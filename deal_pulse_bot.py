@@ -668,7 +668,11 @@ def _edit_nav(user_id, text, markup):
 
 
 def _ensure_nav(chat_id, user_id, text, markup):
-    """يعدّل رسالة التنقل إن وُجدت، وإلا يُرسل واحدة جديدة."""
+    """يعدّل رسالة التنقل إن وُجدت، وإلا يُرسل واحدة جديدة.
+
+    يحتوي على fallback: لو فشل Markdown parsing (بسبب emoji أو أحرف خاصة)،
+    نُعيد المحاولة بدون parse_mode حتى لا تختفي رسالة الأزرار.
+    """
     nav = _get_nav(user_id)
     if nav.get('msg_id') and nav.get('chat_id') == chat_id:
         try:
@@ -678,9 +682,26 @@ def _ensure_nav(chat_id, user_id, text, markup):
             )
             return nav['msg_id']
         except Exception as e:
-            if "message is not modified" in str(e).lower():
+            err = str(e).lower()
+            if "message is not modified" in err:
                 return nav['msg_id']
-    sent = bot.send_message(chat_id, text, reply_markup=markup, parse_mode="Markdown")
+            if "can't parse" in err or "parse_mode" in err:
+                # Markdown فشل → نُحاول بدونه
+                try:
+                    bot.edit_message_text(
+                        text, chat_id, nav['msg_id'], reply_markup=markup
+                    )
+                    return nav['msg_id']
+                except Exception:
+                    pass
+            # أي خطأ آخر → نسقط للإرسال الجديد بالأسفل
+
+    try:
+        sent = bot.send_message(chat_id, text, reply_markup=markup, parse_mode="Markdown")
+    except Exception as e:
+        print(f"⚠️ _ensure_nav send_message Markdown failed: {e}")
+        # fallback بدون parse_mode — الأزرار أهم من التنسيق
+        sent = bot.send_message(chat_id, text, reply_markup=markup)
     _update_nav(user_id, chat_id=chat_id, msg_id=sent.message_id)
     return sent.message_id
 

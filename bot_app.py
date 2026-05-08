@@ -19,6 +19,7 @@ Deal Pulse KSA — Unified Service (Bot + API + Mini App)
     DATABASE_URL                    — postgres connection string
     ALLOWED_ORIGINS                 — افتراضي: null (لـ Telegram WebApp)
 """
+import asyncio
 import os
 import pathlib
 import threading
@@ -130,7 +131,9 @@ async def telegram_webhook(
 
     payload = await request.body()
     update = Update.de_json(payload.decode("utf-8"))
-    bot.process_new_updates([update])
+    # نُشغّل المعالجة الـ sync في thread pool حتى لا تحجب event loop
+    # هذا حلّ جوهري مع pyTelegramBotAPI (sync) داخل FastAPI (async)
+    await asyncio.to_thread(bot.process_new_updates, [update])
     return {"ok": True}
 
 
