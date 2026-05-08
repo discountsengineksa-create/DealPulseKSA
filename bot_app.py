@@ -25,7 +25,8 @@ import threading
 
 from fastapi import FastAPI, Request, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
+from fastapi.staticfiles import StaticFiles
 from telebot.types import Update
 
 from deal_pulse_bot import (
@@ -126,11 +127,40 @@ def health():
     return {"status": "ok", "service": "deal-pulse-unified"}
 
 
+_BASE_DIR = pathlib.Path(__file__).parent
+_LOGO_CACHE = {"max-age": "86400"}  # cache 24h
+
+
 @app.get("/miniapp", include_in_schema=False)
 def serve_miniapp():
     """يخدم واجهة الـ Telegram Mini App."""
-    html_path = pathlib.Path(__file__).parent / "miniapp.html"
-    return FileResponse(html_path, media_type="text/html")
+    return FileResponse(_BASE_DIR / "miniapp.html", media_type="text/html")
+
+
+# ─── Static assets (logos, fonts) — صراحة بدون mount لتجنب فتح الجذر ────────
+_STATIC_FILES = {
+    "logo.png":  "image/png",
+    "logo1.jpeg": "image/jpeg",
+    "logo2.jpeg": "image/jpeg",
+    "logo3.jpeg": "image/jpeg",
+    "logo4.jpeg": "image/jpeg",
+    "Cairo-Bold.ttf": "font/ttf",
+}
+
+
+@app.get("/{filename}", include_in_schema=False)
+def serve_static(filename: str):
+    """يخدم ملفات ثابتة محددة فقط (logos, fonts) مع cache طويل."""
+    if filename not in _STATIC_FILES:
+        raise HTTPException(status_code=404)
+    file_path = _BASE_DIR / filename
+    if not file_path.is_file():
+        raise HTTPException(status_code=404)
+    return FileResponse(
+        file_path,
+        media_type=_STATIC_FILES[filename],
+        headers={"Cache-Control": "public, max-age=86400, immutable"},
+    )
 
 
 @app.get("/", include_in_schema=False)
