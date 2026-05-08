@@ -83,27 +83,40 @@ app.include_router(track.router,   prefix="/api/v1")
 # ─── Lifecycle ────────────────────────────────────────────────────────────────
 @app.on_event("startup")
 def on_startup():
+    """
+    تشغيل آمن مع multi-worker:
+    - تهيئة DB تتم في كل worker (idempotent — CREATE IF NOT EXISTS)
+    - idle_watcher يشتغل في كل worker (كل واحد يفحص حصته)
+    - webhook registration: نتحقق أولاً، ولا نمسحه/نُسجّله إلا إذا اختلف
+      (يمنع race condition بين الـ workers)
+    """
     clean_legacy_columns()
     ensure_tracking_tables()
     backfill_user_behavior()
     threading.Thread(target=idle_watcher, daemon=True).start()
     print(f"✅ idle_watcher started (timeout={IDLE_TIMEOUT_MINUTES}m)")
 
-    bot.remove_webhook()
-    bot.set_webhook(
-        url=WEBHOOK_URL,
-        allowed_updates=["message", "callback_query", "message_reaction"],
-        secret_token=WEBHOOK_SECRET,
-    )
-    print(f"✅ webhook registered at {WEBHOOK_URL}")
+    # webhook: idempotent — يُسجَّل فقط إذا كان غير صحيح
+    try:
+        current = bot.get_webhook_info()
+        if current.url == WEBHOOK_URL:
+            print(f"✅ webhook already set correctly — skip")
+        else:
+            bot.set_webhook(
+                url=WEBHOOK_URL,
+                allowed_updates=["message", "callback_query", "message_reaction"],
+                secret_token=WEBHOOK_SECRET,
+            )
+            print(f"✅ webhook registered at {WEBHOOK_URL}")
+    except Exception as e:
+        print(f"⚠️ webhook registration warning: {e}")
 
 
 @app.on_event("shutdown")
 def on_shutdown():
-    try:
-        bot.remove_webhook()
-    except Exception:
-        pass
+    # لا نمسح الـ webhook عند إيقاف worker واحد لأنه قد يكون
+    # مجرد إعادة تشغيل أو تحديث — workers أخرى ما زالت تعمل.
+    pass
 
 
 # ─── Telegram Webhook ─────────────────────────────────────────────────────────
