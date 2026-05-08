@@ -4,8 +4,10 @@ Deal Pulse KSA — FastAPI Backend
 توثيق تلقائي: http://localhost:8000/docs
 """
 import os
+import pathlib
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from api.routers import coupons, track
 
@@ -43,3 +45,10 @@ app.include_router(track.router,   prefix="/api/v1")
 def health_check():
     """نقطة مراقبة للـ uptime checkers والـ load balancers."""
     return {"status": "ok", "service": "deal-pulse-api"}
+
+
+@app.get("/miniapp", include_in_schema=False)
+def serve_miniapp():
+    """يخدم واجهة الـ Telegram Mini App."""
+    html_path = pathlib.Path(__file__).parent.parent / "miniapp.html"
+    return FileResponse(html_path, media_type="text/html")

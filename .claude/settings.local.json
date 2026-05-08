@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(cmd /c \"dir \"\"C:\\\\Program Files\\\\PostgreSQL\\\\\"\"\")",
+      "PowerShell($env:PGPASSWORD = \"123456\"; & \"C:\\\\Program Files\\\\PostgreSQL\\\\16\\\\bin\\\\pg_dump.exe\" -U postgres -h localhost -p 5432 -d discounts_engine --no-owner --no-acl -f \"c:\\\\Users\\\\user\\\\Desktop\\\\Discounts_Engine\\\\db_export.sql\" 2>&1; Write-Host \"Exit: $LASTEXITCODE\")",
+      "PowerShell($size = \\(Get-Item \"c:\\\\Users\\\\user\\\\Desktop\\\\Discounts_Engine\\\\db_export.sql\"\\).Length; Write-Host \"Size: $\\([math]::Round\\($size/1KB, 1\\)\\) KB\")"
+    ]
+  }
+}

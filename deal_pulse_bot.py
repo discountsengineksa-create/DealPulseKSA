@@ -15,9 +15,9 @@ from bidi.algorithm import get_display
 # تحميل المتغيرات من ملف .env
 load_dotenv()
 
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
 if not TOKEN:
-    raise RuntimeError("❌ BOT_TOKEN غير موجود في ملف .env")
+    raise RuntimeError("❌ BOT_TOKEN/TELEGRAM_BOT_TOKEN غير موجود في متغيرات البيئة")
 
 _DATABASE_URL = os.getenv("DATABASE_URL")
 DB_CONFIG = {
@@ -44,7 +44,11 @@ bot = telebot.TeleBot(TOKEN)
 
 def get_db_connection():
     if _DATABASE_URL:
-        return psycopg2.connect(_DATABASE_URL)
+        url = _DATABASE_URL
+        # Railway يُعطي postgres:// لكن psycopg2 يحتاج postgresql://
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql://", 1)
+        return psycopg2.connect(url)
     return psycopg2.connect(**DB_CONFIG)
 
 

@@ -30,6 +30,9 @@ def get_pool() -> pg_pool.ThreadedConnectionPool:
             if _pool is None:   # double-checked locking لأمان الـ threads
                 db_url = os.getenv("DATABASE_URL")
                 if db_url:
+                    # Railway يُعطي postgres:// لكن psycopg2 يحتاج postgresql://
+                    if db_url.startswith("postgres://"):
+                        db_url = db_url.replace("postgres://", "postgresql://", 1)
                     _pool = pg_pool.ThreadedConnectionPool(
                         minconn=2,
                         maxconn=20,

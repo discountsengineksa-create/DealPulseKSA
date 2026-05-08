@@ -428,6 +428,9 @@ input, textarea, select {{
 def _get_pool() -> pg_pool.ThreadedConnectionPool:
     db_url = os.getenv("DATABASE_URL")
     if db_url:
+        # Railway يُعطي postgres:// لكن psycopg2 يحتاج postgresql://
+        if db_url.startswith("postgres://"):
+            db_url = db_url.replace("postgres://", "postgresql://", 1)
         return pg_pool.ThreadedConnectionPool(minconn=1, maxconn=10, dsn=db_url)
     return pg_pool.ThreadedConnectionPool(
         minconn=1,
