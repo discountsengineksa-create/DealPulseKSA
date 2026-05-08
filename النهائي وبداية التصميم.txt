@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
+<title>نبض الصفقات | Deal Pulse KSA</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+/* ── VARIABLES ── */
+:root {
+  --bg:          #080E1D;
+  --bg2:         #0C1527;
+  --card:        rgba(255,255,255,0.055);
+  --card-h:      rgba(255,255,255,0.095);
+  --border:      rgba(255,255,255,0.10);
+  --blur:        blur(22px);
+  --em:          #10B981;
+  --em2:         #059669;
+  --em3:         #34D399;
+  --em-glow:     rgba(16,185,129,0.30);
+  --navy:        #1E3A5F;
+  --t1:          #F1F5F9;
+  --t2:          rgba(241,245,249,0.65);
+  --t3:          rgba(241,245,249,0.38);
+  --grad-em:     linear-gradient(135deg,#10B981,#059669);
+  --grad-bg:     linear-gradient(160deg,#080E1D 0%,#0C1527 45%,#0F2040 100%);
+  --r-card:      20px;
+  --r-modal:     28px;
+  --r-pill:      999px;
+  --safe-b:      env(safe-area-inset-bottom,16px);
+  --safe-t:      env(safe-area-inset-top,0px);
+  --font:        'Cairo',-apple-system,sans-serif;
+}
+body.light {
+  --bg:#F0F4F8; --bg2:#E4ECF5; --card:rgba(255,255,255,0.80);
+  --card-h:rgba(255,255,255,0.95); --border:rgba(0,0,0,0.08);
+  --t1:#0A0F1E; --t2:rgba(10,15,30,0.65); --t3:rgba(10,15,30,0.38);
+  --grad-bg:linear-gradient(160deg,#E4ECF5 0%,#D0E2F4 100%);
+}
+
+/* ── RESET ── */
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{height:100%;overflow:hidden}
+body{
+  font-family:var(--font);
+  background:var(--grad-bg);
+  color:var(--t1);
+  min-height:100vh;
+  overflow-x:hidden;
+  overflow-y:auto;
+  -webkit-font-smoothing:antialiased;
+  padding-top:var(--safe-t);
+  padding-bottom:calc(72px + var(--safe-b));
+  direction:rtl;
+}
+::-webkit-scrollbar{width:0;height:0}
+
+.glass{ background:var(--card); backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur); border:1px solid var(--border); }
+.glass-strong{ background:rgba(255,255,255,0.09); backdrop-filter:blur(32px); -webkit-backdrop-filter:blur(32px); border:1px solid rgba(255,255,255,0.14); }
+
+/* ── ANIMATED BG BLOBS ── */
+.blobs{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+.blob{position:absolute;border-radius:50%;filter:blur(90px);animation:bfloat 9s ease-in-out infinite}
+.b1{width:320px;height:320px;background:radial-gradient(circle,rgba(16,185,129,.22),transparent);top:-60px;right:-60px;animation-delay:0s}
+.b2{width:260px;height:260px;background:radial-gradient(circle,rgba(30,58,95,.45),transparent);bottom:80px;left:-50px;animation-delay:-3.5s}
+.b3{width:200px;height:200px;background:radial-gradient(circle,rgba(16,185,129,.13),transparent);top:42%;left:38%;animation-delay:-6s}
+@keyframes bfloat{ 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(18px,-14px) scale(1.06)} 66%{transform:translate(-10px,18px) scale(0.94)} }
+
+/* ── HEADER ── */
+.hdr{ position:sticky;top:0;z-index:100; padding:14px 18px 10px; background:linear-gradient(180deg,var(--bg2) 0%,transparent 100%); }
+.hdr-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-ico{ width:42px;height:42px;border-radius:13px; background:var(--grad-em); display:flex;align-items:center;justify-content:center; font-size:20px; box-shadow:0 4px 16px var(--em-glow); }
+.logo-txt h1{font-size:15px;font-weight:900;color:var(--t1);line-height:1.1}
+.logo-txt p{font-size:10px;font-weight:700;color:var(--em);letter-spacing:.8px}
+.hdr-btns{display:flex;gap:7px}
+.ico-btn{ width:38px;height:38px;border-radius:12px; display:flex;align-items:center;justify-content:center; font-size:17px;cursor:pointer;border:none;outline:none; transition:transform .18s ease; }
+.ico-btn:active{transform:scale(.88)}
+
+/* ── SEARCH ── */
+.srch-wrap{position:relative;margin:0 0 0}
+.srch{ width:100%; padding:13px 48px 13px 18px; border-radius:var(--r-pill); font-family:var(--font);font-size:14px; color:var(--t1);border:1.5px solid var(--border); outline:none;caret-color:var(--em); transition:border-color .25s,box-shadow .25s; }
+.srch::placeholder{color:var(--t3)}
+.srch:focus{border-color:var(--em)!important;box-shadow:0 0 0 3px var(--em-glow)!important}
+.srch-ico{ position:absolute;left:16px;top:50%; transform:translateY(-50%); font-size:17px;color:var(--t3);pointer-events:none; transition:color .2s; }
+.srch:focus~.srch-ico{color:var(--em)}
+
+/* ── STATS BAR ── */
+.stats{display:flex;gap:10px;padding:16px 16px 0}
+.stat{ flex:1;padding:13px 10px;border-radius:16px;text-align:center; box-shadow:0 4px 16px rgba(0,0,0,.18); }
+.stat-v{font-size:22px;font-weight:900;color:var(--em);line-height:1}
+.stat-l{font-size:11px;color:var(--t3);font-weight:500;margin-top:3px}
+
+/* ── FEATURED ── */
+#featWrap .feat{margin:16px 16px 0;border-radius:22px;overflow:hidden;cursor:pointer;transition:transform .25s cubic-bezier(.34,1.56,.64,1)}
+#featWrap .feat:active{transform:scale(.97)}
+.feat-inner{ padding:22px 20px;position:relative;overflow:hidden; background:linear-gradient(135deg,#080E1D 0%,#1E3A5F 55%,#10B98145 100%); min-height:150px; }
+.feat-blob{ position:absolute;top:-20px;left:-20px; width:160px;height:160px;border-radius:50%; background:radial-gradient(circle,rgba(16,185,129,.25),transparent); filter:blur(40px);pointer-events:none; }
+.feat-emoji{position:absolute;top:10px;left:16px;font-size:75px;opacity:.12;transform:rotate(-12deg)}
+.feat-tag{ display:inline-flex;align-items:center;gap:4px; padding:4px 10px;border-radius:var(--r-pill); background:rgba(255,255,255,.12); font-size:11px;font-weight:700;color:rgba(255,255,255,.85); margin-bottom:10px; }
+.feat-name{font-size:21px;font-weight:900;color:#fff;margin-bottom:4px}
+.feat-disc{font-size:38px;font-weight:900;color:#fff;line-height:1;margin-bottom:14px;text-shadow:0 4px 12px rgba(0,0,0,.3)}
+.feat-code{ display:inline-flex;align-items:center;gap:6px; padding:8px 16px;border-radius:var(--r-pill); background:rgba(255,255,255,.15); font-size:13px;font-weight:800;color:#fff; letter-spacing:1px; }
+
+/* ── CATEGORIES ── */
+.cats{margin:20px 0 0}
+.sec-lbl{font-size:12px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.6px;padding:0 18px;margin-bottom:10px}
+.cats-scroll{display:flex;gap:9px;padding:2px 18px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.cat{ display:flex;align-items:center;gap:5px; padding:8px 14px;border-radius:var(--r-pill); font-family:var(--font);font-size:13px;font-weight:600; white-space:nowrap;cursor:pointer;border:none;outline:none; color:var(--t2); transition:all .22s cubic-bezier(.34,1.56,.64,1); }
+.cat:active{transform:scale(.91)}
+.cat.on{ background:var(--grad-em)!important;color:#fff!important; border-color:transparent!important; box-shadow:0 4px 14px var(--em-glow); transform:scale(1.04); }
+.cat-cnt{ background:rgba(255,255,255,.15); border-radius:var(--r-pill);padding:1px 6px;font-size:10px; }
+
+/* ── STORES SECTION ── */
+.stores{padding:20px 14px 0}
+.sec-hdr{display:flex;align-items:center;justify-content:space-between;padding:0 2px;margin-bottom:14px}
+.sec-ttl{font-size:17px;font-weight:900;color:var(--t1)}
+.cnt-badge{ display:flex;align-items:center;gap:3px; padding:4px 10px;border-radius:var(--r-pill); background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.25); font-size:11px;font-weight:700;color:var(--em); }
+
+/* ── CARDS GRID ── */
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.card{ border-radius:var(--r-card);padding:16px 14px; cursor:pointer;position:relative;overflow:hidden; box-shadow:0 6px 28px rgba(0,0,0,.28); transition:transform .22s cubic-bezier(.34,1.56,.64,1),box-shadow .22s ease; }
+.card:active{transform:scale(.93);box-shadow:0 3px 14px rgba(16,185,129,.20)}
+.card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px}
+.c-ava{ width:50px;height:50px;border-radius:15px; display:flex;align-items:center;justify-content:center;font-size:26px; background: rgba(255,255,255,0.1); }
+.fire{font-size:17px;animation:flicker 1.6s ease-in-out infinite alternate}
+@keyframes flicker{from{opacity:.75;transform:scale(1)}to{opacity:1;transform:scale(1.12)}}
+.c-name{font-size:14px;font-weight:800;color:var(--t1);margin-bottom:2px;line-height:1.2}
+.c-cat{font-size:11px;color:var(--t3);font-weight:500;margin-bottom:8px}
+.disc-badge{ display:inline-flex;align-items:center;gap:3px; padding:5px 9px;border-radius:var(--r-pill); background:var(--grad-em); font-size:11px;font-weight:800;color:#fff; box-shadow:0 3px 10px var(--em-glow); }
+.cpn-prev{ margin-top:9px;padding:7px 9px;border-radius:9px; background:rgba(16,185,129,.09);border:1px dashed rgba(16,185,129,.28); display:flex;align-items:center;justify-content:center;gap:5px; }
+.cpn-txt{font-size:11px;font-weight:700;color:var(--em);letter-spacing:1.2px;font-family:'Courier New',monospace}
+.c-foot{display:flex;justify-content:space-between;align-items:center;margin-top:9px}
+.go-lbl{font-size:11px;color:var(--em);font-weight:600}
+
+/* ── EMPTY STATE ── */
+.empty{text-align:center;padding:56px 20px;display:none}
+.empty.on{display:block}
+.empty em{font-size:52px;font-style:normal;display:block;margin-bottom:10px}
+.empty h3{font-size:17px;font-weight:700;color:var(--t1);margin-bottom:5px}
+.empty p{font-size:13px;color:var(--t3)}
+
+/* ── MODAL ── */
+.overlay{ position:fixed;inset:0; background:rgba(0,0,0,.55); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); z-index:200; display:flex;align-items:flex-end;justify-content:center; opacity:0;pointer-events:none; transition:opacity .28s ease; }
+.overlay.on{opacity:1;pointer-events:all}
+.sheet{ width:100%;max-width:520px; border-radius:var(--r-modal) var(--r-modal) 0 0; padding:0 0 calc(16px + var(--safe-b)); transform:translateY(100%); transition:transform .38s cubic-bezier(.32,.72,0,1); }
+.overlay.on .sheet{transform:translateY(0)}
+.handle{width:36px;height:4px;background:rgba(255,255,255,.22);border-radius:2px;margin:12px auto 18px}
+.m-close{ position:absolute;top:14px;left:14px; width:30px;height:30px;border-radius:50%; background:rgba(255,255,255,.10); display:flex;align-items:center;justify-content:center; font-size:14px;cursor:pointer;border:none;color:var(--t2); transition:all .18s; }
+.m-close:active{transform:scale(.86);background:rgba(255,255,255,.18)}
+.m-body{padding:0 18px}
+.m-hero{display:flex;align-items:center;gap:14px;margin-bottom:18px}
+.m-ava{ width:68px;height:68px;border-radius:20px; display:flex;align-items:center;justify-content:center;font-size:36px; box-shadow:0 8px 22px rgba(0,0,0,.22); flex-shrink:0; background: rgba(255,255,255,0.1); }
+.m-info h2{font-size:20px;font-weight:900;color:var(--t1);margin-bottom:3px}
+.m-info p{font-size:12px;color:var(--t3)}
+.m-desc{ font-size:13px;color:var(--t2);line-height:1.75; margin-bottom:16px;padding:13px;border-radius:14px; }
+.chips{display:flex;gap:8px;margin-bottom:16px}
+.chip{flex:1;text-align:center;padding:11px 8px;border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.12)}
+.chip-l{font-size:10px;color:var(--t3);font-weight:600;margin-bottom:3px}
+.chip-v{font-size:15px;font-weight:900;color:var(--t1)}
+.cpn-lbl{font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.9px;margin-bottom:9px}
+.cpn-box{ display:flex;align-items:center;justify-content:space-between; padding:15px 18px;border-radius:16px; border:2px dashed rgba(16,185,129,.38); background:rgba(16,185,129,.07); cursor:pointer;position:relative;overflow:hidden; transition:all .22s ease; margin-bottom:14px; }
+.cpn-box:active{transform:scale(.97)}
+.cpn-box.copied{border-color:var(--em)!important;background:rgba(16,185,129,.18)!important}
+.big-cpn{font-size:20px;font-weight:900;color:var(--em);letter-spacing:3px;font-family:'Courier New',monospace}
+.copy-btn{ display:flex;align-items:center;gap:5px; padding:8px 13px;border-radius:10px; background:var(--grad-em);font-family:var(--font); font-size:12px;font-weight:700;color:#fff; border:none;cursor:pointer; box-shadow:0 3px 10px var(--em-glow); transition:all .2s;flex-shrink:0; }
+.copy-ok{ position:absolute;inset:0; display:flex;align-items:center;justify-content:center;gap:6px; background:rgba(16,185,129,.18); font-size:14px;font-weight:800;color:var(--em); opacity:0;pointer-events:none;border-radius:14px; transition:opacity .22s ease; }
+.copy-ok.on{opacity:1;pointer-events:all}
+.m-actions{display:flex;flex-direction:column;gap:10px}
+.btn-p{ width:100%;padding:15px;border-radius:var(--r-pill); font-family:var(--font);font-size:15px;font-weight:800;color:#fff; background:var(--grad-em);border:none;cursor:pointer; display:flex;align-items:center;justify-content:center;gap:7px; box-shadow:0 6px 20px var(--em-glow); transition:all .22s cubic-bezier(.34,1.56,.64,1); animation:pglow 2.5s ease-in-out infinite; }
+@keyframes pglow{0%,100%{box-shadow:0 6px 20px var(--em-glow)}50%{box-shadow:0 6px 30px rgba(16,185,129,.5)}}
+.btn-s{ width:100%;padding:13px;border-radius:var(--r-pill); font-family:var(--font);font-size:14px;font-weight:700;color:var(--t2); background:transparent;border:1.5px solid var(--border);cursor:pointer; display:flex;align-items:center;justify-content:center;gap:6px; transition:all .2s; }
+
+/* ── BOTTOM NAV ── */
+.bnav{ position:fixed;bottom:0;left:0;right:0; padding:10px 16px calc(10px + var(--safe-b)); display:flex;align-items:center;justify-content:space-around; z-index:150; border-top:1px solid var(--border); }
+.nitem{ display:flex;flex-direction:column;align-items:center;gap:3px; padding:7px 18px;border-radius:14px; cursor:pointer;border:none;background:transparent;outline:none; transition:all .22s cubic-bezier(.34,1.56,.64,1); }
+.nitem.on{background:rgba(16,185,129,.14)}
+.n-ico{font-size:21px}
+.n-lbl{font-family:var(--font);font-size:10px;font-weight:600;color:var(--t3)}
+.nitem.on .n-lbl{color:var(--em)}
+
+/* ── TOAST ── */
+.toast{ position:fixed;top:calc(var(--safe-t) + 72px);left:50%; transform:translateX(-50%) translateY(-16px); padding:11px 22px;border-radius:var(--r-pill); font-family:var(--font);font-size:13px;font-weight:700;color:#fff; background:var(--grad-em); box-shadow:0 6px 20px var(--em-glow); z-index:300; opacity:0;white-space:nowrap;pointer-events:none; transition:all .32s cubic-bezier(.34,1.56,.64,1); }
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ── FADE-UP ── */
+.fade-up{animation:fadeUp .45s ease both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+.d1{animation-delay:.05s}.d2{animation-delay:.10s}.d3{animation-delay:.15s}
+</style>
+</head>
+
+<body>
+
+<div class="blobs"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
+<div class="toast" id="toast"></div>
+
+<header class="hdr">
+  <div class="hdr-row">
+    <div class="logo">
+      <div class="logo-ico">🔥</div>
+      <div class="logo-txt"><h1>نبض الصفقات</h1><p>DEAL PULSE KSA</p></div>
+    </div>
+    <div class="hdr-btns">
+      <button class="ico-btn glass" onclick="switchNav('favorites')">❤️</button>
+      <button class="ico-btn glass" onclick="refreshData()">🔄</button>
+    </div>
+  </div>
+  <div class="srch-wrap">
+    <input class="srch glass" id="srchInput" type="text" placeholder="🔍  ابحث عن متجر أو كوبون..." oninput="onSearch(this.value)">
+    <span class="srch-ico">🔍</span>
+  </div>
+</header>
+
+<main style="position:relative;z-index:1;">
+  <div class="stats fade-up d1">
+    <div class="stat glass"><div class="stat-v" id="sStores">0</div><div class="stat-l">متجر</div></div>
+    <div class="stat glass"><div class="stat-v" id="sCoupons">0</div><div class="stat-l">كوبون</div></div>
+    <div class="stat glass"><div class="stat-v" id="sTrend">0</div><div class="stat-l">ترند 🔥</div></div>
+  </div>
+  <div id="featWrap" class="fade-up d2"></div>
+  <div class="cats fade-up d2">
+    <div class="sec-lbl">الأقسام</div>
+    <div class="cats-scroll" id="catsContainer"></div>
+  </div>
+  <div class="stores fade-up d3">
+    <div class="sec-hdr">
+      <span class="sec-ttl" id="secTitle">جميع المتاجر</span>
+      <div class="cnt-badge">🏪 <span id="storeCnt">0</span> متجر</div>
+    </div>
+    <div class="grid" id="storesGrid"></div>
+    <div class="empty" id="emptyState"><em>🔍</em><h3>لا توجد نتائج</h3><p>جرّب كلمة بحث مختلفة</p></div>
+  </div>
+</main>
+
+<div class="overlay" id="overlay" onclick="onOverlayClick(event)">
+  <div class="sheet glass-strong" id="sheet">
+    <div class="handle"></div>
+    <button class="m-close" onclick="closeModal()">✕</button>
+    <div class="m-body" id="mBody"></div>
+  </div>
+</div>
+
+<nav class="bnav glass">
+  <button class="nitem on" id="nav-home" onclick="switchNav('home')"><span class="n-ico">🏠</span><span class="n-lbl">الرئيسية</span></button>
+  <button class="nitem" id="nav-search" onclick="switchNav('search')"><span class="n-ico">🔍</span><span class="n-lbl">البحث</span></button>
+  <button class="nitem" id="nav-favorites" onclick="switchNav('favorites')"><span class="n-ico">❤️</span><span class="n-lbl">المفضلة</span></button>
+  <button class="nitem" id="nav-profile" onclick="switchNav('profile')"><span class="n-ico">👤</span><span class="n-lbl">حسابي</span></button>
+</nav>
+
+
+<script>
+/* ══════════════════════════════════════════
+   Deal Pulse KSA — Unified App Script
+   Replace ALL previous <script> blocks with this
+══════════════════════════════════════════ */
+
+// ── TELEGRAM ──
+const tg = window.Telegram?.WebApp;
+if (tg) {
+    tg.expand();
+    tg.setHeaderColor?.('#080E1D');
+    if (tg.colorScheme === 'light') document.body.classList.add('light');
+}
+function haptic(t = 'light') {
+    try { tg?.HapticFeedback?.impactOccurred(t); } catch (_) {}
+}
+
+// ── CONFIG ──
+const API_BASE = 'http://127.0.0.1:8000/api/v1';
+
+// ── STATE ──
+let ALL          = [];
+let filtered     = [];
+let activeCat    = 'all';
+let activeSearch = '';
+let favs         = JSON.parse(localStorage.getItem('dp_favs') || '[]');
+
+const CAT_ICONS = {
+    all: '🌟', تسوق: '🛒', أزياء: '👗', إلكترونيات: '📱',
+    صحة: '💊', مطاعم: '🍔', سفر: '✈️', رياضة: '⚽'
+};
+
+// ── FETCH ──
+async function loadData() {
+    try {
+        let url;
+        if (activeSearch.length >= 2) {
+            url = `${API_BASE}/coupons/search?q=${encodeURIComponent(activeSearch)}&limit=50`;
+        } else {
+            url = `${API_BASE}/coupons/?limit=50`;
+        }
+        const res = await fetch(url, {
+            mode: 'cors',
+            headers: { 'Accept': 'application/json' }
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const payload = await res.json();
+        const items = payload.results || [];
+
+        ALL = items.map(item => {
+            let displayName = item.store_id || 'متجر غير معروف';
+            if (item.is_trending === 'ترند 🔥') {
+                displayName = `🔥 ${item.store_id}`;
+            }
+            return {
+                id:       item.id,
+                store_id: displayName,
+                name_en:  item.name_en || '',
+                emoji:    '🏷️',
+                cat:      item.store_bio || '',
+                coupon:   item.public_coupon || '',
+                disc:     item.discount_value || '',
+                link:     item.affiliate_link || '#',
+                bio:      item.store_bio || '',
+                extra:    item.extra_offer || ''
+            };
+        });
+
+        applyFilters();
+        renderStats();
+        renderFeatured();
+        renderCats();
+
+    } catch (err) {
+        console.error('loadData:', err);
+        toast('❌ فشل الاتصال بالسيرفر');
+    }
+}
+
+// ── FILTER ──
+function applyFilters() {
+    const s = activeSearch;
+    filtered = ALL.filter(item => {
+        const inCat    = activeCat === 'all' || item.cat === activeCat;
+        const inSearch = !s
+            || item.store_id.toLowerCase().includes(s)
+            || item.name_en.toLowerCase().includes(s)
+            || item.coupon.toLowerCase().includes(s);
+        return inCat && inSearch;
+    });
+    renderStores();
+    document.getElementById('storeCnt').textContent = filtered.length;
+}
+
+// ── RENDER ──
+function renderStats() {
+    document.getElementById('sStores').textContent  = ALL.length;
+    document.getElementById('sCoupons').textContent = ALL.filter(s => s.coupon).length;
+    document.getElementById('sTrend').textContent   = ALL.filter(s => s.trending).length;
+    document.getElementById('storeCnt').textContent = filtered.length;
+}
+
+function renderFeatured() {
+    const t    = ALL.find(s => s.trending) || ALL[0];
+    const wrap = document.getElementById('featWrap');
+    if (!t) { wrap.innerHTML = ''; return; }
+    wrap.innerHTML = `
+        <div class="feat" onclick="openStore(${t.id})">
+          <div class="feat-inner">
+            <div class="feat-blob"></div>
+            <span class="feat-emoji">${t.emoji}</span>
+            <div class="feat-tag">🔥 الأكثر رواجاً الآن</div>
+            <div class="feat-name">${t.store_id}</div>
+            <div class="feat-disc">${t.disc}</div>
+            <div class="feat-code">🎟️ ${t.coupon}</div>
+          </div>
+        </div>`;
+}
+
+function renderCats() {
+    const cats = ['all', ...new Set(ALL.map(s => s.cat).filter(Boolean))];
+    document.getElementById('catsContainer').innerHTML = cats.map(c => `
+        <button class="cat glass ${c === activeCat ? 'on' : ''}" onclick="onCat('${c}')">
+            <span>${CAT_ICONS[c] || '🏷️'}</span>
+            <span>${c === 'all' ? 'الكل' : c}</span>
+        </button>`).join('');
+}
+
+function renderStores() {
+    const grid  = document.getElementById('storesGrid');
+    const empty = document.getElementById('emptyState');
+
+    if (!filtered.length) {
+        grid.innerHTML = '';
+        empty.classList.add('on');
+        return;
+    }
+    empty.classList.remove('on');
+
+    grid.innerHTML = filtered.map((s, i) => `
+        <div class="card glass fade-up" style="animation-delay:${i * .05}s"
+             onclick="openStore(${s.id})">
+          <div class="card-top">
+            <div class="c-ava">${s.emoji}</div>
+            ${s.trending ? '<span class="fire">🔥</span>' : ''}
+          </div>
+          <div class="c-name">${s.store_id}</div>
+          <div class="disc-badge">🏷️ ${s.disc}</div>
+          ${s.coupon
+            ? `<div class="cpn-prev"><span class="cpn-txt">${s.coupon}</span></div>`
+            : ''}
+          <div class="c-foot">
+            <span>${favs.includes(s.id) ? '❤️' : '🤍'}</span>
+            <span class="go-lbl">نسخ ←</span>
+          </div>
+        </div>`).join('');
+}
+
+// ── MODAL ──
+function openStore(id) {
+    const s = ALL.find(x => x.id === id);
+    if (!s) return;
+    haptic('medium');
+    const isFav = favs.includes(id);
+    document.getElementById('mBody').innerHTML = `
+        <div class="m-hero">
+          <div class="m-ava">${s.emoji}</div>
+          <div class="m-info"><h2>${s.store_id}</h2><p>${s.cat}</p></div>
+        </div>
+        <div class="m-desc glass">${s.bio}</div>
+        <div class="cpn-lbl">🎟️ كود الخصم</div>
+        <div class="cpn-box" onclick="copyCoupon('${s.coupon}', ${id})">
+          <span class="big-cpn">${s.coupon || '—'}</span>
+          <button class="copy-btn">نسخ</button>
+          <div class="copy-ok" id="cok_${id}">✅ تم النسخ!</div>
+        </div>
+        <div class="m-actions">
+          <button class="btn-p" onclick="goToStore('${s.link}')">🛍️ انتقل للمتجر</button>
+          <button class="btn-s glass" onclick="toggleFav(${id})">
+            ${isFav ? '💔 إزالة من المفضلة' : '❤️ أضف للمفضلة'}
+          </button>
+        </div>`;
+    document.getElementById('overlay').classList.add('on');
+}
+
+function copyCoupon(code, id) {
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(code);
+    } else {
+        const t = document.createElement('textarea');
+        t.value = code;
+        document.body.appendChild(t);
+        t.select();
+        document.execCommand('copy');
+        document.body.removeChild(t);
+    }
+    haptic('success');
+    document.getElementById(`cok_${id}`)?.classList.add('on');
+    toast('✅ تم النسخ: ' + code);
+    setTimeout(() => document.getElementById(`cok_${id}`)?.classList.remove('on'), 2000);
+}
+
+function goToStore(link) {
+    haptic();
+    if (tg) tg.openLink(link);
+    else window.open(link, '_blank');
+}
+
+function toggleFav(id) {
+    haptic();
+    const i = favs.indexOf(id);
+    if (i === -1) favs.push(id); else favs.splice(i, 1);
+    localStorage.setItem('dp_favs', JSON.stringify(favs));
+    closeModal();
+    renderStores();
+    toast(i === -1 ? '❤️ أُضيف للمفضلة' : '💔 حُذف من المفضلة');
+}
+
+// ── CONTROLS ──
+function closeModal()      { document.getElementById('overlay').classList.remove('on'); }
+function onOverlayClick(e) { if (e.target.id === 'overlay') closeModal(); }
+function onCat(c)          { haptic(); activeCat = c; applyFilters(); renderCats(); }
+function onSearch(v)       { activeSearch = v.toLowerCase().trim(); loadData(); }
+function switchNav(t) {
+    haptic();
+    document.querySelectorAll('.nitem').forEach(n => n.classList.remove('on'));
+    document.getElementById(`nav-${t}`)?.classList.add('on');
+}
+async function refreshData() { toast('🔄 جاري التحديث...'); await loadData(); }
+
+// ── TOAST ──
+function toast(msg, dur = 2400) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('on');
+    setTimeout(() => el.classList.remove('on'), dur);
+}
+
+// ── INIT ──
+document.addEventListener('DOMContentLoaded', loadData);
+</script>
+</body>
+</html>

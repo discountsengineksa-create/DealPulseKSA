@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
+<title>نبض الصفقات | Deal Pulse KSA</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+/* ── VARIABLES ── */
+:root {
+  --bg:          #080E1D;
+  --bg2:         #0C1527;
+  --card:        rgba(255,255,255,0.04);
+  --card-h:      rgba(255,255,255,0.08);
+  --border:      rgba(255,255,255,0.08);
+  --blur:        blur(22px);
+  --em:          #10B981;
+  --em2:         #059669;
+  --em-glow:     rgba(16,185,129,0.20);
+  --t1:          #F1F5F9;
+  --t2:          rgba(241,245,249,0.70);
+  --t3:          rgba(241,245,249,0.40);
+  --grad-bg:     linear-gradient(160deg,#080E1D 0%,#0C1527 45%,#0F2040 100%);
+  --font:        'Cairo', -apple-system, sans-serif;
+}
+
+/* ── RESET & BASE ── */
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{height:100%;overflow:hidden}
+body{
+  font-family:var(--font);
+  background:var(--grad-bg);
+  color:var(--t1);
+  min-height:100vh;
+  overflow-x:hidden;
+  overflow-y:auto;
+  padding-bottom:calc(80px + env(safe-area-inset-bottom,16px));
+  direction:rtl;
+}
+
+.glass{ background:var(--card); backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur); border:1px solid var(--border); }
+
+/* ── HEADER ── */
+.hdr{ position:sticky;top:0;z-index:100; padding:15px 18px; background:linear-gradient(180deg,var(--bg) 60%,transparent); }
+.hdr-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:15px}
+.logo{display:flex;align-items:center;gap:12px}
+.logo-img{ width:45px; height:45px; object-fit: contain; }
+.logo-txt h1{font-size:16px;font-weight:900;color:var(--t1);line-height:1.2}
+.logo-txt p{font-size:10px;font-weight:700;color:var(--em);letter-spacing:1px}
+
+/* ── SEARCH ── */
+.srch-wrap{position:relative}
+.srch{ width:100%; padding:14px 44px 14px 18px; border-radius:15px; font-family:var(--font);font-size:14px; color:var(--t1); border:1px solid var(--border); outline:none; transition:0.3s; }
+.srch:focus{border-color:var(--em); background:rgba(255,255,255,0.08)}
+.srch-ico{ position:absolute; right:15px; top:50%; transform:translateY(-50%); opacity:0.4; }
+
+/* ── STATS ── */
+.stats{display:flex;gap:10px;padding:0 18px}
+.stat{ flex:1;padding:15px;border-radius:18px;text-align:center; }
+.stat-v{font-size:20px;font-weight:900;color:var(--em)}
+.stat-l{font-size:11px;color:var(--t3);margin-top:4px}
+
+/* ── CARDS GRID ── */
+.stores{padding:25px 18px}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:15px}
+.card{ border-radius:20px; padding:15px; cursor:pointer; transition:0.3s cubic-bezier(0.4,0,0.2,1); }
+.card:active{transform:scale(0.95)}
+
+.c-ava {
+    width: 100%;
+    height: 90px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 12px;
+    overflow: hidden;
+}
+.c-ava img {
+    max-width: 80%;
+    max-height: 80%;
+    object-fit: contain;
+}
+
+.c-name{font-size:14px;font-weight:800;color:var(--t1);margin-bottom:6px;text-align:center}
+.disc-badge{ 
+    display:block; text-align:center; padding:6px; border-radius:10px; 
+    background:rgba(16,185,129,0.1); color:var(--em); font-size:11px; font-weight:800; 
+    border: 1px solid rgba(16,185,129,0.2);
+}
+
+.c-foot{display:flex;justify-content:center;margin-top:12px}
+.go-lbl{font-size:11px;color:var(--t3);font-weight:600;border-bottom:1px solid var(--border)}
+
+/* ── MODAL ── */
+.overlay{ position:fixed;inset:0; background:rgba(0,0,0,0.7); backdrop-filter:blur(10px); z-index:200; display:flex;align-items:flex-end; opacity:0;pointer-events:none; transition:0.3s; }
+.overlay.on{opacity:1;pointer-events:all}
+.sheet{ width:100%; background:var(--bg2); border-radius:28px 28px 0 0; padding:20px 20px calc(20px + env(safe-area-inset-bottom)); transform:translateY(100%); transition:0.4s cubic-bezier(0.32,0.72,0,1); border-top:1px solid var(--border); }
+.overlay.on .sheet{transform:translateY(0)}
+.m-ava-big{ width:80px; height:80px; margin:0 auto 15px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05); border-radius:20px; }
+.m-ava-big img{ width:70%; }
+.cpn-box{ 
+    margin:20px 0; padding:20px; border-radius:18px; border:2px dashed var(--em); 
+    text-align:center; background:rgba(16,185,129,0.05); cursor:pointer;
+}
+.big-cpn{font-size:24px;font-weight:900;color:var(--em);letter-spacing:4px;font-family:monospace}
+.btn-p{ width:100%; padding:16px; border-radius:15px; background:var(--em); color:#fff; border:none; font-weight:800; font-size:16px; cursor:pointer; }
+
+/* ── NAV ── */
+.bnav{ position:fixed;bottom:0;width:100%; padding:12px 20px calc(12px + env(safe-area-inset-bottom)); display:flex;justify-content:space-around; background:rgba(8,14,29,0.8); border-top:1px solid var(--border); z-index:150; }
+.nitem{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--t3);text-decoration:none;font-size:10px;font-weight:700}
+.nitem.on{color:var(--em)}
+
+.toast{ position:fixed; top:20px; left:50%; transform:translateX(-50%); padding:12px 24px; background:var(--em); color:#fff; border-radius:50px; font-weight:700; z-index:400; opacity:0; transition:0.3s; }
+.toast.on{opacity:1; top:40px}
+</style>
+</head>
+
+<body>
+<div class="toast" id="toast"></div>
+
+<header class="hdr">
+  <div class="hdr-row">
+    <div class="logo">
+      <img src="logo.png" class="logo-img" alt="Logo">
+      <div class="logo-txt"><h1>نبض الصفقات</h1><p>DEAL PULSE KSA</p></div>
+    </div>
+    <button class="glass" style="padding:8px 15px; border-radius:10px; color:var(--t2); border:none;" onclick="refreshData()">تحديث</button>
+  </div>
+  <div class="srch-wrap">
+    <input class="srch glass" id="srchInput" type="text" placeholder="ابحث عن متجر أو كوبون..." oninput="onSearch(this.value)">
+    <span class="srch-ico">🔍</span>
+  </div>
+</header>
+
+<main>
+  <div class="stats">
+    <div class="stat glass"><div class="stat-v" id="sStores">0</div><div class="stat-l">متجر</div></div>
+    <div class="stat glass"><div class="stat-v" id="sCoupons">0</div><div class="stat-l">كوبون</div></div>
+    <div class="stat glass"><div class="stat-v" id="sTrend">0</div><div class="stat-l">رائج</div></div>
+  </div>
+
+  <div class="stores">
+    <div class="grid" id="storesGrid"></div>
+  </div>
+</main>
+
+<div class="overlay" id="overlay" onclick="if(event.target.id=='overlay')closeModal()">
+  <div class="sheet" id="sheet">
+    <div id="mBody"></div>
+  </div>
+</div>
+
+<nav class="bnav glass">
+  <a href="#" class="nitem on"><span>الرئيسية</span></a>
+  <a href="#" class="nitem"><span>المفضلة</span></a>
+  <a href="#" class="nitem"><span>حسابي</span></a>
+</nav>
+
+<script>
+const API_BASE = 'http://127.0.0.1:8000/api/v1';
+let ALL = [];
+let activeSearch = '';
+
+async function loadData() {
+    try {
+        const res = await fetch(`${API_BASE}/coupons/?limit=50`);
+        const payload = await res.json();
+        const items = payload.results || [];
+
+        ALL = items.map(item => ({
+            id: item.id,
+            store_id: item.store_id || 'متجر',
+            disc: item.discount_value || 'خصم خاص',
+            coupon: item.public_coupon || '',
+            link: item.affiliate_link || '#',
+            bio: item.store_bio || '',
+            trending: item.is_trending === 'ترند 🔥'
+        }));
+
+        renderStores();
+        updateStats();
+    } catch (err) {
+        showToast('❌ عذراً، تعذر تحديث البيانات');
+    }
+}
+
+function updateStats() {
+    document.getElementById('sStores').textContent = ALL.length;
+    document.getElementById('sCoupons').textContent = ALL.filter(x => x.coupon).length;
+    document.getElementById('sTrend').textContent = ALL.filter(x => x.trending).length;
+}
+
+function renderStores() {
+    const grid = document.getElementById('storesGrid');
+    const filtered = ALL.filter(s => s.store_id.toLowerCase().includes(activeSearch));
+    
+    grid.innerHTML = filtered.map(s => `
+        <div class="card glass" onclick="openStore(${s.id})">
+            <div class="c-ava"><img src="logo.png"></div>
+            <div class="c-name">${s.store_id}</div>
+            <div class="disc-badge">${s.disc}</div>
+            <div class="c-foot"><span class="go-lbl">تفاصيل العرض</span></div>
+        </div>
+    `).join('');
+}
+
+function openStore(id) {
+    const s = ALL.find(x => x.id === id);
+    if(!s) return;
+    
+    document.getElementById('mBody').innerHTML = `
+        <div class="m-ava-big"><img src="logo.png"></div>
+        <h2 style="text-align:center; margin-bottom:5px;">${s.store_id}</h2>
+        <p style="text-align:center; color:var(--t3); font-size:12px; margin-bottom:20px;">${s.bio}</p>
+        
+        <div class="cpn-box" onclick="copyText('${s.coupon}')">
+            <div style="font-size:10px; color:var(--t3); margin-bottom:5px;">إضغط لنسخ الكود</div>
+            <div class="big-cpn">${s.coupon || 'لا يوجد كود'}</div>
+        </div>
+        
+        <button class="btn-p" onclick="window.open('${s.link}', '_blank')">الانتقال للمتجر</button>
+        <button class="glass" style="width:100%; padding:14px; margin-top:10px; border-radius:15px; color:var(--t2); border:none;" onclick="closeModal()">إغلاق</button>
+    `;
+    document.getElementById('overlay').classList.add('on');
+}
+
+function copyText(txt) {
+    navigator.clipboard.writeText(txt);
+    showToast('✅ تم نسخ الكود بنجاح');
+}
+
+function onSearch(v) {
+    activeSearch = v.toLowerCase();
+    renderStores();
+}
+
+function closeModal() { document.getElementById('overlay').classList.remove('on'); }
+
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('on');
+    setTimeout(() => t.classList.remove('on'), 2500);
+}
+
+async function refreshData() {
+    showToast('🔄 جاري التحديث...');
+    await loadData();
+}
+
+document.addEventListener('DOMContentLoaded', loadData);
+</script>
+</body>
+</html>

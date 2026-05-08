@@ -1,0 +1,13 @@
+@echo off
+cls
+color 0B
+echo ==========================================
+echo    🔥 GHOST MODE: AUTO-RESTART ACTIVE 🔥
+echo ==========================================
+:loop
+echo [%time%] Starting the Bot...
+python deal_pulse_bot.py
+echo.
+echo [%time%] Bot stopped. Restarting in 2 seconds...
+timeout /t 2 >nul
+goto loop

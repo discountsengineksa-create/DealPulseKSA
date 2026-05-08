@@ -1,0 +1,8 @@
+[https://dealpulseksa.netlify.app](https://dealpulseksa.netlify.app)
+--
+اسم الموقع
+
+netlify
+------
+http://127.0.0.1:8000/docs
+
