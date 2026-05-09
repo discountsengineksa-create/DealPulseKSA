@@ -10,8 +10,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Optional
 
+import bcrypt
 import jwt
-from passlib.context import CryptContext
 
 # ─── إعدادات ────────────────────────────────────────────────────────────────
 # JWT secret — لازم يكون قوي وثابت في الإنتاج
@@ -24,20 +24,24 @@ if not JWT_SECRET:
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_DAYS = 30  # الجلسة 30 يوم
 
-# bcrypt للـ password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# ─── Password Hashing (bcrypt مباشر، بدون passlib) ─────────────────────────
+def _truncate_password(password: str) -> bytes:
+    """bcrypt يدعم 72 byte فقط — نقطع الزائد بصمت."""
+    return password.encode("utf-8")[:72]
 
 
-# ─── Password Hashing ───────────────────────────────────────────────────────
 def hash_password(password: str) -> str:
     """تشفير كلمة السر بـ bcrypt (one-way)."""
-    return pwd_context.hash(password)
+    pw_bytes = _truncate_password(password)
+    return bcrypt.hashpw(pw_bytes, bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
     """التحقق من كلمة السر."""
     try:
-        return pwd_context.verify(plain, hashed)
+        pw_bytes = _truncate_password(plain)
+        return bcrypt.checkpw(pw_bytes, hashed.encode("utf-8"))
     except Exception:
         return False
 
