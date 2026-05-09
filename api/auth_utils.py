@@ -5,6 +5,7 @@ import hashlib
 import os
 import secrets
 import smtplib
+import socket
 from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -131,17 +132,35 @@ def send_reset_email(to_email: str, user_name: str, code: str) -> bool:
     </html>
     """
 
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_FROM}>"
-        msg["To"] = to_email
-        msg.attach(MIMEText(html_body, "html", "utf-8"))
+    # نُجبر IPv4 — حاويات Railway/Docker قد ترجع IPv6 من DNS بدون route صالح،
+        # فيفشل الاتصال بـ "Network is unreachable" قبل ما يجرّب IPv4.
+    # SMTP_PASS قد يأتي بمسافات (Gmail يعرضه كـ "abcd efgh ijkl mnop")
+    smtp_pass_clean = (SMTP_PASS or "").replace(" ", "")
 
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
-            server.send_message(msg)
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_FROM}>"
+    msg["To"] = to_email
+    msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+    try:
+        # نحلّ الـ host لـ IPv4 صراحةً (gethostbyname دائماً IPv4)
+        ipv4_host = socket.gethostbyname(SMTP_HOST)
+
+        if SMTP_PORT == 465:
+            # SMTPS — SSL من البداية (يعمل عادة على المنصات اللي تحجب 587)
+            with smtplib.SMTP_SSL(ipv4_host, SMTP_PORT, timeout=20) as server:
+                server.login(SMTP_USER, smtp_pass_clean)
+                server.send_message(msg)
+        else:
+            # STARTTLS — افتراضي port 587
+            with smtplib.SMTP(ipv4_host, SMTP_PORT, timeout=20) as server:
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+                server.login(SMTP_USER, smtp_pass_clean)
+                server.send_message(msg)
+        print(f"✅ Reset email sent to {to_email}")
         return True
     except Exception as e:
         print(f"❌ فشل إرسال إيميل لـ {to_email}: {e}")
