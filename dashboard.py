@@ -622,6 +622,7 @@ if _logo_b64:
 _MAIN_PAGES = [
     "إدخال بيانات الماستر", "الاستعلام والتعديل", "جدول الكوبونات",
     "جدول الأقسام", "البحث عن كود", "طلبات الأكواد", "بيانات المستخدمين",
+    "مستخدمو الموقع",
 ]
 _ANALYSIS_PAGES = [
     "تحليل المتاجر", "تحليل الأقسام", "تحليل بحث الأكواد",
@@ -1919,6 +1920,112 @@ elif page == "بيانات المستخدمين":
         st.error(f"⚠️ خطأ تقني: {e}")
     finally:
         if 'conn' in locals(): conn.close()
+
+
+# --- صفحة مستخدمي الموقع (web_users) ---
+elif page == "مستخدمو الموقع":
+    page_title("🌐", "مستخدمو موقع dealpulseksa.com")
+    st.caption("جميع المستخدمين المسجّلين عبر الموقع (تسجيل اسم/جوال/إيميل/كلمة سر).")
+    st.divider()
+
+    try:
+        conn = get_conn()
+        conn.rollback()
+
+        # KPIs
+        kpi_df = pd.read_sql(
+            """
+            SELECT
+                COUNT(*)                                              AS total_users,
+                COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days')  AS new_7d,
+                COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days') AS new_30d,
+                COUNT(*) FILTER (WHERE last_seen >= NOW() - INTERVAL '7 days')   AS active_7d
+            FROM web_users
+            WHERE password_hash IS NOT NULL
+            """,
+            conn,
+        )
+        if not kpi_df.empty:
+            r = kpi_df.iloc[0]
+            c1, c2, c3, c4 = st.columns(4)
+            with c1: kpi_card("👥", "إجمالي المسجّلين", f"{int(r['total_users']):,}", accent="emerald")
+            with c2: kpi_card("🆕", "جدد آخر 7 أيام",   f"{int(r['new_7d']):,}",     accent="info")
+            with c3: kpi_card("📅", "جدد آخر 30 يوم",   f"{int(r['new_30d']):,}",    accent="info")
+            with c4: kpi_card("🔥", "نشطون آخر 7 أيام", f"{int(r['active_7d']):,}",  accent="warning")
+
+        st.write("### 📋 جدول المستخدمين")
+
+        # فلتر بحث
+        search = st.text_input("🔎 بحث (اسم / جوال / إيميل / مدينة)", "")
+
+        users_df = pd.read_sql(
+            """
+            SELECT
+                id, display_name, phone_number, email, city, country, lang,
+                visited_clicks, store_copy_count,
+                created_at, last_seen, status,
+                last_ip, device_type
+            FROM web_users
+            WHERE password_hash IS NOT NULL
+            ORDER BY created_at DESC NULLS LAST
+            """,
+            conn,
+        )
+
+        if users_df.empty:
+            st.info("ℹ️ لا يوجد مستخدمون مسجّلون عبر الموقع بعد.")
+        else:
+            # تطبيق الفلتر
+            if search.strip():
+                q = search.strip().lower()
+                mask = (
+                    users_df['display_name'].fillna('').str.lower().str.contains(q, na=False) |
+                    users_df['phone_number'].fillna('').str.lower().str.contains(q, na=False) |
+                    users_df['email'].fillna('').str.lower().str.contains(q, na=False) |
+                    users_df['city'].fillna('').str.lower().str.contains(q, na=False)
+                )
+                users_df = users_df[mask]
+
+            # تنسيق التواريخ
+            for _dc in ['created_at', 'last_seen']:
+                if _dc in users_df.columns:
+                    users_df[_dc] = pd.to_datetime(users_df[_dc], errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
+
+            # ترجمة الأعمدة
+            users_df = users_df.rename(columns={
+                'id':                'المعرف',
+                'display_name':      'الاسم',
+                'phone_number':      'الجوال',
+                'email':             'الإيميل',
+                'city':              'المدينة',
+                'country':           'الدولة',
+                'lang':              'اللغة',
+                'visited_clicks':    'عدد النقرات',
+                'store_copy_count':  'عدد النسخ',
+                'created_at':        'تاريخ التسجيل',
+                'last_seen':         'آخر دخول',
+                'status':            'الحالة',
+                'last_ip':           'آخر IP',
+                'device_type':       'نوع الجهاز',
+            })
+
+            st.caption(f"عدد النتائج: {len(users_df):,}")
+            st.dataframe(users_df, use_container_width=True, hide_index=True)
+
+            # تصدير
+            csv = users_df.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                "⬇️ تصدير CSV",
+                csv,
+                file_name="web_users.csv",
+                mime="text/csv",
+            )
+
+    except Exception as e:
+        st.error(f"⚠️ خطأ تقني: {e}")
+    finally:
+        if 'conn' in locals():
+            conn.close()
 
 
 # --- الصفحة الثانية عشرة: تحليل المستخدمين (Users Analytics) ---

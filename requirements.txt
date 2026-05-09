@@ -13,3 +13,6 @@ pandas
 plotly
 numpy
 pydantic
+passlib[bcrypt]
+PyJWT
+email-validator
