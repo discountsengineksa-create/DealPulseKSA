@@ -13,6 +13,7 @@ from typing import Optional
 
 import bcrypt
 import jwt
+import requests
 
 # ─── إعدادات ────────────────────────────────────────────────────────────────
 # JWT secret — لازم يكون قوي وثابت في الإنتاج
@@ -80,21 +81,28 @@ def hash_reset_code(code: str) -> str:
 
 
 # ─── Email Sending ──────────────────────────────────────────────────────────
+# الأولوية:
+#   1. RESEND_API_KEY  → Resend HTTPS API (الأفضل — port 443، لا يُحجب)
+#   2. SMTP_USER+PASS  → Gmail SMTP (احتياطي — Railway يحجب outbound SMTP عادةً)
+#   3. لا شي         → Dev mode، يطبع الكود في الـ logs
+RESEND_API_KEY = os.getenv("RESEND_API_KEY")
+
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER")
 SMTP_PASS = os.getenv("SMTP_PASS")
-SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USER or "noreply@dealpulseksa.com")
+SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USER or "onboarding@resend.dev")
 SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "نبض الصفقات")
 
 
 def send_reset_email(to_email: str, user_name: str, code: str) -> bool:
     """
     يرسل كود استعادة كلمة المرور للإيميل.
-    لو SMTP غير معدّ، يطبع الكود في الـ logs (للتطوير).
+
+    الترتيب: Resend HTTPS API ← SMTP ← Dev mode (طباعة في الـ logs)
     يرجع True لو نجح، False لو فشل.
     """
-    if not (SMTP_USER and SMTP_PASS):
+    if not RESEND_API_KEY and not (SMTP_USER and SMTP_PASS):
         # Dev mode — اطبع الكود
         print(f"📧 [DEV MODE] Reset code for {to_email}: {code}")
         return True
@@ -132,9 +140,33 @@ def send_reset_email(to_email: str, user_name: str, code: str) -> bool:
     </html>
     """
 
-    # نُجبر IPv4 — حاويات Railway/Docker قد ترجع IPv6 من DNS بدون route صالح،
-        # فيفشل الاتصال بـ "Network is unreachable" قبل ما يجرّب IPv4.
-    # SMTP_PASS قد يأتي بمسافات (Gmail يعرضه كـ "abcd efgh ijkl mnop")
+    # ── المسار 1: Resend HTTPS API (port 443، لا يُحجب على المنصات السحابية) ──
+    if RESEND_API_KEY:
+        try:
+            response = requests.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {RESEND_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "from": f"{SMTP_FROM_NAME} <{SMTP_FROM}>",
+                    "to": [to_email],
+                    "subject": subject,
+                    "html": html_body,
+                },
+                timeout=15,
+            )
+            if response.status_code in (200, 201, 202):
+                print(f"✅ Resend: email sent to {to_email}")
+                return True
+            print(f"❌ Resend failed [{response.status_code}]: {response.text[:200]}")
+            return False
+        except Exception as e:
+            print(f"❌ Resend exception: {e}")
+            return False
+
+    # ── المسار 2: SMTP (احتياطي — قد يفشل على Railway بسبب حجب outbound) ────
     smtp_pass_clean = (SMTP_PASS or "").replace(" ", "")
 
     msg = MIMEMultipart("alternative")
@@ -144,23 +176,21 @@ def send_reset_email(to_email: str, user_name: str, code: str) -> bool:
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     try:
-        # نحلّ الـ host لـ IPv4 صراحةً (gethostbyname دائماً IPv4)
+        # نحلّ الـ host لـ IPv4 صراحةً (Railway قد يرجّح IPv6 بدون route)
         ipv4_host = socket.gethostbyname(SMTP_HOST)
 
         if SMTP_PORT == 465:
-            # SMTPS — SSL من البداية (يعمل عادة على المنصات اللي تحجب 587)
             with smtplib.SMTP_SSL(ipv4_host, SMTP_PORT, timeout=20) as server:
                 server.login(SMTP_USER, smtp_pass_clean)
                 server.send_message(msg)
         else:
-            # STARTTLS — افتراضي port 587
             with smtplib.SMTP(ipv4_host, SMTP_PORT, timeout=20) as server:
                 server.ehlo()
                 server.starttls()
                 server.ehlo()
                 server.login(SMTP_USER, smtp_pass_clean)
                 server.send_message(msg)
-        print(f"✅ Reset email sent to {to_email}")
+        print(f"✅ SMTP: email sent to {to_email}")
         return True
     except Exception as e:
         print(f"❌ فشل إرسال إيميل لـ {to_email}: {e}")
