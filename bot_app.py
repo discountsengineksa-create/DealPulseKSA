@@ -38,7 +38,7 @@ from deal_pulse_bot import (
     backfill_user_behavior,
     IDLE_TIMEOUT_MINUTES,
 )
-from api.routers import coupons, track
+from api.routers import coupons, track, users
 
 # ─── التحقق من المتغيرات الحرجة ───────────────────────────────────────────────
 TOKEN_ENV = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
@@ -72,13 +72,14 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_methods=["GET", "POST", "DELETE", "PUT", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Firebase-UID"],
 )
 
 # ─── دمج Routers الـ API ──────────────────────────────────────────────────────
 app.include_router(coupons.router, prefix="/api/v1")
 app.include_router(track.router,   prefix="/api/v1")
+app.include_router(users.router,   prefix="/api/v1")
 
 
 # ─── Lifecycle ────────────────────────────────────────────────────────────────
