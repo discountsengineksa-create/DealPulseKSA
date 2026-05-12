@@ -45,7 +45,17 @@
       "Bash(python -)",
       "Read(//c/Users/PC/Desktop/dealpulseksa-web/**)",
       "Bash(venvScriptspython.exe -c ' *)",
-      "Bash(python -c \"with open\\('dashboard.py', encoding='utf-8'\\) as f: lines = f.readlines\\(\\); print\\(f'Total lines: {len\\(lines\\)}'\\)\")"
+      "Bash(python -c \"with open\\('dashboard.py', encoding='utf-8'\\) as f: lines = f.readlines\\(\\); print\\(f'Total lines: {len\\(lines\\)}'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('deal_pulse_bot.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('dashboard.py', encoding='utf-8'\\).read\\(\\)\\); print\\('dashboard OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('deal_pulse_bot.py', encoding='utf-8'\\).read\\(\\)\\); print\\('bot OK'\\)\")",
+      "Bash(ls -la *.env* .env* .streamlit/)",
+      "Bash(ls .streamlit/)",
+      "Bash(ls *.sql migration_*.sql)",
+      "Bash(ls *.png *.jpg *.ttf *.otf)",
+      "Bash(ls -la fonts/)",
+      "Bash(ls *.png)",
+      "Bash(git ls-files *)"
     ],
     "additionalDirectories": [
       "C:\\Users\\PC\\Desktop\\dealpulseksa-web\\lib",
