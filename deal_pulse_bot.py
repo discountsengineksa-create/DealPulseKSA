@@ -1641,7 +1641,7 @@ if __name__ == "__main__":
         # backfill في background — البوت يبدأ فوراً دون انتظار
         threading.Thread(target=backfill_user_behavior, daemon=True).start()
         threading.Thread(target=idle_watcher, daemon=True).start()
-        print(f"✅ البوت شغال + مراقبة الخمول مفعّلة (IDLE_TIMEOUT={IDLE_TIMEOUT_MINUTES}m)")
+        print(f"✅ البوت شغال + مراقبة الخمول مفعّلة (تذكير={IDLE_WARN_MINUTES}m | إنهاء={IDLE_KICK_MINUTES}m)")
         bot.infinity_polling(allowed_updates=['message', 'callback_query', 'message_reaction'])
     except Exception as e:
         print(f"❌ حدث خطأ: {e}")
