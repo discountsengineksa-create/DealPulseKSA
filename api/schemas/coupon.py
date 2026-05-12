@@ -8,9 +8,12 @@ class StoreResult(BaseModel):
     affiliate_link: str | None = None
     public_coupon: str | None = None
     extra_offer: str | None = None
+    extra_offer_en: str | None = None
     store_bio: str | None = None
+    store_bio_en: str | None = None
     discount_value: str | None = None
     store_tags: list[str] = Field(default_factory=list)
+    store_tags_en: list[str] = Field(default_factory=list)
     is_trending: str | None = None
     total_coupon_copies: int = 0
     total_link_clicks: int = 0

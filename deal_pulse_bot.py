@@ -6,7 +6,7 @@ import requests
 import telebot
 from telebot import types
 import psycopg2
-from psycopg2 import extras
+from psycopg2 import extras, pool as pg_pool
 from dotenv import load_dotenv
 from PIL import Image, ImageDraw, ImageFont
 import arabic_reshaper
@@ -42,14 +42,41 @@ _idle_alerted_lock = threading.Lock()
 bot = telebot.TeleBot(TOKEN)
 
 
-def get_db_connection():
+def _build_pool() -> pg_pool.ThreadedConnectionPool:
     if _DATABASE_URL:
         url = _DATABASE_URL
-        # Railway يُعطي postgres:// لكن psycopg2 يحتاج postgresql://
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql://", 1)
-        return psycopg2.connect(url)
-    return psycopg2.connect(**DB_CONFIG)
+        return pg_pool.ThreadedConnectionPool(minconn=2, maxconn=8, dsn=url)
+    return pg_pool.ThreadedConnectionPool(minconn=2, maxconn=8, **DB_CONFIG)
+
+_db_pool: pg_pool.ThreadedConnectionPool | None = None
+_db_pool_lock = threading.Lock()
+
+# ─── Cache للأقسام (يتجدد كل 5 دقائق فقط بدل DB في كل ضغطة) ─────────────
+_cats_cache: dict[str, tuple[float, list]] = {}   # lang → (timestamp, tags)
+_CATS_TTL = 300                                    # 5 دقائق
+
+def _get_pool() -> pg_pool.ThreadedConnectionPool:
+    global _db_pool
+    if _db_pool is None:
+        with _db_pool_lock:
+            if _db_pool is None:
+                _db_pool = _build_pool()
+    return _db_pool
+
+def get_db_connection():
+    """يُعيد connection من الـ pool — أسرع بكثير من فتح TCP جديد في كل مرة."""
+    conn = _get_pool().getconn()
+    conn.autocommit = False
+    return conn
+
+def release_conn(conn):
+    """يُعيد الـ connection للـ pool بدل إغلاقه."""
+    try:
+        _get_pool().putconn(conn)
+    except Exception:
+        pass
 
 
 # ============================================================
@@ -68,7 +95,7 @@ def clean_legacy_columns():
               DROP COLUMN IF EXISTS birth_date
         """)
         conn.commit()
-        conn.close()
+        release_conn(conn)
         print("✅ Schema cleanup: dropped social_rank, emotional_score, birth_date")
     except Exception as e:
         print(f"⚠️ clean_legacy_columns: {e}")
@@ -98,7 +125,7 @@ def ensure_tracking_tables():
               ADD COLUMN IF NOT EXISTS name_en TEXT
         """)
         conn.commit()
-        conn.close()
+        release_conn(conn)
         print("✅ Tracking tables ready (sent_coupon_messages, lang column)")
     except Exception as e:
         print(f"⚠️ ensure_tracking_tables: {e}")
@@ -138,7 +165,7 @@ def register_or_update_user(message):
         """, (user.id, user.username or user.first_name or "Anonymous",
               inferred_device))
         conn.commit()
-        conn.close()
+        release_conn(conn)
     except Exception as e:
         print(f"⚠️ فشل تسجيل المستخدم {user.id}: {e}")
 
@@ -154,7 +181,7 @@ def needs_onboarding(user_id):
             FROM bot_users WHERE telegram_id = %s
         """, (user_id, user_id))
         row = cur.fetchone()
-        conn.close()
+        release_conn(conn)
         if not row:
             return True
         country, city, has_picked_lang = row
@@ -278,7 +305,7 @@ def get_lang(user_id):
         cur = conn.cursor()
         cur.execute("SELECT lang FROM bot_users WHERE telegram_id = %s", (user_id,))
         row = cur.fetchone()
-        conn.close()
+        release_conn(conn)
         lang = (row[0] if row and row[0] else 'ar')
     except Exception:
         lang = 'ar'
@@ -318,7 +345,7 @@ def log_action(store_id, action_type, user_id=None, details=None):
             VALUES (%s, %s, %s, %s, NOW())
         """, (store_id, action_type, user_id, details))
         conn.commit()
-        conn.close()
+        release_conn(conn)
     except Exception as e:
         print(f"⚠️ فشل تسجيل action_log [{action_type}]: {e}")
 
@@ -334,7 +361,7 @@ def increment_link_clicks(store_id):
             WHERE store_id = %s
         """, (store_id,))
         conn.commit()
-        conn.close()
+        release_conn(conn)
     except Exception as e:
         print(f"⚠️ فشل تحديث نقرات الرابط لـ {store_id}: {e}")
 
@@ -350,7 +377,7 @@ def increment_coupon_copies(store_id):
             WHERE store_id = %s
         """, (store_id,))
         conn.commit()
-        conn.close()
+        release_conn(conn)
     except Exception as e:
         print(f"⚠️ فشل تحديث نسخ الكوبون لـ {store_id}: {e}")
 
@@ -365,7 +392,7 @@ def log_search(keyword, found):
             VALUES (%s, %s, NOW(), 'TelegramBot')
         """, (keyword, found))
         conn.commit()
-        conn.close()
+        release_conn(conn)
     except Exception as e:
         print(f"⚠️ فشل تسجيل البحث '{keyword}': {e}")
 
@@ -469,7 +496,7 @@ def update_user_behavior(user_id, action_type, store_id=None, tag=None):
         """, (rank, segment, user_id))
 
         conn.commit()
-        conn.close()
+        release_conn(conn)
     except Exception as e:
         print(f"⚠️ update_user_behavior [{action_type}] user={user_id}: {e}")
 
@@ -481,7 +508,7 @@ def backfill_user_behavior():
         cur = conn.cursor()
         cur.execute("SELECT DISTINCT user_id FROM action_logs WHERE user_id IS NOT NULL")
         user_ids = [r[0] for r in cur.fetchall()]
-        conn.close()
+        release_conn(conn)
     except Exception as e:
         print(f"⚠️ backfill query error: {e}")
         return
@@ -552,7 +579,7 @@ def backfill_user_behavior():
             """, (copy_count, fav_store, link_clicks, tag_visits,
                   fav_tag, rank, segment, copied_stores, uid))
             conn.commit()
-            conn.close()
+            release_conn(conn)
         except Exception as e:
             print(f"⚠️ backfill user {uid}: {e}")
 
@@ -654,6 +681,21 @@ def _edit_nav(user_id, text, markup):
     nav = _get_nav(user_id)
     if not nav.get('msg_id'):
         return False
+
+    # لو الرسالة الحالية صورة، نحذفها ونُرسل نص جديد
+    if nav.get('msg_type') == 'photo':
+        try:
+            bot.delete_message(nav['chat_id'], nav['msg_id'])
+        except Exception:
+            pass
+        _update_nav(user_id, msg_id=None, msg_type='text')
+        try:
+            sent = bot.send_message(nav['chat_id'], text, reply_markup=markup, parse_mode="Markdown")
+        except Exception:
+            sent = bot.send_message(nav['chat_id'], text, reply_markup=markup)
+        _update_nav(user_id, msg_id=sent.message_id, msg_type='text')
+        return True
+
     try:
         bot.edit_message_text(
             text, nav['chat_id'], nav['msg_id'],
@@ -702,8 +744,49 @@ def _ensure_nav(chat_id, user_id, text, markup):
         print(f"⚠️ _ensure_nav send_message Markdown failed: {e}")
         # fallback بدون parse_mode — الأزرار أهم من التنسيق
         sent = bot.send_message(chat_id, text, reply_markup=markup)
-    _update_nav(user_id, chat_id=chat_id, msg_id=sent.message_id)
+    _update_nav(user_id, chat_id=chat_id, msg_id=sent.message_id, msg_type='text')
     return sent.message_id
+
+
+def _edit_nav_photo(user_id, photo_url, caption, markup):
+    """يعرض أو يحدّث كارت المتجر كرسالة صورة (send_photo / edit_message_media)."""
+    nav     = _get_nav(user_id)
+    chat_id = nav.get('chat_id')
+    msg_id  = nav.get('msg_id')
+
+    # لو الرسالة الحالية صورة → عدّل فقط (أسرع وأنظف)
+    if msg_id and nav.get('msg_type') == 'photo':
+        try:
+            bot.edit_message_media(
+                types.InputMediaPhoto(photo_url, caption=caption, parse_mode="Markdown"),
+                chat_id, msg_id, reply_markup=markup
+            )
+            return
+        except Exception as e:
+            if "message is not modified" in str(e).lower():
+                return
+            # أي خطأ آخر → نسقط لإرسال جديد
+
+    # احذف الرسالة القديمة (نص أو صورة فاشلة) قبل الإرسال الجديد
+    if msg_id and chat_id:
+        try:
+            bot.delete_message(chat_id, msg_id)
+        except Exception:
+            pass
+
+    try:
+        sent = bot.send_photo(
+            chat_id, photo_url,
+            caption=caption, reply_markup=markup, parse_mode="Markdown"
+        )
+        _update_nav(user_id, chat_id=chat_id, msg_id=sent.message_id, msg_type='photo')
+    except Exception as e:
+        print(f"⚠️ _edit_nav_photo send_photo failed: {e} — falling back to text")
+        try:
+            sent = bot.send_message(chat_id, caption, reply_markup=markup, parse_mode="Markdown")
+        except Exception:
+            sent = bot.send_message(chat_id, caption, reply_markup=markup)
+        _update_nav(user_id, chat_id=chat_id, msg_id=sent.message_id, msg_type='text')
 
 
 # ============================================================
@@ -711,16 +794,28 @@ def _ensure_nav(chat_id, user_id, text, markup):
 # ============================================================
 
 def _card_text(s, lang):
-    trend_emoji   = " 🔥" if s.get('is_trending') == 'ترند 🔥' else ""
-    extra_line    = (f"\n{TEXTS['card_extra'][lang]} {s['extra_offer']}"
-                     if s.get('extra_offer') else "")
-    name_en       = (s.get('name_en') or '').strip()
-    store_display = f"{s['store_id']} | {name_en}" if name_en else s['store_id']
+    """
+    يبني نص الكارت حسب اللغة.
+    لكل حقل: لو EN معبّأ نُظهره، وإلا نرجع للعربي (Fallback).
+    يعمل سواء `s` جاي من DB (يحوي *_en raw) أو من API (مُستبدل).
+    """
+    trend_emoji = " 🔥" if s.get('is_trending') == 'ترند 🔥' else ""
+
+    if lang == "en":
+        store_name  = (s.get('name_en') or '').strip() or s.get('store_id', '')
+        bio         = (s.get('store_bio_en') or '').strip() or (s.get('store_bio') or '')
+        offer_value = (s.get('extra_offer_en') or '').strip() or (s.get('extra_offer') or '')
+    else:
+        store_name  = s.get('store_id', '')
+        bio         = s.get('store_bio') or ''
+        offer_value = s.get('extra_offer') or ''
+
+    extra_line = f"\n{TEXTS['card_extra'][lang]} {offer_value}" if offer_value else ""
     return (
-        f"{TEXTS['card_store'][lang]} {store_display}{trend_emoji}\n"
-        f"{TEXTS['card_discount'][lang]} {s['discount_value']}"
+        f"{TEXTS['card_store'][lang]} {store_name}{trend_emoji}\n"
+        f"{TEXTS['card_discount'][lang]} {s.get('discount_value', '')}"
         f"{extra_line}\n"
-        f"📝 {s['store_bio']}\n\n"
+        f"📝 {bio}\n\n"
         f"{TEXTS['card_react_hint'][lang]}"
     )
 
@@ -751,11 +846,15 @@ def _show_card(user_id, page):
                 ON CONFLICT (chat_id, message_id) DO UPDATE SET store_id = EXCLUDED.store_id
             """, (nav2['chat_id'], nav2['msg_id'], s['store_id'], user_id))
             conn.commit()
-            conn.close()
+            release_conn(conn)
         except Exception as e:
             print(f"⚠️ sent_coupon_messages upsert: {e}")
 
-    _edit_nav(user_id, text, markup)
+    logo_url = (s.get('logo_url') or '').strip()
+    if logo_url:
+        _edit_nav_photo(user_id, logo_url, text, markup)
+    else:
+        _edit_nav(user_id, text, markup)
 
 
 # ============================================================
@@ -776,7 +875,7 @@ def _load_and_show_codes(user_id, lang):
             LIMIT 20
         """)
         rows = [dict(r) for r in cur.fetchall()]
-        conn.close()
+        release_conn(conn)
     except Exception as e:
         print(f"⚠️ _load_and_show_codes: {e}")
         _edit_nav(user_id, t(user_id, 'tech_error'), _kb_cancel(lang))
@@ -788,20 +887,47 @@ def _load_and_show_codes(user_id, lang):
     _show_card(user_id, 0)
 
 
+def _fetch_cats_from_db(lang: str) -> list:
+    tags_expr = "COALESCE(NULLIF(store_tags_en, ''), store_tags)" if lang == "en" else "store_tags"
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(f"""
+            WITH tags_raw AS (
+                SELECT DISTINCT trim(tg) AS tag
+                FROM master,
+                     unnest(string_to_array(
+                         trim(both '{{}}' from COALESCE({tags_expr}, '')), ','
+                     )) AS tg
+                WHERE trim(tg) <> ''
+            )
+            SELECT t.tag
+            FROM tags_raw t
+            LEFT JOIN categories_tags ct ON ct.tag_name = t.tag
+            ORDER BY COALESCE(ct.priority_rank, 5) ASC,
+                     COALESCE(ct."Tag_clicks",   0) DESC,
+                     t.tag                          ASC
+        """)
+        return [r[0] for r in cur.fetchall()]
+    finally:
+        release_conn(conn)
+
+
+def _get_cats(lang: str) -> list:
+    """يُعيد الأقسام من الـ cache — يستعلم DB مرة كل 5 دقائق فقط."""
+    now = time.time()
+    entry = _cats_cache.get(lang)
+    if entry and now - entry[0] < _CATS_TTL:
+        return entry[1]
+    tags = _fetch_cats_from_db(lang)
+    _cats_cache[lang] = (now, tags)
+    return tags
+
+
 def _show_cats(user_id, lang):
     log_action(None, 'view_sections', user_id=user_id)
     try:
-        conn = get_db_connection()
-        cur  = conn.cursor()
-        cur.execute("""
-            SELECT DISTINCT trim(tg) AS tag
-            FROM master,
-                 unnest(string_to_array(trim(both '{}' from COALESCE(store_tags, '')), ',')) AS tg
-            WHERE trim(tg) <> ''
-            ORDER BY tag
-        """)
-        tags = [r[0] for r in cur.fetchall()]
-        conn.close()
+        tags = _get_cats(lang)
     except Exception as e:
         print(f"⚠️ _show_cats: {e}")
         _edit_nav(user_id, t(user_id, 'sections_load_err'), _kb_cancel(lang))
@@ -814,14 +940,16 @@ def _show_cats(user_id, lang):
 
 
 def _load_tag_stores(user_id, lang, tag):
+    # نُطابق الـ tag بنفس العمود اللي عرضناه للمستخدم في _show_cats
+    tags_expr = "COALESCE(NULLIF(store_tags_en, ''), store_tags)" if lang == "en" else "store_tags"
     try:
         conn = get_db_connection()
         cur  = conn.cursor(cursor_factory=extras.DictCursor)
-        cur.execute("""
+        cur.execute(f"""
             SELECT * FROM master
             WHERE %s = ANY(
                 SELECT lower(trim(tg))
-                FROM unnest(string_to_array(trim(both '{}' from COALESCE(store_tags, '')), ',')) AS tg
+                FROM unnest(string_to_array(trim(both '{{}}' from COALESCE({tags_expr}, '')), ',')) AS tg
             )
             AND (last_time IS NULL OR last_time >= CURRENT_DATE)
             ORDER BY
@@ -829,7 +957,7 @@ def _load_tag_stores(user_id, lang, tag):
                 priority_score DESC
         """, (tag.lower(),))
         rows = [dict(r) for r in cur.fetchall()]
-        conn.close()
+        release_conn(conn)
     except Exception as e:
         print(f"⚠️ _load_tag_stores: {e}")
         _edit_nav(user_id, t(user_id, 'tag_load_err'), _kb_cancel(lang))
@@ -841,18 +969,19 @@ def _load_tag_stores(user_id, lang, tag):
     _show_card(user_id, 0)
 
 
-def fetch_api_results(query: str, limit: int = 30) -> list | None:
+def fetch_api_results(query: str, limit: int = 30, lang: str = "ar") -> list | None:
     """
-    يستعلم من FastAPI ويُعيد قائمة dicts بنفس شكل صفوف master.
+    يستعلم من FastAPI ويُعيد قائمة dicts.
+    - يمرّر ?lang= للسيرفر فيُستبدل القيم تلقائياً (Fallback عربي).
     - None  → السيرفر مغلق (ConnectionError) — يُفعِّل الـ fallback على DB
     - []    → السيرفر شغال لكن لا نتائج
     - [...]  → نتائج جاهزة للعرض
     """
-    print(f"🔍 [API] قاعد أبحث في الـ API عن: '{query}'")
+    print(f"🔍 [API] قاعد أبحث في الـ API عن: '{query}' (lang={lang})")
     try:
         resp = requests.get(
             _API_SEARCH_URL,
-            params={"q": query, "limit": limit},
+            params={"q": query, "limit": limit, "lang": lang},
             timeout=5,
         )
         resp.raise_for_status()
@@ -869,6 +998,7 @@ def fetch_api_results(query: str, limit: int = 30) -> list | None:
                 "store_bio":     r.get("store_bio") or "",
                 "is_trending":   r.get("is_trending") or "عادي",
                 "priority_score":r.get("priority_score") or "عادي",
+                "logo_url":      r.get("logo_url") or "",
             })
         return normalized
     except requests.exceptions.ConnectionError:
@@ -880,19 +1010,25 @@ def fetch_api_results(query: str, limit: int = 30) -> list | None:
 
 
 def _db_search(search_term: str) -> list:
-    """بحث احتياطي مباشر في قاعدة البيانات (fallback عند إغلاق الـ API)."""
+    """
+    بحث احتياطي مباشر في قاعدة البيانات (fallback عند إغلاق الـ API).
+    يبحث في الأعمدة العربية والإنجليزية معاً (المستخدم قد يكتب بأي لغة).
+    يرجع الصف الخام (يحوي AR و EN) و _card_text يختار حسب لغة المستخدم.
+    """
     try:
         conn = get_db_connection()
         cur  = conn.cursor(cursor_factory=extras.DictCursor)
         like = f"%{search_term}%"
         cur.execute("""
             SELECT * FROM master
-            WHERE store_id ILIKE %s
-               OR COALESCE(name_en, '') ILIKE %s
-               OR COALESCE(store_tags, '') ILIKE %s
-        """, (like, like, like))
+            WHERE store_id                              ILIKE %s
+               OR COALESCE(name_en,        '')          ILIKE %s
+               OR COALESCE(store_tags,     '')          ILIKE %s
+               OR COALESCE(store_tags_en,  '')          ILIKE %s
+               OR COALESCE(store_bio_en,   '')          ILIKE %s
+        """, (like, like, like, like, like))
         rows = [dict(r) for r in cur.fetchall()]
-        conn.close()
+        release_conn(conn)
         return rows
     except Exception as e:
         print(f"⚠️ _db_search: {e}")
@@ -911,8 +1047,8 @@ def _process_search(message):
     # إظهار حالة "جاري البحث" فوراً قبل أي استعلام
     _edit_nav(user_id, "🔍 جاري البحث في نبض الصفقات...", None)
 
-    # ── المرحلة 1: API أولاً ──────────────────────────────
-    api_rows    = fetch_api_results(search_term)
+    # ── المرحلة 1: API أولاً (مع تمرير لغة المستخدم) ──────────
+    api_rows    = fetch_api_results(search_term, lang=lang)
     api_offline = api_rows is None
 
     if api_offline:
@@ -985,7 +1121,7 @@ def _process_request(message):
             VALUES (%s, %s, NOW())
         """, (user_id, brand))
         conn.commit()
-        conn.close()
+        release_conn(conn)
         log_action(None, 'request_code', user_id=user_id, details=f"brand:{brand}")
         _update_nav(user_id, state='menu')
         _edit_nav(user_id, t(user_id, 'request_saved'), _kb_main(lang))
@@ -1160,7 +1296,7 @@ def handle_lang_pick(call):
             UPDATE bot_users SET marketing_segment = %s, loyalty_rank = %s WHERE telegram_id = %s
         """, (segment, rank, user_id))
         conn.commit()
-        conn.close()
+        release_conn(conn)
     except Exception as e:
         print(f"⚠️ lang pick {code} for {user_id}: {e}")
         bot.answer_callback_query(call.id, "⚠️")
@@ -1272,7 +1408,7 @@ def handle_link_click(call):
         cur  = conn.cursor()
         cur.execute("SELECT affiliate_link FROM master WHERE store_id = %s LIMIT 1", (store_id,))
         row  = cur.fetchone()
-        conn.close()
+        release_conn(conn)
     except Exception as e:
         print(f"⚠️ link callback: {e}")
         return
@@ -1302,7 +1438,7 @@ def handle_coupon_copy(call):
         cur  = conn.cursor()
         cur.execute("SELECT public_coupon FROM master WHERE store_id = %s LIMIT 1", (store_id,))
         row    = cur.fetchone()
-        conn.close()
+        release_conn(conn)
         coupon = row[0] if row and row[0] else None
     except Exception as e:
         bot.answer_callback_query(call.id, t(user_id, 'coupon_err'))
@@ -1334,7 +1470,7 @@ def _process_heart_reaction(chat_id, message_id, user_id):
         """, (chat_id, message_id))
         row = cur.fetchone()
         if not row:
-            conn.close()
+            release_conn(conn)
             return
         store_id = row[0]
 
@@ -1349,7 +1485,7 @@ def _process_heart_reaction(chat_id, message_id, user_id):
             WHERE telegram_id = %s
         """, (store_id, store_id, store_id, store_id, user_id))
         conn.commit()
-        conn.close()
+        release_conn(conn)
 
         log_action(store_id, 'reaction_heart', user_id=user_id)
         update_user_behavior(user_id, 'reaction_heart', store_id=store_id)
@@ -1394,7 +1530,7 @@ def check_idle_users():
               AND last_seen > NOW() - make_interval(hours => %s)
         """, (IDLE_TIMEOUT_MINUTES, IDLE_ALERT_WINDOW_HOURS))
         idle_ids = [row[0] for row in cur.fetchall()]
-        conn.close()
+        release_conn(conn)
     except Exception as e:
         print(f"⚠️ idle query error: {e}")
         return
@@ -1453,7 +1589,8 @@ if __name__ == "__main__":
         bot.remove_webhook()
         clean_legacy_columns()
         ensure_tracking_tables()
-        backfill_user_behavior()
+        # backfill في background — البوت يبدأ فوراً دون انتظار
+        threading.Thread(target=backfill_user_behavior, daemon=True).start()
         threading.Thread(target=idle_watcher, daemon=True).start()
         print(f"✅ البوت شغال + مراقبة الخمول مفعّلة (IDLE_TIMEOUT={IDLE_TIMEOUT_MINUTES}m)")
         bot.infinity_polling(allowed_updates=['message', 'callback_query', 'message_reaction'])

@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from api.routers import coupons, track
+from api.routers import auth, coupons, track
 
 # ─── النطاقات المسموح لها بالاتصال بالـ API ────────────────────────────────
 # في .env: ALLOWED_ORIGINS=https://yoursite.com,https://app.yoursite.com
@@ -37,6 +37,7 @@ app.add_middleware(
 )
 
 # ─── Routers ─────────────────────────────────────────────────────────────────
+app.include_router(auth.router,    prefix="/api/v1")
 app.include_router(coupons.router, prefix="/api/v1")
 app.include_router(track.router,   prefix="/api/v1")
 

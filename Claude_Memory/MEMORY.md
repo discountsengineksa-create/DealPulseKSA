@@ -1,0 +1,6 @@
+- [Railway Production Deployment](railway_deployment.md) — DealPulseKSA unified service URL, stable rollback tag, BotFather setup
+- [Website Design Preferences](website_design_preferences.md) — Apple-style aesthetic, logo watermark background, Firebase OTP for dealpulseksa.com
+- [Website Project](website_project.md) — Next.js repo location, Firebase project ID, deployment status checklist
+- [Website SEO Engine](website_seo_engine.md) — lib/seo modules, BILINGUAL_ENABLED toggle, revalidate/indexnow API, env vars
+- [Email Infrastructure](project_email_infrastructure.md) — Resend API + dealpulseksa.com domain, RESEND_API_KEY env var, noreply sender, Resend-primary/SMTP-fallback pattern
+- [Completed Features Log](project_completed_features.md) — Email marketing module, تحليل الموقع connection fix, forgot-password auth router fix
