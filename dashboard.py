@@ -506,30 +506,56 @@ class _PooledConn:
     Proxy class for PostgreSQL connections.
     Instead of closing the connection, it returns it to the pool.
     """
-    __slots__ = ("_pool", "_conn")
+    __slots__ = ("_pool", "_conn", "_closed")
 
     def __init__(self, pool, conn):
-        object.__setattr__(self, "_pool", pool)
-        object.__setattr__(self, "_conn", conn)
+        object.__setattr__(self, "_pool",   pool)
+        object.__setattr__(self, "_conn",   conn)
+        object.__setattr__(self, "_closed", False)
 
     def __getattr__(self, name: str):
         return getattr(object.__getattribute__(self, "_conn"), name)
 
     def __setattr__(self, name: str, value):
-        if name in ("_pool", "_conn"):
+        if name in ("_pool", "_conn", "_closed"):
             object.__setattr__(self, name, value)
         else:
             setattr(object.__getattribute__(self, "_conn"), name, value)
 
     def close(self):
-        # بدلاً من إغلاق الاتصال، نعيده للمسبح
+        if object.__getattribute__(self, "_closed"):
+            return
+        object.__setattr__(self, "_closed", True)
         pool = object.__getattribute__(self, "_pool")
         conn = object.__getattribute__(self, "_conn")
         try:
-            conn.rollback() # لضمان عدم بقاء عمليات معلقة
-        except:
+            conn.rollback()
+        except Exception:
             pass
         pool.putconn(conn)
+
+    def __del__(self):
+        """شبكة أمان: لو نُسي close() أو حصل exception، الاتصال يرجع للـ pool تلقائياً."""
+        try:
+            self.close()
+        except Exception:
+            pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        conn = object.__getattribute__(self, "_conn")
+        if not object.__getattribute__(self, "_closed"):
+            try:
+                if exc_type is None:
+                    conn.commit()
+                else:
+                    conn.rollback()
+            except Exception:
+                pass
+        self.close()
+        return False
 
 def get_conn() -> _PooledConn:
     """
