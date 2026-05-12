@@ -150,8 +150,8 @@ def register_or_update_user(message):
         _idle_warned.discard(user.id)
         _idle_kicked.discard(user.id)
 
-    # Telegram لا يُرسل User-Agent ولا device-id — نستنتج من is_premium فقط
-    inferred_device = 'iPhone' if getattr(user, 'is_premium', False) else 'Android'
+    # Telegram لا يكشف نوع الجهاز — نسجّل 'Telegram' كقيمة محايدة صادقة
+    inferred_device = 'Telegram'
 
     try:
         conn = get_db_connection()
@@ -299,17 +299,20 @@ TEXTS = {
 }
 
 
-_lang_cache = {}
+_lang_cache: dict[int, tuple[str, float]] = {}   # user_id → (lang, timestamp)
 _lang_cache_lock = threading.Lock()
+_LANG_CACHE_TTL  = 300   # 5 دقائق — بعدها يُعاد جلب اللغة من DB
 
 
 def get_lang(user_id):
-    """يُرجع لغة المستخدم ('ar' أو 'en') مع cache بسيط في الذاكرة."""
+    """يُرجع لغة المستخدم ('ar' أو 'en') مع cache يتجدد كل 5 دقائق."""
     if user_id is None:
         return 'ar'
+    now = time.time()
     with _lang_cache_lock:
-        if user_id in _lang_cache:
-            return _lang_cache[user_id]
+        entry = _lang_cache.get(user_id)
+        if entry and now - entry[1] < _LANG_CACHE_TTL:
+            return entry[0]
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -320,7 +323,7 @@ def get_lang(user_id):
     except Exception:
         lang = 'ar'
     with _lang_cache_lock:
-        _lang_cache[user_id] = lang
+        _lang_cache[user_id] = (lang, time.time())
     return lang
 
 
@@ -1238,6 +1241,35 @@ def send_welcome(message):
     _start_session(message)
 
 
+@bot.message_handler(commands=['help'])
+def send_help(message):
+    register_or_update_user(message)
+    user_id = message.from_user.id
+    lang    = get_lang(user_id)
+    if lang == 'en':
+        text = (
+            "🤖 *Deal Pulse — Help*\n\n"
+            "📜 *Our Codes* — browse all available coupons\n"
+            "📂 *Categories* — filter stores by category\n"
+            "🔎 *Search* — type any store name to find its coupon\n"
+            "➕ *Request Code* — ask us to add a store you need\n"
+            "🛑 *End* — close the current session\n\n"
+            "💡 You can also just type a store name directly — "
+            "the bot will search automatically."
+        )
+    else:
+        text = (
+            "🤖 *نبض الصفقات — المساعدة*\n\n"
+            "📜 *أكوادنا* — تصفّح جميع الكوبونات المتاحة\n"
+            "📂 *الأقسام* — فلتر المتاجر حسب القسم\n"
+            "🔎 *البحث* — اكتب اسم أي متجر للعثور على كوبونه\n"
+            "➕ *طلب كود* — اطلب إضافة متجر لا تجد كوبونه\n"
+            "🛑 *إنهاء* — أغلق الجلسة الحالية\n\n"
+            "💡 يمكنك كتابة اسم المتجر مباشرة — البوت سيبحث تلقائياً."
+        )
+    bot.reply_to(message, text, parse_mode="Markdown")
+
+
 @bot.message_handler(func=lambda m: m.text and not m.text.startswith('/'))
 def handle_text(message):
     register_or_update_user(message)
@@ -1555,7 +1587,11 @@ def check_idle_users():
         print(f"idle query error: {e}")
         return
 
+    active_window = set(warn_ids) | set(kick_ids)
     with _idle_lock:
+        # حذف من الـ sets من خرج عن نافذة الـ 24 ساعة (غاب وانتهت فترة المراقبة)
+        _idle_warned &= active_window
+        _idle_kicked &= active_window
         to_warn = [uid for uid in warn_ids if uid not in _idle_warned and uid not in _idle_kicked]
         to_kick = [uid for uid in kick_ids if uid not in _idle_kicked]
 
