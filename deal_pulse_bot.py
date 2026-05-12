@@ -30,14 +30,16 @@ DB_CONFIG = {
 
 _API_SEARCH_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/") + "/api/v1/coupons/search"
 
-# إعدادات مراقب الخمول (قابلة للتعديل من .env)
-IDLE_TIMEOUT_MINUTES = int(os.getenv("IDLE_TIMEOUT_MINUTES", "15"))
-IDLE_CHECK_INTERVAL_SECONDS = 60      # دورة الفحص
-IDLE_ALERT_WINDOW_HOURS = 24          # لا ننبّه من اختفى أكثر من 24 ساعة
+# إعدادات مراقب الخمول — مرحلتان (قابلة للتعديل من .env)
+IDLE_WARN_MINUTES           = int(os.getenv("IDLE_WARN_MINUTES",  "5"))   # تذكير
+IDLE_KICK_MINUTES           = int(os.getenv("IDLE_KICK_MINUTES",  "10"))  # إنهاء جلسة
+IDLE_CHECK_INTERVAL_SECONDS = 30       # دورة الفحص كل 30 ثانية
+IDLE_ALERT_WINDOW_HOURS     = 24       # لا ننبّه من اختفى أكثر من 24 ساعة
 
-# مجموعة في الذاكرة لمنع تكرار التنبيه نفسه
-_idle_alerted = set()
-_idle_alerted_lock = threading.Lock()
+# تتبع المرحلتين في الذاكرة
+_idle_warned = set()   # أُرسل لهم التذكير (5 دقائق)
+_idle_kicked = set()   # أُنهيت جلستهم  (10 دقائق)
+_idle_lock   = threading.Lock()
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -144,8 +146,9 @@ def register_or_update_user(message):
     device_type يُستنتج تخميناً من is_premium لأن Telegram لا يكشفه."""
     user = message.from_user
 
-    with _idle_alerted_lock:
-        _idle_alerted.discard(user.id)
+    with _idle_lock:
+        _idle_warned.discard(user.id)
+        _idle_kicked.discard(user.id)
 
     # Telegram لا يُرسل User-Agent ولا device-id — نستنتج من is_premium فقط
     inferred_device = 'iPhone' if getattr(user, 'is_premium', False) else 'Android'
@@ -281,11 +284,18 @@ TEXTS = {
     'fav_added':         {'ar': '❤️ تمت إضافة *{sid}* لمفضلتك',
                           'en': '❤️ Added *{sid}* to your favorites'},
 
-    # Idle
-    'idle_alert':        {'ar': '⏰ غبت عنّا أكثر من {m} دقيقة.\n'
-                                'اضغط الزر لما تجهز نكمل 👇',
-                          'en': '⏰ You have been away for over {m} minutes.\n'
-                                'Tap the button when you are ready to continue 👇'},
+    # Idle — مرحلة 1: تذكير
+    'idle_warn':         {'ar': '⏰ غبت عنّا {m} دقائق...\n'
+                                'هل ما زلت معنا؟ لو نعم اضغط أي زر 😊\n'
+                                '_ستنتهي جلستك تلقائياً بعد {k} دقائق إضافية._',
+                          'en': '⏰ You have been away for {m} minutes...\n'
+                                'Still there? Tap any button 😊\n'
+                                '_Session will end in {k} more minutes._'},
+    # Idle — مرحلة 2: إنهاء جلسة تلقائي
+    'idle_alert':        {'ar': '🛑 انتهت جلستك تلقائياً بسبب الخمول.\n'
+                                'اضغط الزر لما تجهز نبدأ من جديد 👇',
+                          'en': '🛑 Your session ended automatically due to inactivity.\n'
+                                'Tap the button when you are ready 👇'},
 }
 
 
@@ -1523,45 +1533,84 @@ def check_idle_users():
     try:
         conn = get_db_connection()
         cur  = conn.cursor()
+        # المرحلة 1: خامل >= WARN دقيقة
         cur.execute("""
             SELECT telegram_id FROM bot_users
             WHERE last_seen IS NOT NULL
               AND last_seen < NOW() - make_interval(mins => %s)
               AND last_seen > NOW() - make_interval(hours => %s)
-        """, (IDLE_TIMEOUT_MINUTES, IDLE_ALERT_WINDOW_HOURS))
-        idle_ids = [row[0] for row in cur.fetchall()]
+        """, (IDLE_WARN_MINUTES, IDLE_ALERT_WINDOW_HOURS))
+        warn_ids = [row[0] for row in cur.fetchall()]
+
+        # المرحلة 2: خامل >= KICK دقيقة
+        cur.execute("""
+            SELECT telegram_id FROM bot_users
+            WHERE last_seen IS NOT NULL
+              AND last_seen < NOW() - make_interval(mins => %s)
+              AND last_seen > NOW() - make_interval(hours => %s)
+        """, (IDLE_KICK_MINUTES, IDLE_ALERT_WINDOW_HOURS))
+        kick_ids = [row[0] for row in cur.fetchall()]
         release_conn(conn)
     except Exception as e:
-        print(f"⚠️ idle query error: {e}")
+        print(f"idle query error: {e}")
         return
 
-    with _idle_alerted_lock:
-        to_notify = [uid for uid in idle_ids if uid not in _idle_alerted]
+    with _idle_lock:
+        to_warn = [uid for uid in warn_ids if uid not in _idle_warned and uid not in _idle_kicked]
+        to_kick = [uid for uid in kick_ids if uid not in _idle_kicked]
 
-    for uid in to_notify:
+    # ── المرحلة 1: إرسال تذكير ────────────────────────────────────────────
+    for uid in to_warn:
         try:
             lang = get_lang(uid)
             nav  = _get_nav(uid)
-            text = t(uid, 'idle_alert', m=IDLE_TIMEOUT_MINUTES)
-            alerted = False
+            text = t(uid, 'idle_warn',
+                     m=IDLE_WARN_MINUTES,
+                     k=IDLE_KICK_MINUTES - IDLE_WARN_MINUTES)
             if nav.get('msg_id') and nav.get('chat_id'):
                 try:
                     bot.edit_message_text(
                         text, nav['chat_id'], nav['msg_id'],
                         reply_markup=_kb_start(lang), parse_mode="Markdown"
                     )
-                    _update_nav(uid, state='ended')
-                    alerted = True
                 except Exception:
-                    pass
-            if not alerted:
-                bot.send_message(uid, text, reply_markup=_kb_start(lang))
-            log_action(None, 'idle_alert', user_id=uid)
-            with _idle_alerted_lock:
-                _idle_alerted.add(uid)
+                    bot.send_message(uid, text,
+                                     reply_markup=_kb_start(lang),
+                                     parse_mode="Markdown")
+            else:
+                bot.send_message(uid, text,
+                                 reply_markup=_kb_start(lang),
+                                 parse_mode="Markdown")
+            log_action(None, 'idle_warn', user_id=uid)
+            with _idle_lock:
+                _idle_warned.add(uid)
             time.sleep(0.05)
         except Exception as e:
-            print(f"⚠️ failed to alert {uid}: {e}")
+            print(f"idle warn failed for {uid}: {e}")
+
+    # ── المرحلة 2: إنهاء الجلسة تلقائياً ────────────────────────────────
+    for uid in to_kick:
+        try:
+            lang = get_lang(uid)
+            nav  = _get_nav(uid)
+            text = t(uid, 'idle_alert')
+            if nav.get('msg_id') and nav.get('chat_id'):
+                try:
+                    bot.edit_message_text(
+                        text, nav['chat_id'], nav['msg_id'],
+                        reply_markup=_kb_start(lang), parse_mode="Markdown"
+                    )
+                except Exception:
+                    bot.send_message(uid, text, reply_markup=_kb_start(lang))
+            else:
+                bot.send_message(uid, text, reply_markup=_kb_start(lang))
+            _update_nav(uid, state='ended')
+            log_action(None, 'idle_kick', user_id=uid)
+            with _idle_lock:
+                _idle_kicked.add(uid)
+            time.sleep(0.05)
+        except Exception as e:
+            print(f"idle kick failed for {uid}: {e}")
 
 
 def idle_watcher():
@@ -1569,7 +1618,7 @@ def idle_watcher():
         try:
             check_idle_users()
         except Exception as e:
-            print(f"⚠️ idle watcher loop: {e}")
+            print(f"idle watcher loop: {e}")
         time.sleep(IDLE_CHECK_INTERVAL_SECONDS)
 
 
