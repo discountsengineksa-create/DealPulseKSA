@@ -24,7 +24,7 @@ import os
 import pathlib
 import threading
 
-from fastapi import FastAPI, Request, HTTPException, Header
+from fastapi import FastAPI, Request, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -39,6 +39,7 @@ from deal_pulse_bot import (
     IDLE_TIMEOUT_MINUTES,
 )
 from api.routers import auth, coupons, track, users
+from api.db import get_db
 
 # ─── التحقق من المتغيرات الحرجة ───────────────────────────────────────────────
 TOKEN_ENV = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
@@ -77,6 +78,11 @@ app.add_middleware(
 )
 
 # ─── دمج Routers الـ API ──────────────────────────────────────────────────────
+# Direct route — ensures /categories resolves even if router include has ordering issues
+@app.get("/api/v1/coupons/categories", response_model=coupons.CategoriesResponse, tags=["coupons"])
+def _get_categories(conn=Depends(get_db)):
+    return coupons.get_categories(conn)
+
 app.include_router(coupons.router, prefix="/api/v1")
 app.include_router(track.router,   prefix="/api/v1")
 app.include_router(users.router,   prefix="/api/v1")
