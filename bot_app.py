@@ -93,6 +93,10 @@ def on_startup():
     - webhook registration: نتحقق أولاً، ولا نمسحه/نُسجّله إلا إذا اختلف
       (يمنع race condition بين الـ workers)
     """
+    # DEBUG: print all GET routes so we can confirm /categories is registered
+    get_routes = [r.path for r in app.routes if hasattr(r, 'methods') and 'GET' in (r.methods or [])]
+    print("DEBUG ROUTES:", sorted(get_routes))
+
     clean_legacy_columns()
     ensure_tracking_tables()
     backfill_user_behavior()
