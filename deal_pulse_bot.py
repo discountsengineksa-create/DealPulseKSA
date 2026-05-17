@@ -913,6 +913,7 @@ def _fetch_cats_from_db(lang: str) -> list:
                          trim(both '{{}}' from COALESCE({tags_expr}, '')), ','
                      )) AS tg
                 WHERE trim(tg) <> ''
+                  AND (last_time IS NULL OR last_time >= CURRENT_DATE)
             )
             SELECT t.tag
             FROM tags_raw t
@@ -1034,11 +1035,12 @@ def _db_search(search_term: str) -> list:
         like = f"%{search_term}%"
         cur.execute("""
             SELECT * FROM master
-            WHERE store_id                              ILIKE %s
-               OR COALESCE(name_en,        '')          ILIKE %s
-               OR COALESCE(store_tags,     '')          ILIKE %s
-               OR COALESCE(store_tags_en,  '')          ILIKE %s
-               OR COALESCE(store_bio_en,   '')          ILIKE %s
+            WHERE (last_time IS NULL OR last_time >= CURRENT_DATE)
+              AND (   store_id                              ILIKE %s
+                   OR COALESCE(name_en,        '')          ILIKE %s
+                   OR COALESCE(store_tags,     '')          ILIKE %s
+                   OR COALESCE(store_tags_en,  '')          ILIKE %s
+                   OR COALESCE(store_bio_en,   '')          ILIKE %s)
         """, (like, like, like, like, like))
         rows = [dict(r) for r in cur.fetchall()]
         release_conn(conn)

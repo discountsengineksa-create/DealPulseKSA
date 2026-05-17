@@ -73,6 +73,7 @@ def get_categories(conn=Depends(get_db)):
                      trim(both '{}' from COALESCE(store_tags, '')), ','
                  )) AS tg
             WHERE trim(tg) <> ''
+              AND (last_time IS NULL OR last_time >= CURRENT_DATE)
         )
         SELECT
             t.tag                                  AS tag_name,
@@ -104,6 +105,7 @@ def get_all_coupons(
             0 AS score_pct
         FROM master
         WHERE public_coupon IS NOT NULL AND public_coupon != ''
+          AND (last_time IS NULL OR last_time >= CURRENT_DATE)
         ORDER BY
             CASE WHEN is_trending = 'ترند 🔥' THEN 0 ELSE 1 END,
             id ASC
@@ -151,11 +153,14 @@ def search_coupons(
                 ) AS relevance_score
             FROM master
             WHERE
-                store_id                       ILIKE %(like)s
-                OR COALESCE(name_en,       '') ILIKE %(like)s
-                OR COALESCE(store_tags,    '') ILIKE %(like)s
-                OR COALESCE(store_tags_en, '') ILIKE %(like)s
-                OR COALESCE(store_bio_en,  '') ILIKE %(like)s
+                (last_time IS NULL OR last_time >= CURRENT_DATE)
+                AND (
+                    store_id                       ILIKE %(like)s
+                    OR COALESCE(name_en,       '') ILIKE %(like)s
+                    OR COALESCE(store_tags,    '') ILIKE %(like)s
+                    OR COALESCE(store_tags_en, '') ILIKE %(like)s
+                    OR COALESCE(store_bio_en,  '') ILIKE %(like)s
+                )
         )
         SELECT *, (relevance_score * 100)::int AS score_pct
         FROM filtered
