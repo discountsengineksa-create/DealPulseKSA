@@ -36,7 +36,7 @@ from deal_pulse_bot import (
     clean_legacy_columns,
     ensure_tracking_tables,
     backfill_user_behavior,
-    IDLE_TIMEOUT_MINUTES,
+    IDLE_KICK_MINUTES,
 )
 from api.routers import auth, coupons, track, users
 
@@ -97,7 +97,7 @@ def on_startup():
     ensure_tracking_tables()
     backfill_user_behavior()
     threading.Thread(target=idle_watcher, daemon=True).start()
-    print(f"✅ idle_watcher started (timeout={IDLE_TIMEOUT_MINUTES}m)")
+    print(f"✅ idle_watcher started (timeout={IDLE_KICK_MINUTES}m)")
 
     # webhook: idempotent — يُسجَّل فقط إذا كان غير صحيح
     try:
