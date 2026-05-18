@@ -1574,6 +1574,7 @@ else:
 # ============================================================
 
 def check_idle_users():
+    global _idle_warned, _idle_kicked
     try:
         conn = get_db_connection()
         cur  = conn.cursor()
