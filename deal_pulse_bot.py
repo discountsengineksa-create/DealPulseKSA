@@ -1450,7 +1450,12 @@ def handle_link_click(call):
     try:
         conn = get_db_connection()
         cur  = conn.cursor()
-        cur.execute("SELECT affiliate_link FROM master WHERE store_id = %s LIMIT 1", (store_id,))
+        cur.execute("""
+            SELECT affiliate_link FROM master
+            WHERE store_id = %s
+              AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+            LIMIT 1
+        """, (store_id,))
         row  = cur.fetchone()
         release_conn(conn)
     except Exception as e:
@@ -1480,7 +1485,12 @@ def handle_coupon_copy(call):
     try:
         conn = get_db_connection()
         cur  = conn.cursor()
-        cur.execute("SELECT public_coupon FROM master WHERE store_id = %s LIMIT 1", (store_id,))
+        cur.execute("""
+            SELECT public_coupon FROM master
+            WHERE store_id = %s
+              AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+            LIMIT 1
+        """, (store_id,))
         row    = cur.fetchone()
         release_conn(conn)
         coupon = row[0] if row and row[0] else None

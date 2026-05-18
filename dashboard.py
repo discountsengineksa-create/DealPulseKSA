@@ -19,6 +19,11 @@ import numpy as np
 import datetime
 import json
 import streamlit.components.v1 as components
+try:
+    from streamlit_option_menu import option_menu as _option_menu
+    _OPTION_MENU_OK = True
+except ImportError:
+    _OPTION_MENU_OK = False
 
 # ─── Cloudinary (اختياري: لرفع شعارات المتاجر تلقائياً) ──────────────────────
 try:
@@ -592,6 +597,79 @@ def get_master_data():
             conn.close()
 
 
+@st.cache_data(ttl=300)
+def _get_partner_logos() -> list[dict]:
+    """شعارات المتاجر النشطة للشريط المتحرك وشبكة الأيقونات — مخزنة 5 دقائق."""
+    try:
+        conn = get_conn()
+        rows = pd.read_sql(
+            """
+            SELECT store_id,
+                   COALESCE(name_en, store_id) AS display_name,
+                   logo_url
+            FROM   master
+            WHERE  logo_url IS NOT NULL AND logo_url != ''
+            ORDER  BY priority_score DESC NULLS LAST
+            LIMIT  50
+            """,
+            conn,
+        ).to_dict("records")
+        conn.close()
+        return rows
+    except Exception:
+        return []
+
+
+@st.cache_data(ttl=300)
+def _get_all_tags() -> list[str]:
+    """جميع الأقسام (tags) الفريدة من جدول master — مخزنة 5 دقائق."""
+    try:
+        conn = get_conn()
+        df = pd.read_sql(
+            """
+            SELECT DISTINCT trim(t) AS tag
+            FROM   master,
+                   unnest(string_to_array(
+                       trim(both '{}' from COALESCE(store_tags, '')), ','
+                   )) AS t
+            WHERE  trim(t) != ''
+            ORDER  BY tag
+            """,
+            conn,
+        )
+        conn.close()
+        return [r for r in df["tag"].tolist() if r]
+    except Exception:
+        return []
+
+
+# خريطة الأيقونات للأقسام العربية الشائعة
+_TAG_ICONS: dict[str, str] = {
+    "أزياء": "👗", "ملابس": "👕", "موضة": "👠",
+    "إلكترونيات": "📱", "تقنية": "💻", "جوالات": "📲",
+    "توصيل": "🛵", "مطاعم": "🍽️", "طعام": "🍔",
+    "تجميل": "💄", "عطور": "🌹", "عناية": "🧴",
+    "رياضة": "⚽", "لياقة": "🏋️",
+    "سفر": "✈️", "فنادق": "🏨",
+    "عقارات": "🏠",
+    "سوبرماركت": "🛒", "بقالة": "🧺",
+    "أطفال": "🧸", "ألعاب": "🎮",
+    "كتب": "📚", "تعليم": "🎓",
+    "سيارات": "🚗",
+    "صيدلية": "💊", "صحة": "🏥",
+    "حيوانات": "🐾",
+    "ديكور": "🛋️", "أثاث": "🪑",
+    "خدمات": "🔧",
+}
+
+
+def _tag_icon(tag: str) -> str:
+    for k, v in _TAG_ICONS.items():
+        if k in tag:
+            return v
+    return "🏷️"
+
+
 _API_SEARCH_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/") + "/api/v1/coupons/search"
 
 def fetch_coupon_data(q: str, limit: int = 50) -> tuple[int, pd.DataFrame]:
@@ -701,6 +779,7 @@ if _logo_b64:
 
 _MAIN_PAGES = [
 "إدخال بيانات الماستر", "الاستعلام والتعديل", "جدول الكوبونات",
+"📦 أرشيف المنتهية",
 "جدول الأقسام", "البحث عن كود", "طلبات الأكواد", "بيانات المستخدمين",
 "مستخدمو الموقع",
 ]
@@ -769,6 +848,71 @@ with st.sidebar.expander("🔧 أدوات متقدمة", expanded=(_cur in _OTHE
 
 # تحديث المتغير النهائي لعرض محتوى الصفحة الصحيحة
 page = st.session_state.page
+
+# ══════════════════════════════════════════════════════════════════════
+# شريط الشركاء العالمي — يظهر في أسفل كل صفحة (position: fixed)
+# ══════════════════════════════════════════════════════════════════════
+_partners_global = _get_partner_logos()
+if _partners_global:
+    _logos_html = "".join(
+        f'<div class="dp-partner-item" title="{p["display_name"]}">'
+        f'<img src="{p["logo_url"]}" alt="{p["display_name"]}" '
+        f'loading="lazy" onerror="this.parentElement.style.display=\'none\'">'
+        f'</div>'
+        for p in (_partners_global * 2)
+    )
+    st.markdown(
+        f"""
+        <style>
+        /* مساحة إضافية في الأسفل حتى لا يُخفي الشريط آخر عنصر */
+        .main .block-container {{ padding-bottom: 76px !important; }}
+
+        .dp-partners-bar {{
+            position: fixed; bottom: 0; left: 0; right: 0; z-index: 9998;
+            background: {BRAND["surface"]};
+            border-top: 2px solid {BRAND["emerald"]};
+            box-shadow: 0 -3px 16px rgba(16,185,129,0.13);
+            display: flex; align-items: center; height: 56px;
+            overflow: hidden;
+        }}
+        .dp-partners-label {{
+            font-family: 'Cairo', sans-serif; font-size: 11px; font-weight: 700;
+            color: {BRAND["emerald_deep"]}; padding: 0 14px;
+            white-space: nowrap; flex-shrink: 0;
+            border-left: 2px solid {BRAND["emerald_mint"]};
+        }}
+        .dp-partners-track-wrap {{ overflow: hidden; flex: 1; }}
+        .dp-partners-track {{
+            display: flex; gap: 18px; align-items: center;
+            animation: dp-scroll-rtl 40s linear infinite;
+            width: max-content;
+        }}
+        .dp-partners-track:hover {{ animation-play-state: paused; }}
+        @keyframes dp-scroll-rtl {{
+            0%   {{ transform: translateX(0); }}
+            100% {{ transform: translateX(-50%); }}
+        }}
+        .dp-partner-item img {{
+            height: 34px; width: auto; max-width: 72px;
+            object-fit: contain; border-radius: 6px;
+            filter: grayscale(15%) opacity(0.85);
+            transition: filter 0.25s, transform 0.2s;
+            cursor: default;
+        }}
+        .dp-partner-item img:hover {{
+            filter: grayscale(0%) opacity(1);
+            transform: scale(1.12);
+        }}
+        </style>
+        <div class="dp-partners-bar">
+            <div class="dp-partners-label">شركاؤنا</div>
+            <div class="dp-partners-track-wrap">
+                <div class="dp-partners-track">{_logos_html}</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 # --- الصفحة الأولى: إدخال بيانات الماستر (نسخة "بو سعود" المريحة) ---
 # --- الصفحة الأولى: إدخال بيانات الماستر (نسخة بو سعود الاحترافية بالبحث الفوري) ---
@@ -907,6 +1051,15 @@ if page == "إدخال بيانات الماستر":
             if logo_url_input:
                 st.image(logo_url_input, width=80)
 
+        # الصف 7: إشهار / إعلان مدفوع
+        st.divider()
+        is_promoted_input = st.checkbox(
+            "📣 إشهار (إعلان مدفوع) — يظهر في قسم «المتاجر المختارة» أعلى الموقع",
+            value=False,
+            key="is_promoted_add",
+            help="فعّل هذا الخيار للمتاجر التي دفعت مقابل الظهور في الواجهة الأمامية كإعلان مميّز."
+        )
+
         if st.form_submit_button("🚀 حفظ المتجر والبيانات"):
             # validation: كل الحقول AR + EN إجبارية
             required = {
@@ -946,14 +1099,15 @@ if page == "إدخال بيانات الماستر":
                                 priority_score, discount_value, store_tags, store_tags_en,
                                 my_coupon, first_time, last_time,
                                 total_coupon_copies, total_link_clicks, is_trending,
-                                logo_url)
-                        VALUES (%s,%s,%s,%s, %s,%s,%s,%s, %s,%s,%s,%s, %s,%s,%s, 0,0,'عادي', %s)
+                                logo_url, is_promoted)
+                        VALUES (%s,%s,%s,%s, %s,%s,%s,%s, %s,%s,%s,%s, %s,%s,%s, 0,0,'عادي', %s, %s)
                     """, (
                         store_id, name_en, aff_link, pub_coupon,
                         extra_offer, extra_offer_en, store_bio, store_bio_en,
                         priority, disc_val, tags_ar_lit, tags_en_lit,
                         my_coupon, date_start, date_end,
                         final_logo_url or None,
+                        bool(is_promoted_input),
                     ))
                     conn.commit()
                     st.success(f"✅ تم الحفظ! التاقات: {len(selected_tags)} AR / {len(selected_tags_en)} EN")
@@ -1024,6 +1178,22 @@ if page == "الاستعلام والتعديل":
                         else:
                             st.caption("لا يوجد شعار — الصق رابط في الحقل المجاور")
 
+                    # الصف 7: إشهار / إعلان مدفوع
+                    st.divider()
+                    current_promoted = bool(res.get('is_promoted') or False)
+                    u_promoted = st.checkbox(
+                        "📣 إشهار (إعلان مدفوع) — يظهر في قسم «المتاجر المختارة»",
+                        value=current_promoted,
+                        key=f"is_promoted_edit_{search_id}",
+                        help="فعّل أو ألغِ الإشهار لهذا المتجر بدون الحاجة لإعادة إدخال البيانات."
+                    )
+                    if u_promoted != current_promoted:
+                        st.caption(
+                            "🟢 سيتم تفعيل الإشهار عند الحفظ"
+                            if u_promoted else
+                            "⚪ سيتم إلغاء الإشهار عند الحفظ"
+                        )
+
                     if st.form_submit_button("💾 حفظ التعديلات النهائية"):
                         # validation: AR + EN كلاهما إجباري
                         required = {
@@ -1047,7 +1217,8 @@ if page == "الاستعلام والتعديل":
                                     store_bio=%s,   store_bio_en=%s,
                                     priority_score=%s, discount_value=%s, my_coupon=%s,
                                     first_time=%s, last_time=%s,
-                                    logo_url=%s
+                                    logo_url=%s,
+                                    is_promoted=%s
                                 WHERE id=%s
                             """, (
                                 u_store, u_name_en,
@@ -1057,6 +1228,7 @@ if page == "الاستعلام والتعديل":
                                 u_prio, u_disc, u_mine,
                                 u_start, u_end,
                                 u_logo.strip() or None,
+                                bool(u_promoted),
                                 search_id,
                             ))
                             conn.commit()
@@ -1077,25 +1249,58 @@ if page == "الاستعلام والتعديل":
     # 2. الجزء السفلي: الجدول بأسماء أعمدة عربية/إنجليزية وتلوين التاريخ
     try:
         conn = get_conn()
-        # سحب الأعمدة المطلوبة (AR + EN جنباً إلى جنب)
-        query = """
-            SELECT id, store_id, name_en, affiliate_link, public_coupon, discount_value,
-                    priority_score, first_time, last_time, my_coupon,
-                    store_bio, store_bio_en, extra_offer, extra_offer_en,
-                    store_tags, store_tags_en
-            FROM master ORDER BY id DESC
-        """
+        conn.rollback()  # تنظيف أي transaction سابقة معلّقة
+
+        # نفحص أولاً هل عمود is_promoted موجود في قاعدة البيانات المتصلة الحالية
+        # عشان الجدول يشتغل سواء طُبّق migration_008 أو لا
+        with conn.cursor() as _check:
+            _check.execute("""
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name='master' AND column_name='is_promoted'
+                LIMIT 1
+            """)
+            _has_promoted = _check.fetchone() is not None
+
+        if _has_promoted:
+            query = """
+                SELECT id, store_id, name_en, affiliate_link, public_coupon, discount_value,
+                        priority_score, first_time, last_time, my_coupon,
+                        store_bio, store_bio_en, extra_offer, extra_offer_en,
+                        store_tags, store_tags_en,
+                        COALESCE(is_promoted, FALSE) AS is_promoted
+                FROM master
+                ORDER BY COALESCE(is_promoted, FALSE) DESC, id DESC
+            """
+        else:
+            query = """
+                SELECT id, store_id, name_en, affiliate_link, public_coupon, discount_value,
+                        priority_score, first_time, last_time, my_coupon,
+                        store_bio, store_bio_en, extra_offer, extra_offer_en,
+                        store_tags, store_tags_en
+                FROM master
+                ORDER BY id DESC
+            """
         df = pd.read_sql(query, conn)
         conn.close()
 
         if not df.empty:
-            # تعريب أسماء الأعمدة يدوياً (AR + EN)
-            df.columns = [
+            base_cols = [
                 'ID', 'اسم المتجر', 'Store Name (EN)', 'رابط الأفلييت', 'كوبون العملاء', 'نسبة الخصم',
                 'الأهمية', 'تاريخ البداية', 'تاريخ الانتهاء', 'عمولتي الخاصة',
                 'وصف المتجر', 'Description (EN)', 'عرض إضافي', 'Extra Offer (EN)',
                 'تاقات', 'Tags (EN)',
             ]
+            if _has_promoted:
+                df['is_promoted'] = df['is_promoted'].apply(
+                    lambda v: '📣 مُشهَر' if bool(v) else '—'
+                )
+                df.columns = base_cols + ['الإشهار']
+            else:
+                df.columns = base_cols
+                st.info(
+                    "ℹ️ ميزة «الإشهار» غير مفعّلة على هذه القاعدة بعد. "
+                    "شغّل `migration_008_is_promoted.sql` على Railway لتفعيلها."
+                )
 
             # زر التحميل الماستر
             output = BytesIO()
@@ -1119,7 +1324,121 @@ if page == "الاستعلام والتعديل":
         st.error(f"خطأ في عرض الجدول: {e}")
 
 
-    # --- الصفحة الثالثة: جدول الكوبونات (واجهة العميل مع الترند من القاعدة) ---
+# ══════════════════════════════════════════════════════════════════════
+# 📦 أرشيف المنتهية — المتاجر اللي last_time < CURRENT_DATE
+#    الموقع والبوت يخفونها تلقائياً (فلتر last_time >= CURRENT_DATE)،
+#    وهنا نقدر نراجعها، نمدّد تاريخها، أو نحذفها نهائياً.
+# ══════════════════════════════════════════════════════════════════════
+if page == "📦 أرشيف المنتهية":
+    st.header("📦 أرشيف الأكواد المنتهية")
+    st.caption(
+        "هذه المتاجر **مخفية تلقائياً** من الموقع والبوت لأن تاريخ انتهائها مرّ. "
+        "تقدر تمدّد التاريخ لإعادة تفعيلها، أو تحذفها نهائياً."
+    )
+
+    try:
+        conn = get_conn()
+        conn.rollback()  # تنظيف أي transaction سابقة معلّقة
+
+        archive_q = """
+            SELECT id, store_id, name_en, last_time, store_tags,
+                   public_coupon, discount_value, affiliate_link,
+                   total_coupon_copies, total_link_clicks,
+                   (CURRENT_DATE - last_time) AS days_expired
+            FROM master
+            WHERE last_time IS NOT NULL AND last_time < CURRENT_DATE
+            ORDER BY last_time DESC, id DESC
+        """
+        df_arch = pd.read_sql(archive_q, conn)
+        conn.close()
+
+        if df_arch.empty:
+            st.success("✅ لا توجد متاجر منتهية حالياً — كل شي شغّال.")
+        else:
+            # تصدير
+            buf = BytesIO()
+            with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
+                df_arch.to_excel(writer, index=False)
+            st.download_button(
+                "📥 تصدير الأرشيف (Excel)",
+                buf.getvalue(),
+                f"Archive_{date.today()}.xlsx",
+            )
+
+            # عرض الجدول
+            display_df = df_arch.copy()
+            display_df.columns = [
+                'ID', 'اسم المتجر', 'Store Name (EN)', 'تاريخ الانتهاء', 'التاقات',
+                'الكوبون', 'الخصم', 'الرابط',
+                'مرات النسخ', 'مرات النقر',
+                'منذ كم يوم',
+            ]
+            st.dataframe(display_df, use_container_width=True, height=420)
+
+            st.divider()
+            st.subheader("⚙️ إجراءات على متجر")
+
+            # اختيار متجر للإجراء
+            options = [
+                f"#{row['id']} — {row['store_id']} (انتهى منذ {int(row['days_expired'])} يوم)"
+                for _, row in df_arch.iterrows()
+            ]
+            selected = st.selectbox("اختر متجراً:", options, key="archive_pick")
+            target_id = int(selected.split("—")[0].replace("#", "").strip())
+
+            act_col1, act_col2, act_col3 = st.columns(3)
+
+            with act_col1:
+                ext_days = st.number_input(
+                    "♻️ تمديد لكم يوم؟",
+                    min_value=1, max_value=365, value=30, step=1,
+                    key="archive_extend_days",
+                )
+                if st.button("♻️ إعادة تفعيل (تمديد التاريخ)", key="archive_extend_btn"):
+                    try:
+                        c2 = get_conn()
+                        cur2 = c2.cursor()
+                        cur2.execute(
+                            "UPDATE master SET last_time = CURRENT_DATE + %s WHERE id = %s",
+                            (int(ext_days), target_id),
+                        )
+                        c2.commit()
+                        c2.close()
+                        st.success(f"✅ تم تمديد المتجر #{target_id} لـ {ext_days} يوم.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"⚠️ فشل التمديد: {e}")
+
+            with act_col2:
+                if st.button("👁️ فتح في التعديل", key="archive_open_edit"):
+                    st.info(
+                        f"اذهب لصفحة **«الاستعلام والتعديل»** وأدخل الـ ID: **{target_id}**"
+                    )
+
+            with act_col3:
+                confirm_del = st.checkbox(
+                    "تأكيد الحذف النهائي",
+                    key=f"archive_confirm_del_{target_id}",
+                )
+                if st.button("🗑️ حذف نهائي", key="archive_delete_btn", type="primary"):
+                    if not confirm_del:
+                        st.warning("⚠️ فعّل خانة التأكيد أولاً.")
+                    else:
+                        try:
+                            c3 = get_conn()
+                            cur3 = c3.cursor()
+                            cur3.execute("DELETE FROM master WHERE id = %s", (target_id,))
+                            c3.commit()
+                            c3.close()
+                            st.success(f"🗑️ تم حذف المتجر #{target_id} نهائياً.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"⚠️ فشل الحذف: {e}")
+
+    except Exception as e:
+        st.error(f"خطأ في الأرشيف: {e}")
+
+
     # --- الصفحة الثالثة: جدول الكوبونات (واجهة العميل مع الترند من القاعدة) ---
 if page == "جدول الكوبونات":
     st.header("🎟️ عرض الكوبونات المباشر (واجهة البوت)")

@@ -47,7 +47,9 @@ def _select_lang_clause(lang: str) -> str:
             COALESCE(NULLIF(store_tags_en, ''),  store_tags)    AS store_tags,
             store_tags_en,
             discount_value,
-            total_coupon_copies, total_link_clicks, is_trending
+            total_coupon_copies, total_link_clicks, is_trending,
+            COALESCE(is_promoted, FALSE) AS is_promoted,
+            logo_url
         """
     return """
         id, store_id, name_en, affiliate_link, public_coupon,
@@ -55,7 +57,9 @@ def _select_lang_clause(lang: str) -> str:
         store_bio,   store_bio_en,
         store_tags,  store_tags_en,
         discount_value,
-        total_coupon_copies, total_link_clicks, is_trending
+        total_coupon_copies, total_link_clicks, is_trending,
+        COALESCE(is_promoted, FALSE) AS is_promoted,
+        logo_url
     """
 
 
@@ -107,7 +111,8 @@ def get_all_coupons(
         WHERE public_coupon IS NOT NULL AND public_coupon != ''
           AND (last_time IS NULL OR last_time >= CURRENT_DATE)
         ORDER BY
-            CASE WHEN is_trending = 'ترند 🔥' THEN 0 ELSE 1 END,
+            CASE WHEN COALESCE(is_promoted, FALSE) THEN 0 ELSE 1 END,
+            CASE WHEN is_trending = 'ترند 🔥'      THEN 0 ELSE 1 END,
             id ASC
         LIMIT %(limit)s
     """

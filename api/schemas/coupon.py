@@ -15,6 +15,8 @@ class StoreResult(BaseModel):
     store_tags: list[str] = Field(default_factory=list)
     store_tags_en: list[str] = Field(default_factory=list)
     is_trending: str | None = None
+    is_promoted: bool = False
+    logo_url: str | None = None
     total_coupon_copies: int = 0
     total_link_clicks: int = 0
     score_pct: int = 0
