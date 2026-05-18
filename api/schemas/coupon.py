@@ -11,6 +11,7 @@ class StoreResult(BaseModel):
     extra_offer_en: str | None = None
     store_bio: str | None = None
     store_bio_en: str | None = None
+    description: str | None = None
     discount_value: str | None = None
     store_tags: list[str] = Field(default_factory=list)
     store_tags_en: list[str] = Field(default_factory=list)

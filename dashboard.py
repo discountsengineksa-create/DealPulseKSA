@@ -57,6 +57,32 @@ def _upload_logo(file_bytes: bytes, store_slug: str) -> str | None:
         st.warning(f"⚠️ فشل رفع الشعار إلى Cloudinary: {e}")
         return None
 
+
+def _trigger_social_broadcast(master_id: int | None) -> None:
+    """
+    fire-and-forget: يبلّغ الـ FastAPI لينشر العرض على منصات السوشيال في الخلفية.
+    لا يُعطّل الـ dashboard لو فشل — يكتفي بـ warning خفيف.
+    """
+    if not master_id:
+        return
+    secret = os.getenv("ADMIN_SHARED_SECRET")
+    api_url = os.getenv(
+        "INTERNAL_API_URL",
+        "https://dealpulseksa-production.up.railway.app",
+    ).rstrip("/")
+    if not secret:
+        st.toast("ℹ️ النشر التلقائي معطّل — أضف ADMIN_SHARED_SECRET لتفعيله.")
+        return
+    try:
+        requests.post(
+            f"{api_url}/api/v1/admin/broadcast/{master_id}",
+            headers={"X-Admin-Secret": secret},
+            timeout=4,
+        )
+        st.toast("📢 جدولة نشر العرض على منصات السوشيال…")
+    except Exception as e:
+        st.warning(f"تم الحفظ، لكن فشلت جدولة النشر: {e}")
+
 # ─── لوحة ألوان "نبض الصفقات KSA" ──────────────────────────────────────────
 BRAND = {
 "bg":             "#FAFAF8",
@@ -1022,6 +1048,14 @@ if page == "إدخال بيانات الماستر":
         store_bio    = b_ar.text_area("📝 وصف المتجر (عربي)")
         store_bio_en = b_en.text_area("📝 Store Description (English)")
 
+        # الصف 4.5: تفاصيل العرض — تُستخدم في منشورات السوشيال
+        description = st.text_area(
+            "📣 تفاصيل العرض (تُنشر على منصات السوشيال)",
+            placeholder="مثال: خصم حصري على جميع منتجات القسم النسائي حتى نهاية الأسبوع. شامل التوصيل المجاني.",
+            height=90,
+            help="هذا النص يظهر في المنشورات التلقائية على X, Instagram, Facebook, Pinterest, Telegram, Discord, Threads, LinkedIn.",
+        )
+
         st.divider()
 
         # الصف 5: الأهمية + التواريخ + عمولتي
@@ -1096,22 +1130,27 @@ if page == "إدخال بيانات الماستر":
                         INSERT INTO master
                             (store_id, name_en, affiliate_link, public_coupon,
                                 extra_offer, extra_offer_en, store_bio, store_bio_en,
+                                description,
                                 priority_score, discount_value, store_tags, store_tags_en,
                                 my_coupon, first_time, last_time,
                                 total_coupon_copies, total_link_clicks, is_trending,
                                 logo_url, is_promoted)
-                        VALUES (%s,%s,%s,%s, %s,%s,%s,%s, %s,%s,%s,%s, %s,%s,%s, 0,0,'عادي', %s, %s)
+                        VALUES (%s,%s,%s,%s, %s,%s,%s,%s, %s, %s,%s,%s,%s, %s,%s,%s, 0,0,'عادي', %s, %s)
+                        RETURNING id
                     """, (
                         store_id, name_en, aff_link, pub_coupon,
                         extra_offer, extra_offer_en, store_bio, store_bio_en,
+                        (description or None),
                         priority, disc_val, tags_ar_lit, tags_en_lit,
                         my_coupon, date_start, date_end,
                         final_logo_url or None,
                         bool(is_promoted_input),
                     ))
+                    new_master_id = cur.fetchone()[0]
                     conn.commit()
                     st.success(f"✅ تم الحفظ! التاقات: {len(selected_tags)} AR / {len(selected_tags_en)} EN")
                     st.balloons()
+                    _trigger_social_broadcast(new_master_id)
                 except Exception as e:
                     st.error(f"⚠️ مشكلة في القاعدة: {e}")
                 finally:
@@ -1156,6 +1195,14 @@ if page == "الاستعلام والتعديل":
                     r4_ar, r4_en = st.columns(2)
                     u_bio    = r4_ar.text_area("📝 وصف المتجر (عربي)", res['store_bio'])
                     u_bio_en = r4_en.text_area("📝 Store Description (English)", res.get('store_bio_en') or '')
+
+                    # الصف 4.5: تفاصيل العرض — تُستخدم في منشورات السوشيال
+                    u_description = st.text_area(
+                        "📣 تفاصيل العرض (تُنشر على منصات السوشيال)",
+                        value=res.get('description') or '',
+                        height=90,
+                        help="يُنشر تلقائياً فقط عند تغيير «كوبون العملاء» — التعديلات الأخرى لا تُطلق نشراً.",
+                    )
 
                     st.divider()
 
@@ -1215,6 +1262,7 @@ if page == "الاستعلام والتعديل":
                                     affiliate_link=%s, public_coupon=%s,
                                     extra_offer=%s, extra_offer_en=%s,
                                     store_bio=%s,   store_bio_en=%s,
+                                    description=%s,
                                     priority_score=%s, discount_value=%s, my_coupon=%s,
                                     first_time=%s, last_time=%s,
                                     logo_url=%s,
@@ -1225,6 +1273,7 @@ if page == "الاستعلام والتعديل":
                                 u_aff, u_pub,
                                 u_extra, u_extra_en,
                                 u_bio, u_bio_en,
+                                (u_description or None),
                                 u_prio, u_disc, u_mine,
                                 u_start, u_end,
                                 u_logo.strip() or None,
@@ -1233,6 +1282,9 @@ if page == "الاستعلام والتعديل":
                             ))
                             conn.commit()
                             st.success("✅ تم تحديث البيانات بنجاح.")
+                            # نشر تلقائي فقط لما الكوبون يتغير (تجديد كود)
+                            if (u_pub or '').strip() != (res.get('public_coupon') or '').strip():
+                                _trigger_social_broadcast(search_id)
                             st.rerun()
             
                 if st.button("🗑️ حذف السجل"):
