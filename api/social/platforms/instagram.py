@@ -8,16 +8,23 @@ Setup:
      META_PAGE_ACCESS_TOKEN=<نفس التوكن الطويل المستخدم في Facebook>
 
 ملاحظة: Instagram يتطلّب صورة (لا يقبل نص-فقط). image_url لازم يكون public HTTPS.
+
+Flow: create container -> poll حتى FINISHED -> publish (يلزم polling لأن الـ
+container processing async — لو نشرنا فوراً يطلع Media ID is not available).
 """
 from __future__ import annotations
 
 import os
+import time
 
 import requests
 
 from api.social.base import BaseSocialPoster, PostResult
 
 GRAPH = "https://graph.facebook.com/v21.0"
+
+_POLL_INTERVAL_SEC = 2
+_POLL_MAX_ATTEMPTS = 15  # 30 ثانية إجمالاً — كافية لصور صغيرة
 
 
 class InstagramPoster(BaseSocialPoster):
@@ -57,7 +64,36 @@ class InstagramPoster(BaseSocialPoster):
         if not creation_id:
             return PostResult(error="no creation_id returned")
 
-        # Step 2: انشر الـ container
+        # Step 2: poll حالة الـ container حتى FINISHED
+        last_status = None
+        for _ in range(_POLL_MAX_ATTEMPTS):
+            time.sleep(_POLL_INTERVAL_SEC)
+            try:
+                check = requests.get(
+                    f"{GRAPH}/{creation_id}",
+                    params={"fields": "status_code,status", "access_token": token},
+                    timeout=10,
+                )
+            except requests.RequestException:
+                continue
+            if check.status_code >= 400:
+                continue
+            try:
+                last_status = check.json().get("status_code")
+            except Exception:
+                continue
+            if last_status == "FINISHED":
+                break
+            if last_status in ("ERROR", "EXPIRED"):
+                detail = check.json().get("status", "")
+                return PostResult(error=f"container {last_status}: {detail[:200]}")
+
+        if last_status != "FINISHED":
+            return PostResult(
+                error=f"container not ready after {_POLL_MAX_ATTEMPTS * _POLL_INTERVAL_SEC}s (last={last_status})"
+            )
+
+        # Step 3: انشر الـ container
         try:
             publish = requests.post(
                 f"{GRAPH}/{ig_id}/media_publish",
