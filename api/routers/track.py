@@ -5,6 +5,7 @@ from api.db import get_db
 from api.schemas.track import (
     TrackRequest, TrackResponse,
     SearchLogRequest, SearchLogResponse,
+    CodeRequestRequest, CodeRequestResponse,
 )
 
 router = APIRouter(prefix="/track", tags=["tracking"])
@@ -89,9 +90,50 @@ def log_search(payload: SearchLogRequest, conn=Depends(get_db)):
     with conn.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO direct_search (search_keyword, store_id, user_found, platform, name_en)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO direct_search
+                (search_keyword, store_id, user_found, platform, name_en, user_id, user_email)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
-            (payload.keyword, payload.store_id, payload.user_found, payload.platform, payload.name_en),
+            (
+                payload.keyword, payload.store_id, payload.user_found,
+                payload.platform, payload.name_en,
+                payload.user_id, payload.user_email,
+            ),
         )
     return SearchLogResponse(ok=True, keyword=payload.keyword)
+
+
+@router.post("/request-code", response_model=CodeRequestResponse, status_code=201)
+def request_code(payload: CodeRequestRequest, conn=Depends(get_db)):
+    """
+    تسجيل طلب عميل لتوفير كود متجر غير موجود حالياً.
+
+    يستقبل من:
+      - الموقع: brand_name + user_email (مطلوب للتواصل لاحقاً)
+      - البوت:  brand_name + user_id (telegram_id)
+      - يمكن إرسال كلاهما معاً لو متوفر
+    """
+    brand = payload.brand_name.strip()
+    if not brand:
+        raise HTTPException(status_code=400, detail="brand_name cannot be empty")
+
+    email = (payload.user_email or "").strip() or None
+    if not email and not payload.user_id:
+        raise HTTPException(
+            status_code=400,
+            detail="either user_email (web) or user_id (bot) must be provided",
+        )
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO unavailable_codes_requests
+                (brand_name, user_email, user_id, requested_at)
+            VALUES (%s, %s, %s, NOW())
+            RETURNING id
+            """,
+            (brand, email, payload.user_id),
+        )
+        new_id = cur.fetchone()[0]
+
+    return CodeRequestResponse(ok=True, request_id=new_id, brand_name=brand)
