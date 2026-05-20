@@ -98,6 +98,75 @@ SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USER or "onboarding@resend.dev")
 SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "نبض الصفقات")
 
 
+def _send_email(to: str, subject: str, html: str) -> bool:
+    """
+    الناقل العام للإيميلات — يُستخدم في كل أنواع الإيميل (استعادة كلمة سر،
+    تنبيهات تشغيلية، توجيهات AI...).
+
+    الترتيب: Resend HTTPS API ← SMTP ← Dev mode (طباعة في الـ logs)
+    يرجع True لو نجح، False لو فشل.
+    """
+    if not RESEND_API_KEY and not (SMTP_USER and SMTP_PASS):
+        print(f"[DEV MODE] Email to {to} | subject: {subject}")
+        return True
+
+    # ── المسار 1: Resend HTTPS API (port 443، لا يُحجب على المنصات السحابية) ──
+    if RESEND_API_KEY:
+        try:
+            response = requests.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {RESEND_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "from": f"{SMTP_FROM_NAME} <{SMTP_FROM}>",
+                    "to": [to],
+                    "subject": subject,
+                    "html": html,
+                },
+                timeout=15,
+            )
+            if response.status_code in (200, 201, 202):
+                print(f"✅ Resend: email sent to {to}")
+                return True
+            print(f"❌ Resend failed [{response.status_code}]: {response.text[:200]}")
+            return False
+        except Exception as e:
+            print(f"❌ Resend exception: {e}")
+            return False
+
+    # ── المسار 2: SMTP (احتياطي — قد يفشل على Railway بسبب حجب outbound) ────
+    smtp_pass_clean = (SMTP_PASS or "").replace(" ", "")
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_FROM}>"
+    msg["To"] = to
+    msg.attach(MIMEText(html, "html", "utf-8"))
+
+    try:
+        # نحلّ الـ host لـ IPv4 صراحةً (Railway قد يرجّح IPv6 بدون route)
+        ipv4_host = socket.gethostbyname(SMTP_HOST)
+
+        if SMTP_PORT == 465:
+            with smtplib.SMTP_SSL(ipv4_host, SMTP_PORT, timeout=20) as server:
+                server.login(SMTP_USER, smtp_pass_clean)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(ipv4_host, SMTP_PORT, timeout=20) as server:
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+                server.login(SMTP_USER, smtp_pass_clean)
+                server.send_message(msg)
+        print(f"✅ SMTP: email sent to {to}")
+        return True
+    except Exception as e:
+        print(f"❌ فشل إرسال إيميل لـ {to}: {e}")
+        return False
+
+
 def send_reset_email(to_email: str, user_name: str, code: str) -> bool:
     """
     يرسل كود استعادة كلمة المرور للإيميل.
@@ -220,58 +289,5 @@ def send_reset_email(to_email: str, user_name: str, code: str) -> bool:
 </body>
 </html>"""
 
-    # ── المسار 1: Resend HTTPS API (port 443، لا يُحجب على المنصات السحابية) ──
-    if RESEND_API_KEY:
-        try:
-            response = requests.post(
-                "https://api.resend.com/emails",
-                headers={
-                    "Authorization": f"Bearer {RESEND_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "from": f"{SMTP_FROM_NAME} <{SMTP_FROM}>",
-                    "to": [to_email],
-                    "subject": subject,
-                    "html": html_body,
-                },
-                timeout=15,
-            )
-            if response.status_code in (200, 201, 202):
-                print(f"✅ Resend: email sent to {to_email}")
-                return True
-            print(f"❌ Resend failed [{response.status_code}]: {response.text[:200]}")
-            return False
-        except Exception as e:
-            print(f"❌ Resend exception: {e}")
-            return False
-
-    # ── المسار 2: SMTP (احتياطي — قد يفشل على Railway بسبب حجب outbound) ────
-    smtp_pass_clean = (SMTP_PASS or "").replace(" ", "")
-
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_FROM}>"
-    msg["To"] = to_email
-    msg.attach(MIMEText(html_body, "html", "utf-8"))
-
-    try:
-        # نحلّ الـ host لـ IPv4 صراحةً (Railway قد يرجّح IPv6 بدون route)
-        ipv4_host = socket.gethostbyname(SMTP_HOST)
-
-        if SMTP_PORT == 465:
-            with smtplib.SMTP_SSL(ipv4_host, SMTP_PORT, timeout=20) as server:
-                server.login(SMTP_USER, smtp_pass_clean)
-                server.send_message(msg)
-        else:
-            with smtplib.SMTP(ipv4_host, SMTP_PORT, timeout=20) as server:
-                server.ehlo()
-                server.starttls()
-                server.ehlo()
-                server.login(SMTP_USER, smtp_pass_clean)
-                server.send_message(msg)
-        print(f"✅ SMTP: email sent to {to_email}")
-        return True
-    except Exception as e:
-        print(f"❌ فشل إرسال إيميل لـ {to_email}: {e}")
-        return False
+    # ناقل الإيميل المشترك (Resend → SMTP → Dev mode)
+    return _send_email(to=to_email, subject=subject, html=html_body)
