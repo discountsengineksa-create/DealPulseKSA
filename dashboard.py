@@ -118,6 +118,7 @@ _logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo.png"
 _logo_b64: str | None = None
 if os.path.exists(_logo_path):
     with open(_logo_path, "rb") as _f:_logo_b64 = base64.b64encode(_f.read()).decode()
+_wm_url = f"data:image/jpeg;base64,{_logo_b64}" if _logo_b64 else ""
 
 # إعداد الصفحة
 st.set_page_config(
@@ -126,6 +127,37 @@ page_icon="🟢",
 layout="wide",
 initial_sidebar_state="expanded",
 )
+
+# ─── CSS حرج مبكّر: يمنع وميض التصميم الافتراضي (FOUC) قبل تحميل الستايل الكامل ─
+# يثبّت اتجاه RTL، يضع الـ sidebar على اليمين، ويفرض خلفية الثيم الفاتحة فوراً
+# حتى لا يومض المستخدم الثيم الداكن الافتراضي للمتصفح/Streamlit قبل أن يصل
+# بلوك الستايل الكامل الذي يأتي بعد المصادقة.
+_BRAND_BG_EARLY = BRAND["bg"]
+_BRAND_BG_ALT_EARLY = BRAND["bg_alt"]
+_BRAND_BORDER_EARLY = BRAND["border_soft"]
+_BRAND_TEXT_EARLY = BRAND["text"]
+st.markdown(f"""
+<style>
+html, body, [data-testid="stAppViewContainer"], .main, .main .block-container {{
+    direction: rtl !important;
+    text-align: right !important;
+    background: {_BRAND_BG_EARLY} !important;
+    color: {_BRAND_TEXT_EARLY} !important;
+    font-family: 'Segoe UI', Tahoma, Arial, sans-serif !important;
+}}
+.stApp {{ background: {_BRAND_BG_EARLY} !important; }}
+[data-testid="stSidebar"] {{
+    right: 0 !important;
+    left: auto !important;
+    background: linear-gradient(180deg, {_BRAND_BG_ALT_EARLY} 0%, {_BRAND_BG_EARLY} 60%, {_BRAND_BORDER_EARLY} 100%) !important;
+}}
+[data-testid="stSidebar"] * {{ color: {_BRAND_TEXT_EARLY} !important; text-align: right !important; }}
+[data-testid="stSidebarCollapseButton"],
+[data-testid="stDeployButton"],
+[data-testid="stToolbar"],
+header[data-testid="stHeader"] {{ display: none !important; }}
+</style>
+""", unsafe_allow_html=True)
 
 # ─── بوابة تسجيل الدخول ────────────────────────────────────────────────────
 # لا أي بيانات تظهر قبل المصادقة. الإعدادات في .streamlit/secrets.toml محلياً
@@ -149,10 +181,6 @@ if st.session_state.get("authentication_status") is False:
 if st.session_state.get("authentication_status") is None:
     st.info("🔒 الرجاء تسجيل الدخول للوصول إلى لوحة التحكم")
     st.stop()
-
-_wm_url = f"data:image/jpeg;base64,{_logo_b64}" if _logo_b64 else ""
-
-
 
 # ─── ثيم "نبض الصفقات KSA" — Light Premium (مطابق للشعار) ────────────────────
 st.markdown(f"""
@@ -875,71 +903,6 @@ with st.sidebar.expander("🔧 أدوات متقدمة", expanded=(_cur in _OTHE
 # تحديث المتغير النهائي لعرض محتوى الصفحة الصحيحة
 page = st.session_state.page
 
-# ══════════════════════════════════════════════════════════════════════
-# شريط الشركاء العالمي — يظهر في أسفل كل صفحة (position: fixed)
-# ══════════════════════════════════════════════════════════════════════
-_partners_global = _get_partner_logos()
-if _partners_global:
-    _logos_html = "".join(
-        f'<div class="dp-partner-item" title="{p["display_name"]}">'
-        f'<img src="{p["logo_url"]}" alt="{p["display_name"]}" '
-        f'loading="lazy" onerror="this.parentElement.style.display=\'none\'">'
-        f'</div>'
-        for p in (_partners_global * 2)
-    )
-    st.markdown(
-        f"""
-        <style>
-        /* مساحة إضافية في الأسفل حتى لا يُخفي الشريط آخر عنصر */
-        .main .block-container {{ padding-bottom: 76px !important; }}
-
-        .dp-partners-bar {{
-            position: fixed; bottom: 0; left: 0; right: 0; z-index: 9998;
-            background: {BRAND["surface"]};
-            border-top: 2px solid {BRAND["emerald"]};
-            box-shadow: 0 -3px 16px rgba(16,185,129,0.13);
-            display: flex; align-items: center; height: 56px;
-            overflow: hidden;
-        }}
-        .dp-partners-label {{
-            font-family: 'Cairo', sans-serif; font-size: 11px; font-weight: 700;
-            color: {BRAND["emerald_deep"]}; padding: 0 14px;
-            white-space: nowrap; flex-shrink: 0;
-            border-left: 2px solid {BRAND["emerald_mint"]};
-        }}
-        .dp-partners-track-wrap {{ overflow: hidden; flex: 1; }}
-        .dp-partners-track {{
-            display: flex; gap: 18px; align-items: center;
-            animation: dp-scroll-rtl 40s linear infinite;
-            width: max-content;
-        }}
-        .dp-partners-track:hover {{ animation-play-state: paused; }}
-        @keyframes dp-scroll-rtl {{
-            0%   {{ transform: translateX(0); }}
-            100% {{ transform: translateX(-50%); }}
-        }}
-        .dp-partner-item img {{
-            height: 34px; width: auto; max-width: 72px;
-            object-fit: contain; border-radius: 6px;
-            filter: grayscale(15%) opacity(0.85);
-            transition: filter 0.25s, transform 0.2s;
-            cursor: default;
-        }}
-        .dp-partner-item img:hover {{
-            filter: grayscale(0%) opacity(1);
-            transform: scale(1.12);
-        }}
-        </style>
-        <div class="dp-partners-bar">
-            <div class="dp-partners-label">شركاؤنا</div>
-            <div class="dp-partners-track-wrap">
-                <div class="dp-partners-track">{_logos_html}</div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
 # --- الصفحة الأولى: إدخال بيانات الماستر (نسخة "بو سعود" المريحة) ---
 # --- الصفحة الأولى: إدخال بيانات الماستر (نسخة بو سعود الاحترافية بالبحث الفوري) ---
 if page == "إدخال بيانات الماستر":
@@ -1065,6 +1028,14 @@ if page == "إدخال بيانات الماستر":
         date_end   = col9.date_input("📅 تاريخ الانتهاء", datetime.date.today() + datetime.timedelta(days=30))
         my_coupon  = col10.text_input("💵 عمولتي (كود التتبع)")
 
+        # الصف 5.5: مصدر الكود (من أي منصة تابعة)
+        source_platform = st.text_input(
+            "🛰️ من أين (المنصة التابعة لهذا الكود)",
+            value="",
+            placeholder="مثال: ArabClicks, CJ Affiliate, تواصل مباشر...",
+            help="اكتب اسم المنصة التي جاء منها هذا الكود — مفيد عند تجديد الكود لاحقاً.",
+        )
+
         # الصف 6: شعار المتجر
         st.divider()
         st.markdown("**🖼️ شعار المتجر (اختياري)**")
@@ -1126,6 +1097,7 @@ if page == "إدخال بيانات الماستر":
                     cur = conn.cursor()
                     tags_ar_lit = "{" + ",".join(selected_tags) + "}"
                     tags_en_lit = "{" + ",".join(selected_tags_en) + "}"
+                    _src_val = (source_platform or "").strip() or None
                     cur.execute("""
                         INSERT INTO master
                             (store_id, name_en, affiliate_link, public_coupon,
@@ -1134,8 +1106,8 @@ if page == "إدخال بيانات الماستر":
                                 priority_score, discount_value, store_tags, store_tags_en,
                                 my_coupon, first_time, last_time,
                                 total_coupon_copies, total_link_clicks, is_trending,
-                                logo_url, is_promoted)
-                        VALUES (%s,%s,%s,%s, %s,%s,%s,%s, %s, %s,%s,%s,%s, %s,%s,%s, 0,0,'عادي', %s, %s)
+                                logo_url, is_promoted, source_platform)
+                        VALUES (%s,%s,%s,%s, %s,%s,%s,%s, %s, %s,%s,%s,%s, %s,%s,%s, 0,0,'عادي', %s, %s, %s)
                         RETURNING id
                     """, (
                         store_id, name_en, aff_link, pub_coupon,
@@ -1145,6 +1117,7 @@ if page == "إدخال بيانات الماستر":
                         my_coupon, date_start, date_end,
                         final_logo_url or None,
                         bool(is_promoted_input),
+                        _src_val,
                     ))
                     new_master_id = cur.fetchone()[0]
                     conn.commit()
@@ -1214,6 +1187,14 @@ if page == "الاستعلام والتعديل":
                     u_end   = r5c3.date_input("📅 تاريخ الانتهاء", res['last_time'])
                     u_mine  = r5c4.text_input("💵 عمولتي الخاصة", res['my_coupon'])
 
+                    # الصف 5.5: مصدر الكود
+                    u_source = st.text_input(
+                        "🛰️ من أين (المنصة التابعة لهذا الكود)",
+                        value=(res.get('source_platform') or ''),
+                        placeholder="مثال: ArabClicks, CJ Affiliate, تواصل مباشر...",
+                        help="يساعدك تعرف من أي منصة تابعة جاء كود هذا المتجر — مفيد عند تجديد الكود.",
+                    )
+
                     # الصف 6: شعار المتجر
                     st.divider()
                     logo_edit_c1, logo_edit_c2 = st.columns([1, 2])
@@ -1256,6 +1237,7 @@ if page == "الاستعلام والتعديل":
                             st.warning("⚠️ الحقول التالية إجبارية: " + " ، ".join(missing))
                         else:
                             # ملاحظة: التاقات (store_tags / store_tags_en) لا تُعدَّل من هنا
+                            _u_src_val = (u_source or "").strip() or None
                             cur.execute("""
                                 UPDATE master SET
                                     store_id=%s, name_en=%s,
@@ -1266,7 +1248,8 @@ if page == "الاستعلام والتعديل":
                                     priority_score=%s, discount_value=%s, my_coupon=%s,
                                     first_time=%s, last_time=%s,
                                     logo_url=%s,
-                                    is_promoted=%s
+                                    is_promoted=%s,
+                                    source_platform=%s
                                 WHERE id=%s
                             """, (
                                 u_store, u_name_en,
@@ -1278,6 +1261,7 @@ if page == "الاستعلام والتعديل":
                                 u_start, u_end,
                                 u_logo.strip() or None,
                                 bool(u_promoted),
+                                _u_src_val,
                                 search_id,
                             ))
                             conn.commit()
@@ -1405,8 +1389,25 @@ if page == "📦 أرشيف المنتهية":
         conn.close()
 
         if df_arch.empty:
+            kc1, _kc2, _kc3 = st.columns(3)
+            with kc1:
+                kpi_card("📦", "إجمالي المتاجر المنتهية", 0, "emerald")
             st.success("✅ لا توجد متاجر منتهية حالياً — كل شي شغّال.")
         else:
+            # كروت الإحصائيات
+            recent_expired = int((df_arch['days_expired'] <= 7).sum())
+            old_expired    = int((df_arch['days_expired'] >  30).sum())
+
+            kc1, kc2, kc3 = st.columns(3)
+            with kc1:
+                kpi_card("📦", "إجمالي المتاجر المنتهية", len(df_arch), "danger")
+            with kc2:
+                kpi_card("🆕", "انتهت مؤخراً (٧ أيام)", recent_expired, "warning")
+            with kc3:
+                kpi_card("🪦", "منتهية من زمان (+٣٠ يوم)", old_expired, "neutral")
+
+            st.divider()
+
             # تصدير
             buf = BytesIO()
             with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
@@ -1417,7 +1418,7 @@ if page == "📦 أرشيف المنتهية":
                 f"Archive_{date.today()}.xlsx",
             )
 
-            # عرض الجدول
+            # عرض الجدول — مقسّم على tabs حسب الكروت
             display_df = df_arch.copy()
             display_df.columns = [
                 'ID', 'اسم المتجر', 'Store Name (EN)', 'تاريخ الانتهاء', 'التاقات',
@@ -1425,7 +1426,26 @@ if page == "📦 أرشيف المنتهية":
                 'مرات النسخ', 'مرات النقر',
                 'منذ كم يوم',
             ]
-            st.dataframe(display_df, use_container_width=True, height=420)
+            _mask_recent = (df_arch['days_expired'] <= 7).values
+            _mask_old    = (df_arch['days_expired'] >  30).values
+
+            tab_all_arc, tab_recent_arc, tab_old_arc = st.tabs([
+                f"📦 الكل ({len(df_arch)})",
+                f"🆕 انتهت مؤخراً ({recent_expired})",
+                f"🪦 من زمان (+٣٠ يوم) ({old_expired})",
+            ])
+            with tab_all_arc:
+                st.dataframe(display_df, use_container_width=True, height=420)
+            with tab_recent_arc:
+                if recent_expired == 0:
+                    st.info("ما فيه متاجر انتهت خلال آخر 7 أيام.")
+                else:
+                    st.dataframe(display_df.loc[_mask_recent], use_container_width=True, height=420)
+            with tab_old_arc:
+                if old_expired == 0:
+                    st.success("👌 ما فيه متاجر منتهية من أكثر من 30 يوم.")
+                else:
+                    st.dataframe(display_df.loc[_mask_old], use_container_width=True, height=420)
 
             st.divider()
             st.subheader("⚙️ إجراءات على متجر")
@@ -1497,7 +1517,6 @@ if page == "جدول الكوبونات":
     st.info("المتاجر المحددة كـ 'ترند' في قاعدة البيانات ستظهر بعلامة 🔥 وتتصدر القائمة.")
     try:
         conn = get_conn()
-        # جلب البيانات (AR + EN) للعرض الثنائي
         query = """
             SELECT
                 is_trending,
@@ -1510,6 +1529,8 @@ if page == "جدول الكوبونات":
                 discount_value,
                 extra_offer,
                 COALESCE(extra_offer_en, '') AS extra_offer_en,
+                last_time,
+                COALESCE(source_platform, '—') AS source_platform,
                 total_coupon_copies,
                 total_link_clicks
             FROM master
@@ -1520,16 +1541,34 @@ if page == "جدول الكوبونات":
         df_client = pd.read_sql(query, conn)
         conn.close()
 
-        if not df_client.empty:
-            # دمج علامة الترند مع الاسم برمجياً للعرض فقط
-            def format_name(row):
-                if row['is_trending'] == 'ترند 🔥':
-                    return f"🔥 {row['store_id']}"
-                return row['store_id']
+        if df_client.empty:
+            st.warning("⚠️ لا توجد كوبونات متاحة.")
+        else:
+            # حساب الإحصائيات: إجمالي / فعّال / قربت تنتهي (خلال 7 أيام)
+            today = pd.Timestamp.today().normalize()
+            df_client['last_time'] = pd.to_datetime(df_client['last_time'], errors='coerce')
+            active_mask = df_client['last_time'].notna() & (df_client['last_time'] >= today)
+            near_expiry_mask = active_mask & (df_client['last_time'] <= today + pd.Timedelta(days=7))
 
-            df_client['اسم المتجر'] = df_client.apply(format_name, axis=1)
+            total_count = len(df_client)
+            active_count = int(active_mask.sum())
+            near_count = int(near_expiry_mask.sum())
 
-            # اختيار الأعمدة: AR + EN جنباً إلى جنب
+            kc1, kc2, kc3 = st.columns(3)
+            with kc1:
+                kpi_card("🏪", "إجمالي المتاجر", total_count, "info")
+            with kc2:
+                kpi_card("✅", "المتاجر الفعّالة", active_count, "emerald")
+            with kc3:
+                kpi_card("⏳", "قربت تنتهي (٧ أيام)", near_count, "warning")
+
+            st.divider()
+
+            df_client['اسم المتجر'] = df_client.apply(
+                lambda r: f"🔥 {r['store_id']}" if r['is_trending'] == 'ترند 🔥' else r['store_id'],
+                axis=1,
+            )
+
             display_cols = {
                 'اسم المتجر':       'اسم المتجر',
                 'name_en':          'Store Name (EN)',
@@ -1540,310 +1579,67 @@ if page == "جدول الكوبونات":
                 'discount_value':   'قيمة كود الخصم',
                 'extra_offer':      'خصم إضافي',
                 'extra_offer_en':   'Extra Offer (EN)',
+                'last_time':        'تاريخ الانتهاء',
+                'source_platform':  'من أين 🛰️',
             }
-
             df_display = df_client[list(display_cols.keys())].rename(columns=display_cols)
 
-            st.dataframe(df_display, use_container_width=True, height=600, hide_index=True)
-        
-        # زر تحميل الإكسل
-    except Exception:
-        pass
-    try:
-        # هنا الكود الذي قد يسبب خطأ (مثلاً جلب البيانات)
-        if not df_display.empty:
-            # زر تحميل الإكسل
+            tab_all, tab_active, tab_near = st.tabs([
+                f"🏪 الكل ({total_count})",
+                f"✅ الفعّالة ({active_count})",
+                f"⏳ قربت تنتهي ({near_count})",
+            ])
+
+            with tab_all:
+                st.dataframe(df_display, use_container_width=True, height=520, hide_index=True)
+
+            with tab_active:
+                if active_count == 0:
+                    st.info("ما فيه متاجر فعّالة حالياً.")
+                else:
+                    st.dataframe(
+                        df_display.loc[active_mask.values],
+                        use_container_width=True, height=520, hide_index=True,
+                    )
+
+            with tab_near:
+                if near_count == 0:
+                    st.success("👌 ما فيه متاجر قربت تنتهي خلال 7 أيام.")
+                else:
+                    df_near = (
+                        df_client[near_expiry_mask][[
+                            'store_id', 'name_en', 'public_coupon',
+                            'discount_value', 'source_platform', 'last_time',
+                        ]].copy()
+                    )
+                    df_near['أيام متبقية'] = (df_near['last_time'] - today).dt.days
+                    df_near['last_time'] = df_near['last_time'].dt.strftime('%Y-%m-%d')
+                    df_near = df_near.rename(columns={
+                        'store_id':        'اسم المتجر',
+                        'name_en':         'Store Name (EN)',
+                        'public_coupon':   'الكوبون',
+                        'discount_value':  'الخصم',
+                        'source_platform': 'من أين 🛰️',
+                        'last_time':       'تاريخ الانتهاء',
+                    })
+                    df_near = df_near.sort_values('أيام متبقية')
+                    st.dataframe(df_near, use_container_width=True, hide_index=True)
+
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 df_display.to_excel(writer, index=False, sheet_name='Trending_View')
-        
-            # ملاحظة: يجب أن يكون الزر خارج الـ with ولكن داخل الـ if
             st.download_button(
                 label="📥 تحميل قائمة العملاء (Excel)",
                 data=output.getvalue(),
                 file_name="Tawfeer_Coupons.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
-        else:
-            st.warning("⚠️ لا توجد كوبونات متاحة.")
 
     except Exception as e:
         st.error(f"❌ خطأ: {e}")
 
 
 
-    # --- صفحة تحليل المتاجر (الترند المزدوج والـ 3 خطوط بالساعة) ---
-if page == "تحليل المتاجر":
-    st.header("📊 تحليل المتاجر")
-
-    tab_gen, tab_ind, tab_trend = st.tabs(["🌎 الأداء العام", "👤 تحليل متجر محدد", "🔥 إدارة الترند"])
-
-    try:
-        conn = get_conn()
-        conn.rollback()
-
-        # جلب action_logs كمصدر أساسي + master لحالة الترند
-        df_logs = pd.read_sql("""
-            SELECT action_time, action_type, user_id, store_id
-            FROM action_logs
-            WHERE action_type IN ('click_link', 'copy_coupon', 'search')
-        """, conn)
-        df_m = pd.read_sql(
-            "SELECT store_id, COALESCE(name_en, '') AS name_en, total_coupon_copies, total_link_clicks, is_trending FROM master", conn
-        )
-
-        # معالجة مسبقة بـ Pandas لضمان السرعة
-        if not df_logs.empty:
-            df_logs['action_time'] = pd.to_datetime(df_logs['action_time'])
-            df_logs['hour'] = df_logs['action_time'].dt.floor('h')
-
-        with tab_gen:
-            # 1. KPIs مأخوذة من action_logs مباشرة
-            counts = df_logs['action_type'].value_counts() if not df_logs.empty else pd.Series(dtype=int)
-            total_links  = int(counts.get('click_link',  0))
-            total_copy   = int(counts.get('copy_coupon', 0))
-            total_search = int(counts.get('search',      0))
-
-            c1, c2, c3 = st.columns(3)
-            c1.metric("🖱️ إجمالي نقرات الروابط",  f"{total_links:,}")
-            c2.metric("✂️ إجمالي نسخ الكوبونات",   f"{total_copy:,}")
-            c3.metric("🔍 إجمالي عمليات البحث",    f"{total_search:,}")
-
-            st.divider()
-
-            # 2. خط زمني بالساعة (Hourly) بـ 3 خطوط متزامنة
-            st.subheader("📈 الأداء بالساعة — نقرات / نسخ / بحث")
-            if not df_logs.empty:
-                hourly = (df_logs.groupby(['hour', 'action_type'])
-                                    .size()
-                                    .reset_index(name='count'))
-                hourly_pivot = (hourly.pivot(index='hour', columns='action_type', values='count')
-                                        .fillna(0)
-                                        .rename(columns={
-                                            'click_link':  'نقرات الروابط',
-                                            'copy_coupon': 'نسخ الكوبونات',
-                                            'search':      'عمليات البحث'
-                                        }))
-                for col in ['نقرات الروابط', 'نسخ الكوبونات', 'عمليات البحث']:
-                    if col not in hourly_pivot.columns:
-                        hourly_pivot[col] = 0
-                # تعبئة الساعات الخالية بصفر لإظهار التعرج الحقيقي بدل الخط المستقيم
-                full_range = pd.date_range(
-                    start=hourly_pivot.index.min(),
-                    end=hourly_pivot.index.max(),
-                    freq='h'
-                )
-                hourly_pivot = hourly_pivot.reindex(full_range, fill_value=0)
-                st.line_chart(hourly_pivot[['نقرات الروابط', 'نسخ الكوبونات', 'عمليات البحث']])
-            else:
-                st.info("📭 لا توجد حركات مسجّلة بعد. الرسم سيظهر فور تفاعل المستخدمين مع البوت.")
-
-                # سطر الإصلاح (أضفه عند سطر 1121 تقريباً)
-                for col in ['نقرات الروابط', 'نسخ الكوبونات', 'عمليات البحث']:
-                    if col not in hourly_pivot.columns:
-                        hourly_pivot[col] = 0
-
-            # تأكد من تحويل البيانات لنص CSV بشكل سليم قبل التحميل
-            csv_data = df_logs.to_csv(index=False).encode('utf-8-sig')
-    
-            st.download_button(
-                label="📥 تحميل تقرير الأداء العام",
-                data=csv_data,
-                file_name=f"General_Report_{datetime.date.today()}.csv",
-                mime="text/csv"
-            )
-
-        with tab_ind:
-            st.subheader("🔍 البحث عن أداء متجر")
-            store_options = [""] + sorted(df_m['store_id'].unique().tolist())
-            search_input = st.selectbox("اختر المتجر للمعاينة:", store_options, key="search_ind")
-
-            if search_input:
-                target = df_m[df_m['store_id'] == search_input].iloc[0]
-                store_logs = df_logs[df_logs['store_id'] == search_input] if not df_logs.empty else pd.DataFrame()
-                sc = store_logs['action_type'].value_counts() if not store_logs.empty else pd.Series(dtype=int)
-                s_clicks = int(sc.get('click_link',  0))
-                s_copies = int(sc.get('copy_coupon', 0))
-                s_search = int(sc.get('search',      0))
-
-                k1, k2, k3, k4 = st.columns(4)
-                k1.metric("🖱️ نقرات الرابط",  f"{s_clicks:,}")
-                k2.metric("✂️ مرات النسخ",     f"{s_copies:,}")
-                k3.metric("🔍 البحث عنه",      f"{s_search:,}")
-                k4.metric("الحالة",             target['is_trending'])
-
-                df_ind_plot = pd.DataFrame({
-                    'النوع':  ['نقرات الروابط', 'نسخ الكوبونات', 'عمليات البحث'],
-                    'العدد':  [s_clicks, s_copies, s_search]
-                })
-                _fig_ind_bar = px.bar(df_ind_plot, x='النوع', y='العدد', color='النوع')
-                st.plotly_chart(apply_brand_theme(_fig_ind_bar), use_container_width=True)
-
-        with tab_trend:
-            st.subheader("🔥 نظام التحكم في الترند")
-            col_a, col_b = st.columns(2)
-
-            with col_a:
-                st.write("🤖 **الترند الآلي — أعلى 5 سكور (نسخ×3 + نقر×2 + بحث×1)**")
-                if not df_logs.empty:
-                    score_raw = (df_logs.groupby(['store_id', 'action_type'])
-                    .size().unstack(fill_value=0).reset_index())
-
-                    # ركز هنا.. لازم نفس مستوى score_raw
-                    for col in ['click_link', 'copy_coupon', 'search']:
-                        if col not in score_raw.columns:
-                            score_raw[col] = 0
-
-                    # وهذا يرجع لمستوى الـ for
-                    score_raw['السكور'] = (score_raw['copy_coupon'] * 3 +
-                    score_raw['click_link']  * 2 +
-                    score_raw['search']      * 1)
-                    score_raw = score_raw.merge(df_m[['store_id', 'name_en']], on='store_id', how='left')
-                    auto_top = (score_raw[['store_id', 'name_en', 'copy_coupon', 'click_link', 'search', 'السكور']]
-                                .sort_values('السكور', ascending=False)
-                                .head(5)
-                                .rename(columns={
-                                    'store_id':    'المتجر',
-                                    'name_en':     'English Name',
-                                    'copy_coupon': 'نسخ (×3)',
-                                    'click_link':  'نقرات (×2)',
-                                    'search':      'بحث (×1)'
-                                })
-                                .reset_index(drop=True))
-                    st.table(auto_top)
-                else:
-                    st.info("لا توجد بيانات كافية لحساب الترند الآلي.")
-
-            with col_b:
-                st.write("🛠️ **الترند اليدوي (تثبيت)**")
-                trending_set = set(df_m[df_m['is_trending'] == 'ترند 🔥']['store_id'])
-                store_list = df_m['store_id'].unique().tolist()
-                store_display = [f"🔥 {s}" if s in trending_set else s for s in store_list]
-                store_map = dict(zip(store_display, store_list))
-
-                selected_display = st.selectbox("اختر متجر لتغيير حالته:", store_display)
-                target_store = store_map[selected_display]
-                new_status = st.radio("الحالة المطلوبة:", ["عادي", "ترند 🔥"])
-
-                if st.button("تحديث حالة الترند"):
-                    cur = conn.cursor()
-                    cur.execute(
-                        "UPDATE master SET is_trending = %s WHERE store_id = %s",
-                        (new_status, target_store)
-                    )
-                    conn.commit()
-                    st.success(f"✅ تم تحويل {target_store} إلى {new_status}")
-                    st.rerun()
-
-    except Exception as e:
-        st.error(f"⚠️ خطأ: {e}")
-    finally:
-        if 'conn' in locals(): conn.close()
-
-
-
-
-
-
-
-
-
-
-
-
-        # ---  الصفحة الخامسة : مركز قيادة الأقسام والتاقات (إدارة الـ 10 أعمدة) ---
-        # --- الصفحة الخامسة: مركز قيادة الأقسام والتاقات (نظام رصد نقرات الأقسام) ---
-        # --- الصفحة الخامسة المحدثة: عرض الأقسام من واقع الماستر ---
-        # --- الصفحة الخامسة: مركز قيادة الأقسام (الربط الهندسي والتحليل الفعلي) ---
-if page == "جدول الأقسام":
-    st.header("📂 مركز قيادة الأقسام (الربط الهندسي)")
-
-    conn = None
-    try:
-        conn = get_conn()
-        query = """
-        SELECT store_id,
-                COALESCE(name_en, '')        AS name_en,
-                store_tags, store_tags_en,
-                store_bio,  store_bio_en,
-                public_coupon, discount_value, affiliate_link,
-                extra_offer, extra_offer_en,
-                total_coupon_copies, total_link_clicks
-        FROM master
-"""
-        df_raw = pd.read_sql(query, conn)
-
-        if not df_raw.empty:
-            all_rows = []
-            for _, row in df_raw.iterrows():
-                ar_tags = parse_tags(row.get('store_tags'))
-                en_tags = parse_tags(row.get('store_tags_en'))
-
-                base = {
-                    'المتجر':              row['store_id'],
-                    'Store Name (EN)':     row['name_en'],
-                    'الوصف':               row['store_bio'],
-                    'Description (EN)':    row.get('store_bio_en') or '',
-                    'الكوبون':             row['public_coupon'],
-                    'عرض إضافي':           row['extra_offer'],
-                    'Extra Offer (EN)':    row.get('extra_offer_en') or '',
-                    'الخصم':               row['discount_value'],
-                    'الرابط':              row['affiliate_link'],
-                    'نقرات_الكوبون':       row['total_coupon_copies'],
-                    'نقرات_الروابط':       row['total_link_clicks'],
-                    'إجمالي_التفاعل':      row['total_coupon_copies'] + row['total_link_clicks'],
-                }
-                for t in ar_tags:
-                    if t:
-                        all_rows.append({'اللغة': 'AR', 'القسم': t, **base})
-                for t in en_tags:
-                    if t:
-                        all_rows.append({'اللغة': 'EN', 'القسم': t, **base})
-
-            df_full = pd.DataFrame(all_rows)
-            tab1, tab2 = st.tabs(["📊 لوحة إدارة الأقسام", "📋 الجدول الشامل"])
-
-            with tab1:
-                st.subheader("📋 ملخص أداء الأقسام (AR / EN منفصلَين)")
-                summary = (df_full.groupby(['اللغة', 'القسم']).agg(
-                    عدد_المتاجر=('المتجر', 'count'),
-                    نقرات_الكوبونات=('نقرات_الكوبون', 'sum'),
-                    إجمالي_التفاعل=('إجمالي_التفاعل', 'sum'),
-                    المتاجر_التابعة=('المتجر', lambda x: ", ".join(list(set(x))))
-                ).reset_index().sort_values(by=['اللغة', 'إجمالي_التفاعل'], ascending=[True, False]))
-
-                summary.columns = ['اللغة', 'اسم القسم', 'عدد المتاجر', 'نقرات الكوبونات', 'إجمالي التفاعل', 'المتاجر التابعة']
-                st.dataframe(summary, use_container_width=True, hide_index=True)
-
-            with tab2:
-                st.subheader("🔍 استعراض الارتباطات الكاملة (AR + EN)")
-                display_cols = [
-                    'اللغة', 'القسم', 'المتجر', 'Store Name (EN)',
-                    'الوصف', 'Description (EN)',
-                    'الكوبون', 'عرض إضافي', 'Extra Offer (EN)',
-                    'الخصم', 'الرابط',
-                ]
-                st.dataframe(df_full[display_cols], use_container_width=True, hide_index=True)
-
-                output = BytesIO()
-                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    summary.to_excel(writer, index=False, sheet_name='إحصائيات الأقسام')
-                    df_full[display_cols].to_excel(writer, index=False, sheet_name='الارتباطات الشاملة')
-
-                st.download_button(
-                    label="📥 تحميل التقرير الشامل (Excel)",
-                    data=output.getvalue(),
-                    file_name="Tawfeer_Full_Analysis.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="dl_cat_full_excel_1"
-                )
-        else:
-            st.info("لا توجد بيانات متاجر مرتبطة بأقسام حالياً.")
-    except Exception as e:
-        st.error(f"⚠️ خطأ في معالجة البيانات: {e}")
-    finally:
-        if conn:
-            conn.close()
 if page == "تحليل الأقسام":
     st.header("📂 مركز تحليل أداء الأقسام الذكي")
     tab_gen_cat, tab_ind_cat, tab_time_analyser, tab_priority = st.tabs([
@@ -2132,94 +1928,235 @@ elif page == "تحليل المتاجر":
 # --- الصفحة الخامسة المحدثة: عرض الأقسام من واقع الماستر ---
 # --- الصفحة الخامسة: مركز قيادة الأقسام (الربط الهندسي والتحليل الفعلي) ---
 elif page == "جدول الأقسام":
-    st.header("📂 مركز قيادة الأقسام (الربط الهندسي)")
+    st.header("📂 جدول الأقسام")
+    st.caption("البيانات مسحوبة مباشرة من جدول master. التعديل والحذف هنا يطبّق على كل المتاجر التي تستخدم القسم.")
 
     conn = None
     try:
         conn = get_conn()
-        # 1. سحب البيانات (AR + EN معاً)
-        query = """
-            SELECT store_id,
-                   COALESCE(name_en, '')        AS name_en,
-                   store_tags, store_tags_en,
-                   store_bio,  store_bio_en,
-                   public_coupon, discount_value, affiliate_link,
-                   extra_offer, extra_offer_en,
-                   total_coupon_copies, total_link_clicks
-            FROM master
-        """
-        df_raw = pd.read_sql(query, conn)
+        df_raw = pd.read_sql(
+            "SELECT store_id, COALESCE(name_en, '') AS name_en, store_tags, store_tags_en FROM master",
+            conn,
+        )
 
-        if not df_raw.empty:
-            # 2. تفجير التاقات لكلا اللغتين — كل سطر يحوي عمود "اللغة" لتمييز AR/EN
-            all_rows = []
-            for _, row in df_raw.iterrows():
-                ar_tags = parse_tags(row.get('store_tags'))
-                en_tags = parse_tags(row.get('store_tags_en'))
-
-                base = {
-                    'المتجر':              row['store_id'],
-                    'Store Name (EN)':     row['name_en'],
-                    'الوصف':               row['store_bio'],
-                    'Description (EN)':    row.get('store_bio_en') or '',
-                    'الكوبون':             row['public_coupon'],
-                    'عرض إضافي':           row['extra_offer'],
-                    'Extra Offer (EN)':    row.get('extra_offer_en') or '',
-                    'الخصم':               row['discount_value'],
-                    'الرابط':              row['affiliate_link'],
-                    'نقرات_الكوبون':       row['total_coupon_copies'],
-                    'نقرات_الروابط':       row['total_link_clicks'],
-                    'إجمالي_التفاعل':      row['total_coupon_copies'] + row['total_link_clicks'],
-                }
-                for t in ar_tags:
-                    if t:
-                        all_rows.append({'اللغة': 'AR', 'القسم': t, **base})
-                for t in en_tags:
-                    if t:
-                        all_rows.append({'اللغة': 'EN', 'القسم': t, **base})
-
-            df_full = pd.DataFrame(all_rows)
-
-            # 3. التبويبات
-            tab1, tab2 = st.tabs(["📊 لوحة إدارة الأقسام", "📋 الجدول الشامل"])
-
-            with tab1:
-                st.subheader("📋 ملخص أداء الأقسام (AR / EN منفصلَين)")
-                summary = (df_full.groupby(['اللغة', 'القسم']).agg(
-                    عدد_المتاجر=('المتجر', 'count'),
-                    نقرات_الكوبونات=('نقرات_الكوبون', 'sum'),
-                    إجمالي_التفاعل=('إجمالي_التفاعل', 'sum'),
-                    المتاجر_التابعة=('المتجر', lambda x: ", ".join(list(set(x))))
-                ).reset_index().sort_values(by=['اللغة', 'إجمالي_التفاعل'], ascending=[True, False]))
-
-                summary.columns = ['اللغة', 'اسم القسم', 'عدد المتاجر', 'نقرات الكوبونات', 'إجمالي التفاعل', 'المتاجر التابعة']
-                st.dataframe(summary, use_container_width=True, hide_index=True)
-
-            with tab2:
-                st.subheader("🔍 استعراض الارتباطات الكاملة (AR + EN)")
-                display_cols = [
-                    'اللغة', 'القسم', 'المتجر', 'Store Name (EN)',
-                    'الوصف', 'Description (EN)',
-                    'الكوبون', 'عرض إضافي', 'Extra Offer (EN)',
-                    'الخصم', 'الرابط',
-                ]
-                st.dataframe(df_full[display_cols], use_container_width=True, hide_index=True)
-
-                # زر التحميل
-                output = BytesIO()
-                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    summary.to_excel(writer, index=False, sheet_name='إحصائيات الأقسام')
-                    df_full[display_cols].to_excel(writer, index=False, sheet_name='الارتباطات الشاملة')
-
-                st.download_button(
-                    label="📥 تحميل التقرير الشامل (Excel)",
-                    data=output.getvalue(),
-                    file_name="Tawfeer_Full_Analysis.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="dl_cat_full_excel_2"
-                )
+        if df_raw.empty:
+            st.info("لا توجد متاجر في القاعدة حالياً.")
         else:
-            st.info("لا توجد بيانات متاجر مرتبطة بأقسام حالياً.")
+            # تفجير التاقات: صف لكل (قسم, متجر) — لغة AR ولغة EN منفصلتَين
+            rows_ar, rows_en = [], []
+            for _, row in df_raw.iterrows():
+                for t in parse_tags(row.get('store_tags')):
+                    if t and t.strip():
+                        rows_ar.append({'القسم': t.strip(), 'المتجر': row['store_id']})
+                for t in parse_tags(row.get('store_tags_en')):
+                    if t and t.strip():
+                        rows_en.append({'القسم': t.strip(), 'المتجر': row.get('name_en') or row['store_id']})
+
+            def _summarize(rows):
+                if not rows:
+                    return pd.DataFrame(columns=['اسم القسم', 'عدد المتاجر', 'المتاجر'])
+                df = pd.DataFrame(rows)
+                grouped = (
+                    df.groupby('القسم')['المتجر']
+                      .agg(lambda s: ", ".join(sorted(set(s))))
+                      .reset_index()
+                      .rename(columns={'القسم': 'اسم القسم', 'المتجر': 'المتاجر'})
+                )
+                counts = df.groupby('القسم')['المتجر'].nunique().reset_index(name='عدد المتاجر')
+                merged = grouped.merge(counts, left_on='اسم القسم', right_on='القسم').drop(columns=['القسم'])
+                return merged[['اسم القسم', 'عدد المتاجر', 'المتاجر']].sort_values('عدد المتاجر', ascending=False)
+
+            sum_ar = _summarize(rows_ar)
+            sum_en = _summarize(rows_en)
+
+            # كروت الإحصائيات
+            kc1, kc2, kc3 = st.columns(3)
+            with kc1:
+                kpi_card("📂", "إجمالي الأقسام (الكل)", len(sum_ar) + len(sum_en), "info")
+            with kc2:
+                kpi_card("🇸🇦", "أقسام عربية", len(sum_ar), "emerald")
+            with kc3:
+                kpi_card("🇬🇧", "أقسام إنجليزية", len(sum_en), "neutral")
+
+            st.divider()
+
+            tab_ar, tab_en, tab_manage = st.tabs([
+                f"🇸🇦 عربي ({len(sum_ar)})",
+                f"🇬🇧 English ({len(sum_en)})",
+                "⚙️ إدارة الأقسام",
+            ])
+            with tab_ar:
+                st.dataframe(sum_ar, use_container_width=True, hide_index=True)
+            with tab_en:
+                st.dataframe(sum_en, use_container_width=True, hide_index=True)
+
+            with tab_manage:
+                st.caption("⚠️ التعديل والحذف يطبّق على **كل المتاجر** التي تحتوي على القسم. لا يمكن التراجع.")
+
+                # ═══════════════ Helpers ═══════════════
+                def _do_rename(col_db, old_name, new_name):
+                    conn2 = get_conn()
+                    cur2 = conn2.cursor()
+                    cur2.execute(f"""
+                        UPDATE master
+                        SET {col_db} = '{{' || array_to_string(
+                            array_replace(
+                                string_to_array(trim(both '{{}}' from COALESCE({col_db}, '')), ','),
+                                %s, %s
+                            ),
+                            ','
+                        ) || '}}'
+                        WHERE %s = ANY(string_to_array(trim(both '{{}}' from COALESCE({col_db}, '')), ','))
+                    """, (old_name, new_name, old_name))
+                    affected = cur2.rowcount
+                    conn2.commit()
+                    conn2.close()
+                    return affected
+
+                def _do_delete(col_db, name):
+                    conn2 = get_conn()
+                    cur2 = conn2.cursor()
+                    cur2.execute(f"""
+                        UPDATE master
+                        SET {col_db} = '{{' || array_to_string(
+                            array_remove(
+                                string_to_array(trim(both '{{}}' from COALESCE({col_db}, '')), ','),
+                                %s
+                            ),
+                            ','
+                        ) || '}}'
+                        WHERE %s = ANY(string_to_array(trim(both '{{}}' from COALESCE({col_db}, '')), ','))
+                    """, (name, name))
+                    affected = cur2.rowcount
+                    conn2.commit()
+                    conn2.close()
+                    return affected
+
+                # ═══════════════ ➕ إضافة قسم ═══════════════
+                st.markdown("### ➕ إضافة قسم جديد")
+                st.caption("القسم الجديد يظهر بقائمة الاختيار في صفحة «إدخال بيانات الماستر» — يثبت في الجدول عند ربطه بأول متجر.")
+                add_ar, add_en = st.tabs(["🇸🇦 عربي", "🇬🇧 English"])
+
+                def _add_to_session(lang_key, label_lang, ui_key):
+                    ac1, ac2 = st.columns([3, 1])
+                    with ac1:
+                        new_cat = st.text_input(
+                            f"اسم القسم الجديد ({label_lang}):",
+                            key=f"add_cat_{ui_key}",
+                            placeholder="مثال: ساعات, نظارات, Watches...",
+                        )
+                    with ac2:
+                        st.write(" ")
+                        if st.button("➕ إضافة", key=f"add_btn_{ui_key}"):
+                            _v = (new_cat or "").strip()
+                            if not _v:
+                                st.warning("⚠️ اكتب اسم القسم.")
+                            else:
+                                if lang_key not in st.session_state:
+                                    st.session_state[lang_key] = []
+                                if _v in st.session_state[lang_key]:
+                                    st.info(f"«{_v}» موجود بالفعل في القائمة.")
+                                else:
+                                    st.session_state[lang_key] = sorted(set(st.session_state[lang_key] + [_v]))
+                                    st.success(f"✅ «{_v}» أُضيف للقائمة — افتح «إدخال بيانات الماستر» واربطه بمتجر لحفظه دائماً.")
+
+                with add_ar:
+                    _add_to_session('custom_tags_list', 'عربي', 'ar')
+                with add_en:
+                    _add_to_session('custom_tags_list_en', 'English', 'en')
+
+                st.markdown("---")
+
+                # ═══════════════ ✏️ تعديل قسم ═══════════════
+                st.markdown("### ✏️ تعديل اسم قسم")
+                edit_ar, edit_en = st.tabs(["🇸🇦 عربي", "🇬🇧 English"])
+
+                def _rename_ui(col_db, existing_list, ui_key):
+                    rc1, rc2, rc3 = st.columns([2, 2, 1])
+                    with rc1:
+                        old_name = st.selectbox(
+                            "القسم الحالي:",
+                            options=["—"] + existing_list,
+                            key=f"rename_old_{ui_key}",
+                        )
+                    with rc2:
+                        new_name = st.text_input(
+                            "الاسم الجديد:",
+                            key=f"rename_new_{ui_key}",
+                            placeholder="اكتب الاسم الجديد...",
+                        )
+                    with rc3:
+                        st.write(" ")
+                        if st.button("💾 تحديث", key=f"rename_btn_{ui_key}", type="primary"):
+                            _new = (new_name or "").strip()
+                            if old_name == "—" or not _new:
+                                st.warning("⚠️ اختر القسم القديم واكتب الاسم الجديد.")
+                            elif _new == old_name:
+                                st.info("الاسم الجديد مطابق للقديم.")
+                            else:
+                                try:
+                                    affected = _do_rename(col_db, old_name, _new)
+                                    st.success(f"✅ تم تحديث {affected} متجر — «{old_name}» ← «{_new}»")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"⚠️ فشل التحديث: {e}")
+
+                with edit_ar:
+                    _rename_ui('store_tags', sum_ar['اسم القسم'].tolist(), 'ar')
+                with edit_en:
+                    _rename_ui('store_tags_en', sum_en['اسم القسم'].tolist(), 'en')
+
+                st.markdown("---")
+
+                # ═══════════════ 🗑️ حذف قسم ═══════════════
+                st.markdown("### 🗑️ حذف قسم")
+                del_ar, del_en = st.tabs(["🇸🇦 عربي", "🇬🇧 English"])
+
+                def _delete_ui(col_db, existing_list, ui_key):
+                    dc1, dc2, dc3 = st.columns([2, 2, 1])
+                    with dc1:
+                        del_name = st.selectbox(
+                            "اختر القسم للحذف:",
+                            options=["—"] + existing_list,
+                            key=f"del_cat_{ui_key}",
+                        )
+                    with dc2:
+                        confirm_del = st.checkbox(
+                            "أؤكد الحذف من جميع المتاجر",
+                            key=f"del_confirm_{ui_key}",
+                        )
+                    with dc3:
+                        st.write(" ")
+                        if st.button("🗑️ حذف", key=f"del_btn_{ui_key}"):
+                            if del_name == "—":
+                                st.warning("⚠️ اختر قسماً.")
+                            elif not confirm_del:
+                                st.warning("⚠️ فعّل خانة التأكيد أولاً.")
+                            else:
+                                try:
+                                    affected = _do_delete(col_db, del_name)
+                                    st.success(f"✅ تم حذف «{del_name}» من {affected} متجر.")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"⚠️ فشل الحذف: {e}")
+
+                with del_ar:
+                    _delete_ui('store_tags', sum_ar['اسم القسم'].tolist(), 'ar')
+                with del_en:
+                    _delete_ui('store_tags_en', sum_en['اسم القسم'].tolist(), 'en')
+
+            st.divider()
+            _xl = BytesIO()
+            with pd.ExcelWriter(_xl, engine='xlsxwriter') as _w:
+                sum_ar.to_excel(_w, index=False, sheet_name='Categories_AR')
+                sum_en.to_excel(_w, index=False, sheet_name='Categories_EN')
+            st.download_button(
+                "📥 تحميل الجدول (Excel)",
+                _xl.getvalue(),
+                "categories_table.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_categories_table_excel",
+            )
 
     except Exception as e:
         st.error(f"⚠️ خطأ في معالجة البيانات: {e}")
@@ -2227,424 +2164,175 @@ elif page == "جدول الأقسام":
         if conn:
             conn.close()
 
-# --- الصفحة السادسة: تحليل الأقسام ---
-elif page == "تحليل الأقسام":
-    st.header("📂 مركز تحليل أداء الأقسام الذكي")
-    tab_gen_cat, tab_ind_cat, tab_time_analyser, tab_priority = st.tabs([
-        "🌎 الأداء العام", "🏷️ تحليل فردي", "⏰ التحليل الزمني", "🏅 الأولويات"
-    ])
+# --- الصفحة السابعة: البحث والتحليل الشامل ---
+elif page == "البحث عن كود":
+    st.header("🔍 البحث عن كود — تحليل الكلمات المُبحوثة")
+    st.caption("الكلمة المبحوثة، عدد مرات البحث، ومن قام بالبحث (مع تفاصيله).")
+
+    import re as _re
+    def _detect_lang(text):
+        if text and _re.search(r'[؀-ۿ]', str(text)):
+            return 'ar'
+        if text and _re.search(r'[a-zA-Z]', str(text)):
+            return 'en'
+        return 'other'
 
     try:
         conn = get_conn()
-        # نجلب user_id الجديد + action_time + الربط مع master للحصول على store_tags
-        cat_query = """
-            SELECT m.store_tags, a.action_time, a.action_type, a.user_id
-            FROM action_logs a
-            JOIN master m ON a.store_id = m.store_id
-            WHERE a.store_id IS NOT NULL
-        """
-        df_raw = pd.read_sql(cat_query, conn)
-        conn.close()
-
-        if not df_raw.empty:
-            # store_tags نص بصيغة '{a,b,c}' — نحوّله لقائمة قبل التفجير
-            df_raw['store_tags'] = df_raw['store_tags'].apply(parse_tags)
-            df_exploded = df_raw.explode('store_tags').dropna(subset=['store_tags'])
-            df_exploded['store_tags'] = df_exploded['store_tags'].astype(str).str.strip()
-
-            # --- تبويب الأداء العام ---
-            with tab_gen_cat:
-                st.subheader("📊 مقارنة نشاط الأقسام")
-                fig = px.sunburst(df_exploded, path=['store_tags', 'action_type'],
-                                  title="توزيع الأقسام ونوع الحركة داخلها")
-                st.plotly_chart(apply_brand_theme(fig), use_container_width=True)
-
-            # --- تبويب التحليل الفردي ---
-            with tab_ind_cat:
-                search_tag = st.selectbox("اختر القسم للمراقبة:", sorted(df_exploded['store_tags'].unique()))
-                tag_data = df_exploded[df_exploded['store_tags'] == search_tag]
-
-                c1, c2, c3 = st.columns(3)
-                c1.metric("إجمالي الحركات", len(tag_data))
-                unique_users = tag_data['user_id'].dropna().nunique()
-                c2.metric("👥 مستخدمون فريدون", int(unique_users))
-                top_action = tag_data['action_type'].mode()[0] if not tag_data.empty else "N/A"
-                c3.metric("السلوك الغالب", top_action)
-
-            # --- تبويب التحليل الزمني ---
-            with tab_time_analyser:
-                st.subheader("📅 متى ينشط هذا القسم؟")
-                df_exploded['hour'] = pd.to_datetime(df_exploded['action_time']).dt.hour
-                time_stats = (df_exploded[df_exploded['store_tags'] == search_tag]
-                              .groupby('hour').size().reset_index(name='الزيارات'))
-                fig_time = px.line(time_stats, x='hour', y='الزيارات',
-                                   title=f"نشاط قسم {search_tag} خلال ساعات اليوم", markers=True)
-                st.plotly_chart(apply_brand_theme(fig_time), use_container_width=True)
-
-        else:
-            st.info("📭 لا توجد حركات على متاجر مسجّلة بعد. ستظهر فور ضغط روابط أو نسخ كوبونات في البوت.")
-    except Exception as e:
-        st.error(f"حدث خطأ فني: {e}")
-
-    # ─── تبويب الأولويات (مستقل — يعمل حتى لو لا توجد action_logs) ───────────
-    with tab_priority:
-        st.subheader("🏅 إدارة ترتيب الأقسام يدوياً")
-        st.caption("الرقم 1 = يظهر أولاً في البوت والموقع · الرقم 5 = الترتيب الافتراضي")
-
-        try:
-            conn_p = get_conn()
-            conn_p.autocommit = True
-            cur_p  = conn_p.cursor()
-
-            # مزامنة أي تاقات جديدة من master لم تُضَف بعد
-            cur_p.execute("""
-                INSERT INTO categories_tags (tag_name, priority_rank)
-                SELECT DISTINCT trim(tg), 5
-                FROM master,
-                     unnest(string_to_array(trim(both '{}' from COALESCE(store_tags, '')), ',')) AS tg
-                WHERE trim(tg) <> ''
-                ON CONFLICT (tag_name) DO NOTHING
-            """)
-
-            df_pr = pd.read_sql("""
-                SELECT
-                    tag_name                          AS "القسم",
-                    priority_rank                     AS "الأولوية (1-5)",
-                    COALESCE("Tag_clicks", 0)         AS "النقرات",
-                    COALESCE(visit_count,  0)         AS "الزيارات"
-                FROM categories_tags
-                ORDER BY priority_rank ASC, "Tag_clicks" DESC
-            """, conn_p)
-            conn_p.close()
-
-        except Exception as e:
-            st.error(f"⚠️ خطأ في تحميل الأولويات: {e}")
-            df_pr = pd.DataFrame()
-
-        if not df_pr.empty:
-            st.markdown("**عدّل عمود «الأولوية» ثم اضغط حفظ:**")
-            edited_pr = st.data_editor(
-                df_pr,
-                column_config={
-                    "القسم":          st.column_config.TextColumn(disabled=True),
-                    "الأولوية (1-5)": st.column_config.NumberColumn(min_value=1, max_value=5, step=1),
-                    "النقرات":        st.column_config.NumberColumn(disabled=True),
-                    "الزيارات":       st.column_config.NumberColumn(disabled=True),
-                },
-                use_container_width=True,
-                hide_index=True,
-                key="priority_editor",
-            )
-
-            if st.button("💾 حفظ الأولويات", type="primary", key="save_priorities"):
-                try:
-                    conn_s = get_conn()
-                    cur_s  = conn_s.cursor()
-                    for _, row in edited_pr.iterrows():
-                        cur_s.execute(
-                            "UPDATE categories_tags SET priority_rank = %s WHERE tag_name = %s",
-                            (int(row["الأولوية (1-5)"]), row["القسم"])
-                        )
-                    conn_s.commit()
-                    conn_s.close()
-                    st.success(f"✅ تم حفظ أولويات {len(edited_pr)} قسم بنجاح!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"⚠️ فشل الحفظ: {e}")
-
-
-
-
-
-
-
-
-
-
-# --- الصفحة السابعة: البحث والتحليل الشامل ---
-elif page == "البحث عن كود":
-    st.header("🔍 محرك البحث الذكي والتحليلات")
-    
-    # تبويبات الصفحة
-    tab_search, tab_analytics = st.tabs(["🔎 البحث الفوري", "📊 مركز التحليل (عام/فردي)"])
-
-    with tab_search:
-        api_q = st.text_input(
-            "🔎 ابحث باسم المتجر أو القسم:",
-            placeholder="نمشي، إلكترونيات، عطور…",
-            key="api_search_input",
-        )
-
-        if api_q:
-            _q = api_q.strip()
-            if len(_q) < 2:
-                st.info("اكتب حرفين على الأقل للبحث.")
-            else:
-                _total, df_api = fetch_coupon_data(_q)
-
-                # ── معالجة حالة السيرفر المغلق ──────────────────────────
-                if _total == -1:
-                    st.error(
-                        "⚠️ **السيرفر غير متاح** — شغّل الـ API من Terminal:\n\n"
-                        "```\nuvicorn api.main:app --reload --port 8000\n```"
-                    )
-                elif df_api.empty:
-                    st.warning("⚠️ لا توجد نتائج — جرّب اسم المتجر بالإنجليزي أو كلمة مختلفة.")
-                else:
-                    # ── Metric Cards ─────────────────────────────────────
-                    _best   = int(df_api['score_pct'].max())
-                    _avg    = float(df_api['score_pct'].mean())
-                    _shown  = len(df_api)
-                    _capped = (_shown == 50)
-
-                    mc1, mc2, mc3, mc4 = st.columns(4)
-                    with mc1:
-                        kpi_card("🎟️", "إجمالي الكوبونات", _total, "emerald")
-                    with mc2:
-                        kpi_card("📊", "نتائج البحث", _shown, "info")
-                    with mc3:
-                        kpi_card("🏆", "أعلى تطابق", f"{_best}%", "warning")
-                    with mc4:
-                        kpi_card("📈", "متوسط التطابق", f"{_avg:.0f}%", "neutral")
-
-                    if _capped:
-                        st.caption("⚡ وصلت للحد الأقصى (50) — جرّب كلمة أدق.")
-
-                    st.divider()
-
-                    # ── الرسوم البيانية ───────────────────────────────────
-                    ch1, ch2 = st.columns(2)
-
-                    with ch1:
-                        st.subheader("📊 توزيع النتائج حسب المتجر")
-                        df_c1 = (df_api[['store_id', 'score_pct']]
-                                 .sort_values('score_pct', ascending=True)
-                                 .tail(15))
-                        fig1 = px.bar(
-                            df_c1, x='score_pct', y='store_id',
-                            orientation='h',
-                            color='score_pct',
-                            color_continuous_scale=[
-                                [0, BRAND["emerald_pastel"]],
-                                [1, BRAND["emerald_dark"]],
-                            ],
-                            labels={'score_pct': 'نسبة التطابق %', 'store_id': 'المتجر'},
-                            title=f'أفضل {len(df_c1)} متجراً لـ "{_q}"',
-                        )
-                        fig1.update_layout(coloraxis_showscale=False)
-                        st.plotly_chart(apply_brand_theme(fig1), use_container_width=True)
-
-                    with ch2:
-                        st.subheader("💪 متوسط قوة الخصم بالقسم")
-                        # store_tags قادمة من الـ API كـ list — نفجّرها مباشرةً
-                        _has_tags = (
-                            'store_tags' in df_api.columns
-                            and df_api['store_tags'].apply(
-                                lambda x: len(x) if isinstance(x, list) else 0
-                            ).sum() > 0
-                        )
-                        if _has_tags:
-                            df_te = df_api.explode('store_tags')
-                            df_te = df_te[df_te['store_tags'].notna() & (df_te['store_tags'] != '')]
-                            avg_tag = (df_te.groupby('store_tags')['score_pct']
-                                           .mean()
-                                           .reset_index()
-                                           .rename(columns={'store_tags': 'القسم',
-                                                            'score_pct': 'متوسط التطابق %'})
-                                           .sort_values('متوسط التطابق %', ascending=False)
-                                           .head(10))
-                            fig2 = px.bar(
-                                avg_tag, x='القسم', y='متوسط التطابق %',
-                                color='متوسط التطابق %',
-                                color_continuous_scale=[
-                                    [0, BRAND["info_soft"]],
-                                    [1, BRAND["emerald"]],
-                                ],
-                                title="متوسط نسبة التطابق لكل قسم",
-                            )
-                            fig2.update_layout(coloraxis_showscale=False)
-                        else:
-                            fig2 = px.histogram(
-                                df_api, x='score_pct', nbins=10,
-                                title="توزيع درجات التطابق",
-                                labels={'score_pct': 'التطابق %', 'count': 'العدد'},
-                                color_discrete_sequence=[BRAND["emerald"]],
-                            )
-                        st.plotly_chart(apply_brand_theme(fig2), use_container_width=True)
-
-                    st.divider()
-
-                    # ── بطاقات النتائج (AR + EN عرض ثنائي للـ admin) ────────
-                    st.success(f"✅ {_shown} نتيجة — مرتبة بالأدق أولاً")
-                    for _, row in df_api.iterrows():
-                        _name_en = (row.get('name_en') or '').strip()
-                        _score   = int(row.get('score_pct', 0))
-                        _header  = f"{row['store_id']} | {_name_en}" if _name_en else row['store_id']
-                        _badge   = f"  ({_score}% تطابق)" if _score else ""
-                        _tags_ar = row.get('store_tags') or []
-                        _tags_en = row.get('store_tags_en') or []
-
-                        with st.expander(
-                            f"🏬 {_header}{_badge} — كود: {row.get('public_coupon', '—')}",
-                            expanded=False,
-                        ):
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                st.write(f"🔗 **الرابط:** [اضغط هنا]({row.get('affiliate_link', '#')})")
-                                st.write(f"🎟️ **كود العميل:** `{row.get('public_coupon') or '—'}`")
-                                st.write(f"➕ **العرض الإضافي (AR):** `{row.get('extra_offer') or '—'}`")
-                                st.write(f"➕ **Extra Offer (EN):** `{row.get('extra_offer_en') or '—'}`")
-                            with col2:
-                                st.write(f"💰 **الخصم:** {row.get('discount_value') or '—'}")
-                                st.write(f"🏷️ **الأقسام (AR):** {', '.join(_tags_ar) if _tags_ar else '—'}")
-                                st.write(f"🏷️ **Tags (EN):** {', '.join(_tags_en) if _tags_en else '—'}")
-                                st.write(f"📊 **نسبة التطابق:** {_score}%")
-                            st.info(f"📝 **نبذة (AR):** {row.get('store_bio') or '—'}")
-                            st.info(f"📝 **Description (EN):** {row.get('store_bio_en') or '—'}")
-
-    with tab_analytics:
-        st.subheader("📊 تحليلات الأداء")
-        sub_tab1, sub_tab2 = st.tabs(["📈 الأداء العام", "👤 الأداء الفردي"])
-
-        # جلب البيانات
-        conn = get_conn()
-        conn.rollback()
-        df_all = pd.read_sql("SELECT * FROM master", conn)
-        df_actions = pd.read_sql("""
+        df_search = pd.read_sql("""
             SELECT
-                a.action_time,
-                a.action_type,
-                a.store_id,
-                COALESCE(m.name_en, '') AS name_en,
-                m.public_coupon,
-                m.discount_value,
-                COALESCE(NULLIF(b.username, ''), CAST(a.user_id AS TEXT), '—') AS username,
-                a.user_id,
-                COALESCE(a.details, '') AS details
-            FROM action_logs a
-            LEFT JOIN master m ON a.store_id = m.store_id
-            LEFT JOIN bot_users b ON a.user_id = b.telegram_id
-            WHERE a.action_type IN ('click_link', 'copy_coupon', 'search')
-            ORDER BY a.action_time DESC
+                ds.id,
+                COALESCE(NULLIF(TRIM(ds.store_id), ''), TRIM(ds.search_keyword)) AS store,
+                ds.search_keyword,
+                LOWER(COALESCE(NULLIF(TRIM(ds.platform), ''), 'unknown')) AS platform,
+                ds.search_date,
+                ds.user_id,
+                ds.user_email,
+                COALESCE(NULLIF('@' || b.username, '@'), NULL) AS bot_username
+            FROM direct_search ds
+            LEFT JOIN bot_users b ON ds.user_id = b.telegram_id
+            WHERE COALESCE(ds.search_keyword, ds.store_id) IS NOT NULL
+            ORDER BY ds.search_date DESC
         """, conn)
         conn.close()
 
-        if not df_actions.empty:
-            df_actions['action_time'] = pd.to_datetime(df_actions['action_time'])
+        if df_search.empty:
+            st.info("📭 لا توجد عمليات بحث مسجّلة بعد.")
+        else:
+            # تصنيف اللغة من الكلمة المبحوثة
+            df_search['lang'] = df_search['search_keyword'].apply(_detect_lang)
+            # تطبيع المنصة
+            df_search['src'] = df_search['platform'].apply(
+                lambda p: 'bot' if 'bot' in str(p) or 'telegram' in str(p)
+                else ('web' if 'web' in str(p) else 'other')
+            )
+            df_search['search_date'] = pd.to_datetime(df_search['search_date'], errors='coerce')
 
-        with sub_tab1:
-            st.markdown("### ملخص أداء المنصة كاملة")
-            m1, m2, m3 = st.columns(3)
-            m1.metric("إجمالي المتاجر", len(df_all))
-            m2.metric("إجمالي نقرات الروابط", df_all['total_link_clicks'].sum())
-            m3.metric("إجمالي عمليات النسخ", df_all['total_coupon_copies'].sum())
+            # ─── فلتر تاريخ (من - إلى) ───────────────────────────────
+            _min_d = df_search['search_date'].min().date() if df_search['search_date'].notna().any() else date.today()
+            _max_d = df_search['search_date'].max().date() if df_search['search_date'].notna().any() else date.today()
+            fdc1, fdc2 = st.columns(2)
+            with fdc1:
+                f_from = st.date_input("📅 من تاريخ:", value=_min_d, key="search_filter_from")
+            with fdc2:
+                f_to   = st.date_input("📅 إلى تاريخ:", value=_max_d, key="search_filter_to")
 
-            if not df_all.empty:
-                df_tags = df_all.copy()
-                df_tags['store_tags'] = df_tags['store_tags'].apply(parse_tags)
-                df_tags = df_tags.explode('store_tags').dropna(subset=['store_tags'])
-                tag_counts = df_tags.groupby('store_tags')['total_coupon_copies'].sum().reset_index()
-                fig = px.bar(tag_counts, x='store_tags', y='total_coupon_copies',
-                             title="تفاعل العملاء حسب القسم")
-                st.plotly_chart(apply_brand_theme(fig), use_container_width=True)
+            mask = (
+                df_search['search_date'].dt.date >= f_from
+            ) & (
+                df_search['search_date'].dt.date <= f_to
+            )
+            df_search = df_search[mask].copy()
 
-            # ── الجدول التفاعلي لسجل الحركات ──
-            st.divider()
-            st.subheader("📋 سجل حركات الكوبونات التفصيلي")
+            if df_search.empty:
+                st.warning("⚠️ لا توجد بحثات ضمن الفترة المختارة. غيّر التواريخ.")
+                st.stop()
 
-            if not df_actions.empty:
-                _action_map = {
-                    'click_link':  'نقر رابط',
-                    'copy_coupon': 'نسخ كوبون',
-                    'search':      'بحث'
-                }
+            def _render_searches(df_subset, key_prefix):
+                """يرسم الكروت + تابز البوت/الموقع + تفاصيل لقطعة من البيانات."""
+                if df_subset.empty:
+                    st.info("📭 لا توجد بحثات في هذا التصنيف.")
+                    return
 
-                # فلاتر
-                fc1, fc2, fc3 = st.columns(3)
-                with fc1:
-                    stores_list = ["الكل"] + sorted(df_actions['store_id'].dropna().unique().tolist())
-                    f_store = st.selectbox("🏪 المتجر:", stores_list, key="f_store_gen")
-                with fc2:
-                    f_action = st.multiselect(
-                        "⚡ نوع الحركة:",
-                        options=list(_action_map.keys()),
-                        default=list(_action_map.keys()),
-                        format_func=lambda x: _action_map[x],
-                        key="f_action_gen"
-                    )
-                with fc3:
-                    _min_d = df_actions['action_time'].min().date()
-                    _max_d = df_actions['action_time'].max().date()
-                    f_dates = st.date_input("📅 نطاق التاريخ:", value=(_min_d, _max_d), key="f_dates_gen")
+                total = len(df_subset)
+                from_bot = int((df_subset['src'] == 'bot').sum())
+                from_web = int((df_subset['src'] == 'web').sum())
 
-                # تطبيق الفلاتر
-                df_filt = df_actions.copy()
-                if f_store != "الكل":
-                    df_filt = df_filt[df_filt['store_id'] == f_store]
-                if f_action:
-                    df_filt = df_filt[df_filt['action_type'].isin(f_action)]
-                if isinstance(f_dates, (list, tuple)) and len(f_dates) == 2:
-                    df_filt = df_filt[
-                        (df_filt['action_time'].dt.date >= f_dates[0]) &
-                        (df_filt['action_time'].dt.date <= f_dates[1])
-                    ]
+                kc1, kc2, kc3 = st.columns(3)
+                with kc1:
+                    kpi_card("🔎", "إجمالي البحثات", total, "info")
+                with kc2:
+                    kpi_card("🤖", "من البوت", from_bot, "emerald")
+                with kc3:
+                    kpi_card("🌐", "من الموقع", from_web, "warning")
 
-                # تعريب وعرض
-                df_disp = df_filt.rename(columns={
-                    'action_time':   'الوقت',
-                    'action_type':   'نوع الحركة',
-                    'store_id':      'المتجر',
-                    'name_en':       'English Name',
-                    'public_coupon': 'الكوبون',
-                    'discount_value':'الخصم',
-                    'username':      'المستخدم',
-                    'user_id':       'Telegram ID',
-                    'details':       'التفاصيل'
+                st.divider()
+
+                # جدول التجميع: متجر/كلمة | من البوت | من الموقع | الإجمالي
+                pivot = (
+                    df_subset.pivot_table(index='store', columns='src', aggfunc='size', fill_value=0)
+                              .reset_index()
+                )
+                for s in ('bot', 'web'):
+                    if s not in pivot.columns:
+                        pivot[s] = 0
+                pivot['الإجمالي'] = pivot[['bot', 'web']].sum(axis=1)
+                pivot = pivot.rename(columns={
+                    'store': 'اسم المتجر / الكلمة',
+                    'bot':   'من البوت',
+                    'web':   'من الموقع',
                 })
-                df_disp['نوع الحركة'] = df_disp['نوع الحركة'].map(_action_map).fillna(df_disp['نوع الحركة'])
+                pivot = pivot[['اسم المتجر / الكلمة', 'من البوت', 'من الموقع', 'الإجمالي']]\
+                    .sort_values('الإجمالي', ascending=False)
 
-                st.caption(f"🔢 عدد السجلات: **{len(df_disp):,}**")
-                st.dataframe(df_disp, use_container_width=True, height=420, hide_index=True)
+                t_all, t_bot, t_web = st.tabs([
+                    f"📋 الإجمالي ({total})",
+                    f"🤖 من البوت ({from_bot})",
+                    f"🌐 من الموقع ({from_web})",
+                ])
+
+                with t_all:
+                    st.dataframe(pivot, use_container_width=True, hide_index=True, height=380)
+
+                with t_bot:
+                    if from_bot == 0:
+                        st.info("ما فيه بحثات من البوت في هذا التصنيف.")
+                    else:
+                        df_b = df_subset[df_subset['src'] == 'bot'].copy()
+                        df_b['who'] = df_b['bot_username'].fillna(df_b['user_id'].astype(str)).replace('nan', '—')
+                        df_b['search_date'] = pd.to_datetime(df_b['search_date']).dt.strftime('%Y-%m-%d %H:%M')
+                        df_b_view = df_b[['search_keyword', 'store', 'who', 'search_date']].rename(columns={
+                            'search_keyword': 'كلمة البحث',
+                            'store':          'تطابق مع',
+                            'who':            'اسم المستخدم (Telegram)',
+                            'search_date':    'وقت البحث',
+                        })
+                        st.dataframe(df_b_view, use_container_width=True, hide_index=True, height=380)
+
+                with t_web:
+                    if from_web == 0:
+                        st.info("ما فيه بحثات من الموقع في هذا التصنيف.")
+                    else:
+                        df_w = df_subset[df_subset['src'] == 'web'].copy()
+                        df_w['who'] = df_w['user_email'].fillna('—')
+                        df_w['search_date'] = pd.to_datetime(df_w['search_date']).dt.strftime('%Y-%m-%d %H:%M')
+                        df_w_view = df_w[['search_keyword', 'store', 'who', 'search_date']].rename(columns={
+                            'search_keyword': 'كلمة البحث',
+                            'store':          'تطابق مع',
+                            'who':            'إيميل الموقع',
+                            'search_date':    'وقت البحث',
+                        })
+                        st.dataframe(df_w_view, use_container_width=True, hide_index=True, height=380)
 
                 _xl = BytesIO()
                 with pd.ExcelWriter(_xl, engine='xlsxwriter') as _w:
-                    df_disp.to_excel(_w, index=False, sheet_name='سجل_الحركات')
+                    pivot.to_excel(_w, index=False, sheet_name='Summary')
+                    df_subset.drop(columns=['lang']).to_excel(_w, index=False, sheet_name='All_Rows')
                 st.download_button(
-                    "📥 تحميل الجدول كـ Excel",
+                    "📥 تحميل (Excel)",
                     _xl.getvalue(),
-                    "coupon_actions_report.xlsx",
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    f"search_{key_prefix}.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f"dl_search_{key_prefix}",
                 )
-            else:
-                st.info("📭 لا توجد حركات مسجّلة بعد.")
 
-        with sub_tab2:
-            st.markdown("### تحليل متجر محدد")
-            selected_store = st.selectbox("اختر المتجر للمعاينة الفردية:", df_all['store_id'].unique())
-            store_data = df_all[df_all['store_id'] == selected_store].iloc[0]
+            # تابز اللغة
+            df_ar = df_search[df_search['lang'] == 'ar']
+            df_en = df_search[df_search['lang'] == 'en']
 
-            c1, c2 = st.columns(2)
-            with c1:
-                fig_ind = px.pie(
-                    values=[store_data['total_link_clicks'], store_data['total_coupon_copies']],
-                    names=['نقرات الرابط', 'عمليات النسخ'],
-                    hole=0.4, title=f"تفاعل {selected_store}"
-                )
-                st.plotly_chart(apply_brand_theme(fig_ind))
-            with c2:
-                st.write("#### تفاصيل التحويل")
-                conversion = (store_data['total_coupon_copies'] / store_data['total_link_clicks'] * 100) if store_data['total_link_clicks'] > 0 else 0
-                st.metric("نسبة التحويل (نسخ/نقر)", f"{conversion:.2f}%")
+            lang_ar, lang_en = st.tabs([
+                f"🇸🇦 عربي ({len(df_ar)})",
+                f"🇬🇧 English ({len(df_en)})",
+            ])
+            with lang_ar:
+                _render_searches(df_ar, "ar")
+            with lang_en:
+                _render_searches(df_en, "en")
 
-        st.divider()
-        csv = df_all.to_csv(index=False).encode('utf-8-sig')
-        st.download_button("📥 تحميل تقرير الأداء الشامل (CSV)", csv, "performance_report.csv", "text/csv")
+    except Exception as e:
+        st.error(f"⚠️ خطأ في تحميل البيانات: {e}")
 
 
-
-
-
-# --- الصفحة الثامنة: تحليل بحث الأكواد (الشاملة - النسخة الملكية النهائية) ---
 elif page == "تحليل بحث الأكواد":
     page_title("📊", "لوحة تحكم ذكاء البحث",
                "عينك على السوق: اكتشف ما يبحث عنه العملاء وحدد الفرص الضائعة.")
@@ -2765,81 +2453,248 @@ elif page == "طلبات الأكواد":
         # لو رُبط بسجل master نُظهر اسمَيه AR + EN حتى يقدر الـ admin يتحقّق.
         query_requests = """
             SELECT
-                r.id          as "ID",
-                r.user_id     as "Telegram ID",
-                r.brand_name  as "طلب العميل (نص حر)",
+                r.id           as "ID",
+                CASE
+                    WHEN r.user_id IS NOT NULL AND r.user_id > 0 THEN '🤖 بوت'
+                    WHEN r.user_email IS NOT NULL AND TRIM(r.user_email) <> '' THEN '🌐 موقع'
+                    ELSE 'غير محدد'
+                END as "المصدر",
+                CASE
+                    WHEN r.user_id IS NOT NULL AND r.user_id > 0
+                    THEN COALESCE(
+                        NULLIF('@' || b.username, '@'),
+                        CAST(r.user_id AS TEXT)
+                    )
+                    ELSE '—'
+                END as "اسم مستخدم البوت",
+                CASE
+                    WHEN r.user_email IS NOT NULL AND TRIM(r.user_email) <> ''
+                    THEN r.user_email
+                    ELSE '—'
+                END as "إيميل الموقع",
+                r.brand_name   as "طلب العميل (نص حر)",
                 r.requested_at as "تاريخ الطلب",
-                r.user_email  as "الإيميل",
                 COALESCE(CAST(r.master_id AS TEXT), 'قيد الانتظار ⏳') as "رقم الماستر",
                 COALESCE(m.store_id, '—')         as "اسم المتجر (AR)",
                 COALESCE(NULLIF(m.name_en, ''), '—') as "Store Name (EN)"
             FROM unavailable_codes_requests r
-            LEFT JOIN master m ON r.master_id = m.id
+            LEFT JOIN master m     ON r.master_id = m.id
+            LEFT JOIN bot_users b  ON r.user_id   = b.telegram_id
             ORDER BY r.requested_at DESC
         """
         req_df = pd.read_sql(query_requests, conn)
 
         if not req_df.empty:
-            # --- كروت الإحصائيات الموحَّدة بهوية الشعار ---
+            req_df["تاريخ الطلب"] = pd.to_datetime(req_df["تاريخ الطلب"], errors='coerce')
+            req_df['is_pending'] = (req_df["رقم الماستر"] == "قيد الانتظار ⏳")
+
+            # --- كروت الإحصائيات (قبل الفلترة — الإجمالي الحقيقي) ---
+            total_all = len(req_df)
+            pending_all = int(req_df['is_pending'].sum())
+            top_b_all = req_df["طلب العميل (نص حر)"].value_counts().idxmax() if total_all else "—"
+
             c1, c2, c3 = st.columns(3)
             with c1:
-                kpi_card("📦", "إجمالي الطلبات", len(req_df), "info")
+                kpi_card("📦", "إجمالي الطلبات", total_all, "info")
             with c2:
-                pending = len(req_df[req_df["رقم الماستر"] == "قيد الانتظار ⏳"])
-                kpi_card("⏳", "لم توفر بعد", pending, "warning")
+                kpi_card("⏳", "لم توفر بعد", pending_all, "warning")
             with c3:
-                top_b = req_df["طلب العميل (نص حر)"].value_counts().idxmax()
-                kpi_card("🔥", "الأكثر طلباً", top_b, "emerald")
+                kpi_card("🔥", "الأكثر طلباً", top_b_all, "emerald")
 
             st.divider()
 
-            # --- عرض الجدول الأساسي (يحتوي على الإيميل) ---
-            st.write("### 📋 قائمة الطلبات الواردة (بالتفصيل)")
-            st.dataframe(req_df, use_container_width=True, height=450)
+            # ─── فلتر التاريخ (يطبق على كل التابز) ───────────────
+            _min_d = req_df["تاريخ الطلب"].min().date() if req_df["تاريخ الطلب"].notna().any() else date.today()
+            _max_d = req_df["تاريخ الطلب"].max().date() if req_df["تاريخ الطلب"].notna().any() else date.today()
+            fc1, fc2 = st.columns(2)
+            with fc1:
+                rf_from = st.date_input("📅 من تاريخ:", value=_min_d, key="req_filter_from")
+            with fc2:
+                rf_to   = st.date_input("📅 إلى تاريخ:", value=_max_d, key="req_filter_to")
 
-            # --- أزرار التحميل (Excel) ---
-            r_output = BytesIO()
-            with pd.ExcelWriter(r_output, engine='xlsxwriter') as writer:
-                req_df.to_excel(writer, index=False, sheet_name='Requests')
-            
-            st.download_button(
-                label="📥 تحميل قائمة الطلبات كاملة (Excel)",
-                data=r_output.getvalue(),
-                file_name=f"Code_Requests_{date.today()}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            mask_date = (
+                req_df["تاريخ الطلب"].dt.date >= rf_from
+            ) & (
+                req_df["تاريخ الطلب"].dt.date <= rf_to
             )
+            req_filtered = req_df[mask_date].copy()
+            req_filtered["تاريخ الطلب"] = req_filtered["تاريخ الطلب"].dt.strftime('%Y-%m-%d %H:%M')
 
-            # --- منطقة الإدارة (الربط والحذف) ---
-            st.divider()
-            col_manage1, col_manage2 = st.columns(2)
-            
-            with col_manage1:
-                with st.expander("🔗 ربط طلب برقم الماستر"):
+            if req_filtered.empty:
+                st.warning("⚠️ لا توجد طلبات في الفترة المختارة.")
+            else:
+                # تقسيم الطلبات حسب الحالة
+                df_pending = req_filtered[req_filtered['is_pending']].copy()
+                df_fulfilled = req_filtered[~req_filtered['is_pending']].copy()
+                cnt_total     = len(req_filtered)
+                cnt_pending   = len(df_pending)
+                cnt_fulfilled = len(df_fulfilled)
+
+                cols_display = ["ID", "المصدر", "اسم مستخدم البوت", "إيميل الموقع",
+                                "طلب العميل (نص حر)", "تاريخ الطلب",
+                                "رقم الماستر", "اسم المتجر (AR)", "Store Name (EN)"]
+
+                tab_all, tab_pending, tab_fulfilled, tab_top = st.tabs([
+                    f"📋 الكل ({cnt_total})",
+                    f"⏳ لم تتوفر ({cnt_pending})",
+                    f"✅ توفّرت ({cnt_fulfilled})",
+                    f"🔥 الأكثر طلباً",
+                ])
+
+                # ═══════ تاب 1: الكل ═══════
+                with tab_all:
+                    st.dataframe(req_filtered[cols_display], use_container_width=True, hide_index=True, height=420)
+                    xl1 = BytesIO()
+                    with pd.ExcelWriter(xl1, engine='xlsxwriter') as w:
+                        req_filtered.drop(columns=['is_pending']).to_excel(w, index=False, sheet_name='All')
+                    st.download_button(
+                        "📥 تحميل الكل (Excel)",
+                        xl1.getvalue(),
+                        f"requests_all_{date.today()}.xlsx",
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="dl_req_all",
+                    )
+
+                # ═══════ تاب 2: لم تتوفر — مع زر "أوفرت الكود" ═══════
+                with tab_pending:
+                    if df_pending.empty:
+                        st.success("👌 ما فيه طلبات معلّقة في الفترة المختارة.")
+                    else:
+                        st.dataframe(df_pending[cols_display], use_container_width=True, hide_index=True, height=380)
+
+                        st.markdown("##### ✅ أوفرت الكود؟ احذف طلبات معينة")
+                        pc1, pc2, pc3 = st.columns([3, 2, 1])
+                        with pc1:
+                            ids_to_close = st.multiselect(
+                                "اختر ID الطلبات اللي وفّرت أكوادها:",
+                                options=df_pending["ID"].astype(int).tolist(),
+                                key="close_req_ids",
+                                help="اختر طلب أو أكثر — يُحذفون دفعة واحدة.",
+                            )
+                        with pc2:
+                            confirm_close = st.checkbox(
+                                "✅ أؤكد التوفير والحذف",
+                                key="confirm_close_req",
+                            )
+                        with pc3:
+                            st.write(" ")
+                            if st.button("🗑️ حذف الطلبات", key="btn_close_req", type="primary"):
+                                if not ids_to_close:
+                                    st.warning("⚠️ اختر طلب أو أكثر.")
+                                elif not confirm_close:
+                                    st.warning("⚠️ فعّل خانة التأكيد.")
+                                else:
+                                    try:
+                                        c2 = get_conn()
+                                        cur2 = c2.cursor()
+                                        cur2.execute(
+                                            "DELETE FROM unavailable_codes_requests WHERE id = ANY(%s)",
+                                            (list(map(int, ids_to_close)),),
+                                        )
+                                        deleted = cur2.rowcount
+                                        c2.commit()
+                                        c2.close()
+                                        st.success(f"✅ تم حذف {deleted} طلب — الكود وفّرته 🎉")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"⚠️ فشل الحذف: {e}")
+
+                # ═══════ تاب 3: توفّرت ═══════
+                with tab_fulfilled:
+                    if df_fulfilled.empty:
+                        st.info("📭 ما فيه طلبات متوفّرة بعد في هذه الفترة.")
+                    else:
+                        st.dataframe(df_fulfilled[cols_display], use_container_width=True, hide_index=True, height=420)
+
+                # ═══════ تاب 4: الأكثر طلباً ═══════
+                with tab_top:
+                    st.caption("ترتيب المتاجر المطلوبة حسب عدد الطلبات. اضغط زر «🗑️ حذف كل طلبات هذا المتجر» لما توفّر الكود.")
+                    # تجميع حسب اسم المتجر
+                    grouped = (
+                        req_filtered.groupby("طلب العميل (نص حر)")
+                        .agg(
+                            عدد_الطلبات=("ID", "count"),
+                            معلّقة=('is_pending', 'sum'),
+                            ids=("ID", lambda s: list(map(int, s))),
+                        )
+                        .reset_index()
+                        .rename(columns={"طلب العميل (نص حر)": "اسم المتجر المطلوب"})
+                        .sort_values('عدد_الطلبات', ascending=False)
+                    )
+
+                    # عرض كل صف مع زر حذف
+                    for _, row in grouped.iterrows():
+                        brand = row['اسم المتجر المطلوب']
+                        cnt   = int(row['عدد_الطلبات'])
+                        pend  = int(row['معلّقة'])
+                        ids   = row['ids']
+
+                        tc1, tc2, tc3, tc4 = st.columns([3, 1, 1, 2])
+                        with tc1:
+                            st.markdown(f"**🏪 {brand}**")
+                        with tc2:
+                            st.markdown(f"📥 **{cnt}** طلب")
+                        with tc3:
+                            badge = f"⏳ {pend} معلّقة" if pend else "✅ كلها مغلقة"
+                            st.markdown(badge)
+                        with tc4:
+                            if st.button(f"🗑️ حذف الكل ({cnt})", key=f"del_brand_{brand}"):
+                                try:
+                                    c3 = get_conn()
+                                    cur3 = c3.cursor()
+                                    cur3.execute(
+                                        "DELETE FROM unavailable_codes_requests WHERE id = ANY(%s)",
+                                        (ids,),
+                                    )
+                                    deleted = cur3.rowcount
+                                    c3.commit()
+                                    c3.close()
+                                    st.success(f"✅ تم حذف {deleted} طلب لـ «{brand}» — الكود وفّرته 🎉")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"⚠️ فشل الحذف: {e}")
+                        st.divider()
+
+            # --- إدارة متقدمة: ربط طلب بـ master + تصفير الكل ---
+            with st.expander("⚙️ إدارة متقدمة"):
+                ma1, ma2 = st.columns(2)
+                with ma1:
+                    st.markdown("**🔗 ربط طلب برقم الماستر**")
                     req_id = st.number_input("رقم طلب العميل (ID):", min_value=1, key="link_q9")
-                    m_id = st.number_input("رقم الكود في الماستر:", min_value=1, key="master_q9")
-                    if st.button("تحديث وحفظ الربط"):
-                        cur = conn.cursor()
-                        cur.execute("UPDATE unavailable_codes_requests SET master_id = %s WHERE id = %s", (m_id, req_id))
-                        conn.commit()
-                        st.success(f"تم ربط الطلب {req_id} بالماستر {m_id}")
-                        st.rerun()
+                    m_id   = st.number_input("رقم الكود في الماستر:", min_value=1, key="master_q9")
+                    if st.button("تحديث وحفظ الربط", key="btn_link_master"):
+                        try:
+                            c4 = get_conn()
+                            cur4 = c4.cursor()
+                            cur4.execute(
+                                "UPDATE unavailable_codes_requests SET master_id = %s WHERE id = %s",
+                                (m_id, req_id),
+                            )
+                            c4.commit()
+                            c4.close()
+                            st.success(f"تم ربط الطلب {req_id} بالماستر {m_id}")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"⚠️ فشل الربط: {e}")
 
-            with col_manage2:
-                with st.expander("🗑️ حذف وتصفير"):
-                    del_id = st.number_input("حذف ID معين:", min_value=1, key="del_q9")
-                    if st.button("تأكيد الحذف"):
-                        cur = conn.cursor()
-                        cur.execute("DELETE FROM unavailable_codes_requests WHERE id = %s", (del_id,))
-                        cur.execute("SELECT public.reset_ids('unavailable_codes_requests');")
-                        conn.commit()
-                        st.success("تم الحذف.")
-                        st.rerun()
-                    
-                    if st.button("🚨 تصفير الجدول نهائياً"):
-                        cur = conn.cursor()
-                        cur.execute("TRUNCATE TABLE unavailable_codes_requests RESTART IDENTITY;")
-                        conn.commit()
-                        st.rerun()
+                with ma2:
+                    st.markdown("**🚨 تصفير كل الجدول**")
+                    st.caption("يحذف كل الطلبات نهائياً — لا يمكن التراجع.")
+                    confirm_all = st.checkbox("أؤكد التصفير الكامل", key="confirm_truncate_all")
+                    if st.button("🚨 تصفير الجدول نهائياً", key="btn_truncate_all"):
+                        if not confirm_all:
+                            st.warning("⚠️ فعّل خانة التأكيد أولاً.")
+                        else:
+                            try:
+                                c5 = get_conn()
+                                cur5 = c5.cursor()
+                                cur5.execute("TRUNCATE TABLE unavailable_codes_requests RESTART IDENTITY;")
+                                c5.commit()
+                                c5.close()
+                                st.success("تم تصفير الجدول.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"⚠️ فشل التصفير: {e}")
         else:
             st.warning("الجدول فارغ حالياً.")
 
