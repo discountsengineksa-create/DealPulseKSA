@@ -1,0 +1,27 @@
+name = "dealpulse-edge-enrichment"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+
+# ─── ضع account_id من Cloudflare dashboard (Overview → Account ID) ─────
+# account_id = "REPLACE_WITH_CF_ACCOUNT_ID"
+
+# ─── Routes ─────────────────────────────────────────────────────────────
+# الـ Worker يعترض كل طلبات /api/v1/track* على الزون المنتج
+[[routes]]
+pattern = "dealpulseksa.com/api/v1/track"
+zone_name = "dealpulseksa.com"
+
+[[routes]]
+pattern = "dealpulseksa.com/api/v1/track/*"
+zone_name = "dealpulseksa.com"
+
+# ─── Variables (public — تُكتب على CF dashboard وفي الكود) ─────────────
+[vars]
+ORIGIN_BASE = "https://dealpulseksa-production.up.railway.app"
+LOG_LEVEL = "info"
+
+# ─── Secrets (سرية — تُضاف عبر wrangler) ───────────────────────────────
+#   wrangler secret put IP_HASH_SALT
+# قيمة مقترحة: 32+ حرف عشوائي (openssl rand -base64 48)
