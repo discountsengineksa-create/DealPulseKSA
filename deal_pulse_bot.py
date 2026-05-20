@@ -395,15 +395,15 @@ def increment_coupon_copies(store_id):
         print(f"⚠️ فشل تحديث نسخ الكوبون لـ {store_id}: {e}")
 
 
-def log_search(keyword, found):
+def log_search(keyword, found, user_id=None):
     """تسجيل عملية بحث في direct_search لتغذية صفحة 'تحليل بحث الأكواد'."""
     try:
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("""
-            INSERT INTO direct_search (search_keyword, user_found, search_date, platform)
-            VALUES (%s, %s, NOW(), 'TelegramBot')
-        """, (keyword, found))
+            INSERT INTO direct_search (search_keyword, user_found, search_date, platform, user_id)
+            VALUES (%s, %s, NOW(), 'TelegramBot', %s)
+        """, (keyword, found, user_id))
         conn.commit()
         release_conn(conn)
     except Exception as e:
@@ -1075,7 +1075,7 @@ def _process_search(message):
         # API شغال لكن لا نتائج → جرب DB كـ fallback إضافي
         rows = _db_search(search_term.lower())
 
-    log_search(search_term, found=bool(rows))
+    log_search(search_term, found=bool(rows), user_id=user_id)
     log_action(None, 'search', user_id=user_id,
                details=f"keyword:{search_term};found:{bool(rows)}")
 
