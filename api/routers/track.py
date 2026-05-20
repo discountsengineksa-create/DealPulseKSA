@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from psycopg2.extras import RealDictCursor
 
 from api.db import get_db
@@ -7,73 +9,128 @@ from api.schemas.track import (
     SearchLogRequest, SearchLogResponse,
     CodeRequestRequest, CodeRequestResponse,
 )
+from api.utils.geo_extractor import extract as extract_geo
+from api.utils.fraud_scoring import compute_quality_score
+from api.utils.event_publisher import publish_event
 
+_log = logging.getLogger("dp.track")
 router = APIRouter(prefix="/track", tags=["tracking"])
+
+# عتبة جودة الحدث — لا نُحدّث عدادات master لو الجودة أقل من هذا الحد
+# (يمنع bots من تضخيم الأرقام الظاهرة في الواجهة).
+QUALITY_THRESHOLD_FOR_COUNTERS = 50
 
 
 @router.post("", response_model=TrackResponse, status_code=201)
-def track_action(payload: TrackRequest, conn=Depends(get_db)):
+def track_action(payload: TrackRequest, request: Request, conn=Depends(get_db)):
     """
     تسجيل حركة مستخدم (نقر رابط / نسخ كوبون / بحث) من أي مصدر.
 
-    يدعم:
-      - البوت (source='bot', user_id=telegram_id)
-      - الموقع (source='web', user_id=web_users.id أو null للزوار)
-      - الداشبورد (source='dashboard')
+    خطوات التنفيذ:
+      1. إثراء الحدث من الـ Cloudflare Worker (x-dp-* headers): country,
+         city, ASN, ip_hash, bot_score...
+      2. حساب quality_score من 0..100 (anti-fraud heuristics).
+      3. التحقق من وجود المتجر.
+      4. INSERT idempotent في action_logs (ON CONFLICT (event_id) DO NOTHING).
+      5. تحديث عدادات master فقط لو الحدث عالي الجودة (quality >= 50).
+      6. تحديث web_users لو من الموقع وعالي الجودة.
+      7. XADD إلى Redis Stream events:raw (best-effort).
 
-    يُنفَّذ في transaction واحدة:
-      1. INSERT في action_logs مع source
-      2. UPDATE عدادات master (للنقرات والنسخ فقط)
-
-    هذا يُغذّي حسابات الترند الآلي مباشرةً دون تأخير.
+    لو حقول الـ Geo فاضية (Worker لم يصل بعد أو طلب من curl محلي)، الكود
+    يكمل بقيم NULL — quality_score يتراجع 5 نقاط فقط.
     """
-    # التحقق من وجود المتجر — يمنع تلويث السجلات ببيانات وهمية
+    # 1) إثراء + score
+    geo = extract_geo(request)
+    quality, is_dc, is_proxy = compute_quality_score(geo)
+    event_id = payload.event_id or geo.event_id
+
+    # 2) التحقق من وجود المتجر
     with conn.cursor() as cur:
         cur.execute("SELECT 1 FROM master WHERE store_id = %s", (payload.store_id,))
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail=f"store '{payload.store_id}' not found")
 
+    # 3) Idempotent INSERT في action_logs
     with conn.cursor() as cur:
-        # 1. تسجيل الحدث في action_logs
         cur.execute(
             """
-            INSERT INTO action_logs (user_id, store_id, action_type, details, source)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO action_logs (
+                user_id, store_id, action_type, details, source,
+                event_id, ip_hash, user_agent_hash,
+                country_code, region_code, city, postal_code,
+                lat, lng, isp, asn,
+                is_datacenter, is_proxy, device_class,
+                cf_bot_score, quality_score
+            )
+            VALUES (
+                %s, %s, %s, %s, %s,
+                %s::uuid, decode(%s, 'hex'), decode(%s, 'hex'),
+                %s, %s, %s, %s,
+                %s, %s, %s, %s,
+                %s, %s, %s,
+                %s, %s
+            )
+            ON CONFLICT (event_id) DO NOTHING
             """,
-            (payload.user_id, payload.store_id, payload.action, payload.details, payload.source),
+            (
+                payload.user_id, payload.store_id, payload.action, payload.details, payload.source,
+                event_id, geo.ip_hash, geo.ua_hash,
+                geo.country_code, geo.region_code, geo.city, geo.postal_code,
+                geo.lat, geo.lng, geo.isp, geo.asn,
+                is_dc, is_proxy, geo.device_class,
+                geo.cf_bot_score, quality,
+            ),
         )
 
-        # 2. تحديث العدادات في master (نقرات الرابط ونسخ الكود فقط)
-        cur.execute(
-            """
-            UPDATE master SET
-                total_coupon_copies = total_coupon_copies
-                    + CASE WHEN %s = 'copy_coupon' THEN 1 ELSE 0 END,
-                total_link_clicks   = total_link_clicks
-                    + CASE WHEN %s = 'click_link'  THEN 1 ELSE 0 END
-            WHERE store_id = %s
-            """,
-            (payload.action, payload.action, payload.store_id),
-        )
+        # 4) تحديث عدادات master — فقط للأحداث عالية الجودة
+        if quality >= QUALITY_THRESHOLD_FOR_COUNTERS:
+            cur.execute(
+                """
+                UPDATE master SET
+                    total_coupon_copies = total_coupon_copies
+                        + CASE WHEN %s = 'copy_coupon' THEN 1 ELSE 0 END,
+                    total_link_clicks   = total_link_clicks
+                        + CASE WHEN %s = 'click_link'  THEN 1 ELSE 0 END
+                WHERE store_id = %s
+                """,
+                (payload.action, payload.action, payload.store_id),
+            )
 
-        # 3. لمستخدمي الموقع المسجّلين: زيادة العدادات الشخصية + سجل الكود المنسوخ
-        if payload.source == "web" and payload.user_id:
-            if payload.action == "click_link":
-                cur.execute(
-                    "UPDATE web_users SET visited_clicks = visited_clicks + 1, last_seen = NOW() WHERE id = %s",
-                    (payload.user_id,),
-                )
-            elif payload.action == "copy_coupon":
-                cur.execute(
-                    """
-                    UPDATE web_users
-                    SET store_copy_count = store_copy_count + 1,
-                        copied_coupons_history = array_append(copied_coupons_history, %s),
-                        last_seen = NOW()
-                    WHERE id = %s
-                    """,
-                    (payload.store_id, payload.user_id),
-                )
+            # 5) العدادات الشخصية لمستخدمي الموقع المسجّلين
+            if payload.source == "web" and payload.user_id:
+                if payload.action == "click_link":
+                    cur.execute(
+                        "UPDATE web_users SET visited_clicks = visited_clicks + 1, last_seen = NOW() WHERE id = %s",
+                        (payload.user_id,),
+                    )
+                elif payload.action == "copy_coupon":
+                    cur.execute(
+                        """
+                        UPDATE web_users
+                        SET store_copy_count = store_copy_count + 1,
+                            copied_coupons_history = array_append(copied_coupons_history, %s),
+                            last_seen = NOW()
+                        WHERE id = %s
+                        """,
+                        (payload.store_id, payload.user_id),
+                    )
+        else:
+            _log.info("Low-quality event quarantined: store=%s action=%s quality=%d asn=%s",
+                      payload.store_id, payload.action, quality, geo.asn)
+
+    # 6) Best-effort fan-out إلى Redis Stream (consumers يفعلون التجميع + التنبيهات)
+    publish_event("events:raw", {
+        "event_id": event_id,
+        "store_id": payload.store_id,
+        "action": payload.action,
+        "source": payload.source,
+        "user_id": payload.user_id,
+        "country": geo.country_code,
+        "city": geo.city,
+        "quality": quality,
+        "is_datacenter": is_dc,
+        "is_proxy": is_proxy,
+    })
 
     return TrackResponse(
         ok=True, action=payload.action,
