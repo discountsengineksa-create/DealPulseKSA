@@ -6,6 +6,7 @@ Connection Pool مستقل للـ FastAPI.
 import os
 import threading
 from collections.abc import Generator
+from contextlib import contextmanager
 
 import psycopg2
 from psycopg2 import pool as pg_pool
@@ -68,6 +69,36 @@ def get_db() -> Generator:
     finally:
         # إعادة الاتصال لحالته الافتراضية قبل إعادته للـ Pool
         # يمنع تسرّب autocommit=True أو transactions معلقة للطلب التالي
+        try:
+            conn.autocommit = False
+            conn.rollback()
+        except Exception:
+            pass
+        pool.putconn(conn)
+
+
+@contextmanager
+def get_db_context():
+    """
+    Context-manager للـ background workers (خارج FastAPI request).
+
+    استخدام:
+        with get_db_context() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+
+    يُؤكّد commit عند الخروج النظيف، rollback عند exception،
+    ويُعيد الاتصال للـ Pool في كل الحالات.
+    """
+    pool = get_pool()
+    conn = pool.getconn()
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
         try:
             conn.autocommit = False
             conn.rollback()
