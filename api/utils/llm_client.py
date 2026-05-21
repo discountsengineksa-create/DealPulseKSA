@@ -1,22 +1,25 @@
 """
-OpenRouter LLM client — OpenAI-compatible router across many providers.
+LLM client with Gemini (primary) → OpenRouter (fallback) failover.
 
-Why OpenRouter:
-    Some regions (incl. KSA) get free_tier_requests limit=0 on Google's
-    direct Gemini API. OpenRouter proxies the same models from its own
-    inventory + free models from Llama/Phi/Gemma — bypassing regional
-    restrictions with a uniform OpenAI-compatible API.
+Why failover:
+    Direct Gemini API is faster, cheaper (per-token), and has prompt
+    caching native to the SDK. But some regions (incl. KSA) get a
+    free-tier limit of 0 and require billing. OpenRouter proxies the
+    same models without regional restrictions and has a generous free
+    pool, but its free models are bursty and rate-limited upstream.
 
-    Default model: google/gemini-2.0-flash-exp:free
-    Free tier: ~50 req/day per :free model, 200 across all
-    Paid models also available (very cheap, no provider lock-in).
+    Solution: try Gemini first. If it returns 404/429/quota errors or
+    times out, transparently retry through OpenRouter. The caller
+    receives a CallResult with a `provider` field indicating which
+    backend actually answered, and `fallback_used=True` when we had
+    to switch.
 
 Public API:
     call_llm(
         purpose: str,
         system: str,
         user: str,
-        model: str = DEFAULT_MODEL,
+        model: str | None = None,        # let backend pick its default
         max_tokens: int = 2048,
         temperature: float = 0.4,
     ) -> CallResult
@@ -31,91 +34,107 @@ import time
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from openai import OpenAI  # type: ignore[import-untyped]
-from openai import APIError, RateLimitError, APIConnectionError  # type: ignore[import-untyped]
+# Both SDKs are optional — the missing one just disables that backend
+try:
+    import google.generativeai as genai  # type: ignore[import-untyped]
+    from google.api_core import exceptions as google_exc  # type: ignore[import-untyped]
+    _GEMINI_SDK_AVAILABLE = True
+except ImportError:
+    genai = None  # type: ignore[assignment]
+    google_exc = None  # type: ignore[assignment]
+    _GEMINI_SDK_AVAILABLE = False
+
+try:
+    from openai import OpenAI  # type: ignore[import-untyped]
+    from openai import APIError, RateLimitError, APIConnectionError  # type: ignore[import-untyped]
+    _OPENAI_SDK_AVAILABLE = True
+except ImportError:
+    OpenAI = None  # type: ignore[assignment]
+    APIError = RateLimitError = APIConnectionError = Exception  # type: ignore[misc,assignment]
+    _OPENAI_SDK_AVAILABLE = False
 
 from api.db import get_db_context
 from api.utils.financial_guardian import precharge, settle
 
 _log = logging.getLogger("dp.llm")
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Provider configuration
+# ─────────────────────────────────────────────────────────────────────────────
+GEMINI_DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+OPENROUTER_DEFAULT_MODEL = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
+DEFAULT_MODEL = GEMINI_DEFAULT_MODEL  # kept for callers that ask "what's the default?"
+
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-APP_REFERER = os.getenv("OPENROUTER_HTTP_REFERER", "https://dealpulseksa.com")
-APP_TITLE = os.getenv("OPENROUTER_APP_TITLE", "DealPulse KSA")
+OPENROUTER_REFERER = os.getenv("OPENROUTER_HTTP_REFERER", "https://dealpulseksa.com")
+OPENROUTER_APP_TITLE = os.getenv("OPENROUTER_APP_TITLE", "DealPulse KSA")
 
-DEFAULT_MODEL = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Pricing & Free-tier quotas
-# ─────────────────────────────────────────────────────────────────────────────
-# الأرقام بـ USD per 1M tokens — حسب OpenRouter rate card.
-# الموديلات بـ :free لها cost=0 (لكن نخزن قيمة وهمية صغيرة عشان Guardian
-# يحتفظ بسجل النشاط حتى وإن كانت الـ calls مجانية فعلياً).
+# Pricing (USD per 1M tokens). Used by Financial Guardian to track spend
+# across providers in a unified currency.
 MODEL_PRICING: dict[str, tuple[float, float]] = {
-    # model_id                                    (input $/1M, output $/1M)
-    "google/gemini-2.0-flash-exp:free":           (0.0,        0.0),
-    "google/gemini-2.0-flash-001":                (0.10,       0.40),
-    "google/gemini-flash-1.5":                    (0.075,      0.30),
-    "meta-llama/llama-3.3-70b-instruct:free":     (0.0,        0.0),
-    "meta-llama/llama-3.3-70b-instruct":          (0.39,       0.39),
-    "mistralai/mistral-7b-instruct:free":         (0.0,        0.0),
-    "google/gemma-2-9b-it:free":                  (0.0,        0.0),
-    "anthropic/claude-3.5-haiku":                 (0.80,       4.00),
-    "anthropic/claude-3.5-sonnet":                (3.00,       15.00),
-    "openai/gpt-4o-mini":                         (0.15,       0.60),
+    # ── Google direct ──
+    "gemini-2.5-flash":                            (0.30,         2.50),
+    "gemini-2.5-pro":                              (1.25,        10.00),
+    "gemini-2.0-flash":                            (0.10,         0.40),
+    "gemini-2.0-flash-lite":                       (0.075,        0.30),
+    "gemini-2.0-flash-001":                        (0.10,         0.40),
+    # ── OpenRouter free pool ──
+    "google/gemini-2.0-flash-exp:free":            (0.0,          0.0),
+    "meta-llama/llama-3.3-70b-instruct:free":      (0.0,          0.0),
+    "mistralai/mistral-small-24b-instruct-2501:free": (0.0,       0.0),
+    "google/gemma-2-9b-it:free":                   (0.0,          0.0),
+    # ── OpenRouter paid (failover safety) ──
+    "google/gemini-2.0-flash-001":                 (0.10,         0.40),
+    "anthropic/claude-3.5-haiku":                  (0.80,         4.00),
+    "openai/gpt-4o-mini":                          (0.15,         0.60),
 }
 
-# Daily request quotas للنماذج المجانية (نتتبعها في Redis).
-# OpenRouter limit الفعلي يختلف حسب الـ tier؛ نضع أرقام محافظة.
+# Daily quotas — Redis-tracked rate gate, not cost gate
 FREE_DAILY_QUOTA: dict[str, int] = {
-    "google/gemini-2.0-flash-exp:free":           50,
-    "meta-llama/llama-3.3-70b-instruct:free":     50,
-    "mistralai/mistral-7b-instruct:free":         50,
-    "google/gemma-2-9b-it:free":                  50,
+    "gemini-2.5-flash":                            500,
+    "gemini-2.5-pro":                              50,
+    "gemini-2.0-flash":                            1500,
+    "gemini-2.0-flash-lite":                       1500,
+    "gemini-2.0-flash-001":                        1500,
+    "google/gemini-2.0-flash-exp:free":            50,
+    "meta-llama/llama-3.3-70b-instruct:free":      50,
+    "mistralai/mistral-small-24b-instruct-2501:free": 50,
+    "google/gemma-2-9b-it:free":                   50,
 }
-DEFAULT_PAID_QUOTA = 10_000  # نقدّر سقف معقول لتجنب runaway calls
-
-_client: Optional[OpenAI] = None
+DEFAULT_PAID_QUOTA = 10_000
 
 
-def _get_client() -> OpenAI:
-    global _client
-    if _client is not None:
-        return _client
-    key = os.getenv("OPENROUTER_API_KEY")
-    if not key:
-        raise RuntimeError(
-            "OPENROUTER_API_KEY غير معرّف. اضبطه في Railway env vars قبل التشغيل "
-            "(https://openrouter.ai/keys)."
-        )
-    _client = OpenAI(
-        api_key=key,
-        base_url=OPENROUTER_BASE_URL,
-        default_headers={
-            "HTTP-Referer": APP_REFERER,
-            "X-Title": APP_TITLE,
-        },
-    )
-    return _client
+@dataclass
+class CallResult:
+    text: str
+    model: str
+    provider: str = "unknown"        # 'gemini' | 'openrouter' | 'none'
+    tokens_input: int = 0
+    tokens_output: int = 0
+    cost_usd: float = 0.0
+    latency_ms: int = 0
+    refused_by_guardian: bool = False
+    refused_by_quota: bool = False
+    fallback_used: bool = False      # True when the primary failed and we switched
+    error: Optional[str] = None      # last error message, if any
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Internal helpers
+# ─────────────────────────────────────────────────────────────────────────────
 
 def estimate_cost_usd(model: str, in_tokens: int, out_tokens: int) -> float:
-    """Forecast cost based on price table. Free models return 0."""
-    in_price, out_price = MODEL_PRICING.get(model, MODEL_PRICING.get(DEFAULT_MODEL, (0.0, 0.0)))
+    in_price, out_price = MODEL_PRICING.get(model, (0.0, 0.0))
     return (in_tokens * in_price + out_tokens * out_price) / 1_000_000
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Daily quota guard
-# ─────────────────────────────────────────────────────────────────────────────
-def _quota_key(model: str) -> str:
+def _quota_key(provider: str, model: str) -> str:
     from datetime import datetime, timezone
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    return f"openrouter:quota:{day}:{model}"
+    return f"{provider}:quota:{day}:{model}"
 
 
 def _quota_limit(model: str) -> int:
-    """Free models get their explicit daily quota; paid get a safety ceiling."""
     if model in FREE_DAILY_QUOTA:
         return FREE_DAILY_QUOTA[model]
     if model.endswith(":free"):
@@ -123,20 +142,16 @@ def _quota_limit(model: str) -> int:
     return DEFAULT_PAID_QUOTA
 
 
-def _check_and_increment_quota(model: str) -> tuple[bool, int]:
-    """
-    Returns (allowed, current_count).
-    Falls back to allowing the call if Redis is unreachable.
-    """
+def _check_and_increment_quota(provider: str, model: str) -> tuple[bool, int]:
     from api.utils.redis_client import get_redis
     limit = _quota_limit(model)
     try:
         r = get_redis()
-        new_count = r.incrbyfloat(_quota_key(model), 1)
-        r.expire(_quota_key(model), 60 * 60 * 36)
+        new_count = r.incrbyfloat(_quota_key(provider, model), 1)
+        r.expire(_quota_key(provider, model), 60 * 60 * 36)
         cur = int(new_count)
         if cur > limit:
-            r.incrbyfloat(_quota_key(model), -1)
+            r.incrbyfloat(_quota_key(provider, model), -1)
             return False, cur - 1
         return True, cur
     except Exception as exc:
@@ -144,23 +159,11 @@ def _check_and_increment_quota(model: str) -> tuple[bool, int]:
         return True, -1
 
 
-@dataclass
-class CallResult:
-    text: str
-    model: str
-    tokens_input: int
-    tokens_output: int
-    cost_usd: float
-    latency_ms: int
-    refused_by_guardian: bool = False
-    refused_by_quota: bool = False
-
-
 def _log_call(
     *, purpose: str, model: str, cache_hit: bool, in_tokens: int, out_tokens: int,
     cost: float, latency_ms: int, success: bool, error: Optional[str] = None,
 ) -> None:
-    """Persist an audit row to llm_call_log (best-effort — never raises)."""
+    """Best-effort persist of one call row. Never raises."""
     try:
         with get_db_context() as conn:
             with conn.cursor() as cur:
@@ -178,65 +181,142 @@ def _log_call(
         _log.warning("llm_call_log insert failed: %s", exc)
 
 
-def call_llm(
-    *,
-    purpose: str,
-    system: str,
-    user: str,
-    model: str = DEFAULT_MODEL,
-    max_tokens: int = 2048,
-    temperature: float = 0.4,
-    estimated_in_tokens: int | None = None,
+# ─────────────────────────────────────────────────────────────────────────────
+# Gemini backend (primary)
+# ─────────────────────────────────────────────────────────────────────────────
+_gemini_configured = False
+
+
+def _ensure_gemini_configured() -> bool:
+    """Returns True if Gemini is usable. False if SDK or API key missing."""
+    global _gemini_configured
+    if _gemini_configured:
+        return True
+    if not _GEMINI_SDK_AVAILABLE:
+        return False
+    key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not key:
+        return False
+    genai.configure(api_key=key)
+    _gemini_configured = True
+    return True
+
+
+def _call_gemini(
+    *, purpose: str, system: str, user: str, model: str,
+    max_tokens: int, temperature: float, est_cost: float,
 ) -> CallResult:
-    """
-    Single-shot OpenRouter call with quota + guardian + audit.
-
-    Workflow:
-      1. Estimate cost (or use caller-provided estimate)
-      2. Daily quota check (per model, free or paid)
-      3. Financial Guardian precharge (cost-based)
-      4. OpenRouter API call via openai SDK
-      5. Settle actual cost
-      6. Log to llm_call_log
-      7. Return CallResult
-    """
-    # 1) Estimate
-    est_in = estimated_in_tokens if estimated_in_tokens is not None else int(
-        (len(system) + len(user)) / 3.5
-    )
-    est_out = max_tokens
-    est_cost = estimate_cost_usd(model, est_in, est_out)
-
-    # 2) Daily quota gate
-    allowed, cur_count = _check_and_increment_quota(model)
-    if not allowed:
-        limit = _quota_limit(model)
-        _log.warning("Quota exceeded for %s: %d/%d", model, cur_count, limit)
-        _log_call(purpose=purpose, model=model, cache_hit=False,
-                  in_tokens=0, out_tokens=0, cost=0, latency_ms=0,
-                  success=False, error=f"daily_quota_exhausted ({cur_count}/{limit})")
-        return CallResult(text="", model=model, tokens_input=0, tokens_output=0,
-                          cost_usd=0.0, latency_ms=0, refused_by_quota=True)
-
-    # 3) Financial Guardian
-    if not precharge(est_cost, purpose=purpose):
-        _log_call(purpose=purpose, model=model, cache_hit=False,
-                  in_tokens=0, out_tokens=0, cost=0, latency_ms=0,
-                  success=False, error="financial_guardian_refused")
-        return CallResult(
-            text="", model=model, tokens_input=0, tokens_output=0,
-            cost_usd=0.0, latency_ms=0, refused_by_guardian=True,
-        )
-
-    client = _get_client()
+    """One attempt against Gemini direct. Returns CallResult with error on failure."""
     start = time.time()
     response: Any = None
     last_err: Optional[Exception] = None
 
-    # 4) OpenRouter call with one retry on transient/rate errors
     for attempt in range(2):
         try:
-            response = client.chat.completions.create(
+            gen_model = genai.GenerativeModel(
+                model_name=model,
+                system_instruction=system,
+                generation_config={
+                    "temperature": temperature,
+                    "max_output_tokens": max_tokens,
+                    "response_mime_type": "application/json",
+                },
+            )
+            response = gen_model.generate_content(user)
+            last_err = None
+            break
+        except google_exc.ResourceExhausted as exc:
+            last_err = exc
+            _log.warning("Gemini quota/rate-limited (attempt %d): %s", attempt + 1, exc)
+            time.sleep(2 * (attempt + 1))
+        except google_exc.GoogleAPICallError as exc:
+            last_err = exc
+            _log.error("Gemini API error: %s", exc)
+            break
+        except Exception as exc:
+            last_err = exc
+            _log.error("Gemini unexpected error: %s", exc)
+            break
+
+    latency_ms = int((time.time() - start) * 1000)
+
+    if response is None or last_err is not None:
+        settle(actual_cost_usd=0.0, estimated_cost_usd=est_cost)
+        err_str = str(last_err)[:500] if last_err else "no_response"
+        _log_call(purpose=purpose, model=model, cache_hit=False,
+                  in_tokens=0, out_tokens=0, cost=0, latency_ms=latency_ms,
+                  success=False, error=err_str)
+        return CallResult(text="", model=model, provider="gemini",
+                          latency_ms=latency_ms, error=err_str)
+
+    usage = getattr(response, "usage_metadata", None)
+    in_tokens = int(getattr(usage, "prompt_token_count", 0)) if usage else 0
+    out_tokens = int(getattr(usage, "candidates_token_count", 0)) if usage else 0
+    actual_cost = estimate_cost_usd(model, in_tokens, out_tokens)
+    settle(actual_cost_usd=actual_cost, estimated_cost_usd=est_cost)
+
+    text = ""
+    try:
+        text = response.text or ""
+    except Exception:
+        try:
+            text = "".join(
+                part.text for cand in (response.candidates or [])
+                for part in (cand.content.parts or []) if hasattr(part, "text")
+            )
+        except Exception:
+            text = ""
+
+    _log_call(purpose=purpose, model=model, cache_hit=False,
+              in_tokens=in_tokens, out_tokens=out_tokens,
+              cost=actual_cost, latency_ms=latency_ms, success=True)
+
+    return CallResult(
+        text=text, model=model, provider="gemini",
+        tokens_input=in_tokens, tokens_output=out_tokens,
+        cost_usd=actual_cost, latency_ms=latency_ms,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OpenRouter backend (fallback)
+# ─────────────────────────────────────────────────────────────────────────────
+_openrouter_client: Optional[Any] = None
+
+
+def _ensure_openrouter_client() -> bool:
+    """Returns True if OpenRouter is usable."""
+    global _openrouter_client
+    if _openrouter_client is not None:
+        return True
+    if not _OPENAI_SDK_AVAILABLE:
+        return False
+    key = os.getenv("OPENROUTER_API_KEY")
+    if not key:
+        return False
+    _openrouter_client = OpenAI(
+        api_key=key,
+        base_url=OPENROUTER_BASE_URL,
+        default_headers={
+            "HTTP-Referer": OPENROUTER_REFERER,
+            "X-Title": OPENROUTER_APP_TITLE,
+        },
+    )
+    return True
+
+
+def _call_openrouter(
+    *, purpose: str, system: str, user: str, model: str,
+    max_tokens: int, temperature: float, est_cost: float,
+) -> CallResult:
+    """One attempt against OpenRouter."""
+    start = time.time()
+    response: Any = None
+    last_err: Optional[Exception] = None
+
+    for attempt in range(2):
+        try:
+            response = _openrouter_client.chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": system},
@@ -244,10 +324,6 @@ def call_llm(
                 ],
                 max_tokens=max_tokens,
                 temperature=temperature,
-                # Note: response_format omitted — not all OpenRouter free
-                # models support it. We rely on the system prompt's explicit
-                # "respond as JSON only" instruction + llm_service's
-                # robust JSON parsing with fallback to raw text.
             )
             last_err = None
             break
@@ -268,40 +344,132 @@ def call_llm(
 
     if response is None or last_err is not None:
         settle(actual_cost_usd=0.0, estimated_cost_usd=est_cost)
+        err_str = str(last_err)[:500] if last_err else "no_response"
         _log_call(purpose=purpose, model=model, cache_hit=False,
                   in_tokens=0, out_tokens=0, cost=0, latency_ms=latency_ms,
-                  success=False, error=str(last_err)[:500] if last_err else "no_response")
-        return CallResult(text="", model=model, tokens_input=0, tokens_output=0,
-                          cost_usd=0.0, latency_ms=latency_ms)
+                  success=False, error=err_str)
+        return CallResult(text="", model=model, provider="openrouter",
+                          latency_ms=latency_ms, error=err_str)
 
-    # 5) Parse usage + cost
     usage = getattr(response, "usage", None)
     in_tokens = int(getattr(usage, "prompt_tokens", 0)) if usage else 0
     out_tokens = int(getattr(usage, "completion_tokens", 0)) if usage else 0
     actual_cost = estimate_cost_usd(model, in_tokens, out_tokens)
-
     settle(actual_cost_usd=actual_cost, estimated_cost_usd=est_cost)
 
-    # 6) Extract text from the first choice
     text = ""
     try:
         text = response.choices[0].message.content or ""
     except (AttributeError, IndexError):
         text = ""
 
-    # 7) Audit
     _log_call(purpose=purpose, model=model, cache_hit=False,
               in_tokens=in_tokens, out_tokens=out_tokens,
               cost=actual_cost, latency_ms=latency_ms, success=True)
 
     return CallResult(
-        text=text,
-        model=model,
-        tokens_input=in_tokens,
-        tokens_output=out_tokens,
-        cost_usd=actual_cost,
-        latency_ms=latency_ms,
+        text=text, model=model, provider="openrouter",
+        tokens_input=in_tokens, tokens_output=out_tokens,
+        cost_usd=actual_cost, latency_ms=latency_ms,
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Public orchestrator — Gemini → OpenRouter failover
+# ─────────────────────────────────────────────────────────────────────────────
+
+def call_llm(
+    *,
+    purpose: str,
+    system: str,
+    user: str,
+    model: Optional[str] = None,
+    max_tokens: int = 2048,
+    temperature: float = 0.4,
+    estimated_in_tokens: int | None = None,
+) -> CallResult:
+    """
+    Orchestrated call with automatic failover.
+
+    Workflow:
+      1. Try Gemini (if SDK + GEMINI_API_KEY available, quota OK,
+         Financial Guardian allows).
+      2. On Gemini failure (any reason — 404, 429, network, parse),
+         fall back to OpenRouter (same checks repeat for the secondary).
+      3. Return the first successful CallResult, with `fallback_used`
+         flag set if we had to switch.
+
+    If both providers fail, returns a CallResult with text="" and
+    `error` populated for the final attempt.
+    """
+    # Shared cost estimate (heuristic) — used for both backends
+    est_in = estimated_in_tokens if estimated_in_tokens is not None else int(
+        (len(system) + len(user)) / 3.5
+    )
+    est_out = max_tokens
+
+    # ─── Attempt 1: Gemini (primary) ───
+    if _ensure_gemini_configured():
+        primary_model = model or GEMINI_DEFAULT_MODEL
+        # Pre-flight quota + budget gate
+        allowed, _ = _check_and_increment_quota("gemini", primary_model)
+        if not allowed:
+            _log.warning("Gemini quota exhausted — going straight to OpenRouter")
+        else:
+            est_cost = estimate_cost_usd(primary_model, est_in, est_out)
+            if not precharge(est_cost, purpose=purpose):
+                _log_call(purpose=purpose, model=primary_model, cache_hit=False,
+                          in_tokens=0, out_tokens=0, cost=0, latency_ms=0,
+                          success=False, error="financial_guardian_refused")
+                return CallResult(
+                    text="", model=primary_model, provider="gemini",
+                    refused_by_guardian=True,
+                )
+
+            result = _call_gemini(
+                purpose=purpose, system=system, user=user, model=primary_model,
+                max_tokens=max_tokens, temperature=temperature, est_cost=est_cost,
+            )
+            if result.text:
+                _log.info("✅ Gemini answered (%s, %dms, $%.5f)",
+                          primary_model, result.latency_ms, result.cost_usd)
+                return result
+            _log.warning("⚠️  Gemini failed → trying OpenRouter. Error: %s",
+                         result.error)
+
+    # ─── Attempt 2: OpenRouter (fallback) ───
+    if not _ensure_openrouter_client():
+        _log.error("Both Gemini and OpenRouter unavailable — no LLM backend configured")
+        return CallResult(
+            text="", model=model or "unknown", provider="none",
+            error="no_provider_configured",
+        )
+
+    secondary_model = OPENROUTER_DEFAULT_MODEL
+    allowed, _ = _check_and_increment_quota("openrouter", secondary_model)
+    if not allowed:
+        return CallResult(text="", model=secondary_model, provider="openrouter",
+                          refused_by_quota=True, fallback_used=True)
+
+    est_cost = estimate_cost_usd(secondary_model, est_in, est_out)
+    if not precharge(est_cost, purpose=purpose):
+        _log_call(purpose=purpose, model=secondary_model, cache_hit=False,
+                  in_tokens=0, out_tokens=0, cost=0, latency_ms=0,
+                  success=False, error="financial_guardian_refused")
+        return CallResult(text="", model=secondary_model, provider="openrouter",
+                          refused_by_guardian=True, fallback_used=True)
+
+    result = _call_openrouter(
+        purpose=purpose, system=system, user=user, model=secondary_model,
+        max_tokens=max_tokens, temperature=temperature, est_cost=est_cost,
+    )
+    result.fallback_used = True
+    if result.text:
+        _log.info("✅ OpenRouter fallback answered (%s, %dms, $%.5f)",
+                  secondary_model, result.latency_ms, result.cost_usd)
+    else:
+        _log.error("❌ Both providers failed. Last error: %s", result.error)
+    return result
 
 
 # Backwards-compat alias

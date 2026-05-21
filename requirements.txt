@@ -4,6 +4,8 @@ anyio==4.13.0
 
 apscheduler==3.10.4
 
+google-generativeai==0.8.3
+
 openai==1.55.3
 
 attrs==26.1.0

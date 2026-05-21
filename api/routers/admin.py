@@ -57,8 +57,11 @@ def trigger_directive(
         "summary":              result.get("summary"),
         "directives_count":     len(result.get("directives") or []),
         "model":                result.get("model"),
+        "provider":             result.get("provider"),
+        "fallback_used":        result.get("fallback_used"),
         "cost_usd":             result.get("cost_usd"),
         "tokens_input":         result.get("tokens_input"),
         "tokens_output":        result.get("tokens_output"),
         "refused_by_guardian":  result.get("refused_by_guardian"),
+        "refused_reason":       result.get("refused_reason"),
     }

@@ -25,7 +25,7 @@ from typing import Any, Optional
 from psycopg2.extras import Json, RealDictCursor
 
 from api.db import get_db_context
-from api.utils.llm_client import call_llm, DEFAULT_MODEL
+from api.utils.llm_client import call_llm
 
 _log = logging.getLogger("dp.llm.service")
 
@@ -327,7 +327,7 @@ def _persist_directive(
 # Public API
 # ─────────────────────────────────────────────────────────────────────────────
 
-def generate_directive(*, model: str = DEFAULT_MODEL) -> dict[str, Any]:
+def generate_directive(*, model: Optional[str] = None) -> dict[str, Any]:
     """
     Main entry. Returns:
         {
@@ -346,15 +346,16 @@ def generate_directive(*, model: str = DEFAULT_MODEL) -> dict[str, Any]:
     prompt_text = render_prompt(snapshot)
     prompt_hash = _hash_prompt(prompt_text)
 
-    # 1) Try cache
+    # 1) Try cache (independent of provider — same prompt → same hash)
     cached = _try_cache(prompt_hash)
     if cached:
         _log.info("🎯 LLM cache HIT for directive")
+        cached_model = "cache"
         directive_id = _persist_directive(
             snapshot=snapshot, prompt_hash=prompt_hash,
             response_text=cached["response_text"],
             response_json=cached["response_json"],
-            model=model, in_tokens=cached["tokens_input"],
+            model=cached_model, in_tokens=cached["tokens_input"],
             out_tokens=cached["tokens_output"], cost_usd=0.0,
             cache_hit=True,
         )
@@ -363,20 +364,22 @@ def generate_directive(*, model: str = DEFAULT_MODEL) -> dict[str, Any]:
             "cache_hit": True,
             "summary": (cached["response_json"] or {}).get("summary", ""),
             "directives": (cached["response_json"] or {}).get("directives", []),
-            "model": model,
+            "model": cached_model,
+            "provider": "cache",
+            "fallback_used": False,
             "cost_usd": 0.0,
             "tokens_input": cached["tokens_input"],
             "tokens_output": cached["tokens_output"],
             "refused_by_guardian": False,
         }
 
-    # 2) Cache miss → call Gemini
-    _log.info("🌐 LLM cache MISS — calling %s", model)
+    # 2) Cache miss → call LLM (Gemini primary, OpenRouter fallback)
+    _log.info("🌐 LLM cache MISS — invoking call_llm()")
     result = call_llm(
         purpose=PURPOSE,
         system=SYSTEM_PROMPT_AR,
         user=prompt_text,
-        model=model,
+        model=model,            # None → backend picks its own default
         max_tokens=2048,
         temperature=0.4,
     )
@@ -389,7 +392,9 @@ def generate_directive(*, model: str = DEFAULT_MODEL) -> dict[str, Any]:
             "cache_hit": False,
             "summary": "",
             "directives": [],
-            "model": model,
+            "model": result.model,
+            "provider": result.provider,
+            "fallback_used": result.fallback_used,
             "cost_usd": 0.0,
             "tokens_input": 0,
             "tokens_output": 0,
@@ -399,7 +404,7 @@ def generate_directive(*, model: str = DEFAULT_MODEL) -> dict[str, Any]:
 
     # 3) Parse JSON output (best-effort)
     response_json: dict | None = None
-    text = result.text.strip()
+    text = (result.text or "").strip()
     if text.startswith("```"):
         # strip ```json ... ```
         text = text.split("```", 2)[1] if text.count("```") >= 2 else text
@@ -415,14 +420,14 @@ def generate_directive(*, model: str = DEFAULT_MODEL) -> dict[str, Any]:
     _save_to_cache(
         prompt_text=prompt_text, prompt_hash=prompt_hash,
         response_text=result.text, response_json=response_json,
-        model=model,
+        model=result.model,
         in_tokens=result.tokens_input, out_tokens=result.tokens_output,
     )
 
     directive_id = _persist_directive(
         snapshot=snapshot, prompt_hash=prompt_hash,
         response_text=result.text, response_json=response_json,
-        model=model, in_tokens=result.tokens_input,
+        model=result.model, in_tokens=result.tokens_input,
         out_tokens=result.tokens_output, cost_usd=result.cost_usd,
         cache_hit=False,
     )
@@ -432,7 +437,9 @@ def generate_directive(*, model: str = DEFAULT_MODEL) -> dict[str, Any]:
         "cache_hit": False,
         "summary": (response_json or {}).get("summary", "") if response_json else "",
         "directives": (response_json or {}).get("directives", []) if response_json else [],
-        "model": model,
+        "model": result.model,
+        "provider": result.provider,
+        "fallback_used": result.fallback_used,
         "cost_usd": result.cost_usd,
         "tokens_input": result.tokens_input,
         "tokens_output": result.tokens_output,
