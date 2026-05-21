@@ -62,7 +62,7 @@ _log = logging.getLogger("dp.llm")
 # Provider configuration
 # ─────────────────────────────────────────────────────────────────────────────
 GEMINI_DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-OPENROUTER_DEFAULT_MODEL = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
+OPENROUTER_DEFAULT_MODEL = os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-chat-v3-0324:free")
 DEFAULT_MODEL = GEMINI_DEFAULT_MODEL  # kept for callers that ask "what's the default?"
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -83,6 +83,9 @@ MODEL_PRICING: dict[str, tuple[float, float]] = {
     "meta-llama/llama-3.3-70b-instruct:free":      (0.0,          0.0),
     "mistralai/mistral-small-24b-instruct-2501:free": (0.0,       0.0),
     "google/gemma-2-9b-it:free":                   (0.0,          0.0),
+    "deepseek/deepseek-chat-v3-0324:free":         (0.0,          0.0),
+    "deepseek/deepseek-r1:free":                   (0.0,          0.0),
+    "qwen/qwen-2.5-72b-instruct:free":             (0.0,          0.0),
     # ── OpenRouter paid (failover safety) ──
     "google/gemini-2.0-flash-001":                 (0.10,         0.40),
     "anthropic/claude-3.5-haiku":                  (0.80,         4.00),
@@ -100,6 +103,9 @@ FREE_DAILY_QUOTA: dict[str, int] = {
     "meta-llama/llama-3.3-70b-instruct:free":      50,
     "mistralai/mistral-small-24b-instruct-2501:free": 50,
     "google/gemma-2-9b-it:free":                   50,
+    "deepseek/deepseek-chat-v3-0324:free":         50,
+    "deepseek/deepseek-r1:free":                   50,
+    "qwen/qwen-2.5-72b-instruct:free":             50,
 }
 DEFAULT_PAID_QUOTA = 10_000
 
@@ -297,6 +303,8 @@ def _ensure_openrouter_client() -> bool:
     _openrouter_client = OpenAI(
         api_key=key,
         base_url=OPENROUTER_BASE_URL,
+        timeout=60.0,                       # was 600s default — fail fast
+        max_retries=0,                      # we have our own retry loop
         default_headers={
             "HTTP-Referer": OPENROUTER_REFERER,
             "X-Title": OPENROUTER_APP_TITLE,
