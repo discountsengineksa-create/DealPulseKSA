@@ -4,17 +4,18 @@ compatibility_date = "2026-01-01"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = false
 
-# ─── ضع account_id من Cloudflare dashboard (Overview → Account ID) ─────
-# account_id = "REPLACE_WITH_CF_ACCOUNT_ID"
+# Cloudflare account: discountsengineksa@gmail.com
+account_id = "189a678111c90bfc4e56271e74129302"
 
 # ─── Routes ─────────────────────────────────────────────────────────────
-# الـ Worker يعترض كل طلبات /api/v1/track* على الزون المنتج
+# الـ Worker يعترض طلبات /api/v1/track* على subdomain الـ API (api.dealpulseksa.com)
+# الـ subdomain proxied عبر Cloudflare ويوجّه لـ Railway origin
 [[routes]]
-pattern = "dealpulseksa.com/api/v1/track"
+pattern = "api.dealpulseksa.com/api/v1/track"
 zone_name = "dealpulseksa.com"
 
 [[routes]]
-pattern = "dealpulseksa.com/api/v1/track/*"
+pattern = "api.dealpulseksa.com/api/v1/track/*"
 zone_name = "dealpulseksa.com"
 
 # ─── Variables (public — تُكتب على CF dashboard وفي الكود) ─────────────
