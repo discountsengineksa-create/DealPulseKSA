@@ -154,6 +154,55 @@ def health():
     return {"status": "ok", "service": "deal-pulse-unified"}
 
 
+@app.get("/health/workers", tags=["system"])
+def health_workers():
+    """تشخيص حالة الـ workers (Week 2)."""
+    import os as _os
+    from api.utils.redis_client import get_redis
+    out = {
+        "redis_url_set": bool(_os.getenv("REDIS_URL")),
+        "disable_workers": _os.getenv("DISABLE_WORKERS"),
+    }
+    try:
+        r = get_redis()
+        out["redis_ping"] = r.ping()
+        out["redis_class"] = type(r).__name__
+        # حجم events:raw stream
+        try:
+            out["events_raw_len"] = r.xlen("events:raw")
+        except Exception as exc:
+            out["events_raw_len_error"] = str(exc)[:200]
+        # حالة consumer group
+        try:
+            groups = r.xinfo_groups("events:raw")
+            out["consumer_groups"] = [
+                {
+                    "name": g.get("name") or g.get(b"name", b"").decode("utf-8", "ignore"),
+                    "consumers": g.get("consumers") or g.get(b"consumers"),
+                    "pending": g.get("pending") or g.get(b"pending"),
+                    "last_delivered_id": g.get("last-delivered-id") or g.get(b"last-delivered-id"),
+                }
+                for g in groups
+            ]
+        except Exception as exc:
+            out["consumer_groups_error"] = str(exc)[:200]
+    except Exception as exc:
+        out["redis_error"] = str(exc)[:200]
+    # scheduler state
+    try:
+        from api.workers.scheduler import _started, _scheduler, _consumer_thread
+        out["scheduler_started"] = _started
+        out["scheduler_jobs"] = (
+            [j.id for j in _scheduler.get_jobs()] if _scheduler else []
+        )
+        out["consumer_thread_alive"] = (
+            _consumer_thread.is_alive() if _consumer_thread else False
+        )
+    except Exception as exc:
+        out["scheduler_error"] = str(exc)[:200]
+    return out
+
+
 _BASE_DIR = pathlib.Path(__file__).parent
 _LOGO_CACHE = {"max-age": "86400"}  # cache 24h
 
