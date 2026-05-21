@@ -36,9 +36,9 @@ from api.utils.financial_guardian import precharge, settle
 
 _log = logging.getLogger("dp.llm")
 
-# Default model: flash-002 = أكبر free quota (1500 req/day) + سرعة عالية.
-# Pro موجود في الـ table لو احتجت قوة استدلال أعلى لكنه محدود بـ 50 req/day.
-DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+# Default model: 2.0-flash = أكبر free quota + متاح في v1 الحالي.
+# (gemini-1.5-* deprecated في v1beta — استخدم 2.x فقط.)
+DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Pricing & Free-tier quotas
@@ -48,23 +48,23 @@ DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 # "ظلّية" صغيرة لكل call عشان Financial Guardian يقدر يكون رؤية موحّدة
 # لاستهلاكنا حتى وإن كانت الـ calls مجانية فعلياً.
 MODEL_PRICING: dict[str, tuple[float, float]] = {
-    # model_id              (input $/1M,   output $/1M)
-    "gemini-1.5-flash":     (0.075,        0.30),
-    "gemini-1.5-flash-002": (0.075,        0.30),
-    "gemini-1.5-flash-8b":  (0.0375,       0.15),
-    "gemini-1.5-pro":       (1.25,         5.00),
-    "gemini-1.5-pro-002":   (1.25,         5.00),
-    "gemini-2.0-flash-exp": (0.075,        0.30),
+    # model_id                (input $/1M,   output $/1M)
+    "gemini-2.5-flash":       (0.30,         2.50),
+    "gemini-2.5-pro":         (1.25,        10.00),
+    "gemini-2.0-flash":       (0.10,         0.40),
+    "gemini-2.0-flash-lite":  (0.075,        0.30),
+    "gemini-2.0-flash-001":   (0.10,         0.40),
+    "gemini-2.0-flash-exp":   (0.10,         0.40),
 }
 
 # Daily request quotas للـ free tier (نتتبعها في Redis عشان نمنع 429 surprise).
 FREE_DAILY_QUOTA: dict[str, int] = {
-    "gemini-1.5-flash":     1500,
-    "gemini-1.5-flash-002": 1500,
-    "gemini-1.5-flash-8b":  1500,
-    "gemini-1.5-pro":       50,
-    "gemini-1.5-pro-002":   50,
-    "gemini-2.0-flash-exp": 1500,
+    "gemini-2.5-flash":       500,
+    "gemini-2.5-pro":         50,
+    "gemini-2.0-flash":       1500,
+    "gemini-2.0-flash-lite":  1500,
+    "gemini-2.0-flash-001":   1500,
+    "gemini-2.0-flash-exp":   1500,
 }
 
 _configured = False
