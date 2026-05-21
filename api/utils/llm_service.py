@@ -5,7 +5,7 @@ LLM Directive Service — orchestrates the full directive lifecycle:
      matview + master expirations + per-category aggregates).
   2. Render a deterministic prompt (same input → same hash).
   3. Check llm_semantic_cache for an exact-hash hit.
-  4. On miss: call Claude via llm_client.call_claude (which itself goes
+  4. On miss: call Gemini via llm_client.call_llm (which itself goes
      through Financial Guardian + logs to llm_call_log).
   5. Persist to ai_directives + llm_semantic_cache.
   6. Return a dict the caller can email / surface in the dashboard.
@@ -25,7 +25,7 @@ from typing import Any, Optional
 from psycopg2.extras import Json, RealDictCursor
 
 from api.db import get_db_context
-from api.utils.llm_client import call_claude, DEFAULT_MODEL
+from api.utils.llm_client import call_llm, DEFAULT_MODEL
 
 _log = logging.getLogger("dp.llm.service")
 
@@ -370,9 +370,9 @@ def generate_directive(*, model: str = DEFAULT_MODEL) -> dict[str, Any]:
             "refused_by_guardian": False,
         }
 
-    # 2) Cache miss → call Claude
+    # 2) Cache miss → call Gemini
     _log.info("🌐 LLM cache MISS — calling %s", model)
-    result = call_claude(
+    result = call_llm(
         purpose=PURPOSE,
         system=SYSTEM_PROMPT_AR,
         user=prompt_text,
@@ -381,8 +381,9 @@ def generate_directive(*, model: str = DEFAULT_MODEL) -> dict[str, Any]:
         temperature=0.4,
     )
 
-    if result.refused_by_guardian:
-        _log.warning("Directive generation refused by Financial Guardian")
+    if result.refused_by_guardian or getattr(result, "refused_by_quota", False):
+        reason = "quota_exhausted" if getattr(result, "refused_by_quota", False) else "financial_guardian"
+        _log.warning("Directive generation refused (%s)", reason)
         return {
             "directive_id": None,
             "cache_hit": False,
@@ -393,6 +394,7 @@ def generate_directive(*, model: str = DEFAULT_MODEL) -> dict[str, Any]:
             "tokens_input": 0,
             "tokens_output": 0,
             "refused_by_guardian": True,
+            "refused_reason": reason,
         }
 
     # 3) Parse JSON output (best-effort)
@@ -406,7 +408,7 @@ def generate_directive(*, model: str = DEFAULT_MODEL) -> dict[str, Any]:
     try:
         response_json = json.loads(text)
     except Exception:
-        _log.warning("Claude returned non-JSON output — saving as text only")
+        _log.warning("LLM returned non-JSON output — saving as text only")
         response_json = None
 
     # 4) Save cache + persist directive

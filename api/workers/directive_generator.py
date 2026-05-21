@@ -2,7 +2,7 @@
 Directive generator worker — invoked by APScheduler every 3 hours.
 
 Flow:
-  1. generate_directive() builds snapshot, hits cache or calls Claude,
+  1. generate_directive() builds snapshot, hits cache or calls Gemini,
      persists to ai_directives, returns dict.
   2. If a real (non-refused) directive came back, send a summary email
      to the ops team via send_ops_alert.

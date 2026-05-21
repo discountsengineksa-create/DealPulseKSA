@@ -48,7 +48,7 @@ def trigger_directive(
     (مش background) عشان نقدر نشوف cache_hit + cost + summary.
     """
     _verify_admin(x_admin_secret)
-    # Lazy import — avoid loading anthropic on every admin request
+    # Lazy import — avoid loading the LLM SDK on every admin request
     from api.utils.llm_service import generate_directive
     result = generate_directive()
     return {
