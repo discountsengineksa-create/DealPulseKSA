@@ -39,6 +39,7 @@ from deal_pulse_bot import (
     IDLE_KICK_MINUTES,
 )
 from api.routers import admin, auth, coupons, track, users
+from api.workers.scheduler import start_workers
 
 # ─── التحقق من المتغيرات الحرجة ───────────────────────────────────────────────
 TOKEN_ENV = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
@@ -99,6 +100,13 @@ def on_startup():
     backfill_user_behavior()
     threading.Thread(target=idle_watcher, daemon=True).start()
     print(f"✅ idle_watcher started (timeout={IDLE_KICK_MINUTES}m)")
+
+    # Week 2 — velocity aggregator + spike detector + email dispatcher
+    # (idempotent: only the first worker process boots the scheduler)
+    try:
+        start_workers()
+    except Exception as e:
+        print(f"⚠️ start_workers warning: {e}")
 
     # webhook: idempotent — يُسجَّل فقط إذا كان غير صحيح
     try:
