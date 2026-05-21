@@ -43,7 +43,7 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 APP_REFERER = os.getenv("OPENROUTER_HTTP_REFERER", "https://dealpulseksa.com")
 APP_TITLE = os.getenv("OPENROUTER_APP_TITLE", "DealPulse KSA")
 
-DEFAULT_MODEL = os.getenv("OPENROUTER_MODEL", "google/gemini-2.0-flash-exp:free")
+DEFAULT_MODEL = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Pricing & Free-tier quotas
@@ -244,7 +244,10 @@ def call_llm(
                 ],
                 max_tokens=max_tokens,
                 temperature=temperature,
-                response_format={"type": "json_object"},  # force JSON output
+                # Note: response_format omitted — not all OpenRouter free
+                # models support it. We rely on the system prompt's explicit
+                # "respond as JSON only" instruction + llm_service's
+                # robust JSON parsing with fallback to raw text.
             )
             last_err = None
             break
