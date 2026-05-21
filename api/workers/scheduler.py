@@ -22,6 +22,7 @@ import threading
 from apscheduler.schedulers.background import BackgroundScheduler  # type: ignore[import-untyped]
 
 from api.workers.alert_dispatcher import dispatch_pending_alerts
+from api.workers.directive_generator import run_directive_cycle
 from api.workers.matview_refresher import refresh_velocity_matview
 from api.workers.spike_detector import detect_spikes
 from api.workers.velocity_aggregator import run_velocity_consumer
@@ -36,6 +37,7 @@ _started_lock = threading.Lock()
 MATVIEW_REFRESH_MINUTES = int(os.getenv("WORKER_MATVIEW_REFRESH_MIN", "1"))
 SPIKE_DETECT_MINUTES    = int(os.getenv("WORKER_SPIKE_DETECT_MIN", "5"))
 ALERT_DISPATCH_SECONDS  = int(os.getenv("WORKER_ALERT_DISPATCH_SEC", "30"))
+DIRECTIVE_HOURS         = int(os.getenv("WORKER_DIRECTIVE_HOURS", "3"))
 
 _scheduler: BackgroundScheduler | None = None
 _consumer_thread: threading.Thread | None = None
@@ -103,10 +105,22 @@ def start_workers() -> None:
         replace_existing=True,
     )
 
+    # Week 3 — LLM directive generator (every 3 hours by default)
+    _scheduler.add_job(
+        run_directive_cycle,
+        trigger="interval",
+        hours=DIRECTIVE_HOURS,
+        id="directive_generator",
+        name="Generate LLM operational directives",
+        replace_existing=True,
+        next_run_time=None,  # don't fire immediately on boot — wait full interval
+    )
+
     _scheduler.start()
     _log.info(
-        "✅ APScheduler started — matview/%dm, spike/%dm, dispatch/%ds",
-        MATVIEW_REFRESH_MINUTES, SPIKE_DETECT_MINUTES, ALERT_DISPATCH_SECONDS,
+        "✅ APScheduler started — matview/%dm, spike/%dm, dispatch/%ds, directive/%dh",
+        MATVIEW_REFRESH_MINUTES, SPIKE_DETECT_MINUTES,
+        ALERT_DISPATCH_SECONDS, DIRECTIVE_HOURS,
     )
 
 
