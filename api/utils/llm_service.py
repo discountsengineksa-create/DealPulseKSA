@@ -324,6 +324,72 @@ def _persist_directive(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Mock fallback — used only when ALL real LLM backends fail.
+# Generates a deterministic directive from the snapshot data itself,
+# without any external call. Quality is rough but the wiring proves out
+# end-to-end (cache, persistence, email). Drops away the instant a real
+# LLM provider answers successfully.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _build_mock_directive(snapshot: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """Returns (response_text_json, response_json). Pure function — no I/O."""
+    top = snapshot.get("top_stores_48h") or []
+    expiring = snapshot.get("expiring_within_7d") or []
+    geo = snapshot.get("geo_distribution_48h") or []
+
+    directives: list[dict[str, Any]] = []
+
+    # Highest-velocity store → recommend renewal/promotion
+    if top:
+        s = top[0]
+        if s.get("recent_48h", 0) > 0:
+            directives.append({
+                "priority": "high",
+                "action": f"وسّع تواجد متجر «{s['store']}» — حقق {s['recent_48h']} تفاعل خلال 48 ساعة (الأعلى في المنصة).",
+                "affected_master_ids": [s["master_id"]],
+                "rationale": f"recent_48h={s['recent_48h']}, hourly_mean={s['hourly_mean']:.1f}",
+            })
+
+    # Stores expiring soon with traffic → renewal urgency
+    for exp in expiring[:3]:
+        if exp.get("recent_48h", 0) > 5:
+            directives.append({
+                "priority": "high",
+                "action": f"جدّد كود «{exp['store']}» قبل {exp['last_time'][:10] if exp.get('last_time') else 'القريب'} — لا يزال يولّد حركة ({exp['recent_48h']} تفاعل/48س).",
+                "affected_master_ids": [exp["master_id"]],
+                "rationale": f"ينتهي قريباً ولا يزال نشط",
+            })
+
+    # Geo concentration
+    if geo:
+        top_geo = geo[0]
+        directives.append({
+            "priority": "medium",
+            "action": f"ركّز محتوى تسويقي على مدينة {top_geo.get('city') or top_geo.get('country')} — مصدر {top_geo.get('events', 0)} تفاعل في آخر 48 ساعة.",
+            "affected_master_ids": [],
+            "rationale": "أعلى تركّز جغرافي حالياً",
+        })
+
+    if not directives:
+        directives.append({
+            "priority": "low",
+            "action": "لا توجد إشارات تشغيلية واضحة في آخر 48 ساعة. واصل المراقبة عبر صفحة «تحليل المتاجر» في الداشبورد.",
+            "affected_master_ids": [],
+            "rationale": "بيانات تجميعية قليلة",
+        })
+
+    response_json = {
+        "summary": (
+            f"({len(directives)} توجيه آلي مبني على بيانات 48س — مولّد محلياً، LLM غير مفعّل)"
+        ),
+        "directives": directives,
+        "confidence": 0.50,
+        "mock": True,
+    }
+    return json.dumps(response_json, ensure_ascii=False, indent=2), response_json
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Public API
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -402,27 +468,46 @@ def generate_directive(*, model: Optional[str] = None) -> dict[str, Any]:
             "refused_reason": reason,
         }
 
-    # 3) Parse JSON output (best-effort)
-    response_json: dict | None = None
-    text = (result.text or "").strip()
-    if text.startswith("```"):
-        # strip ```json ... ```
-        text = text.split("```", 2)[1] if text.count("```") >= 2 else text
-        if text.startswith("json"):
-            text = text[4:].strip()
-    try:
-        response_json = json.loads(text)
-    except Exception:
-        _log.warning("LLM returned non-JSON output — saving as text only")
+    # 3) If both providers returned empty text → use mock fallback so the
+    #    pipeline still produces a directive + email. The instant a real
+    #    LLM is wired correctly, this branch stops firing automatically.
+    used_mock = False
+    if not (result.text or "").strip():
+        _log.warning("All LLM providers returned empty — using local mock fallback")
+        mock_text, mock_json = _build_mock_directive(snapshot)
+        # Pretend result came from the mock — keeps the rest of the
+        # pipeline (cache, persist) unchanged.
+        result.text = mock_text
+        result.model = "local-mock"
+        result.provider = "mock"
+        used_mock = True
+        response_json = mock_json
+        text = mock_text
+    else:
+        # 3a) Parse JSON output (best-effort)
         response_json = None
+        text = (result.text or "").strip()
+        if text.startswith("```"):
+            # strip ```json ... ```
+            text = text.split("```", 2)[1] if text.count("```") >= 2 else text
+            if text.startswith("json"):
+                text = text[4:].strip()
+        try:
+            response_json = json.loads(text)
+        except Exception:
+            _log.warning("LLM returned non-JSON output — saving as text only")
+            response_json = None
 
     # 4) Save cache + persist directive
-    _save_to_cache(
-        prompt_text=prompt_text, prompt_hash=prompt_hash,
-        response_text=result.text, response_json=response_json,
-        model=result.model,
-        in_tokens=result.tokens_input, out_tokens=result.tokens_output,
-    )
+    # NOTE: skip caching mock responses so the moment a real LLM works,
+    # we don't keep serving the mock to subsequent identical-snapshot calls.
+    if not used_mock:
+        _save_to_cache(
+            prompt_text=prompt_text, prompt_hash=prompt_hash,
+            response_text=result.text, response_json=response_json,
+            model=result.model,
+            in_tokens=result.tokens_input, out_tokens=result.tokens_output,
+        )
 
     directive_id = _persist_directive(
         snapshot=snapshot, prompt_hash=prompt_hash,
@@ -435,6 +520,7 @@ def generate_directive(*, model: Optional[str] = None) -> dict[str, Any]:
     return {
         "directive_id": directive_id,
         "cache_hit": False,
+        "is_mock": used_mock,
         "summary": (response_json or {}).get("summary", "") if response_json else "",
         "directives": (response_json or {}).get("directives", []) if response_json else [],
         "model": result.model,

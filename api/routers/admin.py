@@ -54,8 +54,10 @@ def trigger_directive(
     return {
         "directive_id":         result.get("directive_id"),
         "cache_hit":            result.get("cache_hit"),
+        "is_mock":              result.get("is_mock", False),
         "summary":              result.get("summary"),
         "directives_count":     len(result.get("directives") or []),
+        "directives":           result.get("directives", []),
         "model":                result.get("model"),
         "provider":             result.get("provider"),
         "fallback_used":        result.get("fallback_used"),
