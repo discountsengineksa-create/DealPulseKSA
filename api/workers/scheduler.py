@@ -38,10 +38,29 @@ MATVIEW_REFRESH_MINUTES = int(os.getenv("WORKER_MATVIEW_REFRESH_MIN", "1"))
 SPIKE_DETECT_MINUTES    = int(os.getenv("WORKER_SPIKE_DETECT_MIN", "5"))
 ALERT_DISPATCH_SECONDS  = int(os.getenv("WORKER_ALERT_DISPATCH_SEC", "30"))
 DIRECTIVE_HOURS         = int(os.getenv("WORKER_DIRECTIVE_HOURS", "3"))
+# Week 5-6 — SEO generator
+SEO_DISCOVERY_HOURS     = int(os.getenv("WORKER_SEO_DISCOVERY_HOURS", "12"))
+SEO_GENERATE_HOURS      = int(os.getenv("WORKER_SEO_GENERATE_HOURS", "6"))
+SEO_GENERATE_BATCH      = int(os.getenv("SEO_GENERATE_BATCH", "3"))
+SEO_AUTOGEN_ENABLED     = os.getenv("SEO_AUTOGEN_ENABLED") == "1"
 
 _scheduler: BackgroundScheduler | None = None
 _consumer_thread: threading.Thread | None = None
 _stop_event: threading.Event | None = None
+
+
+def _seo_discovery_cycle() -> None:
+    """Week 5-6 — مرحلة مجانية: تجميع الترند الداخلي + مطابقة وإنشاء وظائف."""
+    from api.seo.matcher import match_and_enqueue
+    from api.seo.trends import aggregate_internal_search
+    aggregate_internal_search()
+    match_and_enqueue()
+
+
+def _seo_generation_cycle() -> None:
+    """Week 5-6 — مرحلة LLM (تستهلك الميزانية): توليد صفحات من الوظائف المنتظرة."""
+    from api.seo.generator import process_pending_jobs
+    process_pending_jobs(batch=SEO_GENERATE_BATCH)
 
 
 def start_workers() -> None:
@@ -116,11 +135,36 @@ def start_workers() -> None:
         next_run_time=None,  # don't fire immediately on boot — wait full interval
     )
 
+    # Week 5-6 — SEO discovery (مجاني: trends + match) كل 12 ساعة
+    _scheduler.add_job(
+        _seo_discovery_cycle,
+        trigger="interval",
+        hours=SEO_DISCOVERY_HOURS,
+        id="seo_discovery",
+        name="SEO trend discovery + store match",
+        replace_existing=True,
+        next_run_time=None,
+    )
+
+    # Week 5-6 — SEO generation (يستهلك ميزانية LLM) — محكوم بـ SEO_AUTOGEN_ENABLED
+    if SEO_AUTOGEN_ENABLED:
+        _scheduler.add_job(
+            _seo_generation_cycle,
+            trigger="interval",
+            hours=SEO_GENERATE_HOURS,
+            id="seo_generate",
+            name="SEO LLM page generation",
+            replace_existing=True,
+            next_run_time=None,
+        )
+
     _scheduler.start()
     _log.info(
-        "✅ APScheduler started — matview/%dm, spike/%dm, dispatch/%ds, directive/%dh",
+        "✅ APScheduler started — matview/%dm, spike/%dm, dispatch/%ds, directive/%dh, "
+        "seo_discovery/%dh, seo_generate=%s",
         MATVIEW_REFRESH_MINUTES, SPIKE_DETECT_MINUTES,
         ALERT_DISPATCH_SECONDS, DIRECTIVE_HOURS,
+        SEO_DISCOVERY_HOURS, "on/%dh" % SEO_GENERATE_HOURS if SEO_AUTOGEN_ENABLED else "off",
     )
 
 

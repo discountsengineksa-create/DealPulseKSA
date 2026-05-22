@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Query
 
 from api.social.dispatcher import broadcast_to_all_platforms
 
@@ -67,3 +67,52 @@ def trigger_directive(
         "refused_by_guardian":  result.get("refused_by_guardian"),
         "refused_reason":       result.get("refused_reason"),
     }
+
+
+# ─── Week 5-6: SEO generator triggers ──────────────────────────────────────
+@router.post("/seo-run")
+def seo_run(
+    batch: int = Query(default=3, ge=0, le=20),
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """
+    تشغيل يدوي لخط أنابيب الـ SEO:
+      1. تجميع الترند الداخلي (مجاني)
+      2. مطابقة الكلمات بالمتاجر وإنشاء وظائف (مجاني)
+      3. توليد batch صفحات عبر الـ LLM (يستهلك الميزانية — batch=0 يتخطّاه)
+    """
+    _verify_admin(x_admin_secret)
+    from api.seo.trends import aggregate_internal_search
+    from api.seo.matcher import match_and_enqueue
+    from api.seo.generator import process_pending_jobs
+
+    trends = aggregate_internal_search()
+    enqueued = match_and_enqueue()
+    gen = process_pending_jobs(batch=batch) if batch else {"processed": 0, "generated": 0, "failed": 0}
+    return {"trends_upserted": trends, "jobs_enqueued": enqueued, "generation": gen}
+
+
+@router.post("/seo-publish/{page_id}")
+def seo_publish(
+    page_id: int,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """ينشر صفحة هبوط (draft → published) ثم يخطر الموقع + IndexNow (best-effort)."""
+    _verify_admin(x_admin_secret)
+    from api.db import get_db_context
+    from api.seo.indexer import submit_page
+
+    with get_db_context() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE seo_landing_pages SET status='published', published_at=NOW() "
+                "WHERE id=%s AND status<>'published' RETURNING slug",
+                (page_id,),
+            )
+            row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="page not found or already published")
+
+    slug = row[0]
+    index_result = submit_page(landing_page_id=page_id, slug=slug)
+    return {"published": True, "page_id": page_id, "slug": slug, "index": index_result}
