@@ -62,8 +62,40 @@ _log = logging.getLogger("dp.llm")
 # Provider configuration
 # ─────────────────────────────────────────────────────────────────────────────
 GEMINI_DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-OPENROUTER_DEFAULT_MODEL = os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-chat-v3-0324:free")
+OPENROUTER_DEFAULT_MODEL = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
 DEFAULT_MODEL = GEMINI_DEFAULT_MODEL  # kept for callers that ask "what's the default?"
+
+
+def _build_openrouter_chain() -> list[str]:
+    """
+    سلسلة موديلات OpenRouter للتجربة بالتتابع — لو موديل مات (404 No endpoints)
+    أو امتلأت حصته، ننتقل للتالي تلقائياً. يمنع تكرار توقّف الـ LLM كلما اختفى
+    موديل مجاني (المجانيات تتغيّر باستمرار).
+
+    التخصيص: OPENROUTER_MODELS="a,b,c" (مفصولة بفواصل) يلغي السلسلة الافتراضية،
+    أو OPENROUTER_MODEL=x يضع x في المقدّمة.
+    """
+    raw = os.getenv("OPENROUTER_MODELS", "")
+    chain = [m.strip() for m in raw.split(",") if m.strip()]
+    if not chain:
+        chain = [
+            OPENROUTER_DEFAULT_MODEL,
+            "meta-llama/llama-3.3-70b-instruct:free",
+            "google/gemini-2.0-flash-exp:free",
+            "mistralai/mistral-small-24b-instruct-2501:free",
+            "qwen/qwen-2.5-72b-instruct:free",
+            "google/gemma-2-9b-it:free",
+        ]
+    seen: set[str] = set()
+    out: list[str] = []
+    for m in chain:
+        if m and m not in seen:
+            seen.add(m)
+            out.append(m)
+    return out
+
+
+OPENROUTER_MODEL_CHAIN = _build_openrouter_chain()
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_REFERER = os.getenv("OPENROUTER_HTTP_REFERER", "https://dealpulseksa.com")
@@ -453,31 +485,41 @@ def call_llm(
             error="no_provider_configured",
         )
 
-    secondary_model = OPENROUTER_DEFAULT_MODEL
-    allowed, _ = _check_and_increment_quota("openrouter", secondary_model)
-    if not allowed:
-        return CallResult(text="", model=secondary_model, provider="openrouter",
-                          refused_by_quota=True, fallback_used=True)
+    # نجرّب موديلات OpenRouter بالتتابع — موديل ميت/ممتلئ → التالي تلقائياً
+    last_result: Optional[CallResult] = None
+    for or_model in OPENROUTER_MODEL_CHAIN:
+        allowed, _ = _check_and_increment_quota("openrouter", or_model)
+        if not allowed:
+            _log.warning("OpenRouter quota exhausted for %s — trying next model", or_model)
+            continue
 
-    est_cost = estimate_cost_usd(secondary_model, est_in, est_out)
-    if not precharge(est_cost, purpose=purpose):
-        _log_call(purpose=purpose, model=secondary_model, cache_hit=False,
-                  in_tokens=0, out_tokens=0, cost=0, latency_ms=0,
-                  success=False, error="financial_guardian_refused")
-        return CallResult(text="", model=secondary_model, provider="openrouter",
-                          refused_by_guardian=True, fallback_used=True)
+        est_cost = estimate_cost_usd(or_model, est_in, est_out)
+        if not precharge(est_cost, purpose=purpose):
+            # الحارس المالي رفض — السقف اليومي تخطّى، لا فائدة من موديل آخر
+            _log_call(purpose=purpose, model=or_model, cache_hit=False,
+                      in_tokens=0, out_tokens=0, cost=0, latency_ms=0,
+                      success=False, error="financial_guardian_refused")
+            return CallResult(text="", model=or_model, provider="openrouter",
+                              refused_by_guardian=True, fallback_used=True)
 
-    result = _call_openrouter(
-        purpose=purpose, system=system, user=user, model=secondary_model,
-        max_tokens=max_tokens, temperature=temperature, est_cost=est_cost,
-    )
-    result.fallback_used = True
-    if result.text:
-        _log.info("✅ OpenRouter fallback answered (%s, %dms, $%.5f)",
-                  secondary_model, result.latency_ms, result.cost_usd)
-    else:
-        _log.error("❌ Both providers failed. Last error: %s", result.error)
-    return result
+        result = _call_openrouter(
+            purpose=purpose, system=system, user=user, model=or_model,
+            max_tokens=max_tokens, temperature=temperature, est_cost=est_cost,
+        )
+        result.fallback_used = True
+        last_result = result
+        if result.text:
+            _log.info("✅ OpenRouter fallback answered (%s, %dms, $%.5f)",
+                      or_model, result.latency_ms, result.cost_usd)
+            return result
+        _log.warning("⚠️  OpenRouter model %s failed (%s) — trying next",
+                     or_model, (result.error or "")[:80])
+
+    if last_result is not None:
+        _log.error("❌ All OpenRouter models failed. Last error: %s", last_result.error)
+        return last_result
+    return CallResult(text="", model="none", provider="openrouter", fallback_used=True,
+                      error="all_openrouter_models_exhausted_or_quota")
 
 
 # Backwards-compat alias
