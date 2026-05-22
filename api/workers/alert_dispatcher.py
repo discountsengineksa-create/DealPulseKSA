@@ -27,6 +27,15 @@ BATCH_SIZE = 10
 def dispatch_pending_alerts() -> int:
     """Send all pending alerts. Returns number successfully dispatched."""
     sent = 0
+    # ساعات الهدوء (migration_016): نؤجّل الإيميل ولا نحرقه — يبقى pending
+    try:
+        from api.utils.ops import is_quiet_now
+        quiet, label = is_quiet_now("email")
+        if quiet:
+            _log.info("Quiet hours active (%s) — holding email alerts as pending", label)
+            return 0
+    except Exception as exc:
+        _log.warning("quiet-hours check skipped: %s", exc)
     try:
         with get_db_context() as conn:
             with conn.cursor() as cur:

@@ -35,6 +35,8 @@ def broadcast(
 ):
     _verify_admin(x_admin_secret)
     background_tasks.add_task(broadcast_to_all_platforms, master_id)
+    from api.utils.ops import audit_log
+    audit_log(action="broadcast", target=str(master_id))
     return {"status": "queued", "master_id": master_id}
 
 
@@ -115,6 +117,12 @@ def seo_publish(
 
     slug = row[0]
     index_result = submit_page(landing_page_id=page_id, slug=slug)
+    # ضع وقت آخر فهرسة على الصفحة (كان عموداً غير مُستخدم)
+    with get_db_context() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE seo_landing_pages SET last_indexed_at=NOW() WHERE id=%s", (page_id,))
+    from api.utils.ops import audit_log
+    audit_log(action="seo_publish", target=slug, meta={"page_id": page_id})
     return {"published": True, "page_id": page_id, "slug": slug, "index": index_result}
 
 
@@ -195,7 +203,10 @@ def social_approve(
     """يعتمد رداً وينشره (عبر SOCIAL_POST_WEBHOOK أو يعلّمه approved)."""
     _verify_admin(x_admin_secret)
     from api.social_listener.poster import post_response
-    return post_response(response_id)
+    from api.utils.ops import audit_log
+    res = post_response(response_id)
+    audit_log(action="social_approve", target=str(response_id), meta=res)
+    return res
 
 
 @router.post("/social-reject/{response_id}")
@@ -205,10 +216,81 @@ def social_reject(
 ):
     _verify_admin(x_admin_secret)
     from api.db import get_db_context
+    from api.utils.ops import audit_log
     with get_db_context() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "UPDATE social_responses SET review_status='rejected' WHERE id=%s",
                 (response_id,),
             )
+    audit_log(action="social_reject", target=str(response_id))
     return {"ok": True, "rejected": response_id}
+
+
+# ─── Cross-cutting controls (migration_016) ─────────────────────────────────
+@router.get("/audit-log")
+def audit_log_list(
+    limit: int = Query(default=100, ge=1, le=500),
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """آخر عمليات الأدمن (سجل التدقيق PDPL)."""
+    _verify_admin(x_admin_secret)
+    from psycopg2.extras import RealDictCursor
+    from api.db import get_db_context
+    with get_db_context() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT id, actor, action, target, status,
+                       to_char(created_at, 'YYYY-MM-DD HH24:MI') AS at
+                FROM pdpl_audit_log ORDER BY id DESC LIMIT %s
+                """,
+                (limit,),
+            )
+            rows = [dict(r) for r in cur.fetchall()]
+    return {"total": len(rows), "entries": rows}
+
+
+@router.get("/quiet-hours")
+def quiet_hours_list(x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
+    """نوافذ كتم التنبيهات."""
+    _verify_admin(x_admin_secret)
+    from psycopg2.extras import RealDictCursor
+    from api.db import get_db_context
+    from api.utils.ops import is_quiet_now
+    with get_db_context() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT id, label, start_hour, end_hour, timezone, channels, active "
+                "FROM alert_quiet_hours ORDER BY id"
+            )
+            rows = [dict(r) for r in cur.fetchall()]
+    quiet, label = is_quiet_now("email")
+    return {"windows": rows, "email_muted_now": quiet, "active_window": label}
+
+
+@router.post("/quiet-hours/{qid}/toggle")
+def quiet_hours_toggle(qid: int, x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
+    """يبدّل تفعيل نافذة هدوء."""
+    _verify_admin(x_admin_secret)
+    from api.db import get_db_context
+    from api.utils.ops import audit_log
+    with get_db_context() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE alert_quiet_hours SET active = NOT active WHERE id=%s RETURNING active",
+                (qid,),
+            )
+            row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="quiet-hours window not found")
+    audit_log(action="quiet_hours_toggle", target=str(qid), meta={"active": row[0]})
+    return {"ok": True, "id": qid, "active": row[0]}
+
+
+@router.get("/experiments")
+def experiments_results(x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
+    """نتائج تجارب A/B (impressions/clicks/conversions لكل arm)."""
+    _verify_admin(x_admin_secret)
+    from api.utils.ops import experiment_results
+    return {"results": experiment_results()}

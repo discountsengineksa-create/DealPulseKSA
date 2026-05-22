@@ -101,6 +101,11 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_REFERER = os.getenv("OPENROUTER_HTTP_REFERER", "https://dealpulseksa.com")
 OPENROUTER_APP_TITLE = os.getenv("OPENROUTER_APP_TITLE", "DealPulse KSA")
 
+# Groq — مزوّد مجاني سريع وموثوق (OpenAI-compatible). مفتاح مجاني من
+# console.groq.com. يُجرَّب بعد Gemini وقبل OpenRouter لأنه الأثبت مجاناً.
+GROQ_DEFAULT_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+
 # Pricing (USD per 1M tokens). Used by Financial Guardian to track spend
 # across providers in a unified currency.
 MODEL_PRICING: dict[str, tuple[float, float]] = {
@@ -110,6 +115,9 @@ MODEL_PRICING: dict[str, tuple[float, float]] = {
     "gemini-2.0-flash":                            (0.10,         0.40),
     "gemini-2.0-flash-lite":                       (0.075,        0.30),
     "gemini-2.0-flash-001":                        (0.10,         0.40),
+    # ── Groq (free tier) ──
+    "llama-3.3-70b-versatile":                     (0.0,          0.0),
+    "llama-3.1-8b-instant":                        (0.0,          0.0),
     # ── OpenRouter free pool ──
     "google/gemini-2.0-flash-exp:free":            (0.0,          0.0),
     "meta-llama/llama-3.3-70b-instruct:free":      (0.0,          0.0),
@@ -126,6 +134,8 @@ MODEL_PRICING: dict[str, tuple[float, float]] = {
 
 # Daily quotas — Redis-tracked rate gate, not cost gate
 FREE_DAILY_QUOTA: dict[str, int] = {
+    "llama-3.3-70b-versatile":                     1000,
+    "llama-3.1-8b-instant":                        1000,
     "gemini-2.5-flash":                            500,
     "gemini-2.5-pro":                              50,
     "gemini-2.0-flash":                            1500,
@@ -345,18 +355,18 @@ def _ensure_openrouter_client() -> bool:
     return True
 
 
-def _call_openrouter(
-    *, purpose: str, system: str, user: str, model: str,
+def _call_openai_compatible(
+    *, client: Any, provider: str, purpose: str, system: str, user: str, model: str,
     max_tokens: int, temperature: float, est_cost: float,
 ) -> CallResult:
-    """One attempt against OpenRouter."""
+    """محاولة واحدة على أي مزوّد OpenAI-compatible (OpenRouter / Groq / غيره)."""
     start = time.time()
     response: Any = None
     last_err: Optional[Exception] = None
 
     for attempt in range(2):
         try:
-            response = _openrouter_client.chat.completions.create(
+            response = client.chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": system},
@@ -369,15 +379,15 @@ def _call_openrouter(
             break
         except RateLimitError as exc:
             last_err = exc
-            _log.warning("OpenRouter rate-limited (attempt %d): %s", attempt + 1, exc)
+            _log.warning("%s rate-limited (attempt %d): %s", provider, attempt + 1, exc)
             time.sleep(2 * (attempt + 1))
         except (APIError, APIConnectionError) as exc:
             last_err = exc
-            _log.error("OpenRouter API error: %s", exc)
+            _log.error("%s API error: %s", provider, exc)
             break
         except Exception as exc:
             last_err = exc
-            _log.error("OpenRouter unexpected error: %s", exc)
+            _log.error("%s unexpected error: %s", provider, exc)
             break
 
     latency_ms = int((time.time() - start) * 1000)
@@ -388,7 +398,7 @@ def _call_openrouter(
         _log_call(purpose=purpose, model=model, cache_hit=False,
                   in_tokens=0, out_tokens=0, cost=0, latency_ms=latency_ms,
                   success=False, error=err_str)
-        return CallResult(text="", model=model, provider="openrouter",
+        return CallResult(text="", model=model, provider=provider,
                           latency_ms=latency_ms, error=err_str)
 
     usage = getattr(response, "usage", None)
@@ -408,10 +418,41 @@ def _call_openrouter(
               cost=actual_cost, latency_ms=latency_ms, success=True)
 
     return CallResult(
-        text=text, model=model, provider="openrouter",
+        text=text, model=model, provider=provider,
         tokens_input=in_tokens, tokens_output=out_tokens,
         cost_usd=actual_cost, latency_ms=latency_ms,
     )
+
+
+def _call_openrouter(
+    *, purpose: str, system: str, user: str, model: str,
+    max_tokens: int, temperature: float, est_cost: float,
+) -> CallResult:
+    return _call_openai_compatible(
+        client=_openrouter_client, provider="openrouter", purpose=purpose,
+        system=system, user=user, model=model, max_tokens=max_tokens,
+        temperature=temperature, est_cost=est_cost,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Groq backend (free, fast, reliable — recommended primary fallback)
+# ─────────────────────────────────────────────────────────────────────────────
+_groq_client: Optional[Any] = None
+
+
+def _ensure_groq_client() -> bool:
+    """Returns True if Groq is usable (GROQ_API_KEY set + SDK present)."""
+    global _groq_client
+    if _groq_client is not None:
+        return True
+    if not _OPENAI_SDK_AVAILABLE:
+        return False
+    key = os.getenv("GROQ_API_KEY")
+    if not key:
+        return False
+    _groq_client = OpenAI(api_key=key, base_url=GROQ_BASE_URL, timeout=60.0, max_retries=0)
+    return True
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -474,12 +515,30 @@ def call_llm(
                 _log.info("✅ Gemini answered (%s, %dms, $%.5f)",
                           primary_model, result.latency_ms, result.cost_usd)
                 return result
-            _log.warning("⚠️  Gemini failed → trying OpenRouter. Error: %s",
+            _log.warning("⚠️  Gemini failed → trying Groq/OpenRouter. Error: %s",
                          result.error)
 
-    # ─── Attempt 2: OpenRouter (fallback) ───
+    # ─── Attempt 1.5: Groq (مجاني، سريع، الأثبت) ───
+    if _ensure_groq_client():
+        gmodel = GROQ_DEFAULT_MODEL
+        allowed, _ = _check_and_increment_quota("groq", gmodel)
+        if allowed:
+            est_cost = estimate_cost_usd(gmodel, est_in, est_out)  # = 0 (free)
+            if precharge(est_cost, purpose=purpose):
+                result = _call_openai_compatible(
+                    client=_groq_client, provider="groq", purpose=purpose,
+                    system=system, user=user, model=gmodel,
+                    max_tokens=max_tokens, temperature=temperature, est_cost=est_cost,
+                )
+                result.fallback_used = True
+                if result.text:
+                    _log.info("✅ Groq answered (%s, %dms)", gmodel, result.latency_ms)
+                    return result
+                _log.warning("⚠️  Groq failed → trying OpenRouter. Error: %s", result.error)
+
+    # ─── Attempt 2: OpenRouter (fallback chain) ───
     if not _ensure_openrouter_client():
-        _log.error("Both Gemini and OpenRouter unavailable — no LLM backend configured")
+        _log.error("No LLM backend answered (Gemini/Groq/OpenRouter all unavailable)")
         return CallResult(
             text="", model=model or "unknown", provider="none",
             error="no_provider_configured",

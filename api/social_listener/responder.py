@@ -63,14 +63,14 @@ def _build_link(cur, master_id: int | None) -> tuple[str, str | None, str | None
     return link, m.get("store_name"), m.get("discount_value"), m.get("public_coupon")
 
 
-def _pick_template(cur, lang: str) -> tuple[int | None, str]:
-    cur.execute("SELECT id, template_ar, template_en FROM social_response_templates "
-                "WHERE active = TRUE ORDER BY random() LIMIT 1")
+def _pick_template(cur, lang: str) -> tuple[int | None, str, str]:
+    cur.execute("SELECT id, template_ar, template_en, COALESCE(a_b_group, 'A') AS arm "
+                "FROM social_response_templates WHERE active = TRUE ORDER BY random() LIMIT 1")
     row = cur.fetchone()
     if not row:
-        return None, "وفّر أكثر مع كوبونات {store}: {link}"
+        return None, "وفّر أكثر مع كوبونات {store}: {link}", "default"
     tmpl = (row["template_en"] if lang == "en" and row.get("template_en") else row["template_ar"])
-    return row["id"], tmpl
+    return row["id"], tmpl, row["arm"]
 
 
 def _render(tmpl: str, *, store: str | None, link: str, discount: str | None, coupon: str | None) -> str:
@@ -88,7 +88,7 @@ def prepare_response(cur, signal: dict) -> int | None:
     master_id = (signal.get("candidate_master_ids") or [None])[0]
     lang = signal.get("lang_detected") or "ar"
     link, store_name, discount, coupon = _build_link(cur, master_id)
-    template_id, tmpl = _pick_template(cur, lang)
+    template_id, tmpl, arm = _pick_template(cur, lang)
     text = _render(tmpl, store=store_name, link=link, discount=discount, coupon=coupon)
 
     intent = float(signal.get("intent_score") or 0)
@@ -103,7 +103,16 @@ def prepare_response(cur, signal: dict) -> int | None:
         """,
         (signal["id"], master_id, template_id, text, link, review),
     )
-    return cur.fetchone()["id"]
+    response_id = cur.fetchone()["id"]
+
+    # A/B: سجّل ظهور القالب (migration_016) — best-effort
+    try:
+        from api.utils.ops import log_experiment_event
+        log_experiment_event(surface="social_template", arm=arm,
+                             event_type="impression", ref_id=response_id)
+    except Exception:
+        pass
+    return response_id
 
 
 def process_new_signals(*, batch: int = DEFAULT_BATCH) -> dict[str, int]:
