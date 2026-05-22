@@ -29,6 +29,13 @@ class SeoPageSummary(BaseModel):
 
 class SeoPageFull(SeoPageSummary):
     body_markdown: str
+    # المتجر المرتبط — لبناء زر العرض (CTA) في صفحة الهبوط
+    store_id: str | None = None
+    store_name: str | None = None
+    logo_url: str | None = None
+    discount_value: str | None = None
+    public_coupon: str | None = None
+    cloaked_slug: str | None = None
 
 
 class SeoPageList(BaseModel):
@@ -63,11 +70,15 @@ def get_page(slug: str, conn=Depends(get_db)):
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
-            SELECT slug, target_keyword, master_id, lang,
-                   title_meta, description_meta, body_markdown,
-                   to_char(published_at, 'YYYY-MM-DD"T"HH24:MI:SSZ') AS published_at
-            FROM seo_landing_pages
-            WHERE slug = %s AND status = 'published'
+            SELECT p.slug, p.target_keyword, p.master_id, p.lang,
+                   p.title_meta, p.description_meta, p.body_markdown,
+                   to_char(p.published_at, 'YYYY-MM-DD"T"HH24:MI:SSZ') AS published_at,
+                   m.store_id,
+                   COALESCE(NULLIF(m.name_en, ''), m.store_id) AS store_name,
+                   m.logo_url, m.discount_value, m.public_coupon, m.cloaked_slug
+            FROM seo_landing_pages p
+            LEFT JOIN master m ON m.id = p.master_id
+            WHERE p.slug = %s AND p.status = 'published'
             """,
             (slug,),
         )
