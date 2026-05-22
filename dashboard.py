@@ -83,6 +83,48 @@ def _trigger_social_broadcast(master_id: int | None) -> None:
     except Exception as e:
         st.warning(f"تم الحفظ، لكن فشلت جدولة النشر: {e}")
 
+
+# ─── جسر الـ Admin API (للوحات SEO + الرصد الاجتماعي) ──────────────────────────
+def _admin_api():
+    """يرجّع (base_url, secret) للـ admin API على الإنتاج."""
+    secret = os.getenv("ADMIN_SHARED_SECRET")
+    base = os.getenv(
+        "INTERNAL_API_URL", "https://dealpulseksa-production.up.railway.app"
+    ).rstrip("/")
+    return base, secret
+
+
+def _admin_get(path: str, params: dict | None = None):
+    """GET على /api/v1{path}. يرجّع (data, error)."""
+    base, secret = _admin_api()
+    if not secret:
+        return None, "ADMIN_SHARED_SECRET غير مضبوط في بيئة الداشبورد"
+    try:
+        r = requests.get(f"{base}/api/v1{path}",
+                         headers={"X-Admin-Secret": secret},
+                         params=params or {}, timeout=20)
+        if r.status_code >= 400:
+            return None, f"HTTP {r.status_code}: {r.text[:200]}"
+        return r.json(), None
+    except Exception as e:
+        return None, str(e)
+
+
+def _admin_post(path: str, params: dict | None = None, json_body: dict | None = None):
+    """POST على /api/v1{path}. يرجّع (data, error)."""
+    base, secret = _admin_api()
+    if not secret:
+        return None, "ADMIN_SHARED_SECRET غير مضبوط في بيئة الداشبورد"
+    try:
+        r = requests.post(f"{base}/api/v1{path}",
+                          headers={"X-Admin-Secret": secret},
+                          params=params or {}, json=json_body, timeout=90)
+        if r.status_code >= 400:
+            return None, f"HTTP {r.status_code}: {r.text[:200]}"
+        return r.json(), None
+    except Exception as e:
+        return None, str(e)
+
 # ─── لوحة ألوان "نبض الصفقات KSA" ──────────────────────────────────────────
 BRAND = {
 "bg":             "#FAFAF8",
@@ -847,6 +889,7 @@ _OTHER_PAGES = [
 "ذكاء التنبؤ", "نظام الولاء", "التحكم الآلي", "التخصيص الفائق",
 "رادار المناسبات", "مركز التوسع", "درع الحماية",
 "مركز الصيانة", "مدير القناة", "المحفز الفوري",
+"محرّك SEO", "الرصد الاجتماعي",
 ]
 
 # 1. تهيئة حالة الصفحة إذا لم تكن موجودة
@@ -5174,3 +5217,138 @@ elif page == "تحليل الموقع":
             st.error(f"⚠️ خطأ في الجغرافيا: {e}")
         finally:
             if 'conn' in locals(): conn.close()
+
+# ─────────────────────────────────────────────────────────────────────────────
+# محرّك SEO — مراجعة ونشر صفحات الهبوط المولّدة تلقائياً (Week 5-6)
+# ─────────────────────────────────────────────────────────────────────────────
+elif page == "محرّك SEO":
+    st.header("🔍 محرّك صفحات SEO")
+    st.caption("الصفحات تُولَّد تلقائياً في الخلفية. راجِع المسودّات وانشرها بضغطة — تظهر لايف فوراً على الموقع.")
+
+    cta1, cta2 = st.columns([1, 2])
+    with cta1:
+        if st.button("⚙️ توليد الآن", use_container_width=True, type="primary"):
+            with st.spinner("جارٍ التجميع والمطابقة والتوليد…"):
+                data, err = _admin_post("/admin/seo-run", params={"batch": 3})
+            if err:
+                st.error(f"تعذّر التشغيل: {err}")
+            else:
+                g = data.get("generation", {}) if data else {}
+                st.success(
+                    f"ترند: {data.get('trends_upserted', 0)} · "
+                    f"وظائف جديدة: {data.get('jobs_enqueued', 0)} · "
+                    f"صفحات مولّدة: {g.get('generated', 0)} (فشل: {g.get('failed', 0)})"
+                )
+    with cta2:
+        st.caption("التوليد التلقائي مُفعّل على السيرفر عبر SEO_AUTOGEN_ENABLED. الزر للتشغيل اليدوي الفوري.")
+
+    st.divider()
+    st.subheader("📝 المسودّات بانتظار النشر")
+    drafts, err = _admin_get("/admin/seo-drafts", params={"limit": 50})
+    if err:
+        st.error(f"تعذّر جلب المسودّات: {err}")
+    elif not drafts or not drafts.get("drafts"):
+        st.info("لا توجد مسودّات حالياً. اضغط «توليد الآن» أو انتظر الدورة التلقائية.")
+    else:
+        st.caption(f"إجمالي المسودّات: {drafts.get('total', 0)}")
+        for d in drafts["drafts"]:
+            with st.container(border=True):
+                col_a, col_b = st.columns([4, 1])
+                with col_a:
+                    st.markdown(f"**{d.get('title_meta') or d.get('target_keyword')}**")
+                    st.caption(
+                        f"🔑 {d.get('target_keyword')} · 🏪 {d.get('store_name') or '—'} · "
+                        f"🔗 /c/{d.get('slug')} · 📄 {d.get('body_len', 0)} حرف"
+                    )
+                    if d.get("description_meta"):
+                        st.caption(d["description_meta"])
+                with col_b:
+                    if st.button("🚀 نشر", key=f"seo_pub_{d['id']}", use_container_width=True, type="primary"):
+                        with st.spinner("نشر + تحديث الموقع (revalidate)…"):
+                            res, perr = _admin_post(f"/admin/seo-publish/{d['id']}")
+                        if perr:
+                            st.error(perr)
+                        else:
+                            st.success(f"تم النشر ✅ — /c/{res.get('slug')}")
+                            st.rerun()
+
+# ─────────────────────────────────────────────────────────────────────────────
+# الرصد الاجتماعي — Social Listener + Auto-Responder (Week 7-8)
+# ─────────────────────────────────────────────────────────────────────────────
+elif page == "الرصد الاجتماعي":
+    st.header("📡 الرصد والتفاعل الاجتماعي")
+    st.caption("النظام يرصد الإشارات (mentions) عن الكوبونات والخصومات، ويجهّز ردوداً ذكية تربط لصفحات الهبوط لزيادة الزوار.")
+
+    top1, top2 = st.columns([1, 2])
+    with top1:
+        if st.button("🔄 معالجة الإشارات الآن", use_container_width=True, type="primary"):
+            with st.spinner("scoring + matching + توليد الردود…"):
+                data, err = _admin_post("/admin/social-run", params={"batch": 20})
+            if err:
+                st.error(err)
+            else:
+                st.success(
+                    f"رُدّ على: {data.get('responded', 0)} · "
+                    f"طوبِق: {data.get('scored', 0)} · تجاهل: {data.get('ignored', 0)}"
+                )
+    with top2:
+        st.caption("المعالجة تلقائية كل 10 دقائق على السيرفر. الاستقبال الفوري عبر POST /api/v1/social/ingest للأتمتة الخارجية.")
+
+    with st.expander("➕ إضافة إشارة يدوياً (للاختبار)"):
+        with st.form("social_ingest_form", clear_on_submit=True):
+            f_platform = st.selectbox("المنصة", ["x", "telegram", "instagram", "other"])
+            f_content = st.text_area("نص الإشارة / المنشن", placeholder="مثال: أبي كوبون خصم نون")
+            f_author = st.text_input("الحساب (اختياري)")
+            if st.form_submit_button("📨 إرسال للرصد"):
+                if not (f_content or "").strip():
+                    st.warning("اكتب نص الإشارة أولاً.")
+                else:
+                    import time as _t
+                    body = {
+                        "platform": f_platform,
+                        "external_id": f"manual-{int(_t.time())}",
+                        "content": f_content.strip(),
+                        "author_handle": (f_author or "").strip() or None,
+                    }
+                    res, err = _admin_post("/social/ingest", json_body=body)
+                    if err:
+                        st.error(err)
+                    else:
+                        st.success(f"تم الاستقبال ✅ (إشارة #{res.get('signal_id', '—')})")
+                        st.rerun()
+
+    st.divider()
+    st.subheader("✉️ ردود بانتظار المراجعة")
+    pend, err = _admin_get("/admin/social-pending", params={"limit": 50})
+    if err:
+        st.error(f"تعذّر جلب الردود: {err}")
+    elif not pend or not pend.get("responses"):
+        st.info("لا توجد ردود معلّقة. شغّل المعالجة أو أضف إشارة للاختبار.")
+    else:
+        st.caption(f"إجمالي المعلّق: {pend.get('total', 0)}")
+        for r in pend["responses"]:
+            with st.container(border=True):
+                st.markdown(f"**📨 منشن ({r.get('platform')}):** {(r.get('signal_content') or '')[:220]}")
+                st.caption(
+                    f"👤 {r.get('author_handle') or '—'} · 🎯 نية: {r.get('intent_score')} · "
+                    f"الحالة: {r.get('review_status')}"
+                )
+                st.markdown("**↩️ الرد المقترح:**")
+                st.code(r.get("rendered_text") or "", language=None)
+                act1, act2, _sp = st.columns([1, 1, 3])
+                with act1:
+                    if st.button("✅ اعتماد ونشر", key=f"soc_appr_{r['id']}", use_container_width=True, type="primary"):
+                        res, e2 = _admin_post(f"/admin/social-approve/{r['id']}")
+                        if e2:
+                            st.error(e2)
+                        else:
+                            st.success("تم الاعتماد ✅" + (" (نُشر)" if res and res.get("via") == "webhook" and res.get("ok") else ""))
+                            st.rerun()
+                with act2:
+                    if st.button("🗑️ رفض", key=f"soc_rej_{r['id']}", use_container_width=True):
+                        res, e2 = _admin_post(f"/admin/social-reject/{r['id']}")
+                        if e2:
+                            st.error(e2)
+                        else:
+                            st.toast("رُفض")
+                            st.rerun()

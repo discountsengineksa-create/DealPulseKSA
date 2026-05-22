@@ -43,6 +43,9 @@ SEO_DISCOVERY_HOURS     = int(os.getenv("WORKER_SEO_DISCOVERY_HOURS", "12"))
 SEO_GENERATE_HOURS      = int(os.getenv("WORKER_SEO_GENERATE_HOURS", "6"))
 SEO_GENERATE_BATCH      = int(os.getenv("SEO_GENERATE_BATCH", "3"))
 SEO_AUTOGEN_ENABLED     = os.getenv("SEO_AUTOGEN_ENABLED") == "1"
+# Week 7-8 — social listener (scoring/matching/response prep — مجاني، بلا LLM)
+SOCIAL_PROCESS_MINUTES  = int(os.getenv("WORKER_SOCIAL_PROCESS_MIN", "10"))
+SOCIAL_PROCESS_BATCH    = int(os.getenv("SOCIAL_PROCESS_BATCH", "20"))
 
 _scheduler: BackgroundScheduler | None = None
 _consumer_thread: threading.Thread | None = None
@@ -61,6 +64,12 @@ def _seo_generation_cycle() -> None:
     """Week 5-6 — مرحلة LLM (تستهلك الميزانية): توليد صفحات من الوظائف المنتظرة."""
     from api.seo.generator import process_pending_jobs
     process_pending_jobs(batch=SEO_GENERATE_BATCH)
+
+
+def _social_listener_cycle() -> None:
+    """Week 7-8 — معالجة الإشارات الاجتماعية الجديدة (مجاني)."""
+    from api.social_listener.responder import process_new_signals
+    process_new_signals(batch=SOCIAL_PROCESS_BATCH)
 
 
 def start_workers() -> None:
@@ -158,13 +167,25 @@ def start_workers() -> None:
             next_run_time=None,
         )
 
+    # Week 7-8 — social listener processing (مجاني) كل 10 دقائق
+    _scheduler.add_job(
+        _social_listener_cycle,
+        trigger="interval",
+        minutes=SOCIAL_PROCESS_MINUTES,
+        id="social_listener",
+        name="Process social signals + prepare responses",
+        replace_existing=True,
+        next_run_time=None,
+    )
+
     _scheduler.start()
     _log.info(
         "✅ APScheduler started — matview/%dm, spike/%dm, dispatch/%ds, directive/%dh, "
-        "seo_discovery/%dh, seo_generate=%s",
+        "seo_discovery/%dh, seo_generate=%s, social/%dm",
         MATVIEW_REFRESH_MINUTES, SPIKE_DETECT_MINUTES,
         ALERT_DISPATCH_SECONDS, DIRECTIVE_HOURS,
         SEO_DISCOVERY_HOURS, "on/%dh" % SEO_GENERATE_HOURS if SEO_AUTOGEN_ENABLED else "off",
+        SOCIAL_PROCESS_MINUTES,
     )
 
 

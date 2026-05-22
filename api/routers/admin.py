@@ -116,3 +116,99 @@ def seo_publish(
     slug = row[0]
     index_result = submit_page(landing_page_id=page_id, slug=slug)
     return {"published": True, "page_id": page_id, "slug": slug, "index": index_result}
+
+
+@router.get("/seo-drafts")
+def seo_drafts(
+    limit: int = Query(default=50, ge=1, le=200),
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """قائمة صفحات الهبوط بحالة draft — لعرضها في الداشبورد للنشر بضغطة."""
+    _verify_admin(x_admin_secret)
+    from psycopg2.extras import RealDictCursor
+    from api.db import get_db_context
+    with get_db_context() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT p.id, p.slug, p.target_keyword, p.title_meta, p.description_meta,
+                       p.lang, p.master_id,
+                       COALESCE(NULLIF(m.name_en, ''), m.store_id) AS store_name,
+                       length(p.body_markdown) AS body_len
+                FROM seo_landing_pages p
+                LEFT JOIN master m ON m.id = p.master_id
+                WHERE p.status = 'draft'
+                ORDER BY p.id DESC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            rows = [dict(r) for r in cur.fetchall()]
+    return {"total": len(rows), "drafts": rows}
+
+
+# ─── Week 7-8: Social listener controls ────────────────────────────────────
+@router.post("/social-run")
+def social_run(
+    batch: int = Query(default=20, ge=1, le=100),
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """يعالج الإشارات الجديدة (scoring + matching + توليد الردود)."""
+    _verify_admin(x_admin_secret)
+    from api.social_listener.responder import process_new_signals
+    return process_new_signals(batch=batch)
+
+
+@router.get("/social-pending")
+def social_pending(
+    limit: int = Query(default=50, ge=1, le=200),
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """ردود بانتظار المراجعة/النشر — لعرضها في الداشبورد."""
+    _verify_admin(x_admin_secret)
+    from psycopg2.extras import RealDictCursor
+    from api.db import get_db_context
+    with get_db_context() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT r.id, r.rendered_text, r.link_url, r.review_status, r.master_id,
+                       s.platform, s.author_handle, s.content AS signal_content,
+                       s.intent_score, s.source_url
+                FROM social_responses r
+                JOIN social_signals s ON s.id = r.signal_id
+                WHERE r.review_status IN ('pending', 'auto_approved', 'approved')
+                ORDER BY r.created_at DESC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            rows = [dict(r) for r in cur.fetchall()]
+    return {"total": len(rows), "responses": rows}
+
+
+@router.post("/social-approve/{response_id}")
+def social_approve(
+    response_id: int,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """يعتمد رداً وينشره (عبر SOCIAL_POST_WEBHOOK أو يعلّمه approved)."""
+    _verify_admin(x_admin_secret)
+    from api.social_listener.poster import post_response
+    return post_response(response_id)
+
+
+@router.post("/social-reject/{response_id}")
+def social_reject(
+    response_id: int,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    _verify_admin(x_admin_secret)
+    from api.db import get_db_context
+    with get_db_context() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE social_responses SET review_status='rejected' WHERE id=%s",
+                (response_id,),
+            )
+    return {"ok": True, "rejected": response_id}

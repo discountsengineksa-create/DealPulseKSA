@@ -38,7 +38,7 @@ from deal_pulse_bot import (
     backfill_user_behavior,
     IDLE_KICK_MINUTES,
 )
-from api.routers import admin, auth, coupons, go, seo, track, users
+from api.routers import admin, auth, coupons, go, seo, social, track, users
 from api.workers.scheduler import start_workers
 
 # ─── التحقق من المتغيرات الحرجة ───────────────────────────────────────────────
@@ -84,6 +84,7 @@ app.include_router(users.router,   prefix="/api/v1")
 app.include_router(auth.router,    prefix="/api/v1")
 app.include_router(admin.router,   prefix="/api/v1")
 app.include_router(seo.router,     prefix="/api/v1")   # Week 5-6 — SEO landing pages (read)
+app.include_router(social.router,  prefix="/api/v1")   # Week 7-8 — social listener ingest
 # Week 4 — Affiliate cloaking: /go/{slug} (بدون /api/v1 — رابط عام قصير)
 app.include_router(go.router)
 
