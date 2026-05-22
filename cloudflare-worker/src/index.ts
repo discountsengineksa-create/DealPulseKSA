@@ -69,9 +69,11 @@ export default {
   async fetch(req: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
 
-    // فقط نتدخل في طلبات /api/v1/track* — أي شيء آخر يمر بدون تعديل
-    const isTrack = url.pathname.startsWith("/api/v1/track");
-    if (!isTrack) {
+    // نُثري طلبات /api/v1/track* (تتبّع) و /go/* (تحويل الأفلييت + bot challenge).
+    // أي شيء آخر يمر بدون تعديل.
+    const isEnriched =
+      url.pathname.startsWith("/api/v1/track") || url.pathname.startsWith("/go/");
+    if (!isEnriched) {
       return fetch(`${env.ORIGIN_BASE}${url.pathname}${url.search}`, req);
     }
 

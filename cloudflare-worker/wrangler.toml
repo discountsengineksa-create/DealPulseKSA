@@ -18,6 +18,11 @@ zone_name = "dealpulseksa.com"
 pattern = "api.dealpulseksa.com/api/v1/track/*"
 zone_name = "dealpulseksa.com"
 
+# Week 4 — تحويل الأفلييت المُعمّى /go/{slug} + bot challenge (يحتاج إثراء CF)
+[[routes]]
+pattern = "api.dealpulseksa.com/go/*"
+zone_name = "dealpulseksa.com"
+
 # ─── Variables (public — تُكتب على CF dashboard وفي الكود) ─────────────
 [vars]
 ORIGIN_BASE = "https://dealpulseksa-production.up.railway.app"

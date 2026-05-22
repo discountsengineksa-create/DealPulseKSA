@@ -1120,6 +1120,16 @@ if page == "إدخال بيانات الماستر":
                         _src_val,
                     ))
                     new_master_id = cur.fetchone()[0]
+                    # Week 4 — توليد cloaked_slug للمتجر الجديد (نفس تعبير backfill في migration_012)
+                    cur.execute(
+                        """
+                        UPDATE master
+                        SET cloaked_slug = substr(
+                                md5(random()::text || clock_timestamp()::text || id::text), 1, 10)
+                        WHERE id = %s AND (cloaked_slug IS NULL OR cloaked_slug = '')
+                        """,
+                        (new_master_id,),
+                    )
                     conn.commit()
                     st.success(f"✅ تم الحفظ! التاقات: {len(selected_tags)} AR / {len(selected_tags_en)} EN")
                     st.balloons()

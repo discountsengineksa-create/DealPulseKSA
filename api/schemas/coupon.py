@@ -18,6 +18,7 @@ class StoreResult(BaseModel):
     is_trending: str | None = None
     is_promoted: bool = False
     logo_url: str | None = None
+    cloaked_slug: str | None = None   # Week 4 — يبني المستهلك /go/{cloaked_slug}
     total_coupon_copies: int = 0
     total_link_clicks: int = 0
     score_pct: int = 0

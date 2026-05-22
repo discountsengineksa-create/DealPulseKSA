@@ -50,7 +50,7 @@ def _select_lang_clause(lang: str) -> str:
             discount_value,
             total_coupon_copies, total_link_clicks, is_trending,
             COALESCE(is_promoted, FALSE) AS is_promoted,
-            logo_url
+            logo_url, cloaked_slug
         """
     return """
         id, store_id, name_en, affiliate_link, public_coupon,
@@ -61,7 +61,7 @@ def _select_lang_clause(lang: str) -> str:
         discount_value,
         total_coupon_copies, total_link_clicks, is_trending,
         COALESCE(is_promoted, FALSE) AS is_promoted,
-        logo_url
+        logo_url, cloaked_slug
     """
 
 
