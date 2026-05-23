@@ -1,0 +1,184 @@
+🗺️ خارطة الـ Schema للأسابيع القادمة
+أرتّب لك كل جدول/عمود راح نحتاجه — مرتّب حسب الأسبوع. هذا يخليك تخطّط مسبقاً مع pgAdmin بدون مفاجآت.
+
+Week 2 — Velocity Aggregator + Spike Detector
+🟢 لا جداول جديدة. نعيد استخدام الموجود:
+
+coupon_velocity_snapshots (موجود) — تتعبأ كل 5 دقائق
+mv_store_velocity_48h (موجود) — refresh عبر cron
+ai_alerts (موجود) — كل spike alert يصير صف جديد
+العمل: كود فقط (worker + cron job)، لا migrations.
+
+Week 3 — LLM Directive Generator + Semantic Cache
+🟡 جداول + Extension جديدة:
+
+
+-- 1. Extension للـ vector embeddings (Railway PG يدعم pgvector)
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- 2. سجلّ التوجيهات من الـ LLM
+CREATE TABLE ai_directives (
+    id BIGSERIAL PRIMARY KEY,
+    generated_at TIMESTAMPTZ DEFAULT NOW(),
+    horizon_hours INTEGER NOT NULL,
+    input_snapshot JSONB NOT NULL,
+    prompt_hash BYTEA NOT NULL,
+    model VARCHAR(40) NOT NULL,
+    directive_ar TEXT NOT NULL,
+    confidence NUMERIC(3,2),
+    affected_master_ids INTEGER[],
+    token_input INTEGER,
+    token_output INTEGER,
+    cost_usd NUMERIC(8,5),
+    superseded_by BIGINT REFERENCES ai_directives(id),
+    feedback VARCHAR(20)
+);
+
+-- 3. Semantic cache (يوفر 60-80% من تكلفة الـ LLM)
+CREATE TABLE llm_semantic_cache (
+    id BIGSERIAL PRIMARY KEY,
+    purpose VARCHAR(40) NOT NULL,
+    prompt_text TEXT NOT NULL,
+    prompt_hash BYTEA NOT NULL,
+    prompt_embedding vector(1024),
+    response_text TEXT NOT NULL,
+    model VARCHAR(40) NOT NULL,
+    tokens_saved INTEGER DEFAULT 0,
+    hit_count INTEGER DEFAULT 0,
+    last_hit_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX idx_llm_cache_exact ON llm_semantic_cache(prompt_hash);
+CREATE INDEX idx_llm_cache_embedding ON llm_semantic_cache USING hnsw(prompt_embedding vector_cosine_ops);
+Week 4 — Affiliate Cloaking + Bot Challenge
+🟢 عمود واحد على master (اختياري):
+
+
+ALTER TABLE master ADD COLUMN IF NOT EXISTS cloaked_slug VARCHAR(64);
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_master_cloaked_slug ON master(cloaked_slug);
+-- يستخدم لإنشاء URLs مثل /go/{cloaked_slug} بدل كشف رابط الأفلييت الحقيقي
+Week 5-6 — Dynamic SEO Page Generator
+🟡 5 جداول جديدة:
+
+
+CREATE TABLE trend_signals (
+    id BIGSERIAL PRIMARY KEY,
+    source VARCHAR(30) NOT NULL,        -- 'google_trends', 'serpapi', 'internal_search'
+    query_text TEXT NOT NULL,
+    geo VARCHAR(10) DEFAULT 'SA',
+    interest_score INTEGER,
+    velocity_score NUMERIC(6,2),
+    related_queries TEXT[],
+    captured_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE seo_keyword_blocklist (
+    id SERIAL PRIMARY KEY,
+    pattern TEXT NOT NULL UNIQUE,
+    pattern_type VARCHAR(10),
+    reason VARCHAR(60),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE seo_generation_jobs (
+    id BIGSERIAL PRIMARY KEY,
+    trend_signal_id BIGINT REFERENCES trend_signals(id),
+    target_keyword TEXT NOT NULL,
+    matched_master_id INTEGER REFERENCES master(id),
+    state VARCHAR(20) DEFAULT 'queued',
+    prompt_hash BYTEA,
+    llm_model VARCHAR(40),
+    cost_usd NUMERIC(8,5),
+    error_message TEXT,
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ
+);
+
+CREATE TABLE seo_landing_pages (
+    id BIGSERIAL PRIMARY KEY,
+    slug VARCHAR(200) UNIQUE NOT NULL,
+    target_keyword TEXT NOT NULL,
+    master_id INTEGER REFERENCES master(id),
+    lang CHAR(2) NOT NULL,
+    title_meta VARCHAR(180),
+    description_meta VARCHAR(280),
+    body_markdown TEXT NOT NULL,
+    body_html_hash BYTEA NOT NULL,
+    generated_by_job_id BIGINT REFERENCES seo_generation_jobs(id),
+    status VARCHAR(20) DEFAULT 'draft',
+    published_at TIMESTAMPTZ,
+    last_indexed_at TIMESTAMPTZ,
+    current_position SMALLINT,
+    organic_clicks_7d INTEGER DEFAULT 0,
+    organic_impressions_7d INTEGER DEFAULT 0,
+    retired_reason VARCHAR(40)
+);
+
+CREATE TABLE seo_index_submissions (
+    id BIGSERIAL PRIMARY KEY,
+    landing_page_id BIGINT REFERENCES seo_landing_pages(id),
+    provider VARCHAR(20),                -- 'google_indexing_api', 'indexnow_bing'
+    submitted_at TIMESTAMPTZ DEFAULT NOW(),
+    response_code SMALLINT,
+    response_json JSONB,
+    indexed_confirmed_at TIMESTAMPTZ
+);
+Week 7-8 — Social Listener + Auto-Responder
+🟡 4 جداول جديدة:
+
+
+CREATE TABLE social_listening_terms (
+    id SERIAL PRIMARY KEY,
+    platform VARCHAR(20),                -- 'x', 'telegram', 'instagram', ...
+    term TEXT NOT NULL,
+    term_type VARCHAR(20),               -- 'keyword', 'regex', 'hashtag'
+    associated_master_id INTEGER REFERENCES master(id),
+    intent_weight NUMERIC(3,2) DEFAULT 1.00,
+    active BOOLEAN DEFAULT TRUE,
+    UNIQUE(platform, term)
+);
+
+CREATE TABLE social_response_templates (
+    id SERIAL PRIMARY KEY,
+    template_ar TEXT NOT NULL,
+    template_en TEXT,
+    tone VARCHAR(20),
+    active BOOLEAN DEFAULT TRUE,
+    a_b_group CHAR(1)
+);
+
+CREATE TABLE social_signals (
+    id BIGSERIAL PRIMARY KEY,
+    platform VARCHAR(20),
+    external_id VARCHAR(120) NOT NULL,
+    author_handle VARCHAR(80),
+    author_followers INTEGER,
+    content TEXT NOT NULL,
+    lang_detected CHAR(2),
+    intent_score NUMERIC(3,2),
+    matched_term_id INTEGER REFERENCES social_listening_terms(id),
+    candidate_master_ids INTEGER[],
+    captured_at TIMESTAMPTZ DEFAULT NOW(),
+    posted_at TIMESTAMPTZ,
+    status VARCHAR(20) DEFAULT 'new',
+    UNIQUE(platform, external_id)
+);
+
+CREATE TABLE social_responses (
+    id BIGSERIAL PRIMARY KEY,
+    signal_id BIGINT REFERENCES social_signals(id),
+    master_id INTEGER REFERENCES master(id),
+    template_id INTEGER REFERENCES social_response_templates(id),
+    rendered_text TEXT NOT NULL,
+    review_status VARCHAR(20) DEFAULT 'auto_approved',
+    posted_external_id VARCHAR(120),
+    posted_at TIMESTAMPTZ,
+    engagement_json JSONB,
+    affiliate_clicks INTEGER DEFAULT 0,
+    revenue_attributed_usd NUMERIC(8,2) DEFAULT 0
+);
+Cross-cutting (نتعامل معها لما نوصل لها)
+alert_quiet_hours — إيقاف الإيميلات في ساعات معينة (Week 2 لو احتجت)
+ai_experiments — A/B testing للـ AI decisions (Week 5+)
+pdpl_audit_log — Saudi data-protection audit trail (Week 8+)

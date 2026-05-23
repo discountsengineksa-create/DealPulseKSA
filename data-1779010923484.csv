@@ -1,0 +1,286 @@
+"اسم الجدول","اسم العمود","نوع البيانات","يقبل قيمة فارغة؟","القيمة الافتراضية","نوع المفتاح/القيود","مرتبط بجدول","مرتبط بعمود"
+"action_logs","id","integer","NO","nextval('action_logs_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"action_logs","store_id","text","YES",NULL,"",NULL,NULL
+"action_logs","action_type","text","YES",NULL,"",NULL,NULL
+"action_logs","details","text","YES",NULL,"",NULL,NULL
+"action_logs","action_time","timestamp without time zone","YES","CURRENT_TIMESTAMP","",NULL,NULL
+"action_logs","user_id","bigint","YES",NULL,"",NULL,NULL
+"action_logs","source","text","YES","'bot'::text","",NULL,NULL
+"api_partners","partner_id","integer","NO","nextval('api_partners_partner_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"api_partners","partner_name","text","NO",NULL,"",NULL,NULL
+"api_partners","api_endpoint","text","YES",NULL,"",NULL,NULL
+"api_partners","usage_limit","integer","YES",NULL,"",NULL,NULL
+"api_partners","status","text","YES","'نشط'::text","",NULL,NULL
+"api_partners","api_key","text","YES",NULL,"",NULL,NULL
+"api_partners","api_secret","text","YES",NULL,"",NULL,NULL
+"api_partners","extra_headers","jsonb","YES",NULL,"",NULL,NULL
+"app_monitor","log_id","integer","NO","nextval('app_monitor_log_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"app_monitor","log_type","text","YES",NULL,"",NULL,NULL
+"app_monitor","action_details","text","YES",NULL,"",NULL,NULL
+"app_monitor","created_at","timestamp without time zone","YES","CURRENT_TIMESTAMP","",NULL,NULL
+"auto_rules","rule_id","integer","NO","nextval('auto_rules_rule_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"auto_rules","rule_name","text","YES",NULL,"",NULL,NULL
+"auto_rules","is_active","boolean","YES","false","",NULL,NULL
+"auto_rules","settings","jsonb","YES",NULL,"",NULL,NULL
+"auto_rules","last_run","timestamp without time zone","YES",NULL,"",NULL,NULL
+"available_channels","channel_id","integer","NO","nextval('available_channels_channel_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"available_channels","channel_name","text","NO",NULL,"",NULL,NULL
+"available_channels","telegram_id","text","NO",NULL,"",NULL,NULL
+"available_channels","is_active","boolean","YES","true","",NULL,NULL
+"bot_dynamic_buttons","button_id","integer","NO","nextval('bot_dynamic_buttons_button_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"bot_dynamic_buttons","button_text","text","NO",NULL,"",NULL,NULL
+"bot_dynamic_buttons","button_callback","text","NO",NULL,"",NULL,NULL
+"bot_dynamic_buttons","is_active","boolean","YES","true","",NULL,NULL
+"bot_dynamic_buttons","display_order","integer","YES","0","",NULL,NULL
+"bot_users","telegram_id","bigint","NO",NULL,"مفتاح أساسي (PK)",NULL,NULL
+"bot_users","username","text","YES",NULL,"",NULL,NULL
+"bot_users","joined_at","timestamp without time zone","YES","now()","",NULL,NULL
+"bot_users","last_seen","timestamp without time zone","YES",NULL,"",NULL,NULL
+"bot_users","fav_store_inferred","text","YES",NULL,"",NULL,NULL
+"bot_users","store_copy_count","integer","YES","0","",NULL,NULL
+"bot_users","fav_tag_inferred","text","YES",NULL,"",NULL,NULL
+"bot_users","tag_visit_count","integer","YES","0","",NULL,NULL
+"bot_users","user_status","text","YES",NULL,"",NULL,NULL
+"bot_users","visited_clicks","integer","YES","0","",NULL,NULL
+"bot_users","country","text","YES",NULL,"",NULL,NULL
+"bot_users","city","text","YES",NULL,"",NULL,NULL
+"bot_users","device_type","text","YES",NULL,"",NULL,NULL
+"bot_users","search_date_timestamp","timestamp without time zone","YES",NULL,"",NULL,NULL
+"bot_users","manual_favorites","ARRAY","YES",NULL,"",NULL,NULL
+"bot_users","copied_coupons_history","ARRAY","YES",NULL,"",NULL,NULL
+"bot_users","interests","ARRAY","YES",NULL,"",NULL,NULL
+"bot_users","marketing_segment","text","YES",NULL,"",NULL,NULL
+"bot_users","spy_behavior_logs","jsonb","YES",NULL,"",NULL,NULL
+"bot_users","spy_behavior","jsonb","YES",NULL,"",NULL,NULL
+"bot_users","loyalty_rank","text","YES",NULL,"",NULL,NULL
+"bot_users","lang","text","YES","'ar'::text","",NULL,NULL
+"bot_users","name_en","text","YES",NULL,"",NULL,NULL
+"broadcast_logs","id","integer","NO","nextval('broadcast_logs_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"broadcast_logs","message_text","text","YES",NULL,"",NULL,NULL
+"broadcast_logs","image_url","text","YES",NULL,"",NULL,NULL
+"broadcast_logs","target_audience","text","YES",NULL,"",NULL,NULL
+"broadcast_logs","sent_by","text","YES",NULL,"",NULL,NULL
+"broadcast_logs","sent_at","timestamp without time zone","YES","CURRENT_TIMESTAMP","",NULL,NULL
+"broadcast_logs","delivery_count","integer","YES","0","",NULL,NULL
+"categories_tags","id","integer","NO","nextval('categories_tags_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"categories_tags","tag_name","character varying","NO",NULL,"",NULL,NULL
+"categories_tags","priority_score","integer","YES","0","",NULL,NULL
+"categories_tags","visit_count","integer","YES","0","",NULL,NULL
+"categories_tags","total_interactions","integer","YES","0","",NULL,NULL
+"categories_tags","is_trending","character varying","YES","'عادي'::character varying","",NULL,NULL
+"categories_tags","click_count","integer","YES","0","",NULL,NULL
+"categories_tags","Tag_clicks","integer","YES","0","",NULL,NULL
+"categories_tags","priority_rank","integer","NO","5","",NULL,NULL
+"channel_ads_queue","ad_id","integer","NO","nextval('channel_ads_queue_ad_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"channel_ads_queue","ad_title","text","NO",NULL,"",NULL,NULL
+"channel_ads_queue","ad_link","text","NO",NULL,"",NULL,NULL
+"channel_ads_queue","ad_category","text","YES",NULL,"",NULL,NULL
+"channel_ads_queue","ad_coupon","text","YES",NULL,"",NULL,NULL
+"channel_ads_queue","ad_note","text","YES",NULL,"",NULL,NULL
+"channel_ads_queue","scheduled_time","timestamp without time zone","YES",NULL,"",NULL,NULL
+"channel_ads_queue","status","text","YES","'مجدول ⏳'::text","",NULL,NULL
+"channel_ads_queue","created_at","timestamp without time zone","YES","CURRENT_TIMESTAMP","",NULL,NULL
+"channel_ads_queue","target_channel","text","YES","'القناة العامة 📢'::text","",NULL,NULL
+"competitor_watch","id","integer","NO","nextval('competitor_watch_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"competitor_watch","store_name","text","YES",NULL,"",NULL,NULL
+"competitor_watch","last_code","text","YES",NULL,"",NULL,NULL
+"competitor_watch","status","text","YES","'مستقر'::text","",NULL,NULL
+"competitor_watch","discount_rate","integer","YES",NULL,"",NULL,NULL
+"content_studio_logs","id","integer","NO","nextval('content_studio_logs_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"content_studio_logs","product_name","text","YES",NULL,"",NULL,NULL
+"content_studio_logs","platform","text","YES",NULL,"",NULL,NULL
+"content_studio_logs","ad_text","text","YES",NULL,"",NULL,NULL
+"content_studio_logs","created_at","timestamp without time zone","YES","CURRENT_TIMESTAMP","",NULL,NULL
+"content_studio_logs","bg_color","text","YES",NULL,"",NULL,NULL
+"content_studio_logs","text_color","text","YES",NULL,"",NULL,NULL
+"coupons_view","id","integer","YES",NULL,"",NULL,NULL
+"coupons_view","store_id","text","YES",NULL,"",NULL,NULL
+"coupons_view","affiliate_link","text","YES",NULL,"",NULL,NULL
+"coupons_view","public_coupon","text","YES",NULL,"",NULL,NULL
+"coupons_view","extra_offer","text","YES",NULL,"",NULL,NULL
+"coupons_view","store_bio","text","YES",NULL,"",NULL,NULL
+"coupons_view","priority_score","text","YES",NULL,"",NULL,NULL
+"coupons_view","discount_value","text","YES",NULL,"",NULL,NULL
+"coupons_view","store_tags","text","YES",NULL,"",NULL,NULL
+"coupons_view","my_coupon","text","YES",NULL,"",NULL,NULL
+"coupons_view","first_time","date","YES",NULL,"",NULL,NULL
+"coupons_view","last_time","date","YES",NULL,"",NULL,NULL
+"coupons_view","total_link_clicks","integer","YES",NULL,"",NULL,NULL
+"coupons_view","total_coupon_copies","integer","YES",NULL,"",NULL,NULL
+"coupons_view","total_search_hits","integer","YES",NULL,"",NULL,NULL
+"coupons_view","performance_status","text","YES",NULL,"",NULL,NULL
+"coupons_view","visit_categorie","integer","YES",NULL,"",NULL,NULL
+"coupons_view","target_category","text","YES",NULL,"",NULL,NULL
+"coupons_view","total_clicks","integer","YES",NULL,"",NULL,NULL
+"direct_search","id","integer","NO","nextval('direct_search_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"direct_search","search_keyword","text","YES",NULL,"",NULL,NULL
+"direct_search","store_id","text","YES",NULL,"",NULL,NULL
+"direct_search","search_date","timestamp without time zone","YES","CURRENT_TIMESTAMP","",NULL,NULL
+"direct_search","user_found","boolean","YES",NULL,"",NULL,NULL
+"direct_search","platform","text","YES","'Dashboard'::text","",NULL,NULL
+"direct_search","name_en","text","YES",NULL,"",NULL,NULL
+"email_logs","id","integer","NO","nextval('email_logs_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"email_logs","subject","text","NO",NULL,"",NULL,NULL
+"email_logs","body_html","text","YES",NULL,"",NULL,NULL
+"email_logs","banner_url","text","YES",NULL,"",NULL,NULL
+"email_logs","target_audience","text","YES","'الكل'::text","",NULL,NULL
+"email_logs","delivery_count","integer","YES","0","",NULL,NULL
+"email_logs","sent_count","integer","YES","0","",NULL,NULL
+"email_logs","failed_count","integer","YES","0","",NULL,NULL
+"email_logs","status","text","YES","'completed'::text","",NULL,NULL
+"email_logs","sent_by","text","YES","'dashboard'::text","",NULL,NULL
+"email_logs","sent_at","timestamp with time zone","YES","now()","",NULL,NULL
+"flash_offers_queue","offer_id","integer","NO","nextval('flash_offers_queue_offer_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"flash_offers_queue","offer_title","text","NO",NULL,"",NULL,NULL
+"flash_offers_queue","reward_points","integer","YES",NULL,"",NULL,NULL
+"flash_offers_queue","duration_minutes","integer","YES",NULL,"",NULL,NULL
+"flash_offers_queue","target_coupon","text","YES",NULL,"",NULL,NULL
+"flash_offers_queue","status","text","YES","'نشط 🔥'::text","",NULL,NULL
+"flash_offers_queue","created_at","timestamp without time zone","YES","CURRENT_TIMESTAMP","",NULL,NULL
+"franchise_agents","agent_id","integer","NO","nextval('franchise_agents_agent_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"franchise_agents","agent_name","text","NO",NULL,"",NULL,NULL
+"franchise_agents","region","text","YES",NULL,"",NULL,NULL
+"franchise_agents","profit_share","double precision","YES",NULL,"",NULL,NULL
+"franchise_agents","join_date","date","YES","CURRENT_DATE","",NULL,NULL
+"invoice_verifications","invoice_id","integer","NO","nextval('invoice_verifications_invoice_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"invoice_verifications","user_handle","text","YES",NULL,"",NULL,NULL
+"invoice_verifications","status","text","YES","'قيد الانتظار ⏳'::text","",NULL,NULL
+"loyalty_history","id","integer","NO","nextval('loyalty_history_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"loyalty_history","user_id","bigint","YES",NULL,"",NULL,NULL
+"loyalty_history","action_type","text","YES",NULL,"",NULL,NULL
+"loyalty_history","points_earned","integer","YES",NULL,"",NULL,NULL
+"loyalty_history","log_date","timestamp without time zone","YES","CURRENT_TIMESTAMP","",NULL,NULL
+"loyalty_settings","setting_key","text","NO",NULL,"مفتاح أساسي (PK)",NULL,NULL
+"loyalty_settings","setting_value","integer","YES",NULL,"",NULL,NULL
+"master","id","integer","NO","nextval('master_input_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"master","store_id","text","YES",NULL,"",NULL,NULL
+"master","affiliate_link","text","YES",NULL,"",NULL,NULL
+"master","public_coupon","text","YES",NULL,"",NULL,NULL
+"master","extra_offer","text","YES",NULL,"",NULL,NULL
+"master","store_bio","text","YES",NULL,"",NULL,NULL
+"master","priority_score","text","YES","0","",NULL,NULL
+"master","discount_value","text","YES",NULL,"",NULL,NULL
+"master","store_tags","text","YES",NULL,"",NULL,NULL
+"master","my_coupon","text","YES",NULL,"",NULL,NULL
+"master","first_time","date","YES","CURRENT_DATE","",NULL,NULL
+"master","last_time","date","YES",NULL,"",NULL,NULL
+"master","total_link_clicks","integer","YES","0","",NULL,NULL
+"master","total_coupon_copies","integer","YES","0","",NULL,NULL
+"master","total_search_hits","integer","YES","0","",NULL,NULL
+"master","performance_status","text","YES","'معتدل'::text","",NULL,NULL
+"master","visit_categorie","integer","YES","0","",NULL,NULL
+"master","target_category","text","YES",NULL,"",NULL,NULL
+"master","total_clicks","integer","YES","0","",NULL,NULL
+"master","is_trending","character varying","YES","'عادي'::character varying","",NULL,NULL
+"master","click_count","integer","YES","0","",NULL,NULL
+"master","copy_clicks","integer","YES","0","",NULL,NULL
+"master","link_clicks","integer","YES","0","",NULL,NULL
+"master","name_en","text","YES",NULL,"",NULL,NULL
+"master","store_bio_en","text","YES",NULL,"",NULL,NULL
+"master","extra_offer_en","text","YES",NULL,"",NULL,NULL
+"master","store_tags_en","text","YES",NULL,"",NULL,NULL
+"master","logo_url","text","YES",NULL,"",NULL,NULL
+"password_reset_tokens","id","bigint","NO","nextval('password_reset_tokens_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"password_reset_tokens","user_id","bigint","YES",NULL,"مفتاح خارجي (FK)","web_users","id"
+"password_reset_tokens","code_hash","text","NO",NULL,"",NULL,NULL
+"password_reset_tokens","expires_at","timestamp without time zone","NO",NULL,"",NULL,NULL
+"password_reset_tokens","used","boolean","YES","false","",NULL,NULL
+"password_reset_tokens","created_at","timestamp without time zone","YES","CURRENT_TIMESTAMP","",NULL,NULL
+"password_reset_tokens","request_ip","inet","YES",NULL,"",NULL,NULL
+"prediction_logs","id","integer","NO","nextval('prediction_logs_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"prediction_logs","search_hour","integer","YES",NULL,"",NULL,NULL
+"prediction_logs","search_count","integer","YES","1","",NULL,NULL
+"prediction_logs","store_name","text","YES",NULL,"",NULL,NULL
+"prediction_logs","log_date","date","YES","CURRENT_DATE","",NULL,NULL
+"product_comparisons","id","integer","NO","nextval('product_comparisons_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"product_comparisons","store_id","text","NO",NULL,"",NULL,NULL
+"product_comparisons","product_name","text","YES",NULL,"",NULL,NULL
+"product_comparisons","price","text","YES",NULL,"",NULL,NULL
+"product_comparisons","affiliate_link","text","YES",NULL,"",NULL,NULL
+"product_comparisons","public_coupon","text","YES",NULL,"",NULL,NULL
+"product_comparisons","discount_value","text","YES",NULL,"",NULL,NULL
+"product_comparisons","extra_offer","text","YES",NULL,"",NULL,NULL
+"product_comparisons","priority_score","integer","YES","0","",NULL,NULL
+"product_comparisons","created_at","timestamp without time zone","YES","CURRENT_TIMESTAMP","",NULL,NULL
+"product_comparisons","store_name","text","YES",NULL,"",NULL,NULL
+"search_analytics","id","integer","NO","nextval('search_analytics_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"search_analytics","search_query","text","YES",NULL,"",NULL,NULL
+"search_analytics","search_count","integer","YES","1","",NULL,NULL
+"search_analytics","last_searched","timestamp without time zone","YES","CURRENT_TIMESTAMP","",NULL,NULL
+"search_analytics","name_en","text","YES",NULL,"",NULL,NULL
+"seasonal_events","event_id","integer","NO","nextval('seasonal_events_event_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"seasonal_events","event_name","text","NO",NULL,"",NULL,NULL
+"seasonal_events","event_date","text","YES",NULL,"",NULL,NULL
+"seasonal_events","bot_status","text","YES","'انتظار'::text","",NULL,NULL
+"seasonal_events","ai_suggestion","text","YES",NULL,"",NULL,NULL
+"seasonal_events","emotional_tip","text","YES",NULL,"",NULL,NULL
+"security_blacklist","block_id","integer","NO","nextval('security_blacklist_block_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"security_blacklist","target_value","text","NO",NULL,"",NULL,NULL
+"security_blacklist","reason","text","YES",NULL,"",NULL,NULL
+"security_blacklist","block_date","timestamp without time zone","YES","CURRENT_TIMESTAMP","",NULL,NULL
+"security_settings","setting_key","text","NO",NULL,"مفتاح أساسي (PK)",NULL,NULL
+"security_settings","setting_value","integer","YES",NULL,"",NULL,NULL
+"security_threats","threat_id","integer","NO","nextval('security_threats_threat_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"security_threats","threat_type","text","YES",NULL,"",NULL,NULL
+"security_threats","source_val","text","YES",NULL,"",NULL,NULL
+"security_threats","action_taken","text","YES",NULL,"",NULL,NULL
+"security_threats","detection_time","timestamp without time zone","YES","CURRENT_TIMESTAMP","",NULL,NULL
+"sent_coupon_messages","chat_id","bigint","NO",NULL,"مفتاح أساسي (PK)",NULL,NULL
+"sent_coupon_messages","message_id","bigint","NO",NULL,"مفتاح أساسي (PK)",NULL,NULL
+"sent_coupon_messages","store_id","text","NO",NULL,"",NULL,NULL
+"sent_coupon_messages","user_id","bigint","YES",NULL,"",NULL,NULL
+"sent_coupon_messages","sent_at","timestamp without time zone","YES","now()","",NULL,NULL
+"sent_coupon_messages","name_en","text","YES",NULL,"",NULL,NULL
+"support_tickets","id","integer","NO","nextval('support_tickets_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"support_tickets","username","text","YES",NULL,"",NULL,NULL
+"support_tickets","telegram_id","bigint","YES",NULL,"",NULL,NULL
+"support_tickets","message","text","YES",NULL,"",NULL,NULL
+"support_tickets","status","text","YES","'open'::text","",NULL,NULL
+"support_tickets","created_at","timestamp without time zone","YES","CURRENT_TIMESTAMP","",NULL,NULL
+"traffic_sources","id","integer","NO","nextval('traffic_sources_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"traffic_sources","source_name","text","YES",NULL,"",NULL,NULL
+"traffic_sources","visit_count","integer","YES","0","",NULL,NULL
+"unavailable_codes_requests","id","integer","NO","nextval('unavailable_codes_requests_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"unavailable_codes_requests","user_id","bigint","YES",NULL,"",NULL,NULL
+"unavailable_codes_requests","brand_name","text","YES",NULL,"",NULL,NULL
+"unavailable_codes_requests","requested_at","timestamp without time zone","YES","CURRENT_TIMESTAMP","",NULL,NULL
+"unavailable_codes_requests","user_email","text","YES",NULL,"",NULL,NULL
+"unavailable_codes_requests","master_id","integer","YES",NULL,"",NULL,NULL
+"unavailable_codes_requests","name_en","text","YES",NULL,"",NULL,NULL
+"user_preferences","user_id","bigint","NO",NULL,"مفتاح أساسي (PK)",NULL,NULL
+"user_preferences","preferred_categories","ARRAY","YES",NULL,"",NULL,NULL
+"user_preferences","location_city","text","YES",NULL,"",NULL,NULL
+"user_preferences","last_targeted_broadcast","timestamp without time zone","YES",NULL,"",NULL,NULL
+"user_preferences","opt_in_notifications","boolean","YES","true","",NULL,NULL
+"users_master","user_id","bigint","NO",NULL,"مفتاح أساسي (PK)",NULL,NULL
+"users_master","username","text","YES",NULL,"",NULL,NULL
+"users_master","points","integer","YES","0","",NULL,NULL
+"users_master","rank","text","YES",NULL,"",NULL,NULL
+"users_master","main_interest","text","YES",NULL,"",NULL,NULL
+"users_master","loyalty_score","integer","YES",NULL,"",NULL,NULL
+"users_master","total_savings","double precision","YES","0","",NULL,NULL
+"users_master","last_active","timestamp without time zone","YES",NULL,"",NULL,NULL
+"users_master","birth_date","date","YES",NULL,"",NULL,NULL
+"users_master","favorite_brands","ARRAY","YES",NULL,"",NULL,NULL
+"users_master","meta_data","jsonb","YES",NULL,"",NULL,NULL
+"users_master","name_en","text","YES",NULL,"",NULL,NULL
+"web_users","id","bigint","NO","nextval('web_users_id_seq'::regclass)","مفتاح أساسي (PK)",NULL,NULL
+"web_users","phone_number","text","NO",NULL,"",NULL,NULL
+"web_users","firebase_uid","text","YES",NULL,"",NULL,NULL
+"web_users","display_name","text","YES",NULL,"",NULL,NULL
+"web_users","email","text","YES",NULL,"",NULL,NULL
+"web_users","country","text","YES","'SA'::text","",NULL,NULL
+"web_users","city","text","YES",NULL,"",NULL,NULL
+"web_users","lang","text","YES","'ar'::text","",NULL,NULL
+"web_users","created_at","timestamp without time zone","YES","now()","",NULL,NULL
+"web_users","last_seen","timestamp without time zone","YES","now()","",NULL,NULL
+"web_users","status","text","YES","'Active'::text","",NULL,NULL
+"web_users","manual_favorites","ARRAY","YES","'{}'::text[]","",NULL,NULL
+"web_users","copied_coupons_history","ARRAY","YES","'{}'::text[]","",NULL,NULL
+"web_users","interests","ARRAY","YES","'{}'::text[]","",NULL,NULL
+"web_users","visited_clicks","integer","YES","0","",NULL,NULL
+"web_users","store_copy_count","integer","YES","0","",NULL,NULL
+"web_users","device_type","text","YES",NULL,"",NULL,NULL
+"web_users","user_agent","text","YES",NULL,"",NULL,NULL
+"web_users","last_ip","inet","YES",NULL,"",NULL,NULL
+"web_users","password_hash","text","YES",NULL,"",NULL,NULL
