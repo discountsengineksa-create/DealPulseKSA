@@ -28,6 +28,8 @@ from fastapi import FastAPI, Request, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from telebot.types import Update
 
 from deal_pulse_bot import (
@@ -36,9 +38,11 @@ from deal_pulse_bot import (
     clean_legacy_columns,
     ensure_tracking_tables,
     backfill_user_behavior,
-    IDLE_TIMEOUT_MINUTES,
+    IDLE_KICK_MINUTES,
 )
-from api.routers import auth, coupons, track, users
+from api.routers import admin, auth, coupons, go, seo, social, track, users
+from api.utils.rate_limit import limiter
+from api.workers.scheduler import start_workers
 
 # ─── التحقق من المتغيرات الحرجة ───────────────────────────────────────────────
 TOKEN_ENV = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
@@ -68,12 +72,18 @@ app = FastAPI(
     redoc_url=None,
 )
 
+# ─── Rate limiting (slowapi + Redis) ─────────────────────────────────────────
+# الـ limiter يُسجَّل على الـ app + handler للـ 429 responses.
+# الحدود الفعلية تُطبَّق بـ @limiter.limit("...") في كل router.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE", "PUT", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_headers=["Content-Type", "Authorization", "X-Admin-Secret"],
 )
 
 # ─── دمج Routers الـ API ──────────────────────────────────────────────────────
@@ -81,6 +91,11 @@ app.include_router(coupons.router, prefix="/api/v1")
 app.include_router(track.router,   prefix="/api/v1")
 app.include_router(users.router,   prefix="/api/v1")
 app.include_router(auth.router,    prefix="/api/v1")
+app.include_router(admin.router,   prefix="/api/v1")
+app.include_router(seo.router,     prefix="/api/v1")   # Week 5-6 — SEO landing pages (read)
+app.include_router(social.router,  prefix="/api/v1")   # Week 7-8 — social listener ingest
+# Week 4 — Affiliate cloaking: /go/{slug} (بدون /api/v1 — رابط عام قصير)
+app.include_router(go.router)
 
 
 # ─── Lifecycle ────────────────────────────────────────────────────────────────
@@ -97,7 +112,14 @@ def on_startup():
     ensure_tracking_tables()
     backfill_user_behavior()
     threading.Thread(target=idle_watcher, daemon=True).start()
-    print(f"✅ idle_watcher started (timeout={IDLE_TIMEOUT_MINUTES}m)")
+    print(f"✅ idle_watcher started (timeout={IDLE_KICK_MINUTES}m)")
+
+    # Week 2 — velocity aggregator + spike detector + email dispatcher
+    # (idempotent: only the first worker process boots the scheduler)
+    try:
+        start_workers()
+    except Exception as e:
+        print(f"⚠️ start_workers warning: {e}")
 
     # webhook: idempotent — يُسجَّل فقط إذا كان غير صحيح
     try:
@@ -143,6 +165,55 @@ async def telegram_webhook(
 @app.get("/health", tags=["system"])
 def health():
     return {"status": "ok", "service": "deal-pulse-unified"}
+
+
+@app.get("/health/workers", tags=["system"])
+def health_workers():
+    """تشخيص حالة الـ workers (Week 2)."""
+    import os as _os
+    from api.utils.redis_client import get_redis
+    out = {
+        "redis_url_set": bool(_os.getenv("REDIS_URL")),
+        "disable_workers": _os.getenv("DISABLE_WORKERS"),
+    }
+    try:
+        r = get_redis()
+        out["redis_ping"] = r.ping()
+        out["redis_class"] = type(r).__name__
+        # حجم events:raw stream
+        try:
+            out["events_raw_len"] = r.xlen("events:raw")
+        except Exception as exc:
+            out["events_raw_len_error"] = str(exc)[:200]
+        # حالة consumer group
+        try:
+            groups = r.xinfo_groups("events:raw")
+            out["consumer_groups"] = [
+                {
+                    "name": g.get("name") or g.get(b"name", b"").decode("utf-8", "ignore"),
+                    "consumers": g.get("consumers") or g.get(b"consumers"),
+                    "pending": g.get("pending") or g.get(b"pending"),
+                    "last_delivered_id": g.get("last-delivered-id") or g.get(b"last-delivered-id"),
+                }
+                for g in groups
+            ]
+        except Exception as exc:
+            out["consumer_groups_error"] = str(exc)[:200]
+    except Exception as exc:
+        out["redis_error"] = str(exc)[:200]
+    # scheduler state
+    try:
+        from api.workers.scheduler import _started, _scheduler, _consumer_thread
+        out["scheduler_started"] = _started
+        out["scheduler_jobs"] = (
+            [j.id for j in _scheduler.get_jobs()] if _scheduler else []
+        )
+        out["consumer_thread_alive"] = (
+            _consumer_thread.is_alive() if _consumer_thread else False
+        )
+    except Exception as exc:
+        out["scheduler_error"] = str(exc)[:200]
+    return out
 
 
 _BASE_DIR = pathlib.Path(__file__).parent

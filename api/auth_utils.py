@@ -19,12 +19,17 @@ import requests
 # JWT secret — لازم يكون قوي وثابت في الإنتاج
 JWT_SECRET = os.getenv("JWT_SECRET")
 if not JWT_SECRET:
-    # في التطوير فقط: نولّد واحد عشوائي. في الإنتاج لازم env var ثابت.
-    JWT_SECRET = secrets.token_urlsafe(64)
-    print("⚠️  JWT_SECRET غير معرّف — تم توليد مؤقت. اضبطه كـ env var في الإنتاج!")
+    # fail-fast: مع multi-worker / multi-replica، السرّ العشوائي لكل عملية
+    # يُبطل الـ tokens بشكل عشوائي عند redeploy ويسمح بـ DoS صامت.
+    raise RuntimeError(
+        "JWT_SECRET غير معرّف. اضبطه كـ env var ثابت قبل التشغيل "
+        "(`openssl rand -base64 64`)."
+    )
 
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRY_DAYS = 30  # الجلسة 30 يوم
+# الجلسة 14 يوم — معيار B2C معقول. أقل من ذلك يُزعج المستخدم،
+# أكثر يُعرّض الحساب لخطر طويل لو تسرّب التوكن.
+JWT_EXPIRY_DAYS = int(os.getenv("JWT_EXPIRY_DAYS", "14"))
 
 
 # ─── Password Hashing (bcrypt مباشر، بدون passlib) ─────────────────────────
@@ -95,50 +100,17 @@ SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USER or "onboarding@resend.dev")
 SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "نبض الصفقات")
 
 
-def send_reset_email(to_email: str, user_name: str, code: str) -> bool:
+def _send_email(to: str, subject: str, html: str) -> bool:
     """
-    يرسل كود استعادة كلمة المرور للإيميل.
+    الناقل العام للإيميلات — يُستخدم في كل أنواع الإيميل (استعادة كلمة سر،
+    تنبيهات تشغيلية، توجيهات AI...).
 
     الترتيب: Resend HTTPS API ← SMTP ← Dev mode (طباعة في الـ logs)
     يرجع True لو نجح، False لو فشل.
     """
     if not RESEND_API_KEY and not (SMTP_USER and SMTP_PASS):
-        # Dev mode — اطبع الكود
-        print(f"📧 [DEV MODE] Reset code for {to_email}: {code}")
+        print(f"[DEV MODE] Email to {to} | subject: {subject}")
         return True
-
-    subject = "كود استعادة كلمة المرور - نبض الصفقات"
-    html_body = f"""
-    <!DOCTYPE html>
-    <html dir="rtl" lang="ar">
-    <head><meta charset="utf-8"></head>
-    <body style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 40px 20px;">
-        <div style="max-width: 480px; margin: 0 auto; background: white; border-radius: 16px; padding: 40px; box-shadow: 0 4px 24px rgba(0,0,0,0.06);">
-            <h1 style="color: #10B981; text-align: center; margin: 0 0 16px;">🔐 استعادة كلمة المرور</h1>
-            <p style="color: #334155; font-size: 16px; line-height: 1.6;">
-                مرحباً {user_name}،<br><br>
-                طلبت استعادة كلمة مرور حسابك في <strong>نبض الصفقات</strong>.
-                استخدم الكود التالي لإكمال العملية:
-            </p>
-            <div style="background: linear-gradient(135deg, #10B981, #059669); color: white; font-size: 32px; font-weight: bold; text-align: center; padding: 24px; border-radius: 12px; letter-spacing: 8px; margin: 24px 0;">
-                {code}
-            </div>
-            <p style="color: #64748B; font-size: 14px; text-align: center; margin: 24px 0 8px;">
-                ⏱️ صالح لمدة 15 دقيقة فقط
-            </p>
-            <p style="color: #94A3B8; font-size: 13px; text-align: center; line-height: 1.5;">
-                إذا لم تطلب هذا الكود، تجاهل هذا الإيميل.<br>
-                لا تشارك هذا الكود مع أي شخص.
-            </p>
-            <hr style="border: none; border-top: 1px solid #E2E8F0; margin: 32px 0 16px;">
-            <p style="color: #94A3B8; font-size: 12px; text-align: center; margin: 0;">
-                نبض الصفقات | Deal Pulse KSA<br>
-                <a href="https://dealpulseksa.com" style="color: #10B981; text-decoration: none;">dealpulseksa.com</a>
-            </p>
-        </div>
-    </body>
-    </html>
-    """
 
     # ── المسار 1: Resend HTTPS API (port 443، لا يُحجب على المنصات السحابية) ──
     if RESEND_API_KEY:
@@ -151,14 +123,14 @@ def send_reset_email(to_email: str, user_name: str, code: str) -> bool:
                 },
                 json={
                     "from": f"{SMTP_FROM_NAME} <{SMTP_FROM}>",
-                    "to": [to_email],
+                    "to": [to],
                     "subject": subject,
-                    "html": html_body,
+                    "html": html,
                 },
                 timeout=15,
             )
             if response.status_code in (200, 201, 202):
-                print(f"✅ Resend: email sent to {to_email}")
+                print(f"✅ Resend: email sent to {to}")
                 return True
             print(f"❌ Resend failed [{response.status_code}]: {response.text[:200]}")
             return False
@@ -172,8 +144,8 @@ def send_reset_email(to_email: str, user_name: str, code: str) -> bool:
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_FROM}>"
-    msg["To"] = to_email
-    msg.attach(MIMEText(html_body, "html", "utf-8"))
+    msg["To"] = to
+    msg.attach(MIMEText(html, "html", "utf-8"))
 
     try:
         # نحلّ الـ host لـ IPv4 صراحةً (Railway قد يرجّح IPv6 بدون route)
@@ -190,8 +162,134 @@ def send_reset_email(to_email: str, user_name: str, code: str) -> bool:
                 server.ehlo()
                 server.login(SMTP_USER, smtp_pass_clean)
                 server.send_message(msg)
-        print(f"✅ SMTP: email sent to {to_email}")
+        print(f"✅ SMTP: email sent to {to}")
         return True
     except Exception as e:
-        print(f"❌ فشل إرسال إيميل لـ {to_email}: {e}")
+        print(f"❌ فشل إرسال إيميل لـ {to}: {e}")
         return False
+
+
+def send_reset_email(to_email: str, user_name: str, code: str) -> bool:
+    """
+    يرسل كود استعادة كلمة المرور للإيميل.
+
+    الترتيب: Resend HTTPS API ← SMTP ← Dev mode (طباعة في الـ logs)
+    يرجع True لو نجح، False لو فشل.
+    """
+    if not RESEND_API_KEY and not (SMTP_USER and SMTP_PASS):
+        print(f"[DEV MODE] Reset code for {to_email}: {code}")
+        return True
+
+    subject = "🔐 استعادة كلمة المرور — نبض الصفقات"
+    reset_url = f"https://dealpulseksa.com/forgot-password"
+    html_body = f"""<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>استعادة كلمة المرور</title>
+</head>
+<body style="margin:0;padding:0;background:#F5F5F0;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0"
+         style="background:#F5F5F0;padding:40px 16px;">
+    <tr><td>
+      <table width="520" cellpadding="0" cellspacing="0" align="center"
+             style="background:#FFFFFF;border-radius:20px;overflow:hidden;
+                    box-shadow:0 4px 32px rgba(0,0,0,0.08);max-width:100%;">
+
+        <!-- Header -->
+        <tr>
+          <td style="background:linear-gradient(135deg,#10B981,#059669);
+                     padding:32px 40px;text-align:center;">
+            <h1 style="color:white;margin:0;font-size:22px;font-weight:800;
+                       letter-spacing:-0.5px;">نبض الصفقات</h1>
+            <p style="color:rgba(255,255,255,0.8);margin:6px 0 0;font-size:13px;">
+              dealpulseksa.com
+            </p>
+          </td>
+        </tr>
+
+        <!-- Body -->
+        <tr>
+          <td style="padding:40px 40px 32px;">
+            <div style="text-align:center;margin-bottom:28px;">
+              <div style="display:inline-block;background:#ECFDF5;
+                          border-radius:50%;width:64px;height:64px;
+                          line-height:64px;font-size:28px;">🔐</div>
+            </div>
+
+            <h2 style="color:#1F2937;text-align:center;margin:0 0 12px;
+                       font-size:20px;font-weight:700;">
+              استعادة كلمة المرور
+            </h2>
+
+            <p style="color:#4B5563;font-size:15px;line-height:1.7;
+                      text-align:center;margin:0 0 24px;">
+              مرحباً <strong>{user_name}</strong>،<br>
+              تلقّينا طلبك لاستعادة كلمة المرور.<br>
+              استخدم الكود أدناه لإكمال العملية:
+            </p>
+
+            <!-- Code Box -->
+            <div style="background:linear-gradient(135deg,#10B981,#059669);
+                        border-radius:16px;padding:28px 20px;
+                        text-align:center;margin:0 0 24px;">
+              <p style="color:rgba(255,255,255,0.85);font-size:12px;
+                        margin:0 0 10px;letter-spacing:2px;text-transform:uppercase;">
+                كود التحقق
+              </p>
+              <div style="color:white;font-size:38px;font-weight:900;
+                          letter-spacing:12px;font-family:monospace;">
+                {code}
+              </div>
+            </div>
+
+            <!-- CTA Button -->
+            <div style="text-align:center;margin:0 0 28px;">
+              <a href="{reset_url}"
+                 style="display:inline-block;background:linear-gradient(135deg,#10B981,#059669);
+                        color:white;text-decoration:none;font-size:15px;
+                        font-weight:700;padding:16px 40px;border-radius:50px;
+                        box-shadow:0 4px 14px rgba(16,185,129,0.4);">
+                تعيين كلمة مرور جديدة
+              </a>
+            </div>
+
+            <!-- Timer -->
+            <div style="background:#FEF3C7;border-radius:12px;
+                        padding:12px 20px;text-align:center;margin-bottom:24px;">
+              <p style="color:#92400E;font-size:13px;margin:0;">
+                ⏱️ الكود صالح لمدة <strong>15 دقيقة فقط</strong>
+              </p>
+            </div>
+
+            <p style="color:#9CA3AF;font-size:12px;text-align:center;
+                      line-height:1.6;margin:0;">
+              إذا لم تطلب هذا الكود، تجاهل هذا الإيميل بأمان.<br>
+              لا تشارك هذا الكود مع أي شخص.
+            </p>
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="background:#F9FAFB;padding:20px 40px;text-align:center;
+                     border-top:1px solid #E5E7EB;">
+            <p style="color:#9CA3AF;font-size:12px;margin:0;">
+              نبض الصفقات | Deal Pulse KSA<br>
+              <a href="https://dealpulseksa.com"
+                 style="color:#10B981;text-decoration:none;">
+                dealpulseksa.com
+              </a>
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+
+    # ناقل الإيميل المشترك (Resend → SMTP → Dev mode)
+    return _send_email(to=to_email, subject=subject, html=html_body)

@@ -1,0 +1,33 @@
+name = "dealpulse-edge-enrichment"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+
+# Cloudflare account: discountsengineksa@gmail.com
+account_id = "189a678111c90bfc4e56271e74129302"
+
+# ─── Routes ─────────────────────────────────────────────────────────────
+# الـ Worker يعترض طلبات /api/v1/track* على subdomain الـ API (api.dealpulseksa.com)
+# الـ subdomain proxied عبر Cloudflare ويوجّه لـ Railway origin
+[[routes]]
+pattern = "api.dealpulseksa.com/api/v1/track"
+zone_name = "dealpulseksa.com"
+
+[[routes]]
+pattern = "api.dealpulseksa.com/api/v1/track/*"
+zone_name = "dealpulseksa.com"
+
+# Week 4 — تحويل الأفلييت المُعمّى /go/{slug} + bot challenge (يحتاج إثراء CF)
+[[routes]]
+pattern = "api.dealpulseksa.com/go/*"
+zone_name = "dealpulseksa.com"
+
+# ─── Variables (public — تُكتب على CF dashboard وفي الكود) ─────────────
+[vars]
+ORIGIN_BASE = "https://dealpulseksa-production.up.railway.app"
+LOG_LEVEL = "info"
+
+# ─── Secrets (سرية — تُضاف عبر wrangler) ───────────────────────────────
+#   wrangler secret put IP_HASH_SALT
+# قيمة مقترحة: 32+ حرف عشوائي (openssl rand -base64 48)
