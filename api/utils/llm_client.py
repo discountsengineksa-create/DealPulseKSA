@@ -78,13 +78,17 @@ def _build_openrouter_chain() -> list[str]:
     raw = os.getenv("OPENROUTER_MODELS", "")
     chain = [m.strip() for m in raw.split(",") if m.strip()]
     if not chain:
+        # تحديث 2026-05: gemma-2-9b-it:free تم سحبه من OpenRouter (404).
+        # أضفنا DeepSeek في المقدّمة لأنه الأكثر استقراراً مجاناً.
         chain = [
             OPENROUTER_DEFAULT_MODEL,
+            "deepseek/deepseek-chat-v3-0324:free",       # موثوق + رخيص
+            "deepseek/deepseek-r1:free",                  # احتياط ثاني موثوق
             "meta-llama/llama-3.3-70b-instruct:free",
             "google/gemini-2.0-flash-exp:free",
-            "mistralai/mistral-small-24b-instruct-2501:free",
             "qwen/qwen-2.5-72b-instruct:free",
-            "google/gemma-2-9b-it:free",
+            "mistralai/mistral-small-24b-instruct-2501:free",
+            # محذوف: google/gemma-2-9b-it:free (404 No endpoints found)
         ]
     seen: set[str] = set()
     out: list[str] = []
