@@ -303,3 +303,28 @@ def experiments_results(x_admin_secret: str = Header(..., alias="X-Admin-Secret"
     return {"results": experiment_results()}
 
 
+@router.get("/seo-google-check")
+def seo_google_check(x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
+    """
+    تشخيص إعداد Google Indexing API. يفحص: المفتاح، الـ token، ownership.
+    يُرجع رسالة واضحة لأي خطأ + خطوة الإصلاح التالية.
+    """
+    _verify_admin(x_admin_secret)
+    from api.seo.indexer import diagnose_google_setup
+    return diagnose_google_setup()
+
+
+@router.post("/seo-resubmit-url")
+def seo_resubmit_url(
+    url: str = Query(..., min_length=10, description="URL كامل للإعادة الإرسال"),
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """
+    إعادة إرسال URL محدّد لكل محركات البحث (IndexNow + Google).
+    مفيد عند تحديث محتوى صفحة منشورة أو تشغيل ping يدوي على homepage.
+    """
+    _verify_admin(x_admin_secret)
+    from api.seo.indexer import resubmit_url
+    return resubmit_url(url)
+
+
