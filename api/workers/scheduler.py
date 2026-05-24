@@ -67,8 +67,20 @@ def _seo_generation_cycle() -> None:
 
 
 def _social_listener_cycle() -> None:
-    """Week 7-8 — معالجة الإشارات الاجتماعية الجديدة (مجاني)."""
+    """
+    Week 7-8 — دورة الرصد الاجتماعي الكاملة كل 10 دقائق:
+      1. poll Reddit + RSS (تلتقط mentions جديدة → تخزّنها بـ status='new')
+      2. process_new_signals → score, match, generate draft replies
+    كله مجاني ولا يستهلك LLM (template-based).
+    """
+    from api.social_listener.pollers import run_all_pollers
     from api.social_listener.responder import process_new_signals
+
+    try:
+        run_all_pollers()
+    except Exception as exc:
+        _log.warning("pollers cycle failed (non-fatal): %s", exc)
+
     process_new_signals(batch=SOCIAL_PROCESS_BATCH)
 
 

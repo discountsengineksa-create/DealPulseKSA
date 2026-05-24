@@ -158,6 +158,15 @@ def process_new_signals(*, batch: int = DEFAULT_BATCH) -> dict[str, int]:
                     cur.execute("UPDATE social_signals SET status='responded' WHERE id=%s", (s["id"],))
                     responded += 1
 
+                    # F: تنبيه Telegram للـ ops عند mention عالي النية
+                    # (best-effort — لا يُفشل المعالجة)
+                    if intent >= 0.5:
+                        try:
+                            from api.utils.telegram_alerts import send_mention_alert
+                            send_mention_alert(signal=dict(sig))
+                        except Exception as _tg_exc:
+                            _log.debug("telegram mention alert skipped: %s", _tg_exc)
+
     _log.info("social signals processed: scored=%d responded=%d ignored=%d",
               scored, responded, ignored)
     return {"scored": scored, "responded": responded, "ignored": ignored}

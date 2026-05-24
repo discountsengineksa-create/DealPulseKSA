@@ -18,6 +18,7 @@ import logging
 
 from api.db import get_db_context
 from api.utils.email_alerts import send_ops_alert
+from api.utils.telegram_alerts import send_telegram_alert
 
 _log = logging.getLogger("dp.dispatcher")
 
@@ -63,6 +64,17 @@ def dispatch_pending_alerts() -> int:
                     }
                     sev = severity_map.get(severity, "info")
                     ok = send_ops_alert(subject=title, body_html=body, severity=sev)
+                    # قناة موازية: Telegram للسرعة (لا يُعتبر فشل إن لم يُهيَّأ)
+                    try:
+                        # نزيل HTML بسرعة لأن Telegram يفضّل نصاً
+                        import re as _re
+                        plain = _re.sub(r"<[^>]+>", "", body)[:800]
+                        send_telegram_alert(
+                            text=f"*{title}*\n\n{plain}",
+                            severity=sev,
+                        )
+                    except Exception as _tg_exc:
+                        _log.debug("telegram alert skipped: %s", _tg_exc)
                     with conn.cursor() as cur:
                         if ok:
                             cur.execute(
