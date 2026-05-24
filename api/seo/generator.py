@@ -33,8 +33,11 @@ _log = logging.getLogger("dp.seo.generator")
 
 DEFAULT_BATCH = 3
 BILINGUAL_ENABLED = os.getenv("SEO_BILINGUAL", "1") == "1"
-# طول مرتفع — Google يفضّل صفحات 600-1200 كلمة للـ landing pages
-MAX_TOKENS = int(os.getenv("SEO_MAX_TOKENS", "2400"))
+# طول مرتفع — Google يفضّل صفحات 600-1200 كلمة للـ landing pages.
+# ملاحظة حرجة: العربية في JSON تستهلك 3-4 tokens لكل كلمة (Unicode + escape).
+# 1000 كلمة عربية في JSON ≈ 3500-4000 token output. السقف الأصلي 2400 كان
+# يقطع النص في المنتصف ويكسر JSON → كل الـ jobs تفشل. 5000 يعطي هامش أمان.
+MAX_TOKENS = int(os.getenv("SEO_MAX_TOKENS", "5000"))
 
 
 # ─── System prompts ─────────────────────────────────────────────────────────
@@ -112,23 +115,109 @@ def _make_slug(keyword: str, master_id: int, lang: str = "ar") -> str:
 
 
 def _parse_json(text: str) -> Optional[dict]:
-    """يستخرج JSON من رد الـ LLM (يزيل code fences إن وُجدت)."""
+    """
+    يستخرج JSON من رد الـ LLM بأقصى صلابة ممكنة.
+
+    يتعامل مع:
+      • code fences (```json ... ```)
+      • نص قبل/بعد الـ JSON
+      • newlines حرفية غير مهرّبة داخل القيم النصية (مشكلة شائعة مع Llama)
+      • truncation: يحاول إغلاق JSON ناقص
+      • Last resort: regex مباشر لاستخراج الحقول الثلاثة المطلوبة
+
+    يرجّع dict فيه على الأقل body_markdown، أو None لو فعلاً مستحيل.
+    """
     if not text:
         return None
+
     t = text.strip()
+
+    # 1) أزِل code fences
     if t.startswith("```"):
         t = re.sub(r"^```(?:json)?\s*", "", t)
-        t = re.sub(r"\s*```$", "", t)
+        t = re.sub(r"\s*```\s*$", "", t)
+        t = t.strip()
+
+    # 2) محاولة مباشرة
     try:
         return json.loads(t)
     except json.JSONDecodeError:
-        i, j = t.find("{"), t.rfind("}")
-        if 0 <= i < j:
-            try:
-                return json.loads(t[i:j + 1])
-            except json.JSONDecodeError:
-                return None
-    return None
+        pass
+
+    # 3) قصّ بين أول '{' وآخر '}'
+    i, j = t.find("{"), t.rfind("}")
+    candidate = None
+    if 0 <= i < j:
+        candidate = t[i:j + 1]
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            pass
+
+    # 4) إصلاح newlines حرفية داخل القيم النصية (Llama يخرجها بدون escape)
+    if candidate:
+        # نستبدل \r\n و\n و\r داخل قيمة بـ \\n
+        # طريقة آمنة: نُمرّر النص حرفاً حرفاً مع تتبّع الـ string state
+        fixed = _escape_unescaped_newlines(candidate)
+        try:
+            return json.loads(fixed)
+        except json.JSONDecodeError:
+            pass
+
+    # 5) Last resort: regex لاستخراج الحقول مباشرة
+    # نقبل الـ job لو حصلنا على body_markdown على الأقل
+    extracted: dict[str, Any] = {}
+    for field in ("title_meta", "description_meta"):
+        m = re.search(
+            rf'"{field}"\s*:\s*"((?:[^"\\]|\\.)*)"',
+            t, re.DOTALL,
+        )
+        if m:
+            extracted[field] = m.group(1).encode().decode("unicode_escape", errors="ignore")
+
+    # body_markdown قد يحتوي newlines حرفية — نستخرج بطريقة أكثر تساهلاً
+    body_match = re.search(
+        r'"body_markdown"\s*:\s*"(.*?)"\s*(?:,|\}|$)',
+        t, re.DOTALL,
+    )
+    if body_match:
+        body_raw = body_match.group(1)
+        # decode escape sequences لو موجودة
+        try:
+            body_raw = body_raw.encode().decode("unicode_escape", errors="ignore")
+        except Exception:
+            pass
+        extracted["body_markdown"] = body_raw
+
+    return extracted if extracted.get("body_markdown") else None
+
+
+def _escape_unescaped_newlines(s: str) -> str:
+    """
+    يستبدل newlines الحرفية داخل قيم JSON النصية بـ \\n.
+    يتتبّع state: هل نحن داخل string أم لا.
+    """
+    out = []
+    in_string = False
+    escape_next = False
+    for ch in s:
+        if escape_next:
+            out.append(ch)
+            escape_next = False
+            continue
+        if ch == "\\":
+            out.append(ch)
+            escape_next = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            out.append(ch)
+            continue
+        if in_string and ch in ("\n", "\r"):
+            out.append("\\n")
+            continue
+        out.append(ch)
+    return "".join(out)
 
 
 def _mark_failed(job_id: int, error: str) -> None:

@@ -314,6 +314,71 @@ def seo_google_check(x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
     return diagnose_google_setup()
 
 
+@router.get("/seo-failed-jobs")
+def seo_failed_jobs(
+    limit: int = Query(default=20, ge=1, le=100),
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """
+    آخر وظائف SEO فشلت. مفيد لتشخيص أسباب الفشل (LLM error, JSON parse, ...).
+    يرجّع: id, target_keyword, error_message, completed_at.
+    """
+    _verify_admin(x_admin_secret)
+    from psycopg2.extras import RealDictCursor
+
+    from api.db import get_db_context
+    with get_db_context() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT id, target_keyword, state,
+                       LEFT(COALESCE(error_message, ''), 500) AS error_message,
+                       to_char(completed_at, 'YYYY-MM-DD HH24:MI:SS') AS completed_at
+                FROM seo_generation_jobs
+                WHERE state = 'failed'
+                ORDER BY completed_at DESC NULLS LAST, id DESC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            rows = [dict(r) for r in cur.fetchall()]
+    return {"total": len(rows), "failed_jobs": rows}
+
+
+@router.post("/seo-retry-failed")
+def seo_retry_failed(
+    limit: int = Query(default=50, ge=1, le=300),
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """
+    يُعيد جدولة الـ failed jobs كـ queued لتُعالَج في الدورة التالية.
+    مفيد بعد إصلاح bug — تعيد محاولة كل الفاشلين.
+    """
+    _verify_admin(x_admin_secret)
+    from api.db import get_db_context
+    with get_db_context() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE seo_generation_jobs
+                SET state='queued',
+                    error_message=NULL,
+                    started_at=NULL,
+                    completed_at=NULL
+                WHERE id IN (
+                    SELECT id FROM seo_generation_jobs
+                    WHERE state='failed'
+                    ORDER BY completed_at DESC NULLS LAST
+                    LIMIT %s
+                )
+                RETURNING id
+                """,
+                (limit,),
+            )
+            requeued = len(cur.fetchall())
+    return {"requeued": requeued}
+
+
 @router.post("/seo-seed-long-tail")
 def seo_seed_long_tail(
     max_stores: int = Query(default=30, ge=1, le=100,
