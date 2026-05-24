@@ -328,3 +328,93 @@ def seo_resubmit_url(
     return resubmit_url(url)
 
 
+# ─── Social Leads Radar (migration_018 — v_social_leads view) ──────────────
+@router.get("/social-leads")
+def social_leads_list(
+    status: str = Query(default="pending", description="pending|replied|dismissed|all"),
+    limit: int = Query(default=100, ge=1, le=500),
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """
+    قائمة الـ social leads — العملاء الذين كتبوا منشوراً عن متجر نُغطّيه
+    وينتظرون رد يدوي.
+
+    status:
+      pending    → matched/responded/lead_pending (لم تتعامل معه بعد)
+      replied    → lead_replied (ضغطت 'تم الرد')
+      dismissed  → lead_dismissed (قرّرت تجاهله)
+      all        → كل ما سبق
+    """
+    _verify_admin(x_admin_secret)
+    from psycopg2.extras import RealDictCursor
+
+    from api.db import get_db_context
+
+    status_filter = {
+        "pending":   "status IN ('matched', 'responded', 'lead_pending')",
+        "replied":   "status = 'lead_replied'",
+        "dismissed": "status = 'lead_dismissed'",
+        "all":       "1=1",
+    }.get(status, "status IN ('matched', 'responded', 'lead_pending')")
+
+    with get_db_context() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                f"""
+                SELECT lead_id, platform, username, post_text, post_url,
+                       intent_score, target_store, target_store_id,
+                       target_cloaked_slug, status, age_seconds,
+                       to_char(captured_at, 'YYYY-MM-DD HH24:MI') AS captured_at_fmt
+                FROM v_social_leads
+                WHERE {status_filter}
+                ORDER BY captured_at DESC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            rows = [dict(r) for r in cur.fetchall()]
+    return {"total": len(rows), "status_filter": status, "leads": rows}
+
+
+@router.post("/social-leads/{lead_id}/mark-replied")
+def social_leads_mark_replied(
+    lead_id: int,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """يعلّم العميل أنك رددت عليه يدوياً → يختفي من شاشة pending."""
+    _verify_admin(x_admin_secret)
+    from api.db import get_db_context
+    with get_db_context() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE social_signals SET status='lead_replied' WHERE id=%s "
+                "AND status IN ('matched','responded','lead_pending') RETURNING id",
+                (lead_id,),
+            )
+            row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Lead not found or already processed")
+    return {"ok": True, "lead_id": lead_id, "new_status": "lead_replied"}
+
+
+@router.post("/social-leads/{lead_id}/dismiss")
+def social_leads_dismiss(
+    lead_id: int,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """يتجاهل العميل (تقرّر عدم الرد) — يختفي من pending."""
+    _verify_admin(x_admin_secret)
+    from api.db import get_db_context
+    with get_db_context() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE social_signals SET status='lead_dismissed' WHERE id=%s "
+                "AND status IN ('matched','responded','lead_pending') RETURNING id",
+                (lead_id,),
+            )
+            row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return {"ok": True, "lead_id": lead_id, "new_status": "lead_dismissed"}
+
+

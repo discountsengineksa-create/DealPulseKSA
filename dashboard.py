@@ -1204,7 +1204,7 @@ _OTHER_PAGES = [
 "ذكاء التنبؤ", "نظام الولاء", "التحكم الآلي", "التخصيص الفائق",
 "رادار المناسبات", "مركز التوسع", "درع الحماية",
 "مركز الصيانة", "مدير القناة", "المحفز الفوري",
-"محرّك SEO", "الرصد الاجتماعي", "التدقيق والتجارب",
+"محرّك SEO", "الرصد الاجتماعي", "🎯 رادار الصفقات الفوري", "التدقيق والتجارب",
 ]
 
 # 1. تهيئة حالة الصفحة إذا لم تكن موجودة
@@ -6283,6 +6283,169 @@ elif page == "الرصد الاجتماعي":
                         else:
                             st.toast("رُفض")
                             st.rerun()
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 🎯 رادار الصفقات الفوري — Social Leads Radar
+#
+# يعرض كل العملاء المحتملين الذين كتبوا منشوراً يبحث عن كوبون متجر نُغطّيه.
+# المصادر الحالية المفعّلة:
+#   • Reddit (مجاني، يعمل تماماً)
+#   • Google Alerts → RSS (مجاني — يلتقط تغريدات X العامة + مدونات + منتديات)
+#
+# لكل عميل: زر "↗ افتح المنشور" → يفتحه في تبويب جديد لترد عليه يدوياً
+#            زر "✅ تم الرد"    → يخفيه من شاشة pending
+#            زر "🗑️ تجاهل"     → يخفيه ولا يُحسب كردّ
+# ═════════════════════════════════════════════════════════════════════════════
+elif page == "🎯 رادار الصفقات الفوري":
+    page_title("🎯", "رادار الصفقات الفوري",
+               "اصطد العملاء قبل المنافسين — Reddit + Google Alerts (X العام مشمول)")
+
+    # شريط تحكّم
+    _r1, _r2, _r3 = st.columns([1.5, 1.5, 3])
+    with _r1:
+        status_filter = st.selectbox(
+            "الحالة",
+            ["pending", "replied", "dismissed", "all"],
+            format_func=lambda s: {
+                "pending":   "⏳ ينتظر ردّك",
+                "replied":   "✅ ردّيت عليه",
+                "dismissed": "🗑️ متجاهَل",
+                "all":       "📋 الكل",
+            }[s],
+            key="leads_status",
+        )
+    with _r2:
+        if st.button("🔄 تحديث الآن", use_container_width=True, key="leads_refresh"):
+            st.rerun()
+    with _r3:
+        st.caption(
+            "polling تلقائي كل 10 دقائق · لإضافة Google Alerts: "
+            "اذهب لـ google.com/alerts → أنشئ تنبيه → Delivery=RSS → "
+            "ضع الرابط في Railway env: SOCIAL_RSS_FEEDS"
+        )
+
+    # جلب البيانات
+    leads_data, leads_err = _admin_get("/admin/social-leads",
+                                        params={"status": status_filter, "limit": 200})
+    if leads_err:
+        st.error(f"تعذّر جلب الـ leads: {leads_err}")
+    elif not leads_data or not leads_data.get("leads"):
+        if status_filter == "pending":
+            st.success(
+                "✅ صفر leads معلّقة. الـ polling يعمل كل 10 دقائق — لو ما ظهر شيء "
+                "بعد 30 دقيقة، تأكّد من:\n\n"
+                "1. `REDDIT_SUBREDDITS` في Railway env (افتراضي: saudiarabia,riyadh,jeddah,uae,dubai)\n"
+                "2. `SOCIAL_RSS_FEEDS` فيه على الأقل feed واحد من Google Alerts\n"
+                "3. `/health/workers` يُظهر `scheduler_started=true`"
+            )
+        else:
+            st.info("لا يوجد leads بهذه الحالة.")
+    else:
+        total = leads_data.get("total", 0)
+
+        # KPIs مختصرة
+        urgent = sum(1 for l in leads_data["leads"] if (l.get("age_seconds") or 0) < 3600)
+        with_store = sum(1 for l in leads_data["leads"] if l.get("target_store_id"))
+
+        k1, k2, k3 = st.columns(3)
+        with k1: kpi_card("🎯", "عملاء بهذه الحالة", f"{total}", "warning" if status_filter == "pending" else "info")
+        with k2: kpi_card("🔥", "خلال آخر ساعة", f"{urgent}", "danger" if urgent else "neutral")
+        with k3: kpi_card("🏪", "مطابَق بمتجر", f"{with_store}/{total}", "emerald")
+
+        st.divider()
+
+        # جدول العملاء
+        for lead in leads_data["leads"]:
+            age_min = (lead.get("age_seconds") or 0) // 60
+            age_str = (
+                f"قبل {age_min} دقيقة" if age_min < 60
+                else f"قبل {age_min // 60} ساعة" if age_min < 1440
+                else f"قبل {age_min // 1440} يوم"
+            )
+
+            # تحديد عاجلية اللون
+            border_color = (
+                "#DC2626" if age_min < 30
+                else "#F59E0B" if age_min < 180
+                else "#9CA3AF"
+            )
+
+            with st.container(border=True):
+                # رأس البطاقة
+                head_c1, head_c2, head_c3 = st.columns([3, 1.5, 1.5])
+                with head_c1:
+                    platform_emoji = {
+                        "reddit":      "🔴",
+                        "rss":         "🌐",
+                        "x":           "𝕏",
+                        "twitter":     "𝕏",
+                        "instagram":   "📷",
+                        "facebook":    "📘",
+                        "telegram":    "✈️",
+                    }
+                    plat_key = (lead.get("platform") or "").split(":")[0].lower()
+                    emoji = platform_emoji.get(plat_key, "🌐")
+                    st.markdown(
+                        f"{emoji} **{lead.get('platform') or '?'}** · "
+                        f"👤 `{lead.get('username') or '—'}`"
+                    )
+                with head_c2:
+                    target = lead.get("target_store") or "—"
+                    if lead.get("target_store_id"):
+                        st.markdown(f"🏪 **{target}** ✓")
+                    else:
+                        st.caption(f"🏪 {target} (غير مطابق)")
+                with head_c3:
+                    color = "🔴" if age_min < 30 else "🟡" if age_min < 180 else "⚪"
+                    intent = lead.get("intent_score")
+                    intent_str = f" · نية: {float(intent):.2f}" if intent is not None else ""
+                    st.markdown(f"{color} {age_str}{intent_str}")
+
+                # نص المنشور
+                post_text = (lead.get("post_text") or "").strip()
+                if post_text:
+                    preview = post_text[:400] + ("…" if len(post_text) > 400 else "")
+                    st.markdown(f"> _{preview}_")
+
+                # أزرار الإجراءات
+                act_c1, act_c2, act_c3, _ = st.columns([2, 1.5, 1.5, 3])
+                with act_c1:
+                    post_url = lead.get("post_url")
+                    if post_url:
+                        st.link_button(
+                            "↗ افتح المنشور للرد",
+                            url=post_url,
+                            use_container_width=True,
+                            type="primary",
+                        )
+                    else:
+                        st.button(
+                            "🚫 لا يوجد رابط",
+                            disabled=True,
+                            use_container_width=True,
+                            key=f"nourl_{lead['lead_id']}",
+                        )
+                with act_c2:
+                    if lead.get("status") in ("matched", "responded", "lead_pending"):
+                        if st.button("✅ تم الرد", key=f"replied_{lead['lead_id']}",
+                                     use_container_width=True):
+                            _r, e2 = _admin_post(f"/admin/social-leads/{lead['lead_id']}/mark-replied")
+                            if e2:
+                                st.error(e2)
+                            else:
+                                st.toast("✅ تم تعليمه كـ مردود عليه", icon="✅")
+                                st.rerun()
+                with act_c3:
+                    if lead.get("status") in ("matched", "responded", "lead_pending"):
+                        if st.button("🗑️ تجاهل", key=f"dismiss_{lead['lead_id']}",
+                                     use_container_width=True):
+                            _r, e2 = _admin_post(f"/admin/social-leads/{lead['lead_id']}/dismiss")
+                            if e2:
+                                st.error(e2)
+                            else:
+                                st.toast("تم التجاهل", icon="🗑️")
+                                st.rerun()
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # التدقيق والتجارب — Audit log + Quiet hours + A/B experiments (migration_016)
