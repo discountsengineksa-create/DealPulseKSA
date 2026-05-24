@@ -31,7 +31,6 @@ from api.schemas.auth import (
     TokenResponse,
     UserResponse,
 )
-from api.utils.ops import audit_log
 from api.utils.rate_limit import (
     LIMIT_FORGOT_PASSWORD,
     LIMIT_LOGIN,
@@ -61,13 +60,8 @@ def _row_to_user(row: dict) -> UserResponse:
     )
 
 
-def _find_user_by_username(conn, username: str, *, include_deleted: bool = False) -> dict | None:
-    """
-    يبحث عن المستخدم بالجوال أو الإيميل.
-
-    include_deleted=False (الافتراضي): يستثني الحسابات المحذوفة ناعماً —
-    يضمن أن login/forgot-password لا تعمل على حساب طلب صاحبه الحذف.
-    """
+def _find_user_by_username(conn, username: str) -> dict | None:
+    """يبحث عن المستخدم بالجوال أو الإيميل."""
     username = username.strip()
     # نطبّع الجوال نفس الطريقة (لو دخل 05XX أو 5XX)
     phone = username
@@ -78,13 +72,11 @@ def _find_user_by_username(conn, username: str, *, include_deleted: bool = False
     if phone.startswith("5") and len(phone) == 9:
         phone = "+966" + phone
 
-    deleted_clause = "" if include_deleted else " AND deleted_at IS NULL"
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            f"""
+            """
             SELECT * FROM web_users
-            WHERE (phone_number = %s OR email = %s OR phone_number = %s)
-            {deleted_clause}
+            WHERE phone_number = %s OR email = %s OR phone_number = %s
             LIMIT 1
             """,
             (username, username.lower(), phone),
@@ -132,10 +124,6 @@ def get_current_user(
 
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
-    # PDPL: الحساب المحذوف ناعماً يُعامَل كـ غير موجود لجميع endpoints المحمية
-    # (استثناء وحيد: /users/me/cancel-deletion يستخدم dependency منفصلة)
-    if user.get("deleted_at") is not None:
-        raise HTTPException(status_code=410, detail="هذا الحساب محذوف.")
     return user
 
 
@@ -178,13 +166,6 @@ def register(payload: RegisterRequest, request: Request, conn=Depends(get_db)):
         raise HTTPException(status_code=409, detail="مستخدم موجود مسبقاً")
 
     token = create_jwt_token(user["id"])
-    # PDPL audit: تسجيل حساب جديد (لا نسجّل كلمة السر بطبيعة الحال)
-    audit_log(
-        action="user_register",
-        actor=f"user:{user['id']}",
-        target=user.get("email") or "",
-        meta={"ip": client_ip, "phone_prefix": user["phone_number"][:7]},
-    )
     return TokenResponse(token=token, user=_row_to_user(user))
 
 
@@ -323,11 +304,4 @@ def reset_password(payload: ResetPasswordRequest, request: Request, conn=Depends
         )
 
     jwt_token = create_jwt_token(updated_user["id"])
-    # PDPL audit: تغيير كلمة سر (حدث أمني مهم — لو شخص دخل بحساب مسروق)
-    audit_log(
-        action="password_reset",
-        actor=f"user:{updated_user['id']}",
-        target=updated_user.get("email") or "",
-        meta={"method": "email_code"},
-    )
     return TokenResponse(token=jwt_token, user=_row_to_user(updated_user))

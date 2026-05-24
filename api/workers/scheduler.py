@@ -24,7 +24,6 @@ from apscheduler.schedulers.background import BackgroundScheduler  # type: ignor
 from api.workers.alert_dispatcher import dispatch_pending_alerts
 from api.workers.directive_generator import run_directive_cycle
 from api.workers.matview_refresher import refresh_velocity_matview
-from api.workers.pdpl_purger import purge_expired_users
 from api.workers.spike_detector import detect_spikes
 from api.workers.velocity_aggregator import run_velocity_consumer
 
@@ -47,9 +46,6 @@ SEO_AUTOGEN_ENABLED     = os.getenv("SEO_AUTOGEN_ENABLED") == "1"
 # Week 7-8 — social listener (scoring/matching/response prep — مجاني، بلا LLM)
 SOCIAL_PROCESS_MINUTES  = int(os.getenv("WORKER_SOCIAL_PROCESS_MIN", "10"))
 SOCIAL_PROCESS_BATCH    = int(os.getenv("SOCIAL_PROCESS_BATCH", "20"))
-# PDPL — purge worker runs once a day (24h interval). Hard-deletes accounts
-# whose soft-delete is older than 30 days. Idempotent.
-PDPL_PURGE_HOURS        = int(os.getenv("WORKER_PDPL_PURGE_HOURS", "24"))
 
 _scheduler: BackgroundScheduler | None = None
 _consumer_thread: threading.Thread | None = None
@@ -182,25 +178,14 @@ def start_workers() -> None:
         next_run_time=None,
     )
 
-    # PDPL — يومياً: حذف نهائي للحسابات المنتهي حذفها الناعم (> 30 يوم)
-    _scheduler.add_job(
-        purge_expired_users,
-        trigger="interval",
-        hours=PDPL_PURGE_HOURS,
-        id="pdpl_purge",
-        name="PDPL hard-purge expired soft-deleted users",
-        replace_existing=True,
-        next_run_time=None,
-    )
-
     _scheduler.start()
     _log.info(
         "✅ APScheduler started — matview/%dm, spike/%dm, dispatch/%ds, directive/%dh, "
-        "seo_discovery/%dh, seo_generate=%s, social/%dm, pdpl_purge/%dh",
+        "seo_discovery/%dh, seo_generate=%s, social/%dm",
         MATVIEW_REFRESH_MINUTES, SPIKE_DETECT_MINUTES,
         ALERT_DISPATCH_SECONDS, DIRECTIVE_HOURS,
         SEO_DISCOVERY_HOURS, "on/%dh" % SEO_GENERATE_HOURS if SEO_AUTOGEN_ENABLED else "off",
-        SOCIAL_PROCESS_MINUTES, PDPL_PURGE_HOURS,
+        SOCIAL_PROCESS_MINUTES,
     )
 
 

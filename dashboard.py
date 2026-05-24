@@ -1199,7 +1199,6 @@ _ANALYSIS_PAGES = [
 "تحليل طلبات الأكواد", "تحليل المستخدمين", "تحليل الموقع",
 ]
 _OTHER_PAGES = [
-"💰 محرّك الأرباح",
 "مركز الإشعارات", "لوحة القيادة", "مركز الدعم",
 "مختبر النمو", "رادار المنافسين", "استوديو المحتوى",
 "ذكاء التنبؤ", "نظام الولاء", "التحكم الآلي", "التخصيص الفائق",
@@ -4575,37 +4574,29 @@ elif page == "لوحة القيادة":
 
     try:
         conn = get_conn()
-        # السر هنا: تنظيف أي خطأ سابق في الجلسة الحالية
         cur = conn.cursor()
-        cur.execute("ROLLBACK") 
-        
-        # دالة جلب الأعداد بمرونة عالية
+        cur.execute("ROLLBACK")
+
         def get_stat(query):
             try:
                 res = pd.read_sql(query, conn)
                 return res.iloc[0,0] if not res.empty else 0
-            except:
+            except Exception:
                 return 0
 
-        # جلب البيانات الحقيقية
-        m_count = get_stat("SELECT COUNT(*) FROM master ")
+        m_count = get_stat("SELECT COUNT(*) FROM master")
         u_count = get_stat("SELECT COUNT(*) FROM bot_users")
         b_count = get_stat("SELECT COUNT(*) FROM broadcast_logs")
-
-        # KPI: المستخدمون الخاملون (لم يدخلوا خلال 24 ساعة أو لا يوجد last_seen)
         idle_count = get_stat("""
             SELECT COUNT(*) FROM bot_users
             WHERE last_seen IS NULL OR last_seen < NOW() - INTERVAL '24 hours'
         """)
-
-        # KPI: العملاء المستفيدون (نسخوا كوبون أو ضغطوا رابط — يعتمد على ميجريشن 001)
         beneficiaries = get_stat("""
             SELECT COUNT(DISTINCT user_id) FROM action_logs
             WHERE user_id IS NOT NULL
               AND action_type IN ('copy_coupon','click_link')
         """)
 
-        # --- عرض العدادات ---
         st.markdown("### 📈 مؤشرات الأداء الحية")
         c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("📦 روابط الماستر", f"{m_count}")
@@ -4615,53 +4606,23 @@ elif page == "لوحة القيادة":
         c5.metric("🎁 المستفيدون", f"{beneficiaries}")
 
         st.divider()
-
-        # --- تحليل الاهتمامات (مع معالجة احتمال عدم وجود الجدول) ---
-        col_left, col_right = st.columns([1.5, 1])
-        with col_left:
-            st.subheader("🔥 اهتمامات الجمهور")
-            try:
-                df_int = pd.read_sql("SELECT interest_name as 'الهدف', COUNT(*) as 'الطلب' FROM user_interests GROUP BY interest_name ORDER BY 'الطلب' DESC LIMIT 5", conn)
-                if not df_int.empty:
-                    st.bar_chart(df_int.set_index('الهدف'))
-                else:
-                    st.info("💡 سيظهر تحليل الاهتمامات هنا فور تفاعل المستخدمين.")
-            except:
-                st.caption("جاري تهيئة جداول التحليل...")
-
-        with col_right:
-            st.subheader("⚙️ حالة النظام")
-            with st.container(border=True):
-                st.write(f"🌐 **القاعدة:** `متصلة بنجاح ✅` ")
-                st.write(f"📊 **إجمالي السجلات:** `{m_count + u_count}`")
-                st.success("النظام يعمل بكفاءة عالية")
-
-        st.divider()
-
-        # --- سجل آخر الحركات (يستخدم user_id الجديد + JOIN مع bot_users لإظهار اسم المستخدم) ---
         st.subheader("📜 سجل آخر الحركات")
         try:
-            recent_logs_query = """
+            df_logs = pd.read_sql("""
                 SELECT
                     TO_CHAR(a.action_time, 'YYYY-MM-DD HH24:MI:SS') AS "الوقت",
                     a.action_type AS "الحركة",
                     COALESCE(a.store_id, '—') AS "المتجر",
-                    COALESCE(m.name_en, '') AS "English Name",
                     COALESCE(NULLIF(b.username, ''), '— مجهول —') AS "المستخدم",
-                    a.user_id AS "Telegram ID",
                     COALESCE(a.details, '') AS "التفاصيل"
                 FROM action_logs a
                 LEFT JOIN bot_users b ON a.user_id = b.telegram_id
-                LEFT JOIN master m ON a.store_id = m.store_id
-                ORDER BY a.action_time DESC
-                LIMIT 20
-            """
-            df_logs = pd.read_sql(recent_logs_query, conn)
+                ORDER BY a.action_time DESC LIMIT 20
+            """, conn)
             if not df_logs.empty:
                 st.dataframe(df_logs, use_container_width=True, hide_index=True, height=420)
-                st.caption(f"🕒 يعرض آخر {len(df_logs)} حركة. كل صف مرتبط باسم المستخدم تلقائياً.")
             else:
-                st.info("📭 لا توجد حركات مسجّلة بعد. ستظهر فور تفاعل المستخدمين مع البوت.")
+                st.info("📭 لا توجد حركات مسجّلة بعد.")
         except Exception as e:
             st.warning(f"⚠️ تعذّر جلب سجل الحركات: {e}")
 
@@ -4669,20 +4630,6 @@ elif page == "لوحة القيادة":
         st.error(f"حدث خطأ فني: {e}")
     finally:
         if 'conn' in locals(): conn.close()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 # --- الصفحة الثامنة عشرة: مركز الدعم الفني ---
@@ -6344,8 +6291,8 @@ elif page == "التدقيق والتجارب":
     st.header("🛡️ التدقيق والتجارب")
     st.caption("سجل عمليات الأدمن (PDPL)، ساعات كتم التنبيهات، ونتائج تجارب A/B للردود.")
 
-    tab_audit, tab_quiet, tab_exp, tab_pdpl = st.tabs(
-        ["📜 سجل التدقيق", "🌙 ساعات الهدوء", "🧪 تجارب A/B", "🛡️ PDPL"]
+    tab_audit, tab_quiet, tab_exp = st.tabs(
+        ["📜 سجل التدقيق", "🌙 ساعات الهدوء", "🧪 تجارب A/B"]
     )
 
     # ── سجل التدقيق ──
@@ -6404,492 +6351,3 @@ elif page == "التدقيق والتجارب":
             st.dataframe(df, use_container_width=True, hide_index=True)
             st.caption("الظهور يُسجَّل عند توليد كل رد. النقرات/التحويلات تتفعّل مع ربط الإحالة لاحقاً.")
 
-    # ── 🛡️ PDPL — إدارة طلبات الحذف ──
-    with tab_pdpl:
-        st.markdown("### 🛡️ نظام حماية البيانات الشخصية السعودي (PDPL)")
-        st.caption(
-            "إدارة الحسابات المحذوفة ناعماً. كل عملية تُسجَّل في «سجل التدقيق» للأثر القانوني. "
-            "بعد 30 يوماً من الحذف الناعم، الـ worker اليومي يحذف الحساب نهائياً تلقائياً."
-        )
-
-        pdpl_data, pdpl_err = _admin_get("/admin/pdpl/pending-deletions")
-        if pdpl_err:
-            st.error(f"تعذّر جلب البيانات: {pdpl_err}")
-        elif not pdpl_data or not pdpl_data.get("pending"):
-            st.success("✅ لا توجد طلبات حذف معلّقة. كل الحسابات نشطة.")
-        else:
-            grace = pdpl_data.get("grace_period_days", 30)
-            total = pdpl_data.get("total", 0)
-            urgent = sum(1 for r in pdpl_data["pending"] if r.get("days_remaining", 0) <= 3)
-
-            mp1, mp2, mp3 = st.columns(3)
-            with mp1: kpi_card("⏳", "حسابات معلّقة الحذف", f"{total}", "warning")
-            with mp2: kpi_card("🚨", "حذف خلال 3 أيام", f"{urgent}", "danger" if urgent else "neutral")
-            with mp3: kpi_card("📅", "فترة الـ grace", f"{grace} يوم", "info")
-
-            st.divider()
-
-            for r in pdpl_data["pending"]:
-                with st.container(border=True):
-                    cc1, cc2, cc3 = st.columns([3, 1.5, 1.5])
-                    with cc1:
-                        utype_label = "🌐 ويب" if r["user_type"] == "web" else "📱 تيليجرام"
-                        st.markdown(f"**{utype_label}** — `{r['identifier']}`")
-                        name = r.get("display_name") or "—"
-                        st.caption(f"الاسم: {name} · ID: `{r['uid']}` · حُذف في: {r['deleted_at'][:10] if r.get('deleted_at') else '—'}")
-                    with cc2:
-                        days = r.get("days_remaining", 0)
-                        color = "🔴" if days <= 3 else "🟡" if days <= 14 else "🟢"
-                        st.markdown(f"{color} **متبقّي: {days} يوم**")
-                    with cc3:
-                        if st.button("⏩ تسريع الحذف", key=f"pdpl_exp_{r['user_type']}_{r['uid']}",
-                                     use_container_width=True, type="primary"):
-                            _r, e2 = _admin_post(f"/admin/pdpl/expedite/{r['user_type']}/{r['uid']}")
-                            if e2:
-                                st.error(e2)
-                            else:
-                                st.success(f"تم التسريع — {_r.get('purged_count_in_batch', 0)} حساب")
-                                st.rerun()
-
-        st.divider()
-        with st.expander("➕ حذف يدوي (لطلبات قانونية)", expanded=False):
-            st.warning(
-                "⚠️ استخدم هذا فقط عند طلب رسمي من المستخدم (لا يستطيع الوصول لحسابه) "
-                "أو طلب من سلطة. كل عملية تُسجَّل في سجل التدقيق."
-            )
-            mc1, mc2, mc3 = st.columns([1, 2, 1])
-            with mc1:
-                mtype = st.selectbox("نوع المستخدم", ["web", "bot"], key="pdpl_manual_type")
-            with mc2:
-                mid = st.text_input(
-                    "المعرّف",
-                    placeholder="id (للويب) أو telegram_id (للبوت)",
-                    key="pdpl_manual_id",
-                )
-            with mc3:
-                st.write("")
-                st.write("")
-                if st.button("🗑️ بدء الحذف الناعم", key="pdpl_manual_btn", use_container_width=True):
-                    if not mid.strip().isdigit():
-                        st.error("المعرّف يجب أن يكون رقماً.")
-                    else:
-                        _r, e2 = _admin_post(f"/admin/pdpl/manual-delete/{mtype}/{mid.strip()}")
-                        if e2:
-                            st.error(e2)
-                        else:
-                            st.success("تم بدء حذف ناعم — يُكتمل بعد 30 يوماً.")
-                            st.rerun()
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# 💰 محرّك الأرباح — Revenue Funnel
-#
-# الهدف: تحديد المتاجر والأقسام التي تُولّد أعلى احتمال أرباح فعلية، ليس فقط
-# الأكثر شعبية. نستخدم الإشارات المتاحة:
-#
-#   - master.total_link_clicks     → نقرات خروج للمتجر (الإحالة)
-#   - master.total_coupon_copies   → نسخ أكواد الخصم
-#   - action_logs                  → التفصيل الزمني والتقسيم بالمصدر
-#
-# الـ Score (وفق اختيار المستخدم):
-#     score = link_clicks × (copy_clicks / NULLIF(link_clicks, 0))
-#   جبرياً = copy_clicks لكن نُبقي الصيغة الكاملة عشان توضح المنطق:
-#   "كم شخص ذهب فعلاً للمتجر، وزن بحسب جودة الكوبون (نسبة من نسخوه)".
-#
-# الفترة الافتراضية: 30 يوم (قابلة للتغيير من الواجهة).
-# ═════════════════════════════════════════════════════════════════════════════
-elif page == "💰 محرّك الأرباح":
-    page_title("💰", "محرّك الأرباح",
-               "أي متجر/قسم يولّد أعلى احتمال أرباح فعلية — نقرات الخروج × جودة الكوبون")
-
-    # ─── شريط التحكم ──────────────────────────────────────────────────────────
-    _rev_c1, _rev_c2, _rev_c3, _rev_c4 = st.columns([1.3, 1.3, 1.3, 2])
-    with _rev_c1:
-        rev_window = st.selectbox(
-            "الفترة الزمنية",
-            ["7 أيام", "30 يوم", "90 يوم", "كل البيانات"],
-            index=1,  # 30 يوم افتراضي
-            key="rev_window",
-        )
-    with _rev_c2:
-        rev_source = st.selectbox(
-            "المصدر",
-            ["الكل", "الموقع (web)", "تيليجرام (bot)"],
-            index=0,
-            key="rev_source",
-        )
-    with _rev_c3:
-        rev_genuine = st.toggle(
-            "🧹 ترافيك حقيقي فقط",
-            value=True,
-            help="استبعاد البوتات/مراكز البيانات/البروكسي (quality_score ≥ 50)",
-            key="rev_genuine",
-        )
-    with _rev_c4:
-        if st.button("🔄 تحديث البيانات", use_container_width=True, key="rev_refresh"):
-            st.cache_data.clear()
-            st.rerun()
-        st.caption("البيانات مخزّنة مؤقتاً 3 دقائق · الـ score يكافئ التحويل الفعلي")
-
-    # ─── تحويل الفلاتر إلى شروط SQL ───────────────────────────────────────────
-    _window_days = {"7 أيام": 7, "30 يوم": 30, "90 يوم": 90, "كل البيانات": None}[rev_window]
-    _source_filter = {"الكل": None, "الموقع (web)": "web", "تيليجرام (bot)": "bot"}[rev_source]
-
-    @st.cache_data(ttl=180, show_spinner=False)
-    def _rev_load_funnel(window_days: int | None, source: str | None, genuine: bool):
-        """
-        يجمع per-store: link_clicks, copy_clicks, conversion_rate, score.
-        يستخدم action_logs (لا master.total_*) كي يحترم الفلتر الزمني + المصدر + الجودة.
-        """
-        where = ["a.action_type IN ('click_link','copy_coupon')"]
-        params: list = []
-        if window_days is not None:
-            where.append("a.action_time >= NOW() - (%s || ' days')::interval")
-            params.append(str(window_days))
-        if source is not None:
-            where.append("COALESCE(a.source,'bot') = %s")
-            params.append(source)
-        if genuine:
-            where.append("COALESCE(a.quality_score, 100) >= 50")
-            where.append("COALESCE(a.is_datacenter, FALSE) = FALSE")
-            where.append("COALESCE(a.is_proxy, FALSE) = FALSE")
-        sql = f"""
-            SELECT
-                m.store_id,
-                COALESCE(NULLIF(m.name_en, ''), m.store_id)  AS store_label,
-                m.store_tags,
-                m.is_trending,
-                m.is_promoted,
-                SUM(CASE WHEN a.action_type = 'click_link'  THEN 1 ELSE 0 END) AS link_clicks,
-                SUM(CASE WHEN a.action_type = 'copy_coupon' THEN 1 ELSE 0 END) AS copy_clicks,
-                COUNT(DISTINCT a.user_id) FILTER (WHERE a.user_id IS NOT NULL)
-                                                                           AS unique_users
-            FROM action_logs a
-            JOIN master m ON m.store_id = a.store_id
-            WHERE {' AND '.join(where)}
-            GROUP BY m.store_id, m.name_en, m.store_tags, m.is_trending, m.is_promoted
-            HAVING SUM(CASE WHEN a.action_type IN ('click_link','copy_coupon') THEN 1 ELSE 0 END) > 0
-        """
-        conn = get_conn()
-        try:
-            conn.rollback()
-            df = pd.read_sql(sql, conn, params=params)
-        finally:
-            try: conn.close()
-            except Exception: pass
-        if df.empty:
-            return df
-        df["link_clicks"]  = df["link_clicks"].fillna(0).astype(int)
-        df["copy_clicks"]  = df["copy_clicks"].fillna(0).astype(int)
-        df["unique_users"] = df["unique_users"].fillna(0).astype(int)
-        # نسبة التحويل: من نقر على المتجر، كم نسبتهم نسخوا كوداً
-        # نستخدم max(1, link_clicks) لتجنّب القسمة على صفر (متجر له نسخ بلا نقرات)
-        denom = df["link_clicks"].where(df["link_clicks"] > 0, 1)
-        df["copy_rate"] = (df["copy_clicks"] / denom).clip(upper=10.0)  # cap عند 10x للحالات الشاذة
-        # الـ score (وفق اختيار المستخدم): link_clicks × copy_rate ≡ copy_clicks للحالة الطبيعية
-        # لكن عندما تكون link_clicks=0 وcopy_clicks>0 (نسخ بلا نقرة)، نبقي الـ score = copy_clicks
-        df["score"] = (df["link_clicks"] * df["copy_rate"]).round(0).astype(int)
-        df.loc[df["link_clicks"] == 0, "score"] = df.loc[df["link_clicks"] == 0, "copy_clicks"]
-        return df
-
-    try:
-        df_funnel = _rev_load_funnel(_window_days, _source_filter, rev_genuine)
-    except Exception as e:
-        st.error(f"⚠️ تعذّر تحميل بيانات الـ funnel: {e}")
-        df_funnel = pd.DataFrame()
-
-    if df_funnel.empty:
-        st.info("📭 لا توجد نقرات/نسخ في الفترة المحددة. جرّب توسيع الفترة أو إلغاء فلتر «ترافيك حقيقي فقط».")
-    else:
-        # ─── KPIs ──────────────────────────────────────────────────────────────
-        total_clicks = int(df_funnel["link_clicks"].sum())
-        total_copies = int(df_funnel["copy_clicks"].sum())
-        overall_conv = (total_copies / total_clicks * 100) if total_clicks > 0 else 0.0
-        active_stores = int((df_funnel["score"] > 0).sum())
-
-        k1, k2, k3, k4 = st.columns(4)
-        with k1: kpi_card("👆", "نقرات خروج للمتاجر", f"{total_clicks:,}", "info")
-        with k2: kpi_card("📋", "نُسخ الأكواد",        f"{total_copies:,}", "emerald")
-        with k3: kpi_card("📈", "نسبة التحويل",       f"{overall_conv:.1f}%", "warning",
-                          note="copies ÷ clicks (إجمالي)")
-        with k4: kpi_card("🏪", "متاجر نشطة",         f"{active_stores:,}", "neutral",
-                          note=f"من أصل {len(df_funnel):,} متجر له تفاعل")
-
-        st.divider()
-
-        # ─── الجدول الأهم: ترتيب المتاجر بالـ score ──────────────────────────
-        st.subheader("🏆 المتاجر الأقوى أرباحاً (مرتّبة بالـ score)")
-        st.caption(
-            "الـ Score = نقرات الخروج × نسبة التحويل. متجر بـ 100 نقرة و 30 نسخة (30%) "
-            "أفضل من متجر بـ 500 نقرة و 10 نسخ (2%) — رغم أن الثاني أكثر شعبية."
-        )
-
-        df_top = df_funnel.sort_values("score", ascending=False).head(50).copy()
-        df_top["score_pct_of_total"] = (df_top["score"] / df_top["score"].sum() * 100).round(1)
-        df_top["copy_rate_pct"] = (df_top["copy_rate"] * 100).round(1)
-        df_top["rank"] = range(1, len(df_top) + 1)
-
-        display_cols = {
-            "rank":               "#",
-            "store_label":        "المتجر",
-            "link_clicks":        "نقرات",
-            "copy_clicks":        "نُسخ",
-            "copy_rate_pct":      "% تحويل",
-            "unique_users":       "زوار فريدون",
-            "score":              "🏆 Score",
-            "score_pct_of_total": "% من الإجمالي",
-            "is_trending":        "ترند؟",
-            "is_promoted":        "مُروَّج؟",
-        }
-        df_show = df_top[list(display_cols.keys())].rename(columns=display_cols)
-        st.dataframe(
-            df_show,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "% تحويل":      st.column_config.NumberColumn(format="%.1f%%"),
-                "% من الإجمالي": st.column_config.NumberColumn(format="%.1f%%"),
-                "🏆 Score":      st.column_config.ProgressColumn(
-                                    min_value=0,
-                                    max_value=int(df_show["🏆 Score"].max() or 1),
-                                    format="%d",
-                                ),
-            },
-        )
-
-        # ─── رسم: Top 15 متجراً ──────────────────────────────────────────────
-        st.divider()
-        st.subheader("📊 أعلى 15 متجراً بالـ Score")
-        df_chart = df_funnel.sort_values("score", ascending=False).head(15)
-        fig_top = px.bar(
-            df_chart,
-            x="score",
-            y="store_label",
-            orientation="h",
-            color="copy_rate",
-            color_continuous_scale=["#FCA5A5", "#FBBF24", "#10B981"],
-            labels={"score": "Score (نقرات × نسبة التحويل)",
-                    "store_label": "المتجر",
-                    "copy_rate": "نسبة التحويل"},
-            title="الأعلى أرباحاً — اللون يدل على جودة التحويل",
-        )
-        fig_top.update_layout(
-            yaxis=dict(categoryorder="total ascending"),
-            height=520, plot_bgcolor="#FAFAF8",
-            font=dict(family="Tahoma, Arial"),
-        )
-        st.plotly_chart(fig_top, use_container_width=True)
-
-        # ─── تجميع بالأقسام (store_tags) ─────────────────────────────────────
-        st.divider()
-        st.subheader("🗂️ الأقسام الأقوى أرباحاً")
-        st.caption("نفس المنطق على مستوى القسم — متجر له تاقات متعددة يُحسب في كل تاق.")
-
-        @st.cache_data(ttl=180, show_spinner=False)
-        def _rev_load_by_category(window_days: int | None, source: str | None, genuine: bool):
-            # store_tags عبارة عن TEXT بصيغة '{a,b,c}' — نحتاج string_to_array
-            where = ["a.action_type IN ('click_link','copy_coupon')"]
-            params: list = []
-            if window_days is not None:
-                where.append("a.action_time >= NOW() - (%s || ' days')::interval")
-                params.append(str(window_days))
-            if source is not None:
-                where.append("COALESCE(a.source,'bot') = %s")
-                params.append(source)
-            if genuine:
-                where.append("COALESCE(a.quality_score, 100) >= 50")
-                where.append("COALESCE(a.is_datacenter, FALSE) = FALSE")
-                where.append("COALESCE(a.is_proxy, FALSE) = FALSE")
-            sql = f"""
-                SELECT
-                    trim(t) AS category,
-                    SUM(CASE WHEN a.action_type = 'click_link'  THEN 1 ELSE 0 END) AS link_clicks,
-                    SUM(CASE WHEN a.action_type = 'copy_coupon' THEN 1 ELSE 0 END) AS copy_clicks,
-                    COUNT(DISTINCT m.store_id) AS stores_count
-                FROM action_logs a
-                JOIN master m ON m.store_id = a.store_id,
-                     unnest(string_to_array(trim(both '{{}}' from COALESCE(m.store_tags, '')), ',')) AS t
-                WHERE {' AND '.join(where)}
-                  AND trim(t) <> ''
-                GROUP BY trim(t)
-                HAVING SUM(CASE WHEN a.action_type IN ('click_link','copy_coupon') THEN 1 ELSE 0 END) > 0
-            """
-            conn = get_conn()
-            try:
-                conn.rollback()
-                df = pd.read_sql(sql, conn, params=params)
-            finally:
-                try: conn.close()
-                except Exception: pass
-            if df.empty:
-                return df
-            df["link_clicks"] = df["link_clicks"].fillna(0).astype(int)
-            df["copy_clicks"] = df["copy_clicks"].fillna(0).astype(int)
-            denom = df["link_clicks"].where(df["link_clicks"] > 0, 1)
-            df["copy_rate"] = (df["copy_clicks"] / denom).clip(upper=10.0)
-            df["score"] = (df["link_clicks"] * df["copy_rate"]).round(0).astype(int)
-            df.loc[df["link_clicks"] == 0, "score"] = df.loc[df["link_clicks"] == 0, "copy_clicks"]
-            return df.sort_values("score", ascending=False)
-
-        try:
-            df_cats = _rev_load_by_category(_window_days, _source_filter, rev_genuine)
-        except Exception as e:
-            st.error(f"⚠️ تعذّر تحميل تجميع الأقسام: {e}")
-            df_cats = pd.DataFrame()
-
-        if df_cats.empty:
-            st.info("لا أقسام مُسجّلة في الفترة.")
-        else:
-            cat_left, cat_right = st.columns([1.2, 1])
-            with cat_left:
-                df_cat_show = df_cats.head(20).copy()
-                df_cat_show["copy_rate_pct"] = (df_cat_show["copy_rate"] * 100).round(1)
-                st.dataframe(
-                    df_cat_show[["category", "stores_count", "link_clicks", "copy_clicks",
-                                  "copy_rate_pct", "score"]].rename(columns={
-                        "category":       "القسم",
-                        "stores_count":   "عدد المتاجر",
-                        "link_clicks":    "نقرات",
-                        "copy_clicks":    "نُسخ",
-                        "copy_rate_pct":  "% تحويل",
-                        "score":          "🏆 Score",
-                    }),
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "% تحويل": st.column_config.NumberColumn(format="%.1f%%"),
-                        "🏆 Score": st.column_config.ProgressColumn(
-                                        min_value=0,
-                                        max_value=int(df_cats["score"].max() or 1),
-                                        format="%d",
-                                    ),
-                    },
-                )
-            with cat_right:
-                fig_cat = px.bar(
-                    df_cats.head(10),
-                    x="score", y="category", orientation="h",
-                    color="copy_rate",
-                    color_continuous_scale=["#FCA5A5", "#FBBF24", "#10B981"],
-                    title="أعلى 10 أقسام بالـ Score",
-                )
-                fig_cat.update_layout(
-                    yaxis=dict(categoryorder="total ascending"),
-                    height=420, plot_bgcolor="#FAFAF8",
-                    font=dict(family="Tahoma, Arial"),
-                    showlegend=False,
-                )
-                st.plotly_chart(fig_cat, use_container_width=True)
-
-        # ─── Drill-down: متجر مختار ──────────────────────────────────────────
-        st.divider()
-        st.subheader("🔍 تفصيل متجر")
-        store_options = ["— اختر متجراً —"] + df_top["store_label"].tolist()
-        chosen_label = st.selectbox("المتجر", store_options, index=0, key="rev_store_drill")
-
-        if chosen_label and chosen_label != "— اختر متجراً —":
-            chosen_row = df_top[df_top["store_label"] == chosen_label].iloc[0]
-            chosen_sid = chosen_row["store_id"]
-
-            d1, d2, d3, d4 = st.columns(4)
-            with d1: kpi_card("👆", "النقرات", f"{int(chosen_row['link_clicks']):,}", "info")
-            with d2: kpi_card("📋", "النُسخ",   f"{int(chosen_row['copy_clicks']):,}", "emerald")
-            with d3: kpi_card("📈", "% التحويل", f"{chosen_row['copy_rate']*100:.1f}%", "warning")
-            with d4: kpi_card("🏆", "Score",     f"{int(chosen_row['score']):,}", "neutral")
-
-            @st.cache_data(ttl=180, show_spinner=False)
-            def _rev_load_store_daily(store_id: str, window_days: int | None,
-                                       source: str | None, genuine: bool):
-                where = ["a.store_id = %s",
-                         "a.action_type IN ('click_link','copy_coupon')"]
-                params: list = [store_id]
-                if window_days is not None:
-                    where.append("a.action_time >= NOW() - (%s || ' days')::interval")
-                    params.append(str(window_days))
-                if source is not None:
-                    where.append("COALESCE(a.source,'bot') = %s")
-                    params.append(source)
-                if genuine:
-                    where.append("COALESCE(a.quality_score, 100) >= 50")
-                sql = f"""
-                    SELECT (a.action_time + INTERVAL '3 hours')::date AS day,
-                           SUM(CASE WHEN a.action_type = 'click_link'  THEN 1 ELSE 0 END) AS clicks,
-                           SUM(CASE WHEN a.action_type = 'copy_coupon' THEN 1 ELSE 0 END) AS copies
-                    FROM action_logs a
-                    WHERE {' AND '.join(where)}
-                    GROUP BY 1
-                    ORDER BY 1
-                """
-                conn = get_conn()
-                try:
-                    conn.rollback()
-                    return pd.read_sql(sql, conn, params=params)
-                finally:
-                    try: conn.close()
-                    except Exception: pass
-
-            df_daily = _rev_load_store_daily(chosen_sid, _window_days, _source_filter, rev_genuine)
-            if df_daily.empty:
-                st.info("لا بيانات يومية في الفترة.")
-            else:
-                fig_daily = px.line(
-                    df_daily, x="day", y=["clicks", "copies"],
-                    labels={"day": "اليوم", "value": "العدد", "variable": "النوع"},
-                    title=f"التطور اليومي — {chosen_label}",
-                    color_discrete_map={"clicks": "#3B82F6", "copies": "#10B981"},
-                )
-                fig_daily.update_layout(
-                    height=380, plot_bgcolor="#FAFAF8",
-                    font=dict(family="Tahoma, Arial"),
-                )
-                st.plotly_chart(fig_daily, use_container_width=True)
-
-        # ─── تنبيه ذكي: متاجر شاذة ──────────────────────────────────────────
-        st.divider()
-        st.subheader("⚠️ تنبيهات تركيز")
-        c_alert1, c_alert2 = st.columns(2)
-        with c_alert1:
-            # متاجر بنسخ كثيرة لكن نقرات قليلة — ربما المستخدمون يأخذون الكود ويذهبون لمكان آخر
-            df_orphans = df_funnel[
-                (df_funnel["copy_clicks"] >= 10) & (df_funnel["link_clicks"] < df_funnel["copy_clicks"] * 0.3)
-            ].sort_values("copy_clicks", ascending=False).head(5)
-            if not df_orphans.empty:
-                st.warning("**كوبونات بلا نقرات** — يُنسخ الكود بكثرة لكن لا أحد يضغط على رابط المتجر:")
-                for _, r in df_orphans.iterrows():
-                    st.markdown(f"- **{r['store_label']}**: {int(r['copy_clicks'])} نسخة / فقط {int(r['link_clicks'])} نقرة")
-                st.caption("💡 الاحتمال: المستخدمون يبحثون عن الكود في Google ويذهبون مباشرةً. فكّر برابط مباشر للكوبون بدل عرض الكود.")
-            else:
-                st.success("لا توجد كوبونات «معزولة» — التحويل من النسخ إلى الزيارة سليم.")
-        with c_alert2:
-            # متاجر بنقرات كثيرة لكن لا أحد ينسخ — الكوبون ضعيف/قديم/منتهي
-            df_weak = df_funnel[
-                (df_funnel["link_clicks"] >= 20) & (df_funnel["copy_rate"] < 0.05)
-            ].sort_values("link_clicks", ascending=False).head(5)
-            if not df_weak.empty:
-                st.error("**كوبونات ضعيفة** — زيارات عالية لكن نسبة نسخ < 5% (الكوبون غير جذّاب أو منتهي):")
-                for _, r in df_weak.iterrows():
-                    st.markdown(f"- **{r['store_label']}**: {int(r['link_clicks'])} نقرة / فقط {int(r['copy_clicks'])} نسخة ({r['copy_rate']*100:.1f}%)")
-                st.caption("💡 الاحتمال: الكوبون منتهي الصلاحية، أو الخصم متواضع. راجع/جدّد العرض.")
-            else:
-                st.success("لا توجد كوبونات «ضعيفة الجذب» — جميعها تحوّل بنسبة مقبولة.")
-
-        # ─── تصدير ───────────────────────────────────────────────────────────
-        st.divider()
-        _exp_c1, _exp_c2, _ = st.columns([1, 1, 3])
-        with _exp_c1:
-            st.download_button(
-                "📥 تنزيل تقرير المتاجر (CSV)",
-                data=df_top.to_csv(index=False).encode("utf-8-sig"),
-                file_name=f"revenue_funnel_stores_{rev_window.replace(' ', '_')}.csv",
-                mime="text/csv",
-                use_container_width=True,
-            )
-        with _exp_c2:
-            if not df_cats.empty:
-                st.download_button(
-                    "📥 تنزيل تقرير الأقسام (CSV)",
-                    data=df_cats.to_csv(index=False).encode("utf-8-sig"),
-                    file_name=f"revenue_funnel_categories_{rev_window.replace(' ', '_')}.csv",
-                    mime="text/csv",
-                    use_container_width=True,
-                )
