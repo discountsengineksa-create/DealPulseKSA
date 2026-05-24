@@ -261,11 +261,9 @@ def _build_user_prompt(job: dict[str, Any], lang: str) -> str:
 
 
 # ─── Per-language generation ────────────────────────────────────────────────
-def _generate_page_for_lang(job: dict, lang: str, job_id: int) -> tuple[bool, Optional[dict]]:
+def _generate_page_for_lang(job: dict, lang: str, job_id: int) -> tuple[bool, Optional[dict], Optional[str]]:
     """
-    يولّد صفحة واحدة بلغة محدّدة. يرجّع (نجاح، {model, cost_usd, prompt_hash})
-    للتسجيل لاحقاً في الـ job. الإدراج في seo_landing_pages يتم هنا.
-
+    يولّد صفحة واحدة بلغة محدّدة. يرجّع (نجاح، meta، reason_if_failed).
     لا يعدّل حالة الـ job — المُتّصل يقرّر إجمالاً.
     """
     from api.utils.llm_client import call_llm  # lazy
@@ -281,15 +279,28 @@ def _generate_page_for_lang(job: dict, lang: str, job_id: int) -> tuple[bool, Op
         max_tokens=MAX_TOKENS,
         temperature=0.6,
     )
+
+    # نُسجّل الـ provider/model دائماً للتشخيص (حتى عند الفشل)
+    diag = f"provider={res.provider} model={res.model}"
+
+    if res.refused_by_guardian:
+        reason = f"{diag} REFUSED_BY_GUARDIAN (daily LLM budget exhausted)"
+        _log.warning("LLM refused for job=%s lang=%s: %s", job_id, lang, reason)
+        return False, None, reason
+
     if not res.text:
-        _log.warning("LLM empty for job=%s lang=%s: %s", job_id, lang,
-                     res.error or "no_text")
-        return False, None
+        # رجعت سلسلة فارغة — نحتاج تفاصيل
+        reason = f"{diag} EMPTY_RESPONSE err={(res.error or 'no_error_msg')[:200]}"
+        _log.warning("LLM empty for job=%s lang=%s: %s", job_id, lang, reason)
+        return False, None, reason
 
     data = _parse_json(res.text)
     if not data or not data.get("body_markdown"):
-        _log.warning("Unparseable JSON for job=%s lang=%s", job_id, lang)
-        return False, None
+        # JSON parse فشل — نحفظ بداية النص للتشخيص
+        preview = (res.text or "")[:300].replace("\n", " ")
+        reason = f"{diag} JSON_PARSE_FAIL len={len(res.text)} preview={preview}"
+        _log.warning("Unparseable JSON for job=%s lang=%s: %s", job_id, lang, reason)
+        return False, None, reason
 
     title = (data.get("title_meta") or "")[:180]
     desc = (data.get("description_meta") or "")[:280]
@@ -325,7 +336,7 @@ def _generate_page_for_lang(job: dict, lang: str, job_id: int) -> tuple[bool, Op
         "cost_usd":     float(res.cost_usd or 0),
         "prompt_hash":  prompt_hash,
         "words":        word_count,
-    }
+    }, None
 
 
 # ─── Per-job orchestration ──────────────────────────────────────────────────
@@ -356,19 +367,20 @@ def _generate_one(job_id: int) -> bool:
         return False
 
     # 1) العربية — الأساس
-    ar_ok, ar_meta = _generate_page_for_lang(job, "ar", job_id)
+    ar_ok, ar_meta, ar_reason = _generate_page_for_lang(job, "ar", job_id)
     if not ar_ok:
-        _mark_failed(job_id, "arabic_generation_failed")
+        # نحفظ السبب الحقيقي بدل رسالة عامة
+        _mark_failed(job_id, f"AR_FAIL: {ar_reason or 'unknown'}")
         return False
 
     # 2) الإنجليزية — إضافة لو bilingual مفعّل (فشلها لا يكسر العربية)
     total_cost = ar_meta["cost_usd"] if ar_meta else 0.0
     if BILINGUAL_ENABLED:
-        en_ok, en_meta = _generate_page_for_lang(job, "en", job_id)
+        en_ok, en_meta, en_reason = _generate_page_for_lang(job, "en", job_id)
         if en_ok and en_meta:
             total_cost += en_meta["cost_usd"]
         else:
-            _log.info("English generation skipped/failed for job=%s (Arabic OK, continuing)", job_id)
+            _log.info("English generation skipped/failed for job=%s: %s", job_id, en_reason or "?")
 
     # 3) علّم الـ job مكتمل (بالـ Arabic metadata — صحيحة دائماً)
     import psycopg2
