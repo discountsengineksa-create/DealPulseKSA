@@ -314,6 +314,27 @@ def seo_google_check(x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
     return diagnose_google_setup()
 
 
+@router.post("/seo-seed-long-tail")
+def seo_seed_long_tail(
+    max_stores: int = Query(default=30, ge=1, le=100,
+                             description="عدد المتاجر التي ننتقي منها"),
+    sort_by: str = Query(default="trending",
+                          description="trending | engagement | recent"),
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """
+    يولّد وظائف SEO بكلمات long-tail (منخفضة المنافسة) لأهمّ المتاجر.
+
+    مثال: 30 متجر × 10-12 نمط = 300-360 صفحة محتملة. الـ dedup يمنع التكرار،
+    فلو شغّلته مرّتين ما يضاعف العدد.
+
+    بعد التشغيل، استخدم /admin/seo-run?batch=50 لتوليد الصفحات فعلياً عبر LLM.
+    """
+    _verify_admin(x_admin_secret)
+    from api.seo.seed_long_tail import seed_long_tail_jobs
+    return seed_long_tail_jobs(max_stores=max_stores, sort_by=sort_by)
+
+
 @router.post("/seo-resubmit-url")
 def seo_resubmit_url(
     url: str = Query(..., min_length=10, description="URL كامل للإعادة الإرسال"),
