@@ -74,3 +74,10 @@ def serve_miniapp():
     """يخدم واجهة الـ Telegram Mini App."""
     html_path = pathlib.Path(__file__).parent.parent / "miniapp.html"
     return FileResponse(html_path, media_type="text/html")
+
+
+from fastapi.responses import PlainTextResponse
+
+@app.get("/google2ed86c67fa2838f0.html", response_class=PlainTextResponse)
+async def google_verification():
+    return "google-site-verification: google2ed86c67fa2838f0.html"
