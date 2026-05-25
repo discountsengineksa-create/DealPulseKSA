@@ -189,6 +189,59 @@ def social_poll_now(
         return {"ok": False, "error": str(exc)[:500]}
 
 
+@router.get("/rss-probe")
+def rss_probe(
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """
+    يفحص كل feed مُعدّ في SOCIAL_RSS_FEEDS ويُرجع:
+      - HTTP status + content_length
+      - عدد الـ items التي يلتقطها parser الحالي (Atom + RSS variants)
+      - أول 800 char من المحتوى الخام لتشخيص XML namespace mismatch
+    """
+    _verify_admin(x_admin_secret)
+    import os as _os
+    import requests as _rq
+    from xml.etree import ElementTree as ET
+
+    raw = (_os.getenv("SOCIAL_RSS_FEEDS") or "").strip()
+    feeds = [f.strip() for f in raw.split(",") if f.strip()]
+    if not feeds:
+        return {"configured_count": 0, "feeds": [], "note": "SOCIAL_RSS_FEEDS not set"}
+
+    ns_atom = "{http://www.w3.org/2005/Atom}"
+    results = []
+    for url in feeds:
+        item = {"url_tail": url[-60:]}
+        try:
+            r = _rq.get(
+                url, timeout=15,
+                headers={"User-Agent": "DealPulseKSA-Listener/1.0 (mention monitor)"},
+            )
+            item["http"] = r.status_code
+            item["content_length"] = len(r.text)
+            item["content_type"] = r.headers.get("content-type", "")
+            item["raw_preview"] = r.text[:800]
+            if r.status_code == 200 and r.text:
+                try:
+                    import re as _re
+                    cleaned = _re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F]', '', r.text)
+                    root = ET.fromstring(cleaned)
+                    item["root_tag"] = root.tag
+                    item["atom_entries"] = len(root.findall(f"{ns_atom}entry"))
+                    item["rss_items"] = len(root.findall(".//item"))
+                    # محاولة fallback: أي tag ينتهي بـ entry/item
+                    all_tags = {el.tag for el in root.iter()}
+                    item["all_distinct_tags"] = sorted(all_tags)[:15]
+                except ET.ParseError as exc:
+                    item["parse_error"] = str(exc)[:300]
+        except Exception as exc:
+            item["fetch_error"] = f"{type(exc).__name__}: {str(exc)[:200]}"
+        results.append(item)
+
+    return {"configured_count": len(feeds), "feeds": results}
+
+
 @router.get("/social-debug")
 def social_debug(
     x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
