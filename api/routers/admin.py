@@ -13,6 +13,8 @@ from __future__ import annotations
 import os
 import secrets as _secrets
 
+from pydantic import BaseModel
+
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Query, Request
 
 from api.social.dispatcher import broadcast_to_all_platforms
@@ -342,6 +344,187 @@ def seo_draft_full(
     if not row:
         raise HTTPException(status_code=404, detail="page not found")
     return dict(row)
+
+
+class SeoDraftUpdate(BaseModel):
+    """تعديل حقول مسودّة قبل النشر (كلها اختيارية — نُحدّث الموجود فقط)."""
+    title_meta: str | None = None
+    description_meta: str | None = None
+    body_markdown: str | None = None
+
+
+@router.put("/seo-draft/{page_id}")
+def seo_draft_update(
+    page_id: int,
+    payload: SeoDraftUpdate,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """يُعدّل محتوى مسودّة (title/description/body). للمسودّات فقط — لا تعديل بعد النشر."""
+    _verify_admin(x_admin_secret)
+    from api.db import get_db_context
+
+    sets: list[str] = []
+    params: list = []
+    if payload.title_meta is not None:
+        sets.append("title_meta = %s")
+        params.append(payload.title_meta[:180])
+    if payload.description_meta is not None:
+        sets.append("description_meta = %s")
+        params.append(payload.description_meta[:280])
+    if payload.body_markdown is not None:
+        sets.append("body_markdown = %s")
+        params.append(payload.body_markdown)
+        # نُحدّث body_html_hash لو body تغيّر
+        import hashlib
+        sets.append("body_html_hash = %s")
+        params.append(hashlib.sha256(payload.body_markdown.encode("utf-8")).digest())
+
+    if not sets:
+        raise HTTPException(status_code=400, detail="لا يوجد ما يُحدَّث")
+
+    params.append(page_id)
+    with get_db_context() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"UPDATE seo_landing_pages SET {', '.join(sets)} "
+                f"WHERE id = %s AND status = 'draft' RETURNING id",
+                params,
+            )
+            row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="مسودّة غير موجودة (أو منشورة بالفعل)")
+
+    from api.utils.ops import audit_log
+    audit_log(action="seo_draft_update", target=str(page_id),
+              meta={"fields": [s.split("=")[0].strip() for s in sets]})
+    return {"ok": True, "page_id": page_id, "updated": True}
+
+
+@router.delete("/seo-draft/{page_id}")
+def seo_draft_delete(
+    page_id: int,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """يحذف مسودّة نهائياً (لا يُؤثر على الصفحات المنشورة)."""
+    _verify_admin(x_admin_secret)
+    from api.db import get_db_context
+    with get_db_context() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM seo_landing_pages WHERE id = %s AND status = 'draft' "
+                "RETURNING slug",
+                (page_id,),
+            )
+            row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="مسودّة غير موجودة (أو منشورة)")
+
+    from api.utils.ops import audit_log
+    audit_log(action="seo_draft_delete", target=str(page_id), meta={"slug": row[0]})
+    return {"ok": True, "page_id": page_id, "deleted_slug": row[0]}
+
+
+@router.post("/seo-seed-custom")
+def seo_seed_custom(
+    topic: str = Query(..., min_length=2, max_length=80,
+                        description="موضوع/مناسبة (مثل: يوم التأسيس، رمضان، عودة المدارس)"),
+    max_stores: int = Query(default=15, ge=1, le=50,
+                             description="عدد المتاجر التي ننشئ لها صفحة بهذا الموضوع"),
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """
+    يولّد وظائف صفحات SEO بموضوع مخصّص (يحدّده المستخدم) × أهمّ المتاجر.
+
+    أمثلة استخدام:
+      topic="يوم التأسيس"           → 'كود خصم {store} يوم التأسيس'
+      topic="رمضان 2026"            → 'كود خصم {store} رمضان 2026'
+      topic="عروض البلاك فرايدي"   → 'كود خصم {store} عروض البلاك فرايدي'
+
+    بعد التشغيل، استدعِ /admin/seo-run?batch=N لتوليد الصفحات الفعلية عبر LLM.
+    """
+    _verify_admin(x_admin_secret)
+    from psycopg2.extras import RealDictCursor
+
+    from api.db import get_db_context
+
+    topic_clean = topic.strip()
+    if not topic_clean:
+        raise HTTPException(status_code=400, detail="الموضوع لا يمكن أن يكون فارغاً")
+
+    # 3 أنماط لكل متجر لتوسعة التغطية بدون تكرار:
+    patterns_ar = [
+        "كود خصم {store} {topic}",
+        "{store} {topic} 2026",
+        "أفضل عروض {store} {topic}",
+    ]
+
+    enqueued = 0
+    skipped_duplicate = 0
+    errors = 0
+
+    with get_db_context() as conn:
+        # نأخذ أهم المتاجر بحسب الـ trending score
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT id, store_id,
+                       COALESCE(NULLIF(name_en, ''), store_id) AS display_name
+                FROM master
+                WHERE COALESCE(affiliate_link, '') <> ''
+                ORDER BY (COALESCE(total_link_clicks, 0) + COALESCE(total_coupon_copies, 0) * 2) DESC NULLS LAST
+                LIMIT %s
+                """,
+                (max_stores,),
+            )
+            stores = cur.fetchall()
+
+        for store in stores:
+            name = store["display_name"]
+            for pat in patterns_ar:
+                kw = pat.format(store=name, topic=topic_clean)
+                try:
+                    with conn.cursor() as cur:
+                        # dedup عبر seo_generation_jobs + seo_landing_pages
+                        cur.execute(
+                            "SELECT 1 FROM seo_generation_jobs WHERE target_keyword = %s LIMIT 1",
+                            (kw,),
+                        )
+                        if cur.fetchone():
+                            skipped_duplicate += 1
+                            continue
+                        cur.execute(
+                            "SELECT 1 FROM seo_landing_pages WHERE target_keyword = %s LIMIT 1",
+                            (kw,),
+                        )
+                        if cur.fetchone():
+                            skipped_duplicate += 1
+                            continue
+
+                        cur.execute(
+                            "INSERT INTO seo_generation_jobs "
+                            "(target_keyword, matched_master_id, state) "
+                            "VALUES (%s, %s, 'queued')",
+                            (kw, store["id"]),
+                        )
+                        enqueued += 1
+                except Exception:
+                    errors += 1
+
+    from api.utils.ops import audit_log
+    audit_log(
+        action="seo_seed_custom",
+        target=topic_clean[:60],
+        meta={"max_stores": max_stores, "enqueued": enqueued,
+              "skipped": skipped_duplicate},
+    )
+    return {
+        "topic":             topic_clean,
+        "stores_processed":  len(stores),
+        "jobs_enqueued":     enqueued,
+        "jobs_skipped_duplicate": skipped_duplicate,
+        "errors":            errors,
+        "next_action":       "استدعِ /admin/seo-run?batch=N للتوليد الفعلي عبر LLM",
+    }
 
 
 @router.get("/seo-failed-jobs")

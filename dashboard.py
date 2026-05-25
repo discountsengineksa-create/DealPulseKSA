@@ -125,6 +125,37 @@ def _admin_post(path: str, params: dict | None = None, json_body: dict | None = 
     except Exception as e:
         return None, str(e)
 
+
+def _admin_put(path: str, json_body: dict | None = None):
+    """PUT على /api/v1{path}. يرجّع (data, error)."""
+    base, secret = _admin_api()
+    if not secret:
+        return None, "ADMIN_SHARED_SECRET غير مضبوط في بيئة الداشبورد"
+    try:
+        r = requests.put(f"{base}/api/v1{path}",
+                         headers={"X-Admin-Secret": secret},
+                         json=json_body or {}, timeout=30)
+        if r.status_code >= 400:
+            return None, f"HTTP {r.status_code}: {r.text[:200]}"
+        return r.json(), None
+    except Exception as e:
+        return None, str(e)
+
+
+def _admin_delete(path: str):
+    """DELETE على /api/v1{path}. يرجّع (data, error)."""
+    base, secret = _admin_api()
+    if not secret:
+        return None, "ADMIN_SHARED_SECRET غير مضبوط في بيئة الداشبورد"
+    try:
+        r = requests.delete(f"{base}/api/v1{path}",
+                            headers={"X-Admin-Secret": secret}, timeout=30)
+        if r.status_code >= 400:
+            return None, f"HTTP {r.status_code}: {r.text[:200]}"
+        return r.json(), None
+    except Exception as e:
+        return None, str(e)
+
 # ─── لوحة ألوان "نبض الصفقات KSA" ──────────────────────────────────────────
 BRAND = {
 "bg":             "#FAFAF8",
@@ -6154,54 +6185,294 @@ elif page == "تحليل الموقع":
 # ─────────────────────────────────────────────────────────────────────────────
 elif page == "محرّك SEO":
     st.header("🔍 محرّك صفحات SEO")
-    st.caption("الصفحات تُولَّد تلقائياً في الخلفية. راجِع المسودّات وانشرها بضغطة — تظهر لايف فوراً على الموقع.")
+    st.caption("توليد ومراجعة وتعديل وحذف ونشر صفحات الـ landing من واجهة واحدة.")
 
-    cta1, cta2 = st.columns([1, 2])
+    # ═════════════════════════════════════════════════════════════════════════
+    # القسم 1 — صندوق التوليد بموضوع مخصّص
+    # ═════════════════════════════════════════════════════════════════════════
+    st.subheader("✨ توليد صفحات حول موضوع")
+    st.caption(
+        "اكتب موضوعاً (مثال: «يوم التأسيس» / «رمضان 2026» / «اليوم الوطني») وسنُنشئ "
+        "3 صفحات لكل من أهم المتاجر تربط الموضوع باسم المتجر."
+    )
+
+    with st.form("seo_custom_topic_form", clear_on_submit=False):
+        col_topic, col_stores, col_btn = st.columns([3, 1, 1])
+        with col_topic:
+            topic_input = st.text_input(
+                "الموضوع",
+                placeholder="مثلاً: يوم التأسيس، رمضان 2026، عودة المدارس...",
+                key="seo_topic_input",
+            )
+        with col_stores:
+            max_stores_input = st.number_input(
+                "عدد المتاجر",
+                min_value=1, max_value=50, value=10, step=1,
+                key="seo_max_stores",
+            )
+        with col_btn:
+            st.write("")
+            st.write("")
+            submit_topic = st.form_submit_button("📥 جدولة الوظائف", use_container_width=True)
+
+        if submit_topic:
+            if not topic_input.strip():
+                st.warning("اكتب موضوعاً أولاً.")
+            else:
+                with st.spinner("نُجدّول وظائف التوليد..."):
+                    data, err = _admin_post(
+                        "/admin/seo-seed-custom",
+                        params={"topic": topic_input.strip(),
+                                "max_stores": int(max_stores_input)},
+                    )
+                if err:
+                    st.error(f"تعذّر: {err}")
+                else:
+                    st.success(
+                        f"✅ تم جدولة **{data.get('jobs_enqueued', 0)}** وظيفة "
+                        f"({data.get('jobs_skipped_duplicate', 0)} مُكرّر تم تخطيه). "
+                        "اضغط «توليد المسودّات» أدناه لتشغيل الـ LLM."
+                    )
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # القسم 2 — أزرار تشغيل التوليد
+    # ═════════════════════════════════════════════════════════════════════════
+    st.divider()
+    st.subheader("⚙️ توليد المسودّات من قائمة الانتظار")
+
+    cta1, cta2, cta3 = st.columns([1, 1, 2])
     with cta1:
+        batch_size = st.number_input("حجم الدفعة", min_value=1, max_value=20,
+                                      value=3, step=1, key="seo_batch_size",
+                                      help="عدد المتاجر التي تُولَّد دفعة (كل متجر = صفحتان: عربي+إنجليزي)")
+    with cta2:
         if st.button("⚙️ توليد الآن", use_container_width=True, type="primary"):
-            with st.spinner("جارٍ التجميع والمطابقة والتوليد…"):
-                data, err = _admin_post("/admin/seo-run", params={"batch": 3})
+            with st.spinner(f"جارٍ توليد {batch_size} متجر عبر الـ LLM... (~{batch_size * 30} ثانية)"):
+                data, err = _admin_post("/admin/seo-run", params={"batch": int(batch_size)})
             if err:
                 st.error(f"تعذّر التشغيل: {err}")
             else:
                 g = data.get("generation", {}) if data else {}
                 st.success(
-                    f"ترند: {data.get('trends_upserted', 0)} · "
-                    f"وظائف جديدة: {data.get('jobs_enqueued', 0)} · "
-                    f"صفحات مولّدة: {g.get('generated', 0)} (فشل: {g.get('failed', 0)})"
+                    f"✅ نتيجة الدفعة — مُعالَج: {g.get('processed', 0)} · "
+                    f"مولّد: {g.get('generated', 0)} · فشل: {g.get('failed', 0)}"
                 )
-    with cta2:
-        st.caption("التوليد التلقائي مُفعّل على السيرفر عبر SEO_AUTOGEN_ENABLED. الزر للتشغيل اليدوي الفوري.")
+                st.rerun()
+    with cta3:
+        st.caption(
+            "💡 لو ظهرت `failed` كثيرة، افتح تبويب «وظائف فاشلة» أدناه لتشخيص السبب. "
+            "في الغالب: انتهاء حصة LLM اليومية (تتجدّد 03:00 صباحاً بتوقيت الرياض)."
+        )
 
+    # ═════════════════════════════════════════════════════════════════════════
+    # القسم 3 — قائمة المسودّات (مع معاينة + تعديل + حذف + نشر)
+    # ═════════════════════════════════════════════════════════════════════════
     st.divider()
     st.subheader("📝 المسودّات بانتظار النشر")
-    drafts, err = _admin_get("/admin/seo-drafts", params={"limit": 50})
+
+    # شريط بحث/تصفية بسيط
+    fc1, fc2, fc3 = st.columns([2, 1, 1])
+    with fc1:
+        search_filter = st.text_input(
+            "🔎 بحث في العنوان/الكلمة المستهدفة",
+            placeholder="مثلاً: نون، رمضان، شحن...",
+            key="seo_search",
+        ).strip().lower()
+    with fc2:
+        lang_filter = st.selectbox("اللغة", ["الكل", "عربي", "إنجليزي"], key="seo_lang_filter")
+    with fc3:
+        if st.button("🔄 تحديث القائمة", use_container_width=True):
+            st.rerun()
+
+    drafts, err = _admin_get("/admin/seo-drafts", params={"limit": 200})
     if err:
         st.error(f"تعذّر جلب المسودّات: {err}")
     elif not drafts or not drafts.get("drafts"):
-        st.info("لا توجد مسودّات حالياً. اضغط «توليد الآن» أو انتظر الدورة التلقائية.")
+        st.info("لا توجد مسودّات حالياً. اكتب موضوعاً واضغط «جدولة الوظائف» ثم «توليد الآن».")
     else:
-        st.caption(f"إجمالي المسودّات: {drafts.get('total', 0)}")
-        for d in drafts["drafts"]:
+        all_drafts = drafts["drafts"]
+        # تطبيق الفلاتر
+        filtered = all_drafts
+        if search_filter:
+            filtered = [d for d in filtered
+                        if search_filter in (d.get("title_meta") or "").lower()
+                        or search_filter in (d.get("target_keyword") or "").lower()]
+        lang_map = {"عربي": "ar", "إنجليزي": "en"}
+        if lang_filter in lang_map:
+            filtered = [d for d in filtered if d.get("lang") == lang_map[lang_filter]]
+
+        st.caption(
+            f"عرض **{len(filtered)}** من إجمالي **{drafts.get('total', 0)}** مسودّة"
+            + (f" (مرشّحة)" if len(filtered) != len(all_drafts) else "")
+        )
+
+        for d in filtered:
+            page_id = d["id"]
+            lang_badge = "🇸🇦 عربي" if d.get("lang") == "ar" else "🇬🇧 EN"
+
             with st.container(border=True):
-                col_a, col_b = st.columns([4, 1])
-                with col_a:
-                    st.markdown(f"**{d.get('title_meta') or d.get('target_keyword')}**")
+                # عنوان البطاقة
+                head_l, head_r = st.columns([5, 1])
+                with head_l:
+                    st.markdown(
+                        f"**{d.get('title_meta') or d.get('target_keyword')}** "
+                        f"<span style='background:#10B981;color:white;padding:2px 8px;border-radius:4px;font-size:0.75em;'>{lang_badge}</span>",
+                        unsafe_allow_html=True,
+                    )
                     st.caption(
                         f"🔑 {d.get('target_keyword')} · 🏪 {d.get('store_name') or '—'} · "
-                        f"🔗 /c/{d.get('slug')} · 📄 {d.get('body_len', 0)} حرف"
+                        f"🔗 `/c/{d.get('slug')}` · 📄 {d.get('body_len', 0)} حرف · `ID={page_id}`"
                     )
                     if d.get("description_meta"):
-                        st.caption(d["description_meta"])
-                with col_b:
-                    if st.button("🚀 نشر", key=f"seo_pub_{d['id']}", use_container_width=True, type="primary"):
-                        with st.spinner("نشر + تحديث الموقع (revalidate)…"):
-                            res, perr = _admin_post(f"/admin/seo-publish/{d['id']}")
+                        st.caption(f"📝 {d['description_meta']}")
+                with head_r:
+                    st.caption(f"#{page_id}")
+
+                # أزرار العمل
+                btn_preview, btn_edit, btn_publish, btn_delete = st.columns(4)
+                with btn_preview:
+                    show_preview = st.toggle(
+                        "👁️ معاينة",
+                        key=f"seo_prev_{page_id}",
+                        help="عرض المحتوى الكامل قبل النشر",
+                    )
+                with btn_edit:
+                    show_edit = st.toggle(
+                        "✏️ تعديل",
+                        key=f"seo_edit_{page_id}",
+                        help="تعديل العنوان/الوصف/المحتوى",
+                    )
+                with btn_publish:
+                    if st.button("🚀 نشر",
+                                 key=f"seo_pub_{page_id}",
+                                 use_container_width=True, type="primary"):
+                        with st.spinner("نشر + IndexNow + Next.js revalidate..."):
+                            res, perr = _admin_post(f"/admin/seo-publish/{page_id}")
                         if perr:
                             st.error(perr)
                         else:
-                            st.success(f"تم النشر ✅ — /c/{res.get('slug')}")
+                            st.success(f"✅ نُشر — /c/{res.get('slug')}")
                             st.rerun()
+                with btn_delete:
+                    if st.button("🗑️ حذف",
+                                 key=f"seo_del_{page_id}",
+                                 use_container_width=True):
+                        # نطلب تأكيداً عبر session_state
+                        confirm_key = f"seo_del_confirm_{page_id}"
+                        st.session_state[confirm_key] = True
+
+                # تأكيد الحذف
+                if st.session_state.get(f"seo_del_confirm_{page_id}"):
+                    st.warning(f"⚠️ هل تريد حذف المسودّة #{page_id} نهائياً؟")
+                    cf1, cf2, _ = st.columns([1, 1, 3])
+                    with cf1:
+                        if st.button("نعم احذف", key=f"seo_del_yes_{page_id}",
+                                     use_container_width=True, type="primary"):
+                            res, derr = _admin_delete(f"/admin/seo-draft/{page_id}")
+                            if derr:
+                                st.error(derr)
+                            else:
+                                st.toast(f"✅ حُذفت", icon="🗑️")
+                                st.session_state.pop(f"seo_del_confirm_{page_id}", None)
+                                st.rerun()
+                    with cf2:
+                        if st.button("إلغاء", key=f"seo_del_no_{page_id}",
+                                     use_container_width=True):
+                            st.session_state.pop(f"seo_del_confirm_{page_id}", None)
+                            st.rerun()
+
+                # ─── المعاينة ──────────────────────────────────────────────
+                if show_preview or show_edit:
+                    full, ferr = _admin_get(f"/admin/seo-draft/{page_id}")
+                    if ferr:
+                        st.error(f"تعذّر جلب المحتوى: {ferr}")
+                    elif full:
+                        if show_preview and not show_edit:
+                            with st.expander("📄 المحتوى الكامل", expanded=True):
+                                st.markdown(f"**Title:** {full.get('title_meta', '')}")
+                                st.markdown(f"**Description:** {full.get('description_meta', '')}")
+                                st.markdown("---")
+                                # نعرض markdown كما هو ليُرى بصورته النهائية
+                                if full.get('lang') == 'en':
+                                    st.markdown(f"<div dir='ltr' style='text-align:left'>{full.get('body_markdown', '')}</div>",
+                                                unsafe_allow_html=True)
+                                else:
+                                    st.markdown(full.get('body_markdown', ''))
+
+                        if show_edit:
+                            with st.expander("✏️ نموذج التعديل", expanded=True):
+                                with st.form(f"seo_edit_form_{page_id}"):
+                                    new_title = st.text_input(
+                                        "Title (≤180 حرف)",
+                                        value=full.get('title_meta', ''),
+                                        max_chars=180,
+                                    )
+                                    new_desc = st.text_area(
+                                        "Description (≤280 حرف)",
+                                        value=full.get('description_meta', ''),
+                                        max_chars=280, height=80,
+                                    )
+                                    new_body = st.text_area(
+                                        "Body Markdown",
+                                        value=full.get('body_markdown', ''),
+                                        height=400,
+                                    )
+                                    save_col, cancel_col, _ = st.columns([1, 1, 3])
+                                    with save_col:
+                                        if st.form_submit_button("💾 حفظ", type="primary",
+                                                                  use_container_width=True):
+                                            update_body = {}
+                                            if new_title != full.get('title_meta', ''):
+                                                update_body["title_meta"] = new_title
+                                            if new_desc != full.get('description_meta', ''):
+                                                update_body["description_meta"] = new_desc
+                                            if new_body != full.get('body_markdown', ''):
+                                                update_body["body_markdown"] = new_body
+                                            if not update_body:
+                                                st.info("لا تغييرات للحفظ.")
+                                            else:
+                                                _r, uerr = _admin_put(
+                                                    f"/admin/seo-draft/{page_id}",
+                                                    json_body=update_body,
+                                                )
+                                                if uerr:
+                                                    st.error(uerr)
+                                                else:
+                                                    st.toast("✅ حُفظت التعديلات", icon="💾")
+                                                    st.rerun()
+                                    with cancel_col:
+                                        st.form_submit_button("إلغاء",
+                                                               use_container_width=True)
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # القسم 4 — تشخيص الفشل (مطوي)
+    # ═════════════════════════════════════════════════════════════════════════
+    st.divider()
+    with st.expander("🔧 تشخيص الوظائف الفاشلة (للمطوّر)", expanded=False):
+        fail_data, fail_err = _admin_get("/admin/seo-failed-jobs", params={"limit": 20})
+        if fail_err:
+            st.error(fail_err)
+        elif not fail_data or not fail_data.get("failed_jobs"):
+            st.success("✅ لا توجد وظائف فاشلة.")
+        else:
+            st.caption(f"إجمالي الفاشلة: {fail_data.get('total', 0)} (آخر 20)")
+
+            ret_col, _ = st.columns([1, 4])
+            with ret_col:
+                if st.button("🔁 إعادة جدولة الكل", use_container_width=True):
+                    _r, rerr = _admin_post("/admin/seo-retry-failed",
+                                            params={"limit": 100})
+                    if rerr:
+                        st.error(rerr)
+                    else:
+                        st.success(f"✅ أُعيد جدولة {_r.get('requeued', 0)} وظيفة")
+                        st.rerun()
+
+            for j in fail_data["failed_jobs"]:
+                with st.container(border=True):
+                    st.markdown(f"**#{j['id']}** · 🔑 {j.get('target_keyword', '')}")
+                    st.caption(f"📅 {j.get('completed_at', '—')}")
+                    st.code((j.get("error_message") or "")[:500], language=None)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # الرصد الاجتماعي — Social Listener + Auto-Responder (Week 7-8)
