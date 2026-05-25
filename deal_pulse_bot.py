@@ -104,7 +104,8 @@ def clean_legacy_columns():
 
 
 def ensure_tracking_tables():
-    """جدول ربط رسائل الكوبونات بالـ store_id + عمود lang للـ i18n."""
+    """جدول ربط رسائل الكوبونات بالـ store_id + عمود lang للـ i18n.
+    أيضاً يُهيّئ seo_opportunity_keywords (محرك الفرص — Google Trends)."""
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -126,9 +127,40 @@ def ensure_tracking_tables():
             ALTER TABLE master
               ADD COLUMN IF NOT EXISTS name_en TEXT
         """)
+        # migration_020 — محرك الفرص (Google Trends + keyword CRUD)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS seo_opportunity_keywords (
+                id                  BIGSERIAL PRIMARY KEY,
+                keyword             TEXT NOT NULL UNIQUE,
+                store_id            TEXT,
+                notes               TEXT,
+                active              BOOLEAN DEFAULT TRUE,
+                trend_score         INTEGER DEFAULT 0,
+                trend_avg           NUMERIC(6, 2) DEFAULT 0,
+                rising_pct          NUMERIC(8, 2) DEFAULT 0,
+                last_checked_at     TIMESTAMPTZ,
+                last_error          TEXT,
+                generated_page_id   BIGINT,
+                created_at          TIMESTAMPTZ DEFAULT NOW(),
+                updated_at          TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_seo_opp_active_score
+                ON seo_opportunity_keywords (active, trend_score DESC)
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_seo_opp_store
+                ON seo_opportunity_keywords (store_id)
+                WHERE store_id IS NOT NULL
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_seo_opp_last_checked
+                ON seo_opportunity_keywords (last_checked_at NULLS FIRST)
+        """)
         conn.commit()
         release_conn(conn)
-        print("✅ Tracking tables ready (sent_coupon_messages, lang column)")
+        print("✅ Tracking tables ready (sent_coupon_messages, lang, seo_opportunity_keywords)")
     except Exception as e:
         print(f"⚠️ ensure_tracking_tables: {e}")
 

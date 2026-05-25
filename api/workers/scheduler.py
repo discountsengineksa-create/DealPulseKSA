@@ -46,6 +46,8 @@ SEO_AUTOGEN_ENABLED     = os.getenv("SEO_AUTOGEN_ENABLED") == "1"
 # Week 7-8 — social listener (scoring/matching/response prep — مجاني، بلا LLM)
 SOCIAL_PROCESS_MINUTES  = int(os.getenv("WORKER_SOCIAL_PROCESS_MIN", "10"))
 SOCIAL_PROCESS_BATCH    = int(os.getenv("SOCIAL_PROCESS_BATCH", "20"))
+# محرك الفرص — Google Trends refresh كل ساعة افتراضياً
+TRENDS_REFRESH_HOURS    = int(os.getenv("WORKER_TRENDS_REFRESH_HOURS", "1"))
 
 _scheduler: BackgroundScheduler | None = None
 _consumer_thread: threading.Thread | None = None
@@ -68,10 +70,9 @@ def _seo_generation_cycle() -> None:
 
 def _social_listener_cycle() -> None:
     """
-    Week 7-8 — دورة الرصد الاجتماعي الكاملة كل 10 دقائق:
-      1. poll Reddit + RSS (تلتقط mentions جديدة → تخزّنها بـ status='new')
+    Week 7-8 — دورة الرصد الاجتماعي كل 10 دقائق:
+      1. poll Reddit (تلتقط mentions جديدة → تخزّنها بـ status='new')
       2. process_new_signals → score, match, generate draft replies
-    كله مجاني ولا يستهلك LLM (template-based).
     """
     from api.social_listener.pollers import run_all_pollers
     from api.social_listener.responder import process_new_signals
@@ -82,6 +83,19 @@ def _social_listener_cycle() -> None:
         _log.warning("pollers cycle failed (non-fatal): %s", exc)
 
     process_new_signals(batch=SOCIAL_PROCESS_BATCH)
+
+
+def _trends_refresh_cycle() -> None:
+    """
+    محرك الفرص — يجلب درجة Google Trends لكل keyword نشط في
+    seo_opportunity_keywords كل ساعة. أي فشل لـ pytrends يُلتقط داخلياً
+    ويُسجَّل في last_error بدل كسر الـ scheduler.
+    """
+    from api.seo.trends_puller import refresh_all_active_keywords
+    try:
+        refresh_all_active_keywords()
+    except Exception as exc:
+        _log.warning("trends refresh cycle failed (non-fatal): %s", exc)
 
 
 def start_workers() -> None:
@@ -196,14 +210,25 @@ def start_workers() -> None:
         next_run_time=datetime.now(timezone.utc) + timedelta(seconds=30),
     )
 
+    # محرك الفرص — refresh Google Trends لكل active keyword كل ساعة
+    _scheduler.add_job(
+        _trends_refresh_cycle,
+        trigger="interval",
+        hours=TRENDS_REFRESH_HOURS,
+        id="trends_refresh",
+        name="Refresh Google Trends scores for opportunity keywords",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc) + timedelta(seconds=90),
+    )
+
     _scheduler.start()
     _log.info(
         "✅ APScheduler started — matview/%dm, spike/%dm, dispatch/%ds, directive/%dh, "
-        "seo_discovery/%dh, seo_generate=%s, social/%dm",
+        "seo_discovery/%dh, seo_generate=%s, social/%dm, trends/%dh",
         MATVIEW_REFRESH_MINUTES, SPIKE_DETECT_MINUTES,
         ALERT_DISPATCH_SECONDS, DIRECTIVE_HOURS,
         SEO_DISCOVERY_HOURS, "on/%dh" % SEO_GENERATE_HOURS if SEO_AUTOGEN_ENABLED else "off",
-        SOCIAL_PROCESS_MINUTES,
+        SOCIAL_PROCESS_MINUTES, TRENDS_REFRESH_HOURS,
     )
 
 

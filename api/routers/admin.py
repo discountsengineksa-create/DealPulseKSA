@@ -286,6 +286,318 @@ def social_debug(
     return out
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# محرك الفرص — Google Trends + keyword CRUD (migration_020)
+# ═════════════════════════════════════════════════════════════════════════════
+class OpportunityKeywordCreate(BaseModel):
+    keyword: str
+    store_id: str | None = None
+    notes: str | None = None
+    active: bool = True
+
+
+class OpportunityKeywordUpdate(BaseModel):
+    keyword: str | None = None
+    store_id: str | None = None
+    notes: str | None = None
+    active: bool | None = None
+
+
+@router.get("/seo-opportunities")
+def seo_opportunities_list(
+    sort: str = Query(default="trend_score", description="trend_score|rising_pct|created_at|keyword"),
+    only_active: bool = Query(default=False),
+    limit: int = Query(default=200, ge=1, le=1000),
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """قائمة الكلمات المُتابَعة في محرك الفرص + درجة Google Trends لكل منها."""
+    _verify_admin(x_admin_secret)
+    from psycopg2.extras import RealDictCursor
+    from api.db import get_db_context
+
+    sort_col = {
+        "trend_score": "trend_score DESC NULLS LAST",
+        "rising_pct":  "rising_pct DESC NULLS LAST",
+        "created_at":  "created_at DESC",
+        "keyword":     "keyword ASC",
+    }.get(sort, "trend_score DESC NULLS LAST")
+
+    where = "active = TRUE" if only_active else "1=1"
+
+    with get_db_context() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                f"""
+                SELECT id, keyword, store_id, notes, active,
+                       trend_score, trend_avg, rising_pct,
+                       to_char(last_checked_at, 'YYYY-MM-DD HH24:MI') AS last_checked_at,
+                       last_error, generated_page_id,
+                       to_char(created_at, 'YYYY-MM-DD HH24:MI') AS created_at
+                FROM seo_opportunity_keywords
+                WHERE {where}
+                ORDER BY {sort_col}
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            rows = [dict(r) for r in cur.fetchall()]
+    return {"total": len(rows), "keywords": rows}
+
+
+@router.post("/seo-opportunities")
+def seo_opportunities_create(
+    payload: OpportunityKeywordCreate,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """إضافة keyword جديد للمتابعة."""
+    _verify_admin(x_admin_secret)
+    kw = (payload.keyword or "").strip()
+    if not kw:
+        raise HTTPException(status_code=400, detail="keyword required")
+    if len(kw) > 200:
+        raise HTTPException(status_code=400, detail="keyword too long (max 200 chars)")
+
+    from psycopg2.extras import RealDictCursor
+    from api.db import get_db_context
+    with get_db_context() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            try:
+                cur.execute(
+                    """
+                    INSERT INTO seo_opportunity_keywords
+                        (keyword, store_id, notes, active)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id, keyword
+                    """,
+                    (kw, payload.store_id, payload.notes, payload.active),
+                )
+                row = dict(cur.fetchone())
+            except Exception as exc:
+                # على الأرجح UNIQUE violation
+                if "duplicate key" in str(exc).lower() or "unique" in str(exc).lower():
+                    raise HTTPException(status_code=409, detail="keyword already exists")
+                raise HTTPException(status_code=500, detail=str(exc)[:200])
+    return {"ok": True, "created": row}
+
+
+@router.put("/seo-opportunities/{kw_id}")
+def seo_opportunities_update(
+    kw_id: int,
+    payload: OpportunityKeywordUpdate,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """تعديل keyword موجود (الكلمة نفسها، المتجر، الملاحظات، التفعيل)."""
+    _verify_admin(x_admin_secret)
+    fields, values = [], []
+    if payload.keyword is not None:
+        kw = payload.keyword.strip()
+        if not kw or len(kw) > 200:
+            raise HTTPException(status_code=400, detail="invalid keyword")
+        fields.append("keyword = %s"); values.append(kw)
+    if payload.store_id is not None:
+        fields.append("store_id = %s"); values.append(payload.store_id or None)
+    if payload.notes is not None:
+        fields.append("notes = %s"); values.append(payload.notes or None)
+    if payload.active is not None:
+        fields.append("active = %s"); values.append(payload.active)
+    if not fields:
+        raise HTTPException(status_code=400, detail="nothing to update")
+    fields.append("updated_at = NOW()")
+    values.append(kw_id)
+
+    from api.db import get_db_context
+    with get_db_context() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"UPDATE seo_opportunity_keywords SET {', '.join(fields)} "
+                f"WHERE id = %s RETURNING id",
+                values,
+            )
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="keyword not found")
+    return {"ok": True, "id": kw_id}
+
+
+@router.delete("/seo-opportunities/{kw_id}")
+def seo_opportunities_delete(
+    kw_id: int,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """حذف keyword نهائياً."""
+    _verify_admin(x_admin_secret)
+    from api.db import get_db_context
+    with get_db_context() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM seo_opportunity_keywords WHERE id = %s RETURNING id",
+                (kw_id,),
+            )
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="keyword not found")
+    return {"ok": True, "deleted": kw_id}
+
+
+@router.post("/seo-opportunities/{kw_id}/refresh")
+def seo_opportunities_refresh(
+    kw_id: int,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """جلب فوري لدرجة Google Trends لهذا الـ keyword (بدون انتظار الـ scheduler)."""
+    _verify_admin(x_admin_secret)
+    from psycopg2.extras import RealDictCursor
+    from api.db import get_db_context
+    from api.seo.trends_puller import fetch_keyword_score
+
+    with get_db_context() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT keyword FROM seo_opportunity_keywords WHERE id = %s",
+                (kw_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="keyword not found")
+            kw = row["keyword"]
+
+        result = fetch_keyword_score(kw)
+        with conn.cursor() as cur2:
+            if result["ok"]:
+                cur2.execute(
+                    """
+                    UPDATE seo_opportunity_keywords
+                    SET trend_score=%s, trend_avg=%s, rising_pct=%s,
+                        last_checked_at=NOW(), last_error=NULL
+                    WHERE id=%s
+                    """,
+                    (result["trend_score"], result["trend_avg"],
+                     result["rising_pct"], kw_id),
+                )
+            else:
+                cur2.execute(
+                    """
+                    UPDATE seo_opportunity_keywords
+                    SET last_checked_at=NOW(), last_error=%s
+                    WHERE id=%s
+                    """,
+                    (result["error"], kw_id),
+                )
+    return {"ok": result["ok"], "result": result}
+
+
+@router.post("/seo-opportunities/refresh-all")
+def seo_opportunities_refresh_all(
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """جلب فوري لكل الـ active keywords (يستغرق وقتاً — 5s × عدد الكلمات)."""
+    _verify_admin(x_admin_secret)
+    from api.seo.trends_puller import refresh_all_active_keywords
+    try:
+        return {"ok": True, "stats": refresh_all_active_keywords()}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)[:500]}
+
+
+@router.post("/seo-opportunities/{kw_id}/generate-page")
+def seo_opportunities_generate_page(
+    kw_id: int,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """
+    يولّد صفحة هبوط /c/{slug} لهذا الـ keyword الآن:
+      1. يطابق المتجر (store_id المُحدّد، أو trigram على master)
+      2. يُنشئ seo_generation_jobs بـ state='queued'
+      3. يُشغّل process_pending_jobs(batch=1) فوراً (sync)
+      4. يحدّث seo_opportunity_keywords.generated_page_id
+    """
+    _verify_admin(x_admin_secret)
+    from psycopg2.extras import RealDictCursor
+    from api.db import get_db_context
+
+    with get_db_context() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT id, keyword, store_id, generated_page_id "
+                "FROM seo_opportunity_keywords WHERE id = %s",
+                (kw_id,),
+            )
+            opp = cur.fetchone()
+            if not opp:
+                raise HTTPException(status_code=404, detail="keyword not found")
+            if opp["generated_page_id"]:
+                return {"ok": True, "already_generated": True,
+                        "page_id": opp["generated_page_id"]}
+
+            kw = opp["keyword"]
+
+            # 1) أوجد المتجر المُطابق
+            if opp["store_id"]:
+                cur.execute("SELECT id FROM master WHERE store_id = %s LIMIT 1",
+                            (opp["store_id"],))
+            else:
+                cur.execute(
+                    """
+                    SELECT id,
+                           GREATEST(
+                               similarity(lower(store_id),                    lower(%(q)s)),
+                               similarity(lower(COALESCE(name_en, '')),       lower(%(q)s)),
+                               similarity(lower(COALESCE(store_tags, '')),    lower(%(q)s))
+                           ) AS sim
+                    FROM master ORDER BY sim DESC LIMIT 1
+                    """,
+                    {"q": kw},
+                )
+            master = cur.fetchone()
+            if not master:
+                raise HTTPException(status_code=400,
+                    detail="no matching store — set store_id manually or add the store to master")
+
+            master_id = master["id"]
+
+            # 2) أنشئ job (مع تجاهل التكرارات)
+            cur.execute(
+                """
+                INSERT INTO seo_generation_jobs
+                    (target_keyword, matched_master_id, state)
+                VALUES (%s, %s, 'queued')
+                ON CONFLICT (target_keyword, matched_master_id)
+                    WHERE state IN ('queued', 'running')
+                    DO NOTHING
+                RETURNING id
+                """,
+                (kw, master_id),
+            )
+            job_row = cur.fetchone()
+            job_id = job_row["id"] if job_row else None
+
+    # 3) شغّل الوظيفة فوراً (sync). قد تستغرق 20-40 ثانية بسبب LLM
+    from api.seo.generator import process_pending_jobs
+    try:
+        stats = process_pending_jobs(batch=1)
+    except Exception as exc:
+        return {"ok": False, "error": f"generator crashed: {str(exc)[:200]}",
+                "job_id": job_id}
+
+    # 4) ابحث عن الصفحة الناتجة واربطها
+    with get_db_context() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT id, slug, status FROM seo_landing_pages "
+                "WHERE target_keyword = %s ORDER BY id DESC LIMIT 1",
+                (kw,),
+            )
+            page = cur.fetchone()
+            if page:
+                cur.execute(
+                    "UPDATE seo_opportunity_keywords SET generated_page_id=%s WHERE id=%s",
+                    (page["id"], kw_id),
+                )
+                return {"ok": True, "page_id": page["id"], "slug": page["slug"],
+                        "status": page["status"], "generator_stats": stats}
+
+    return {"ok": True, "job_id": job_id, "generator_stats": stats,
+            "note": "job queued/ran but no page row found yet — check seo-drafts"}
+
+
 @router.get("/social-pending")
 def social_pending(
     limit: int = Query(default=50, ge=1, le=200),
