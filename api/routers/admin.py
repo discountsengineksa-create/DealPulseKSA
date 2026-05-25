@@ -224,40 +224,57 @@ def social_debug(
         "DISABLE_WORKERS": _os.getenv("DISABLE_WORKERS") or "(off)",
     }
 
-    out = {"env": env_info}
+    out = {"env": env_info, "db": {}}
+
+    def _safe(label, fn):
+        try:
+            out["db"][label] = fn()
+        except Exception as exc:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            out["db"][f"{label}_error"] = f"{type(exc).__name__}: {str(exc)[:300]}"
 
     with get_db_context() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("SELECT COUNT(*) AS n FROM social_signals")
-            out["signals_total"] = cur.fetchone()["n"]
-
-            cur.execute(
-                "SELECT status, COUNT(*) AS n FROM social_signals "
-                "GROUP BY status ORDER BY n DESC"
-            )
-            out["signals_by_status"] = [dict(r) for r in cur.fetchall()]
-
-            cur.execute(
-                "SELECT id, platform, status, intent_score, "
-                "to_char(created_at, 'YYYY-MM-DD HH24:MI') AS at, "
-                "LEFT(content, 140) AS preview "
-                "FROM social_signals ORDER BY id DESC LIMIT 10"
-            )
-            out["recent_signals"] = [dict(r) for r in cur.fetchall()]
-
-            cur.execute(
-                "SELECT to_char(MAX(created_at), 'YYYY-MM-DD HH24:MI') AS last_ingest "
-                "FROM social_signals"
-            )
-            out["last_ingest_at"] = cur.fetchone()["last_ingest"]
-
-            try:
+            _safe("signals_total", lambda: (
+                cur.execute("SELECT COUNT(*) AS n FROM social_signals"),
+                cur.fetchone()["n"],
+            )[1])
+            _safe("signals_by_status", lambda: (
                 cur.execute(
-                    "SELECT COUNT(*) AS n FROM social_match_terms WHERE active = TRUE"
-                )
-                out["active_match_terms"] = cur.fetchone()["n"]
-            except Exception as exc:
-                out["active_match_terms_error"] = str(exc)[:200]
+                    "SELECT status, COUNT(*) AS n FROM social_signals "
+                    "GROUP BY status ORDER BY n DESC"
+                ),
+                [dict(r) for r in cur.fetchall()],
+            )[1])
+            _safe("recent_signals", lambda: (
+                cur.execute(
+                    "SELECT id, platform, status, intent_score, "
+                    "to_char(created_at, 'YYYY-MM-DD HH24:MI') AS at, "
+                    "LEFT(content, 140) AS preview "
+                    "FROM social_signals ORDER BY id DESC LIMIT 10"
+                ),
+                [dict(r) for r in cur.fetchall()],
+            )[1])
+            _safe("last_ingest_at", lambda: (
+                cur.execute(
+                    "SELECT to_char(MAX(created_at), 'YYYY-MM-DD HH24:MI') AS t "
+                    "FROM social_signals"
+                ),
+                cur.fetchone()["t"],
+            )[1])
+            _safe("active_listening_terms", lambda: (
+                cur.execute(
+                    "SELECT COUNT(*) AS n FROM social_listening_terms WHERE active = TRUE"
+                ),
+                cur.fetchone()["n"],
+            )[1])
+            _safe("v_social_leads_total", lambda: (
+                cur.execute("SELECT COUNT(*) AS n FROM v_social_leads"),
+                cur.fetchone()["n"],
+            )[1])
 
     # حالة الـ scheduler
     try:
