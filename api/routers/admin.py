@@ -197,7 +197,7 @@ def social_debug(
     تشخيص شامل لـ pipeline رادار الصفقات:
       • قيم env vars الحرجة (مُلخّصة دون كشف أسرار)
       • عدد الإشارات حسب status في social_signals
-      • أحدث 10 إشارات (id, platform, status, created_at, preview)
+      • أحدث 10 إشارات (id, platform, status, captured_at, preview)
       • عدد المصطلحات النشطة في scorer
       • حالة الجدولة (آخر تشغيل لـ social_listener job)
     """
@@ -252,7 +252,7 @@ def social_debug(
             _safe("recent_signals", lambda: (
                 cur.execute(
                     "SELECT id, platform, status, intent_score, "
-                    "to_char(created_at, 'YYYY-MM-DD HH24:MI') AS at, "
+                    "to_char(captured_at, 'YYYY-MM-DD HH24:MI') AS at, "
                     "LEFT(content, 140) AS preview "
                     "FROM social_signals ORDER BY id DESC LIMIT 10"
                 ),
@@ -260,7 +260,7 @@ def social_debug(
             )[1])
             _safe("last_ingest_at", lambda: (
                 cur.execute(
-                    "SELECT to_char(MAX(created_at), 'YYYY-MM-DD HH24:MI') AS t "
+                    "SELECT to_char(MAX(captured_at), 'YYYY-MM-DD HH24:MI') AS t "
                     "FROM social_signals"
                 ),
                 cur.fetchone()["t"],

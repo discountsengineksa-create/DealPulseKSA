@@ -145,6 +145,12 @@ def start_workers() -> None:
         replace_existing=True,
     )
 
+    # NOTE: APScheduler quirk — passing next_run_time=None to add_job() PAUSES
+    # the job (never auto-fires). To delay first run to "now + interval" we
+    # must OMIT next_run_time entirely (the trigger's get_next_fire_time will
+    # then return now + interval). This used to be the bug that kept
+    # social_listener / directive_generator / seo_* jobs silent for days.
+
     # Week 3 — LLM directive generator (every 3 hours by default)
     _scheduler.add_job(
         run_directive_cycle,
@@ -153,7 +159,6 @@ def start_workers() -> None:
         id="directive_generator",
         name="Generate LLM operational directives",
         replace_existing=True,
-        next_run_time=None,  # don't fire immediately on boot — wait full interval
     )
 
     # Week 5-6 — SEO discovery (مجاني: trends + match) كل 12 ساعة
@@ -164,7 +169,6 @@ def start_workers() -> None:
         id="seo_discovery",
         name="SEO trend discovery + store match",
         replace_existing=True,
-        next_run_time=None,
     )
 
     # Week 5-6 — SEO generation (يستهلك ميزانية LLM) — محكوم بـ SEO_AUTOGEN_ENABLED
@@ -176,10 +180,12 @@ def start_workers() -> None:
             id="seo_generate",
             name="SEO LLM page generation",
             replace_existing=True,
-            next_run_time=None,
         )
 
     # Week 7-8 — social listener processing (مجاني) كل 10 دقائق
+    # Run the first cycle ~30s after boot so leads start appearing quickly
+    # instead of waiting the full 10-minute interval after every redeploy.
+    from datetime import datetime, timedelta, timezone
     _scheduler.add_job(
         _social_listener_cycle,
         trigger="interval",
@@ -187,7 +193,7 @@ def start_workers() -> None:
         id="social_listener",
         name="Process social signals + prepare responses",
         replace_existing=True,
-        next_run_time=None,
+        next_run_time=datetime.now(timezone.utc) + timedelta(seconds=30),
     )
 
     _scheduler.start()
