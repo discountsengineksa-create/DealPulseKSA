@@ -314,6 +314,36 @@ def seo_google_check(x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
     return diagnose_google_setup()
 
 
+@router.get("/seo-draft/{page_id}")
+def seo_draft_full(
+    page_id: int,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """يجلب محتوى مسودّة كامل (للعرض في الداشبورد أو الـ CLI قبل النشر)."""
+    _verify_admin(x_admin_secret)
+    from psycopg2.extras import RealDictCursor
+
+    from api.db import get_db_context
+    with get_db_context() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT p.id, p.slug, p.lang, p.target_keyword, p.status,
+                       p.title_meta, p.description_meta, p.body_markdown,
+                       COALESCE(NULLIF(m.name_en, ''), m.store_id) AS store_name,
+                       to_char(p.published_at, 'YYYY-MM-DD HH24:MI') AS published_at
+                FROM seo_landing_pages p
+                LEFT JOIN master m ON m.id = p.master_id
+                WHERE p.id = %s
+                """,
+                (page_id,),
+            )
+            row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="page not found")
+    return dict(row)
+
+
 @router.get("/seo-failed-jobs")
 def seo_failed_jobs(
     limit: int = Query(default=20, ge=1, le=100),
