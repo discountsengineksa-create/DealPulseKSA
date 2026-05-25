@@ -24,9 +24,12 @@ _log = logging.getLogger("dp.seo.trends_puller")
 _pytrends_client = None
 
 
+_last_init_error: str | None = None  # تشخيص: آخر سبب فشل init
+
+
 def _get_client():
     """يُنشئ pytrends client بـ lazy init. يرجع None لو الـ import فشل."""
-    global _pytrends_client
+    global _pytrends_client, _last_init_error
     if _pytrends_client is not None:
         return _pytrends_client
     try:
@@ -38,10 +41,31 @@ def _get_client():
             retries=2,
             backoff_factor=0.5,
         )
+        _last_init_error = None
         return _pytrends_client
     except Exception as exc:
-        _log.error("pytrends import/init failed: %s", str(exc)[:300])
+        _last_init_error = f"{type(exc).__name__}: {str(exc)[:300]}"
+        _log.error("pytrends import/init failed: %s", _last_init_error)
         return None
+
+
+def get_init_status() -> dict:
+    """يرجع حالة الاستيراد لـ pytrends (للتشخيص فقط)."""
+    import sys
+    out = {
+        "pytrends_installed": "pytrends" in sys.modules,
+        "client_active": _pytrends_client is not None,
+        "last_init_error": _last_init_error,
+    }
+    # حاول import مباشر للتأكد
+    try:
+        import pytrends  # noqa: F401
+        from pytrends.request import TrendReq  # noqa: F401
+        out["import_test"] = "ok"
+        out["pytrends_version"] = getattr(pytrends, "__version__", "unknown")
+    except Exception as exc:
+        out["import_test"] = f"{type(exc).__name__}: {str(exc)[:300]}"
+    return out
 
 
 def fetch_keyword_score(keyword: str, *, geo: str = "SA",

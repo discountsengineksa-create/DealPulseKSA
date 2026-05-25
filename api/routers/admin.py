@@ -497,6 +497,22 @@ def seo_opportunities_refresh_all(
         return {"ok": False, "error": str(exc)[:500]}
 
 
+@router.get("/trends-debug")
+def trends_debug(
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """يتحقق من حالة pytrends على Railway (هل مثبتة، هل تستورد، إلخ)."""
+    _verify_admin(x_admin_secret)
+    from api.seo.trends_puller import get_init_status, fetch_keyword_score
+    out = {"init_status": get_init_status()}
+    # اختبار حيّ بكلمة إنجليزية بسيطة (تجنب أي مشكلة UTF-8)
+    try:
+        out["live_test_english"] = fetch_keyword_score("noon", geo="SA")
+    except Exception as exc:
+        out["live_test_error"] = f"{type(exc).__name__}: {str(exc)[:300]}"
+    return out
+
+
 @router.post("/seo-opportunities/{kw_id}/generate-page")
 def seo_opportunities_generate_page(
     kw_id: int,
