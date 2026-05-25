@@ -176,6 +176,105 @@ def social_run(
     return process_new_signals(batch=batch)
 
 
+@router.post("/social-poll-now")
+def social_poll_now(
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """تشغيل دورة polling يدوية فوراً (Reddit + RSS) لتشخيص لماذا لا تظهر leads."""
+    _verify_admin(x_admin_secret)
+    from api.social_listener.pollers import run_all_pollers
+    try:
+        return {"ok": True, "stats": run_all_pollers()}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)[:500]}
+
+
+@router.get("/social-debug")
+def social_debug(
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """
+    تشخيص شامل لـ pipeline رادار الصفقات:
+      • قيم env vars الحرجة (مُلخّصة دون كشف أسرار)
+      • عدد الإشارات حسب status في social_signals
+      • أحدث 10 إشارات (id, platform, status, created_at, preview)
+      • عدد المصطلحات النشطة في scorer
+      • حالة الجدولة (آخر تشغيل لـ social_listener job)
+    """
+    _verify_admin(x_admin_secret)
+    import os as _os
+    from psycopg2.extras import RealDictCursor
+    from api.db import get_db_context
+
+    rss = (_os.getenv("SOCIAL_RSS_FEEDS") or "").strip()
+    subs = (_os.getenv("REDDIT_SUBREDDITS") or "").strip()
+    rss_count = len([f for f in rss.split(",") if f.strip()]) if rss else 0
+    sub_count = len([s for s in subs.split(",") if s.strip()]) if subs else 0
+
+    env_info = {
+        "REDDIT_SUBREDDITS_count": sub_count,
+        "REDDIT_SUBREDDITS_preview": subs[:200] if subs else "(unset → uses default 7 subs)",
+        "SOCIAL_RSS_FEEDS_count": rss_count,
+        "SOCIAL_RSS_FEEDS_sample_host": (
+            rss.split(",")[0].split("/")[2] if rss_count else "(unset — RSS poller will skip)"
+        ),
+        "SOCIAL_RESPOND_MIN_INTENT": _os.getenv("SOCIAL_RESPOND_MIN_INTENT", "0.5 (default)"),
+        "SOCIAL_AUTO_APPROVE": _os.getenv("SOCIAL_AUTO_APPROVE") or "(off)",
+        "WORKER_SOCIAL_PROCESS_MIN": _os.getenv("WORKER_SOCIAL_PROCESS_MIN", "10 (default)"),
+        "DISABLE_WORKERS": _os.getenv("DISABLE_WORKERS") or "(off)",
+    }
+
+    out = {"env": env_info}
+
+    with get_db_context() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT COUNT(*) AS n FROM social_signals")
+            out["signals_total"] = cur.fetchone()["n"]
+
+            cur.execute(
+                "SELECT status, COUNT(*) AS n FROM social_signals "
+                "GROUP BY status ORDER BY n DESC"
+            )
+            out["signals_by_status"] = [dict(r) for r in cur.fetchall()]
+
+            cur.execute(
+                "SELECT id, platform, status, intent_score, "
+                "to_char(created_at, 'YYYY-MM-DD HH24:MI') AS at, "
+                "LEFT(content, 140) AS preview "
+                "FROM social_signals ORDER BY id DESC LIMIT 10"
+            )
+            out["recent_signals"] = [dict(r) for r in cur.fetchall()]
+
+            cur.execute(
+                "SELECT to_char(MAX(created_at), 'YYYY-MM-DD HH24:MI') AS last_ingest "
+                "FROM social_signals"
+            )
+            out["last_ingest_at"] = cur.fetchone()["last_ingest"]
+
+            try:
+                cur.execute(
+                    "SELECT COUNT(*) AS n FROM social_match_terms WHERE active = TRUE"
+                )
+                out["active_match_terms"] = cur.fetchone()["n"]
+            except Exception as exc:
+                out["active_match_terms_error"] = str(exc)[:200]
+
+    # حالة الـ scheduler
+    try:
+        from api.workers.scheduler import _scheduler, _started
+        out["scheduler"] = {
+            "started": _started,
+            "social_job_next_run": (
+                str(_scheduler.get_job("social_listener").next_run_time)
+                if _scheduler and _scheduler.get_job("social_listener") else None
+            ),
+        }
+    except Exception as exc:
+        out["scheduler_error"] = str(exc)[:200]
+
+    return out
+
+
 @router.get("/social-pending")
 def social_pending(
     limit: int = Query(default=50, ge=1, le=200),
