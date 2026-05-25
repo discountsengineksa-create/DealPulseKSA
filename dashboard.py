@@ -1235,7 +1235,7 @@ _OTHER_PAGES = [
 "ذكاء التنبؤ", "نظام الولاء", "التحكم الآلي", "التخصيص الفائق",
 "رادار المناسبات", "مركز التوسع", "درع الحماية",
 "مركز الصيانة", "مدير القناة", "المحفز الفوري",
-"محرّك SEO", "📤 الصفحات المنشورة", "الرصد الاجتماعي", "🎯 رادار الصفقات الفوري", "التدقيق والتجارب",
+"محرّك SEO", "📤 الصفحات المنشورة", "🎯 محرك الفرص", "الرصد الاجتماعي", "🎯 رادار الصفقات الفوري", "التدقيق والتجارب",
 ]
 
 # 1. تهيئة حالة الصفحة إذا لم تكن موجودة
@@ -6569,6 +6569,271 @@ elif page == "📤 الصفحات المنشورة":
                         "</button>"
                     )
                     components.html(btn_html, height=50)
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 🎯 محرك الفرص — Google Trends + keyword CRUD + one-click page generation
+#
+# المستخدم يضيف keywords (مثلاً "كود خصم نون")، الـ scheduler يجلب درجة Google
+# Trends لها كل ساعة في السعودية، الصفحة تعرضها مرتّبة، المستخدم يقرّر يولّد
+# صفحة هبوط بضغطة واحدة. بديل Google Alerts الذي ثبت أنه غير منتج.
+# ═════════════════════════════════════════════════════════════════════════════
+elif page == "🎯 محرك الفرص":
+    page_title("🎯", "محرك الفرص",
+               "Google Trends لكلماتك في السعودية — أضف، تابع، ولّد صفحة بضغطة")
+
+    # شريط أعلى الصفحة: إضافة + sort + refresh-all
+    top_l, top_m, top_r = st.columns([3, 1.4, 1.4])
+    with top_l:
+        with st.expander("➕ إضافة keyword جديد", expanded=False):
+            with st.form("opp_add_form", clear_on_submit=True):
+                fa1, fa2 = st.columns([3, 2])
+                with fa1:
+                    new_kw = st.text_input(
+                        "الكلمة",
+                        placeholder="مثلاً: كود خصم نون",
+                        max_chars=200,
+                    )
+                with fa2:
+                    new_store = st.text_input(
+                        "store_id (اختياري)",
+                        placeholder="مثلاً: noon",
+                        help="لربط الكلمة بمتجر محدد في master. اتركه فارغاً للمطابقة التلقائية.",
+                    )
+                new_notes = st.text_input("ملاحظة (اختياري)", placeholder="مثلاً: ينافس عليه كود خصم")
+                if st.form_submit_button("➕ أضف للمراقبة", type="primary"):
+                    if not new_kw.strip():
+                        st.error("الكلمة مطلوبة")
+                    else:
+                        body = {
+                            "keyword": new_kw.strip(),
+                            "store_id": (new_store or "").strip() or None,
+                            "notes":    (new_notes or "").strip() or None,
+                            "active":   True,
+                        }
+                        res, err = _admin_post("/seo-opportunities", json_body=body)
+                        if err:
+                            st.error(f"فشل: {err}")
+                        else:
+                            st.success(f"تمت الإضافة ✅ (سيتم جلب درجة Trends خلال دقائق)")
+                            st.rerun()
+
+    with top_m:
+        sort_opt = st.selectbox(
+            "الترتيب",
+            ["trend_score", "rising_pct", "created_at", "keyword"],
+            format_func=lambda s: {
+                "trend_score": "🔥 الأعلى شعبية",
+                "rising_pct":  "↗️ الأسرع صعوداً",
+                "created_at":  "🆕 الأحدث إضافة",
+                "keyword":     "🔤 أبجدي",
+            }[s],
+            key="opp_sort",
+        )
+    with top_r:
+        only_active = st.toggle("النشطة فقط", value=False, key="opp_active_only")
+        if st.button("🔄 تحديث Trends لكل الكلمات", use_container_width=True,
+                     key="opp_refresh_all",
+                     help="يستغرق ~5 ثوانٍ × عدد الكلمات (لتفادي rate-limit)"):
+            with st.spinner("جلب Google Trends لكل الكلمات النشطة..."):
+                res, err = _admin_post("/seo-opportunities/refresh-all")
+            if err:
+                st.error(err)
+            else:
+                stats = res.get("stats", {}) if res.get("ok") else {}
+                st.success(
+                    f"✅ تم — فُحص {stats.get('checked', 0)}، "
+                    f"حُدّث {stats.get('updated', 0)}، فشل {stats.get('failed', 0)}"
+                )
+                st.rerun()
+
+    # جلب القائمة
+    data, err = _admin_get(
+        "/seo-opportunities",
+        params={"sort": sort_opt, "only_active": str(only_active).lower(), "limit": 500},
+    )
+    if err:
+        st.error(f"تعذّر الجلب: {err}")
+    elif not data or not data.get("keywords"):
+        st.info(
+            "📭 لا توجد كلمات بعد. اضغط «➕ إضافة keyword» وابدأ بكلمات مثل:\n\n"
+            "- كود خصم نون\n- كوبون نون 2026\n- كود خصم شي إن\n- كود خصم اكسايت"
+        )
+    else:
+        kws = data["keywords"]
+        # ─── KPIs مختصرة ───
+        total       = len(kws)
+        hot         = sum(1 for k in kws if (k.get("trend_score") or 0) >= 50)
+        rising_fast = sum(1 for k in kws if (k.get("rising_pct") or 0) >= 30)
+        with_page   = sum(1 for k in kws if k.get("generated_page_id"))
+        k1, k2, k3, k4 = st.columns(4)
+        with k1: kpi_card("📊", "إجمالي المُتابَع", f"{total}", "info")
+        with k2: kpi_card("🔥", "شعبية ≥ 50", f"{hot}", "danger" if hot else "neutral")
+        with k3: kpi_card("↗️", "صاعدة سريعاً", f"{rising_fast}", "emerald" if rising_fast else "neutral")
+        with k4: kpi_card("✅", "مولَّدة صفحة", f"{with_page}/{total}", "info")
+
+        st.divider()
+
+        # ─── جدول الكلمات ───
+        for kw in kws:
+            score = int(kw.get("trend_score") or 0)
+            rising = float(kw.get("rising_pct") or 0)
+            inactive = not kw.get("active", True)
+            has_page = bool(kw.get("generated_page_id"))
+
+            # لون الإطار حسب الشعبية
+            border_color = (
+                "#9CA3AF" if inactive
+                else "#DC2626" if score >= 70
+                else "#F59E0B" if score >= 40
+                else "#6B7280"
+            )
+
+            with st.container(border=True):
+                # ── السطر العلوي: الكلمة + المتجر + الحالة ──
+                h1, h2, h3, h4 = st.columns([3, 1.3, 1.3, 1.4])
+                with h1:
+                    badge_active = "🔇 موقوف" if inactive else ""
+                    st.markdown(
+                        f"### {kw['keyword']} {badge_active}",
+                        help=kw.get("notes") or None,
+                    )
+                    if kw.get("notes"):
+                        st.caption(f"📝 {kw['notes']}")
+                with h2:
+                    score_color = (
+                        "#DC2626" if score >= 70
+                        else "#F59E0B" if score >= 40
+                        else "#6B7280"
+                    )
+                    st.markdown(
+                        f"<div style='text-align:center;padding:6px;background:{score_color};"
+                        f"color:white;border-radius:8px;'>"
+                        f"<div style='font-size:11px;opacity:0.9;'>شعبية الآن</div>"
+                        f"<div style='font-size:22px;font-weight:bold;'>{score}<span style='font-size:12px;'>/100</span></div>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                with h3:
+                    arrow = "↗️" if rising > 5 else "↘️" if rising < -5 else "→"
+                    rcolor = (
+                        "#16A34A" if rising > 5
+                        else "#DC2626" if rising < -5
+                        else "#6B7280"
+                    )
+                    st.markdown(
+                        f"<div style='text-align:center;padding:6px;border:2px solid {rcolor};"
+                        f"border-radius:8px;'>"
+                        f"<div style='font-size:11px;color:#666;'>الاتجاه</div>"
+                        f"<div style='font-size:18px;font-weight:bold;color:{rcolor};'>"
+                        f"{arrow} {rising:+.0f}%</div>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                with h4:
+                    if kw.get("store_id"):
+                        st.caption(f"🏪 `{kw['store_id']}`")
+                    last_at = kw.get("last_checked_at") or "—"
+                    st.caption(f"🕒 آخر فحص: {last_at}")
+                    if kw.get("last_error"):
+                        st.caption(f"⚠️ {kw['last_error'][:60]}")
+
+                # ── سطر الإجراءات ──
+                a1, a2, a3, a4, a5 = st.columns([2, 1.4, 1.4, 1.4, 1.4])
+                with a1:
+                    if has_page:
+                        st.success(f"✅ مولَّدة صفحة #{kw['generated_page_id']}")
+                    elif inactive:
+                        st.caption("الكلمة موقوفة")
+                    else:
+                        if st.button("🚀 ولّد صفحة الآن", key=f"gen_{kw['id']}",
+                                     type="primary", use_container_width=True):
+                            with st.spinner("جاري التوليد (قد يستغرق 30 ثانية للـ LLM)..."):
+                                res, err = _admin_post(
+                                    f"/seo-opportunities/{kw['id']}/generate-page"
+                                )
+                            if err:
+                                st.error(err)
+                            elif res and res.get("ok"):
+                                st.toast(f"✅ تم — slug: {res.get('slug', '?')}", icon="🚀")
+                                st.rerun()
+                            else:
+                                st.error(res.get("error", "فشل غير معروف") if res else "فشل")
+
+                with a2:
+                    if st.button("🔄 جلب Trend", key=f"rf_{kw['id']}",
+                                 use_container_width=True,
+                                 help="جلب فوري لدرجة Google Trends لهذه الكلمة"):
+                        with st.spinner("جلب من Google..."):
+                            res, err = _admin_post(
+                                f"/seo-opportunities/{kw['id']}/refresh"
+                            )
+                        if err:
+                            st.error(err)
+                        else:
+                            r = res.get("result", {})
+                            if r.get("ok"):
+                                st.toast(f"✅ Trend: {r.get('trend_score')}/100", icon="📊")
+                            else:
+                                st.toast(f"⚠️ {r.get('error', 'فشل')}", icon="⚠️")
+                            st.rerun()
+
+                with a3:
+                    toggle_label = "▶️ تفعيل" if inactive else "⏸️ إيقاف"
+                    if st.button(toggle_label, key=f"tg_{kw['id']}",
+                                 use_container_width=True):
+                        res, err = _admin_put(
+                            f"/seo-opportunities/{kw['id']}",
+                            json_body={"active": inactive},  # عكس الحالة الحالية
+                        )
+                        if err:
+                            st.error(err)
+                        else:
+                            st.rerun()
+
+                with a4:
+                    with st.popover("✏️ تعديل", use_container_width=True):
+                        with st.form(f"edit_form_{kw['id']}"):
+                            e_kw = st.text_input("الكلمة", value=kw["keyword"],
+                                                  max_chars=200)
+                            e_store = st.text_input("store_id",
+                                                     value=kw.get("store_id") or "")
+                            e_notes = st.text_area("ملاحظة",
+                                                    value=kw.get("notes") or "",
+                                                    max_chars=500)
+                            if st.form_submit_button("💾 حفظ"):
+                                body = {
+                                    "keyword":  e_kw.strip(),
+                                    "store_id": e_store.strip() or None,
+                                    "notes":    e_notes.strip() or None,
+                                }
+                                res, err = _admin_put(
+                                    f"/seo-opportunities/{kw['id']}",
+                                    json_body=body,
+                                )
+                                if err:
+                                    st.error(err)
+                                else:
+                                    st.toast("✅ حُفظ", icon="✅")
+                                    st.rerun()
+
+                with a5:
+                    confirm_key = f"del_confirm_{kw['id']}"
+                    if st.session_state.get(confirm_key):
+                        if st.button("⚠️ أكّد الحذف", key=f"del_yes_{kw['id']}",
+                                     type="primary", use_container_width=True):
+                            res, err = _admin_delete(f"/seo-opportunities/{kw['id']}")
+                            if err:
+                                st.error(err)
+                            else:
+                                st.session_state.pop(confirm_key, None)
+                                st.toast("🗑️ تم الحذف", icon="🗑️")
+                                st.rerun()
+                    else:
+                        if st.button("🗑️ حذف", key=f"del_{kw['id']}",
+                                     use_container_width=True):
+                            st.session_state[confirm_key] = True
+                            st.rerun()
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # الرصد الاجتماعي — Social Listener + Auto-Responder (Week 7-8)
