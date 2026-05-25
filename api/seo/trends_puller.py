@@ -19,6 +19,30 @@ from typing import Any
 
 _log = logging.getLogger("dp.seo.trends_puller")
 
+
+# ─── urllib3 compat shim ──────────────────────────────────────────────────────
+# pytrends 4.9.2 يستخدم urllib3.Retry(method_whitelist=...) — وهذا اسم قديم
+# تم حذفه في urllib3 ≥ 2.0 (الاسم الجديد: allowed_methods). Railway يثبّت
+# urllib3 ≥ 2.0 افتراضياً، فيحدث TypeError عند أول استدعاء.
+# الحل: monkey-patch Retry.__init__ ليقبل الاسم القديم كـ alias.
+def _install_urllib3_compat_shim() -> None:
+    try:
+        import urllib3.util.retry as _retry_mod
+        _orig_init = _retry_mod.Retry.__init__
+        if getattr(_orig_init, "_dp_patched", False):
+            return  # مُطبَّق مسبقاً
+        def _patched_init(self, *args, **kwargs):
+            if "method_whitelist" in kwargs and "allowed_methods" not in kwargs:
+                kwargs["allowed_methods"] = kwargs.pop("method_whitelist")
+            return _orig_init(self, *args, **kwargs)
+        _patched_init._dp_patched = True  # type: ignore[attr-defined]
+        _retry_mod.Retry.__init__ = _patched_init
+    except Exception as exc:
+        _log.warning("urllib3 compat shim failed: %s", exc)
+
+
+_install_urllib3_compat_shim()
+
 # pytrends يبني client داخلياً عند الاستدعاء — نُنشئ instance واحد يُعاد استخدامه
 # مع cookies session لتقليل rate-limit
 _pytrends_client = None
