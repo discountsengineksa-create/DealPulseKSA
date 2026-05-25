@@ -6610,7 +6610,7 @@ elif page == "🎯 محرك الفرص":
                             "notes":    (new_notes or "").strip() or None,
                             "active":   True,
                         }
-                        res, err = _admin_post("/seo-opportunities", json_body=body)
+                        res, err = _admin_post("/admin/seo-opportunities", json_body=body)
                         if err:
                             st.error(f"فشل: {err}")
                         else:
@@ -6635,7 +6635,7 @@ elif page == "🎯 محرك الفرص":
                      key="opp_refresh_all",
                      help="يستغرق ~5 ثوانٍ × عدد الكلمات (لتفادي rate-limit)"):
             with st.spinner("جلب Google Trends لكل الكلمات النشطة..."):
-                res, err = _admin_post("/seo-opportunities/refresh-all")
+                res, err = _admin_post("/admin/seo-opportunities/refresh-all")
             if err:
                 st.error(err)
             else:
@@ -6648,7 +6648,7 @@ elif page == "🎯 محرك الفرص":
 
     # جلب القائمة
     data, err = _admin_get(
-        "/seo-opportunities",
+        "/admin/seo-opportunities",
         params={"sort": sort_opt, "only_active": str(only_active).lower(), "limit": 500},
     )
     if err:
@@ -6749,7 +6749,7 @@ elif page == "🎯 محرك الفرص":
                                      type="primary", use_container_width=True):
                             with st.spinner("جاري التوليد (قد يستغرق 30 ثانية للـ LLM)..."):
                                 res, err = _admin_post(
-                                    f"/seo-opportunities/{kw['id']}/generate-page"
+                                    f"/admin/seo-opportunities/{kw['id']}/generate-page"
                                 )
                             if err:
                                 st.error(err)
@@ -6765,7 +6765,7 @@ elif page == "🎯 محرك الفرص":
                                  help="جلب فوري لدرجة Google Trends لهذه الكلمة"):
                         with st.spinner("جلب من Google..."):
                             res, err = _admin_post(
-                                f"/seo-opportunities/{kw['id']}/refresh"
+                                f"/admin/seo-opportunities/{kw['id']}/refresh"
                             )
                         if err:
                             st.error(err)
@@ -6782,7 +6782,7 @@ elif page == "🎯 محرك الفرص":
                     if st.button(toggle_label, key=f"tg_{kw['id']}",
                                  use_container_width=True):
                         res, err = _admin_put(
-                            f"/seo-opportunities/{kw['id']}",
+                            f"/admin/seo-opportunities/{kw['id']}",
                             json_body={"active": inactive},  # عكس الحالة الحالية
                         )
                         if err:
@@ -6807,7 +6807,7 @@ elif page == "🎯 محرك الفرص":
                                     "notes":    e_notes.strip() or None,
                                 }
                                 res, err = _admin_put(
-                                    f"/seo-opportunities/{kw['id']}",
+                                    f"/admin/seo-opportunities/{kw['id']}",
                                     json_body=body,
                                 )
                                 if err:
@@ -6821,7 +6821,7 @@ elif page == "🎯 محرك الفرص":
                     if st.session_state.get(confirm_key):
                         if st.button("⚠️ أكّد الحذف", key=f"del_yes_{kw['id']}",
                                      type="primary", use_container_width=True):
-                            res, err = _admin_delete(f"/seo-opportunities/{kw['id']}")
+                            res, err = _admin_delete(f"/admin/seo-opportunities/{kw['id']}")
                             if err:
                                 st.error(err)
                             else:
