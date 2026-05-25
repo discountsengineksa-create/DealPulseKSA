@@ -1235,7 +1235,7 @@ _OTHER_PAGES = [
 "ذكاء التنبؤ", "نظام الولاء", "التحكم الآلي", "التخصيص الفائق",
 "رادار المناسبات", "مركز التوسع", "درع الحماية",
 "مركز الصيانة", "مدير القناة", "المحفز الفوري",
-"محرّك SEO", "الرصد الاجتماعي", "🎯 رادار الصفقات الفوري", "التدقيق والتجارب",
+"محرّك SEO", "📤 الصفحات المنشورة", "الرصد الاجتماعي", "🎯 رادار الصفقات الفوري", "التدقيق والتجارب",
 ]
 
 # 1. تهيئة حالة الصفحة إذا لم تكن موجودة
@@ -6475,6 +6475,102 @@ elif page == "محرّك SEO":
                     st.code((j.get("error_message") or "")[:500], language=None)
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 📤 الصفحات المنشورة — متابعة حالة صفحات SEO بعد النشر
+# ─────────────────────────────────────────────────────────────────────────────
+elif page == "📤 الصفحات المنشورة":
+    st.header("📤 الصفحات المنشورة")
+    st.caption("متابعة صفحات SEO بعد النشر — رابط الصفحة الحيّة، حالة Google، فهرسة سريعة.")
+
+    import os
+    site_url = os.getenv("SITE_URL", "https://dealpulseksa.com").rstrip("/")
+
+    top1, top2, top3 = st.columns([1, 1, 2])
+    with top1:
+        if st.button("🔄 تحديث", use_container_width=True):
+            st.rerun()
+    with top2:
+        lang_pub_filter = st.selectbox("اللغة", ["الكل", "عربي", "إنجليزي"], key="pub_lang")
+    with top3:
+        st.caption(f"الموقع: `{site_url}`")
+
+    lang_param = {"عربي": "ar", "إنجليزي": "en"}.get(lang_pub_filter)
+    params = {"limit": 200}
+    if lang_param:
+        params["lang"] = lang_param
+
+    data, err = _admin_get("/seo/pages", params=params)
+    if err:
+        st.error(f"تعذّر جلب الصفحات: {err}")
+    elif not data or not data.get("pages"):
+        st.info("لا توجد صفحات منشورة بعد. اذهب إلى «محرّك SEO» وانشر مسودّة.")
+    else:
+        pages = data["pages"]
+        st.success(f"📊 إجمالي المنشور: **{data.get('total', len(pages))}** صفحة")
+
+        st.divider()
+        for p in pages:
+            slug = p.get("slug")
+            lang_badge = "🇸🇦 عربي" if p.get("lang") == "ar" else "🇬🇧 EN"
+            live_url = f"{site_url}/c/{slug}"
+
+            with st.container(border=True):
+                head_l, head_r = st.columns([5, 1])
+                with head_l:
+                    st.markdown(
+                        f"**{p.get('title_meta') or p.get('target_keyword')}** "
+                        f"<span style='background:#0EA5E9;color:white;padding:2px 8px;border-radius:4px;font-size:0.75em;'>{lang_badge}</span>",
+                        unsafe_allow_html=True,
+                    )
+                    st.caption(
+                        f"🔑 {p.get('target_keyword')} · 🔗 `/c/{slug}` · "
+                        f"🗓️ {(p.get('published_at') or '—')[:10]}"
+                    )
+                    if p.get("description_meta"):
+                        st.caption(f"📝 {p['description_meta']}")
+                with head_r:
+                    st.caption(f"slug:")
+                    st.code(slug, language=None)
+
+                # شريط الإجراءات
+                a1, a2 = st.columns(2)
+                with a1:
+                    st.link_button("🌐 افتح الصفحة", live_url, use_container_width=True)
+                with a2:
+                    import html as _html
+                    url_attr = _html.escape(live_url, quote=True)
+                    btn_html = (
+                        '<button '
+                        f'data-url="{url_attr}" '
+                        "onclick=\"var u=this.dataset.url;"
+                        "navigator.clipboard.writeText(u).then(function(){"
+                        "this.innerHTML='&#10003; تم النسخ';"
+                        "this.style.background='#10B981';"
+                        "this.style.color='white';"
+                        "this.style.borderColor='#10B981';"
+                        "var b=this;"
+                        "setTimeout(function(){"
+                        "b.innerHTML='&#128203; نسخ الرابط';"
+                        "b.style.background='rgb(240,242,246)';"
+                        "b.style.color='';"
+                        "b.style.borderColor='rgba(49,51,63,0.2)';"
+                        "},1800);"
+                        "}.bind(this)).catch(function(){"
+                        "this.innerHTML='&#10007; فشل النسخ';"
+                        "this.style.background='#EF4444';"
+                        "this.style.color='white';"
+                        "}.bind(this));\" "
+                        "style=\"width:100%;padding:6px 12px;"
+                        "background:rgb(240,242,246);"
+                        "border:1px solid rgba(49,51,63,0.2);"
+                        "border-radius:8px;cursor:pointer;"
+                        "font-family:'Source Sans Pro',sans-serif;"
+                        "font-size:14px;height:38px;transition:all 0.2s;\">"
+                        "&#128203; نسخ الرابط"
+                        "</button>"
+                    )
+                    components.html(btn_html, height=50)
+
+# ─────────────────────────────────────────────────────────────────────────────
 # الرصد الاجتماعي — Social Listener + Auto-Responder (Week 7-8)
 # ─────────────────────────────────────────────────────────────────────────────
 elif page == "الرصد الاجتماعي":
@@ -6569,7 +6665,7 @@ elif page == "الرصد الاجتماعي":
 # ═════════════════════════════════════════════════════════════════════════════
 elif page == "🎯 رادار الصفقات الفوري":
     page_title("🎯", "رادار الصفقات الفوري",
-               "اصطد العملاء قبل المنافسين — Reddit + Google Alerts (X العام مشمول)")
+               "اصطد العملاء قبل المنافسين — منشورات Reddit التي تطلب أكواد خصم")
 
     # شريط تحكّم
     _r1, _r2, _r3 = st.columns([1.5, 1.5, 3])
@@ -6590,9 +6686,8 @@ elif page == "🎯 رادار الصفقات الفوري":
             st.rerun()
     with _r3:
         st.caption(
-            "polling تلقائي كل 10 دقائق · لإضافة Google Alerts: "
-            "اذهب لـ google.com/alerts → أنشئ تنبيه → Delivery=RSS → "
-            "ضع الرابط في Railway env: SOCIAL_RSS_FEEDS"
+            "polling تلقائي كل 10 دقائق من Reddit. "
+            "للبحث الاستباقي عن طلبات قوقل استخدم صفحة «🎯 محرك الفرص»."
         )
 
     # جلب البيانات
@@ -6603,11 +6698,10 @@ elif page == "🎯 رادار الصفقات الفوري":
     elif not leads_data or not leads_data.get("leads"):
         if status_filter == "pending":
             st.success(
-                "✅ صفر leads معلّقة. الـ polling يعمل كل 10 دقائق — لو ما ظهر شيء "
-                "بعد 30 دقيقة، تأكّد من:\n\n"
-                "1. `REDDIT_SUBREDDITS` في Railway env (افتراضي: saudiarabia,riyadh,jeddah,uae,dubai)\n"
-                "2. `SOCIAL_RSS_FEEDS` فيه على الأقل feed واحد من Google Alerts\n"
-                "3. `/health/workers` يُظهر `scheduler_started=true`"
+                "✅ صفر leads معلّقة. الـ polling يعمل كل 10 دقائق على Reddit. "
+                "هذه الصفحة لمنشورات اجتماعية تطلب أكواد خصم — أغلبها يأتي "
+                "بشكل عشوائي وقد تمضي أيام بدون ظهور أي طلب. "
+                "للبحث الاستباقي بكلمات تحددها أنت، استخدم صفحة «🎯 محرك الفرص»."
             )
         else:
             st.info("لا يوجد leads بهذه الحالة.")

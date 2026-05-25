@@ -121,107 +121,18 @@ def poll_reddit(*, keywords: Iterable[str] | None = None, limit_per_sub: int = 2
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  RSS poller (Google Alerts feeds)
-# ═══════════════════════════════════════════════════════════════════════════
-RSS_FEEDS_RAW = os.getenv("SOCIAL_RSS_FEEDS", "").strip()
-
-
-def poll_rss(*, feeds: Iterable[str] | None = None) -> dict:
-    """
-    يجلب RSS feeds (مفيد بشكل خاص لـ Google Alerts).
-
-    إعداد Google Alerts:
-      1. اذهب إلى google.com/alerts
-      2. أنشئ alert لـ "نبض الصفقات" / "DealPulse" / "كود خصم نون"...
-      3. Settings → Delivery to: RSS feed
-      4. انسخ رابط الـ feed
-      5. في Railway env: SOCIAL_RSS_FEEDS=url1,url2,url3
-
-    Returns: {scanned, ingested, duplicate, errors}
-    """
-    feed_list = list(feeds) if feeds else \
-                [f.strip() for f in RSS_FEEDS_RAW.split(",") if f.strip()]
-    if not feed_list:
-        return {"skipped": "no_feeds_configured"}
-
-    stats = {"scanned": 0, "ingested": 0, "duplicate": 0, "errors": 0}
-
-    # نستخدم XML parsing بسيط — لا نضيف dependency feedparser
-    import re
-    from xml.etree import ElementTree as ET
-
-    for feed_url in feed_list:
-        try:
-            r = requests.get(feed_url, timeout=15,
-                             headers={"User-Agent": REDDIT_USER_AGENT})
-            if r.status_code != 200:
-                _log.warning("RSS %s returned %s", feed_url[:60], r.status_code)
-                stats["errors"] += 1
-                continue
-
-            # نُنظّف XML من حروف غير صالحة قد تكسر الـ parser
-            text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F]', '', r.text)
-            root = ET.fromstring(text)
-
-            # Google Alerts feeds = Atom format
-            # المسارات الشائعة: ./{ns}entry, ./channel/item
-            ns_atom = "{http://www.w3.org/2005/Atom}"
-            items = root.findall(f"{ns_atom}entry") or root.findall(".//item")
-
-            for item in items:
-                stats["scanned"] += 1
-                title_el = item.find(f"{ns_atom}title") if root.tag.startswith(ns_atom) \
-                           else item.find("title")
-                link_el = item.find(f"{ns_atom}link") if root.tag.startswith(ns_atom) \
-                          else item.find("link")
-                summary_el = item.find(f"{ns_atom}content") or item.find(f"{ns_atom}summary") \
-                             if root.tag.startswith(ns_atom) else item.find("description")
-                id_el = item.find(f"{ns_atom}id") if root.tag.startswith(ns_atom) \
-                        else item.find("guid")
-
-                title = "".join((title_el.itertext() if title_el is not None else [""])).strip()
-                summary = "".join((summary_el.itertext() if summary_el is not None else [""])).strip()
-                # Atom link قد يكون <link href="..."/>
-                href = ""
-                if link_el is not None:
-                    href = link_el.attrib.get("href") or (link_el.text or "")
-                ext_id = (id_el.text if id_el is not None and id_el.text
-                          else hashlib.md5((title + href).encode()).hexdigest()[:16])
-
-                if not title:
-                    continue
-
-                # نزيل HTML من الملخّص
-                summary_clean = re.sub(r"<[^>]+>", "", summary)[:1500]
-
-                res = ingest_signal(
-                    platform="rss:google-alerts",
-                    external_id=ext_id[:120],
-                    content=f"{title}\n\n{summary_clean}"[:3000],
-                    source_url=href[:500] if href else None,
-                )
-                if res.get("duplicate"):
-                    stats["duplicate"] += 1
-                elif res.get("signal_id"):
-                    stats["ingested"] += 1
-        except Exception as exc:
-            _log.error("poll_rss %s failed: %s", feed_url[:60], str(exc)[:200])
-            stats["errors"] += 1
-
-    _log.info("RSS poll: %s", stats)
-    return stats
-
-
-# ═══════════════════════════════════════════════════════════════════════════
 #  Orchestrator
 # ═══════════════════════════════════════════════════════════════════════════
+# NOTE: RSS / Google Alerts poller تمت إزالته (2026-05) — أثبت أن Google Alerts
+# يعتمد على فهرسة Google بطيئة جداً للعربية. الاستراتيجية الجديدة تعتمد على
+# Google Trends مع keyword CRUD في "محرك الفرص" (api/seo/trends_puller.py).
+
 def run_all_pollers() -> dict:
     """
-    دورة كاملة: Reddit + RSS. يستدعيها الـ scheduler كل 10 دقائق.
-    بعد الجمع، process_new_signals() (في responder.py) يحلّل الإشارات
-    الجديدة ويولّد drafts للرد اليدوي من الداشبورد.
+    دورة كاملة لجمع social signals: Reddit فقط الآن.
+    يستدعيها الـ scheduler كل 10 دقائق. بعد الجمع، process_new_signals()
+    (في responder.py) يحلّل الإشارات الجديدة ويولّد drafts للرد اليدوي.
     """
     return {
         "reddit": poll_reddit(),
-        "rss":    poll_rss(),
     }
