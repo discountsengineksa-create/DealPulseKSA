@@ -127,22 +127,41 @@ def fetch_keyword_score(keyword: str, *, geo: str = "SA",
         "related_top": [], "related_rising": [],
         "error": None,
     }
+
+    # ─── المصدر #1: Google Suggest (مستقل، مجاني، مستقر — يعمل دائماً) ─────────
+    # نشغّله أولاً ودائماً — مستقل عن pytrends، فحتى لو Google يحجب Trends
+    # عن Railway IPs، الـ user يحصل على اقتراحات حقيقية بنقرة واحدة.
+    if with_related:
+        try:
+            suggestions = fetch_google_suggestions(keyword, hl="ar", gl="sa")
+            if suggestions:
+                out["related_top"] = suggestions
+                # علامة جزئية: حتى لو pytrends فشل، الاقتراحات نجحت
+                out["ok"] = True
+        except Exception as sg_exc:
+            _log.warning("suggest primary failed for '%s': %s",
+                         keyword[:50], str(sg_exc)[:200])
+
+    # ─── المصدر #2: pytrends (الـ trend score — قد يفشل بسبب rate-limit) ──────
     client = _get_client()
     if client is None:
-        out["error"] = "pytrends_unavailable"
+        if not out["ok"]:
+            out["error"] = "pytrends_unavailable_no_suggestions"
         return out
 
     try:
         client.build_payload(
             kw_list=[keyword],
-            cat=0,                # كل الفئات
+            cat=0,
             timeframe=timeframe,
             geo=geo,
-            gprop="",             # web search (الافتراضي)
+            gprop="",
         )
         df = client.interest_over_time()
         if df is None or df.empty:
-            out["error"] = "no_data"
+            # ليس فشلاً — لو عندنا اقتراحات نُرجع ok=True مع تنبيه فقط
+            if not out["ok"]:
+                out["error"] = "no_trends_data"
             return out
 
         series = df[keyword]
@@ -160,30 +179,34 @@ def fetch_keyword_score(keyword: str, *, geo: str = "SA",
             "data_points": len(series),
         })
 
-        # related queries من pytrends (قد تكون فارغة بسبب تغيير Google API)
+        # محاولة إضافة related queries من pytrends لاحقاً (قد تُثري قائمة Suggest)
         if with_related:
             try:
                 related = client.related_queries() or {}
                 kw_data = related.get(keyword) or {}
-                top_df = kw_data.get("top")
                 rising_df = kw_data.get("rising")
-                if top_df is not None and not top_df.empty:
-                    out["related_top"] = top_df.head(10).to_dict(orient="records")
                 if rising_df is not None and not rising_df.empty:
+                    # rising من pytrends أهم (مع نسب %) — Suggest لا يعطي rising
                     out["related_rising"] = rising_df.head(10).to_dict(orient="records")
+                # لو pytrends أعطى top أغنى من Suggest، استبدلها
+                top_df = kw_data.get("top")
+                if top_df is not None and not top_df.empty:
+                    pt_top = top_df.head(10).to_dict(orient="records")
+                    if len(pt_top) > len(out["related_top"]):
+                        out["related_top"] = pt_top
             except Exception as rel_exc:
-                _log.warning("related_queries failed for '%s': %s",
+                _log.warning("pytrends related_queries failed for '%s': %s",
                              keyword[:50], str(rel_exc)[:200])
-
-            # Fallback: لو pytrends ما رجّع top، استخدم Google Suggest
-            # (مصدر مختلف لكنه أكثر استقراراً ويرجع ما يكتبه الناس فعلياً)
-            if not out["related_top"]:
-                suggestions = fetch_google_suggestions(keyword, hl="ar", gl="sa")
-                if suggestions:
-                    out["related_top"] = suggestions
         return out
     except Exception as exc:
-        out["error"] = f"{type(exc).__name__}: {str(exc)[:200]}"
+        # pytrends فشل (rate-limit، شبكة، إلخ) — لكن لو عندنا اقتراحات Suggest
+        # نُعتبر النتيجة جزئية ناجحة بدل فشل كامل.
+        err_msg = f"{type(exc).__name__}: {str(exc)[:200]}"
+        if out["related_top"]:
+            out["error"] = f"trends_unavailable: {err_msg}"
+            # ok يبقى True لأن عندنا اقتراحات
+        else:
+            out["error"] = err_msg
         return out
 
 
