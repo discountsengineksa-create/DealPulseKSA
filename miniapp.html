@@ -411,7 +411,7 @@ function openLinkCurrent() {
     if (tg && tg.openLink) {
         tg.openLink(s.link);
     } else {
-        window.open(s.link, '_blank');if (tg && tg.openLink) tg.openLink(s.original_link);
+        if (tg && tg.openLink) tg.openLink(s.original_link);
         else window.open(s.original_link, '_blank');
     }
 }
