@@ -20,8 +20,9 @@ import logging
 import time
 from datetime import datetime, timezone
 
+import redis as _redis_pkg  # for exception types
 from api.db import get_db_context  # see note below — falls back to direct conn
-from api.utils.redis_client import get_redis
+from api.utils.redis_client import get_redis, get_redis_blocking
 
 _log = logging.getLogger("dp.aggregator")
 
@@ -31,6 +32,10 @@ CONSUMER = "consumer-1"
 BLOCK_MS = 5000
 BATCH_SIZE = 100
 QUALITY_FLOOR = 50
+
+# Retry backoff state for connection errors (وليس timeout الذي هو سلوك طبيعي).
+_BACKOFF_INITIAL_SEC = 1.0
+_BACKOFF_MAX_SEC = 30.0
 
 
 def _ensure_group() -> None:
@@ -108,9 +113,26 @@ def run_velocity_consumer(stop_event=None) -> None:
     """
     Long-running loop. Call from a background thread.
     `stop_event` is an optional threading.Event for graceful shutdown.
+
+    Uses get_redis_blocking() — a dedicated client with socket_timeout=None
+    so XREADGROUP can BLOCK 5s without being killed by a 2s socket timeout
+    (which is what was producing spurious "XREADGROUP failed" warnings).
     """
-    _ensure_group()
-    r = get_redis()
+    # محاولة إنشاء المجموعة مع backoff — Railway قد يحتاج بضع ثوانٍ بعد الإقلاع
+    # قبل أن يصبح Redis متاحاً.
+    backoff = _BACKOFF_INITIAL_SEC
+    while True:
+        if stop_event is not None and stop_event.is_set():
+            return
+        try:
+            _ensure_group()
+            break
+        except _redis_pkg.exceptions.ConnectionError as exc:
+            _log.warning("Redis not ready (%s) — retry in %.1fs", exc, backoff)
+            time.sleep(backoff)
+            backoff = min(backoff * 2, _BACKOFF_MAX_SEC)
+
+    r = get_redis_blocking()
     _log.info("Velocity aggregator started — consuming %s as %s", STREAM, CONSUMER)
 
     while True:
@@ -127,8 +149,25 @@ def run_velocity_consumer(stop_event=None) -> None:
                 count=BATCH_SIZE,
                 block=BLOCK_MS,
             )
+        except _redis_pkg.exceptions.TimeoutError:
+            # سلوك طبيعي — لا أحداث وصلت خلال BLOCK_MS. لا نُطبع تنبيه.
+            continue
+        except _redis_pkg.exceptions.ConnectionError as exc:
+            # انقطاع شبكي حقيقي — backoff تصاعدي
+            _log.warning("Redis connection lost: %s — backoff", exc)
+            time.sleep(2)
+            continue
         except Exception as exc:
-            _log.error("XREADGROUP failed: %s — sleeping 2s", exc)
+            # أي شيء آخر (مثلاً NOGROUP لو حُذفت المجموعة) — أعد الإنشاء
+            err_str = str(exc)
+            if "NOGROUP" in err_str:
+                _log.warning("Consumer group missing — recreating")
+                try:
+                    _ensure_group()
+                except Exception:
+                    pass
+            else:
+                _log.error("XREADGROUP unexpected: %s — sleeping 2s", exc)
             time.sleep(2)
             continue
 
