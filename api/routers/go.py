@@ -29,12 +29,44 @@ from api.utils.event_publisher import publish_event
 from api.utils.fraud_scoring import compute_quality_score
 from api.utils.geo_extractor import extract as extract_geo
 from api.utils.rate_limit import LIMIT_GO_REDIRECT, limiter
+from api.utils.redis_client import get_redis
 
 _log = logging.getLogger("dp.go")
 router = APIRouter(prefix="/go", tags=["cloaking"])
 
 # نفس عتبة /track — تحت هذا الحد لا نُحدّث العدّادات ونطلب تحدّي JS
 QUALITY_THRESHOLD = 50
+
+# ─── Redis cache for slug→(store_id, affiliate_link) ─────────────────────────
+# يُسرّع التحويلات الشائعة (نفس الـ slug آلاف المرات في الدقيقة).
+# TTL=10min: قصير كفاية لانعكاس تغييرات master، طويل كفاية لتقليل DB hits.
+_CACHE_TTL_SEC = 600
+
+
+def _cache_lookup(slug: str) -> tuple[int, str, str] | None:
+    """يبحث في Redis. يُعيد (id, store_id, affiliate_link) أو None."""
+    try:
+        r = get_redis()
+        raw = r.get(f"go:slug:{slug}")
+        if not raw:
+            return None
+        # تنسيق: "id|store_id|url"
+        parts = raw.split("|", 2)
+        if len(parts) != 3:
+            return None
+        return int(parts[0]), parts[1], parts[2]
+    except Exception:
+        return None
+
+
+def _cache_store(slug: str, master_id: int, store_id: str, link: str) -> None:
+    """يخزّن في Redis مع TTL. خاطئ بصمت لو Redis معطّل."""
+    try:
+        r = get_redis()
+        r.set(f"go:slug:{slug}", f"{master_id}|{store_id}|{link}")
+        r.expire(f"go:slug:{slug}", _CACHE_TTL_SEC)
+    except Exception:
+        pass
 
 
 def _challenge_page(slug: str, source: str) -> str:
@@ -87,19 +119,23 @@ def cloaked_redirect(
     h: str = "0",
     conn=Depends(get_db),
 ):
-    # 1) البحث عن المتجر بالـ slug
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(
-            "SELECT id, store_id, affiliate_link FROM master WHERE cloaked_slug = %s",
-            (slug,),
-        )
-        row = cur.fetchone()
-
-    if not row or not (row.get("affiliate_link") or "").strip():
-        return HTMLResponse(_not_found_page(), status_code=404)
-
-    target_url = row["affiliate_link"].strip()
-    store_id = row["store_id"]
+    # 1) البحث عن المتجر — Redis cache أولاً، ثم DB
+    cached = _cache_lookup(slug)
+    if cached:
+        master_id_int, store_id, target_url = cached
+    else:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT id, store_id, affiliate_link FROM master WHERE cloaked_slug = %s",
+                (slug,),
+            )
+            row = cur.fetchone()
+        if not row or not (row.get("affiliate_link") or "").strip():
+            return HTMLResponse(_not_found_page(), status_code=404)
+        target_url = row["affiliate_link"].strip()
+        store_id = row["store_id"]
+        master_id_int = row["id"]
+        _cache_store(slug, master_id_int, store_id, target_url)
 
     # 2) إثراء + جودة
     geo = extract_geo(request)
@@ -148,7 +184,7 @@ def cloaked_redirect(
         if counted:
             cur.execute(
                 "UPDATE master SET total_link_clicks = total_link_clicks + 1 WHERE id = %s",
-                (row["id"],),
+                (master_id_int,),
             )
 
     # 5) fan-out best-effort لـ Redis Stream (نفس مسار /track)

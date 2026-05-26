@@ -50,6 +50,14 @@ if not TOKEN_ENV:
     raise RuntimeError("❌ BOT_TOKEN/TELEGRAM_BOT_TOKEN غير موجود في متغيرات البيئة")
 
 WEBHOOK_SECRET = os.environ["WEBHOOK_SECRET"]
+# Telegram يُلزِم 1..256 حرف، لكن الأمان يستوجب ≥32 حرف عشوائي حقيقي.
+# قيمة قصيرة تسمح بـ brute-force تجريبي على الـ webhook endpoint.
+# نُحذّر بدلاً من فشل الإقلاع — حتى لا نُسقط الإنتاج لو الـ secret الحالي قصير.
+if len(WEBHOOK_SECRET) < 32:
+    print(
+        f"⚠️  WARNING: WEBHOOK_SECRET قصير (الطول={len(WEBHOOK_SECRET)}). "
+        "يُوصى بقيمة ≥32 حرف. ولّد قيمة آمنة عبر: openssl rand -base64 48"
+    )
 
 _raw_base = os.environ["WEBHOOK_BASE_URL"].rstrip("/")
 # auto-add https:// if user forgot the protocol on Railway
@@ -78,12 +86,20 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# CORS hardening:
+#   - X-Admin-Secret أُزيل من allow_headers — لا يُستخدم cross-origin أبداً
+#     (الداشبورد محلي والـ workers تكلّم Railway مباشرةً، بدون متصفّح).
+#   - "null" origin مسموح فقط لـ Telegram Mini App (Telegram WebApp يستخدم null).
+#   - لو "*" موجود في ALLOWED_ORIGINS مع allow_credentials=True، FastAPI/CORS
+#     ترفض الـ preflight تلقائياً، لكن نتأكّد صراحةً.
+if "*" in ALLOWED_ORIGINS:
+    raise RuntimeError("ALLOWED_ORIGINS=* غير مسموح مع allow_credentials=True")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE", "PUT", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-Admin-Secret"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 # ─── دمج Routers الـ API ──────────────────────────────────────────────────────

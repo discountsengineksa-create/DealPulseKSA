@@ -274,7 +274,13 @@ def _call_gemini(
                     "response_mime_type": "application/json",
                 },
             )
-            response = gen_model.generate_content(user)
+            # request_options={"timeout": ...} يفرض سقف صارم لكل محاولة.
+            # بدونها قد يتعلّق الـ SDK 5+ دقائق على network hang، مما يحجز
+            # workers ويُعطّل الجدولة. 30s كافية لأي توليد JSON معقول.
+            response = gen_model.generate_content(
+                user,
+                request_options={"timeout": 30},
+            )
             last_err = None
             break
         except google_exc.ResourceExhausted as exc:

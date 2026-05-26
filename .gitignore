@@ -31,3 +31,11 @@ Transfer_Package/
 # ─── ملاحظة ──────────────────────────────────────────────────────────────────
 # migration_*.sql مستثناة (تظل في git) لأن المهاجرات لازم تُتعقّب.
 # لو غضضت `*.sql` بالكامل تخسر تتبّع المهاجرات.
+
+# ─── ملفات تشخيصية مؤقتة (من curl/diagnose) ─────────────────────────────────
+openapi_dump.json
+openapi_v2.json
+site_home.html
+site_home_full.html
+robots.txt
+sitemap.xml

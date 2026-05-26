@@ -45,8 +45,8 @@ class TokenResponse(BaseModel):
 # ─── Login ─────────────────────────────────────────────────────────────────
 class LoginRequest(BaseModel):
     """طلب تسجيل دخول."""
-    username: str = Field(..., min_length=3, description="جوال أو إيميل")
-    password: str = Field(..., min_length=1)
+    username: str = Field(..., min_length=3, max_length=200, description="جوال أو إيميل")
+    password: str = Field(..., min_length=1, max_length=128)
 
 
 # ─── User ──────────────────────────────────────────────────────────────────
@@ -68,7 +68,7 @@ class UserResponse(BaseModel):
 # ─── Forgot Password ───────────────────────────────────────────────────────
 class ForgotPasswordRequest(BaseModel):
     """طلب استعادة كلمة المرور."""
-    username: str = Field(..., min_length=3, description="جوال أو إيميل المستخدم")
+    username: str = Field(..., min_length=3, max_length=200, description="جوال أو إيميل المستخدم")
 
 
 class ForgotPasswordResponse(BaseModel):
@@ -80,7 +80,7 @@ class ForgotPasswordResponse(BaseModel):
 # ─── Reset Password ────────────────────────────────────────────────────────
 class ResetPasswordRequest(BaseModel):
     """تغيير كلمة المرور بالكود."""
-    username: str = Field(..., min_length=3)
+    username: str = Field(..., min_length=3, max_length=200)
     code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
     new_password: str = Field(..., min_length=8, max_length=128)
 

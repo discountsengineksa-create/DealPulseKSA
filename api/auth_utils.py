@@ -30,6 +30,18 @@ JWT_ALGORITHM = "HS256"
 # الجلسة 14 يوم — معيار B2C معقول. أقل من ذلك يُزعج المستخدم،
 # أكثر يُعرّض الحساب لخطر طويل لو تسرّب التوكن.
 JWT_EXPIRY_DAYS = int(os.getenv("JWT_EXPIRY_DAYS", "14"))
+# تحذير صامت — لا نمنع الإقلاع (نتجنّب كسر الإنتاج لو القيمة على Railway غير
+# معقولة). فقط نطبع warning بصوت عالٍ في الـ logs.
+if JWT_EXPIRY_DAYS < 1 or JWT_EXPIRY_DAYS > 90:
+    print(
+        f"⚠️  WARNING: JWT_EXPIRY_DAYS={JWT_EXPIRY_DAYS} خارج النطاق الموصى به (1..90). "
+        "اضبط القيمة في env vars لجلسة أكثر أماناً."
+    )
+if len(JWT_SECRET) < 32:
+    print(
+        f"⚠️  WARNING: JWT_SECRET أقصر من 32 محرف (الطول={len(JWT_SECRET)}). "
+        "ولّد قيمة جديدة: openssl rand -base64 64"
+    )
 
 
 # ─── Password Hashing (bcrypt مباشر، بدون passlib) ─────────────────────────

@@ -43,12 +43,15 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ─── CORS ────────────────────────────────────────────────────────────────────
+# X-Admin-Secret لا يُمرَّر cross-origin (الداشبورد محلي/مباشر، ليس متصفّح ويب).
+if "*" in ALLOWED_ORIGINS:
+    raise RuntimeError("ALLOWED_ORIGINS=* غير مسموح مع allow_credentials=True")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE", "PUT", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-Admin-Secret"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 # ─── Routers (مطابق تماماً لـ bot_app.py) ────────────────────────────────────

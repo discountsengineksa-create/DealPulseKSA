@@ -98,6 +98,31 @@ def _trends_refresh_cycle() -> None:
         _log.warning("trends refresh cycle failed (non-fatal): %s", exc)
 
 
+def _llm_cache_cleanup_cycle() -> None:
+    """
+    تنظيف صفوف llm_semantic_cache المنتهية الصلاحية (migration_022).
+    يمنع تراكم صفوف ميتة في DB. يدعو الدالة الـ Postgres SQL إذا وُجدت
+    (cleanup_expired_llm_cache)، وإلا DELETE مباشرة.
+    """
+    try:
+        from api.db import get_db_context
+        with get_db_context() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT cleanup_expired_llm_cache()")
+                deleted = cur.fetchone()
+                if deleted:
+                    _log.info("LLM cache cleanup: removed %s expired rows", deleted[0])
+    except Exception as exc:
+        # لو دالة Postgres غير موجودة (migration_022 لم تُطبَّق بعد) نستخدم DELETE
+        try:
+            from api.db import get_db_context
+            with get_db_context() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM llm_semantic_cache WHERE expires_at < NOW()")
+        except Exception as exc2:
+            _log.warning("llm cache cleanup failed (non-fatal): %s / %s", exc, exc2)
+
+
 def start_workers() -> None:
     """Boot the aggregator thread + scheduled jobs. Safe to call multiple times."""
     global _started, _scheduler, _consumer_thread, _stop_event
@@ -219,6 +244,18 @@ def start_workers() -> None:
         name="Refresh Google Trends scores for opportunity keywords",
         replace_existing=True,
         next_run_time=datetime.now(timezone.utc) + timedelta(seconds=90),
+    )
+
+    # تنظيف llm_semantic_cache المنتهي — كل ساعة (migration_022).
+    # يمنع تراكم صفوف ميتة في DB ويُحرّر مساحة قرص دورياً.
+    _scheduler.add_job(
+        _llm_cache_cleanup_cycle,
+        trigger="interval",
+        hours=1,
+        id="llm_cache_cleanup",
+        name="Clean expired llm_semantic_cache rows",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc) + timedelta(minutes=5),
     )
 
     _scheduler.start()

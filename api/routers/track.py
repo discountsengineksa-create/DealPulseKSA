@@ -14,6 +14,11 @@ from api.utils.fraud_scoring import compute_quality_score
 from api.utils.event_publisher import publish_event
 from api.utils.rate_limit import LIMIT_TRACK, limiter
 
+# حدود مخصّصة لقنوات تسجيل خفيفة (search/request-code) — أقل من /track العام
+# لمنع إغراق direct_search و unavailable_codes_requests من سكربتات.
+LIMIT_TRACK_SEARCH       = "30/minute"
+LIMIT_TRACK_REQUEST_CODE = "5/minute"
+
 _log = logging.getLogger("dp.track")
 router = APIRouter(prefix="/track", tags=["tracking"])
 
@@ -141,7 +146,8 @@ def track_action(payload: TrackRequest, request: Request, conn=Depends(get_db)):
 
 
 @router.post("/search", response_model=SearchLogResponse, status_code=201)
-def log_search(payload: SearchLogRequest, conn=Depends(get_db)):
+@limiter.limit(LIMIT_TRACK_SEARCH)
+def log_search(payload: SearchLogRequest, request: Request, conn=Depends(get_db)):
     """
     تسجيل كلمة بحث في direct_search — لتحليل ما يبحث عنه المستخدمون.
     user_found=False يُحدّد فجوات المحتوى (متاجر مطلوبة لكنها غير موجودة).
@@ -163,7 +169,8 @@ def log_search(payload: SearchLogRequest, conn=Depends(get_db)):
 
 
 @router.post("/request-code", response_model=CodeRequestResponse, status_code=201)
-def request_code(payload: CodeRequestRequest, conn=Depends(get_db)):
+@limiter.limit(LIMIT_TRACK_REQUEST_CODE)
+def request_code(payload: CodeRequestRequest, request: Request, conn=Depends(get_db)):
     """
     تسجيل طلب عميل لتوفير كود متجر غير موجود حالياً.
 
