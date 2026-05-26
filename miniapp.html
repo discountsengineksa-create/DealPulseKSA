@@ -145,28 +145,55 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
       <button class="glass" id="refreshBtn" style="padding:8px 12px; border-radius:10px; color:var(--t2); border:none;" onclick="refreshData()">تحديث</button>
     </div>
   </div>
-  <div class="srch-wrap">
-    <input class="srch glass" id="srchInput" type="text" placeholder="ابحث عن متجر أو كوبون..." oninput="onSearch(this.value)">
+  <div class="srch-wrap" id="srchWrap">
+    <input class="srch glass" id="srchInput" type="text" placeholder="ابحث عن متجر أو قسم..." oninput="onSearch(this.value)">
     <span class="srch-ico">🔍</span>
   </div>
 </header>
 
-<main>
-  <!-- 3 stats مطابقة للموقع dealpulseksa.com: ترند · قسم · متجر -->
+<!-- ═══════════════════════════════════════════════════════════════════
+     VIEW: HOME — الستات + chips الأقسام + grid المتاجر
+     ═══════════════════════════════════════════════════════════════════ -->
+<main id="viewHome">
   <div class="stats">
-    <div class="stat glass"><div class="stat-v" id="sTrend">0</div><div class="stat-l" id="lblTrend">ترند</div></div>
-    <div class="stat glass"><div class="stat-v" id="sCats">0</div><div class="stat-l" id="lblCats">قسم</div></div>
-    <div class="stat glass"><div class="stat-v" id="sStores">0</div><div class="stat-l" id="lblStores">متجر</div></div>
+    <div class="stat glass" onclick="setFilter('trending')" style="cursor:pointer">
+      <div class="stat-v" id="sTrend">0</div><div class="stat-l" id="lblTrend">ترند</div>
+    </div>
+    <div class="stat glass" onclick="scrollToCats()" style="cursor:pointer">
+      <div class="stat-v" id="sCats">0</div><div class="stat-l" id="lblCats">قسم</div>
+    </div>
+    <div class="stat glass" onclick="setFilter('all')" style="cursor:pointer">
+      <div class="stat-v" id="sStores">0</div><div class="stat-l" id="lblStores">متجر</div>
+    </div>
   </div>
 
-  <!-- شريحة الأقسام: chips أفقية قابلة للسحب — الضغط يُفلتر المتاجر -->
   <div id="catsBar" style="padding:14px 18px 0;overflow-x:auto;white-space:nowrap;scrollbar-width:none">
     <div id="catsChips" style="display:inline-flex;gap:8px"></div>
   </div>
-  <style>#catsBar::-webkit-scrollbar{display:none}
+  <style>
+  #catsBar::-webkit-scrollbar{display:none}
   .chip{display:inline-block;padding:8px 14px;border-radius:20px;background:rgba(255,255,255,0.04);border:1px solid var(--border);color:var(--t2);font-size:12px;font-weight:700;cursor:pointer;transition:0.2s;white-space:nowrap}
   .chip:active{transform:scale(0.95)}
-  .chip.on{background:rgba(16,185,129,0.15);color:var(--em);border-color:rgba(16,185,129,0.4)}</style>
+  .chip.on{background:rgba(16,185,129,0.15);color:var(--em);border-color:rgba(16,185,129,0.4)}
+  /* Sub-view (Category / Store) — يستبدل home بالكامل */
+  .subview{display:none;padding:18px;animation:slideIn 0.25s ease-out}
+  .subview.on{display:block}
+  @keyframes slideIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  .sv-title{font-size:22px;font-weight:900;color:var(--t1);margin-bottom:16px;text-align:center}
+  .sv-back{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:12px;background:rgba(255,255,255,0.04);border:1px solid var(--border);color:var(--em);font-weight:700;font-size:12px;cursor:pointer;margin-bottom:14px}
+  .store-hero{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:20px;padding:24px 18px;text-align:center;margin-bottom:16px}
+  .store-hero img{width:110px;height:110px;object-fit:contain;background:rgba(255,255,255,0.05);border-radius:18px;padding:8px}
+  .store-hero h2{margin:14px 0 6px;font-size:20px;font-weight:900;color:var(--t1)}
+  .store-hero p{color:var(--t3);font-size:13px;line-height:1.6}
+  .coupon-box{margin:18px 0;padding:24px 16px;border:2px dashed var(--em);border-radius:18px;text-align:center;background:rgba(16,185,129,0.06);cursor:pointer}
+  .coupon-box .lbl{font-size:11px;color:var(--t3);margin-bottom:8px;letter-spacing:1px}
+  .coupon-box .code{font-size:28px;font-weight:900;color:var(--em);letter-spacing:5px;font-family:monospace}
+  .cta-row{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+  .cta-row button{padding:16px;border-radius:14px;border:none;font-weight:800;font-size:15px;cursor:pointer;font-family:var(--font)}
+  .cta-primary{background:var(--em);color:#fff}
+  .cta-ghost{background:rgba(255,255,255,0.04);color:var(--t2);border:1px solid var(--border) !important}
+  .store-meta{margin-top:18px;padding-top:18px;border-top:1px solid var(--border);font-size:12px;color:var(--t3);text-align:center;line-height:1.8}
+  </style>
 
   <div class="stores">
     <div id="sectionTitle" style="padding:0 18px 12px;font-size:14px;font-weight:800;color:var(--t1);opacity:0.85"></div>
@@ -174,23 +201,22 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
   </div>
 </main>
 
-<div class="overlay" id="overlay" onclick="if(event.target.id=='overlay')closeModal()">
-  <div class="sheet" id="sheet">
-    <div id="mBody"></div>
-  </div>
-</div>
+<!-- ═══════════════════════════════════════════════════════════════════
+     VIEW: CATEGORY — صفحة قسم معيّن (متاجر هذا القسم)
+     ═══════════════════════════════════════════════════════════════════ -->
+<main id="viewCategory" class="subview">
+  <button class="sv-back" onclick="goBack()">← <span id="catBackLbl">رجوع</span></button>
+  <div class="sv-title" id="catTitle">قسم</div>
+  <div class="grid" id="catGrid"></div>
+</main>
 
-<nav class="bnav glass">
-  <!-- 4 tabs deep-link لمسارات الموقع الفعلية:
-       • الرئيسية → / (الصفحة الرئيسية للموقع)
-       • المتاجر  → /stores
-       • الأقسام → /categories (أو /stores#categories لو لم تكن /categories متاحة)
-       • الترند   → /trending  -->
-  <a href="#" class="nitem on" id="navHomeTab" onclick="event.preventDefault();openWebPath('/')"><span id="navHome">الرئيسية</span></a>
-  <a href="#" class="nitem" id="navStoresTab" onclick="event.preventDefault();openWebPath('/stores')"><span id="navStores">المتاجر</span></a>
-  <a href="#" class="nitem" id="navCatsTab" onclick="event.preventDefault();openWebPath('/categories')"><span id="navCats">الأقسام</span></a>
-  <a href="#" class="nitem" id="navTrendTab" onclick="event.preventDefault();openWebPath('/trending')"><span id="navTrend">الترند 🔥</span></a>
-</nav>
+<!-- ═══════════════════════════════════════════════════════════════════
+     VIEW: STORE — صفحة متجر مفرد (الكوبون + الذهاب)
+     ═══════════════════════════════════════════════════════════════════ -->
+<main id="viewStore" class="subview">
+  <button class="sv-back" onclick="goBack()">← <span id="storeBackLbl">رجوع</span></button>
+  <div id="storeBody"></div>
+</main>
 
 <script>
 // ── Telegram WebApp integration (ready/expand/theme) ─────────────────────
@@ -305,11 +331,69 @@ const API_BASE = window.location.origin + '/api/v1';
 // يفتح خارج Mini App عبر tg.openLink() ليبقى Mini App مفتوحاً للعودة.
 const WEB_BASE = 'https://www.dealpulseksa.com';
 
-// activeFilter: 'all' | 'trending' | 'cat:{name}' — يتحكم بكل الفلترة محلياً
+// ═══════════════════════════════════════════════════════════════════════════
+// State management — SPA داخل Mini App (3 views، Telegram BackButton أصلي)
+// ═══════════════════════════════════════════════════════════════════════════
 let ALL = [];
-let CATS = [];                 // قائمة الأقسام من /coupons/categories
+let CATS = [];
 let activeSearch = '';
-let activeFilter = 'all';
+let activeFilter = 'all';      // 'all' | 'trending' (للـ home grid فقط)
+let currentView = 'home';      // 'home' | 'category' | 'store'
+let viewStack = [];            // stack للرجوع (آخر view → الرجوع له)
+let viewContext = {};          // {category: 'عطور'} | {storeId: 17}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//                  View Manager — لا يفتح خارج أبداً
+// ═══════════════════════════════════════════════════════════════════════════
+function switchView(name) {
+    document.getElementById('viewHome').style.display     = (name === 'home') ? 'block' : 'none';
+    document.getElementById('viewCategory').classList.toggle('on', name === 'category');
+    document.getElementById('viewStore').classList.toggle('on', name === 'store');
+    // إخفاء البحث في sub-views (محصور على home)
+    const srch = document.getElementById('srchWrap');
+    if (srch) srch.style.display = (name === 'home') ? 'block' : 'none';
+    currentView = name;
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    updateTelegramBackButton();
+}
+
+function updateTelegramBackButton() {
+    if (!tg || !tg.BackButton) return;
+    if (currentView === 'home') {
+        tg.BackButton.hide();
+    } else {
+        tg.BackButton.show();
+    }
+}
+
+function goBack() {
+    const prev = viewStack.pop() || { view: 'home', context: {} };
+    viewContext = prev.context || {};
+    switchView(prev.view);
+    // أعد رسم الـ view لو رجعنا لـ category سابق
+    if (prev.view === 'category' && viewContext.category) {
+        renderCategoryView(viewContext.category);
+    }
+}
+
+function showCategoryView(name) {
+    viewStack.push({ view: currentView, context: { ...viewContext } });
+    viewContext = { category: name };
+    renderCategoryView(name);
+    switchView('category');
+}
+
+function showStoreView(storeId) {
+    viewStack.push({ view: currentView, context: { ...viewContext } });
+    viewContext = { storeId };
+    renderStoreView(storeId);
+    switchView('store');
+}
+
+function scrollToCats() {
+    const el = document.getElementById('catsBar');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 
 // ── Categories loader — chips قابلة للفلترة ─────────────────────────────
 async function loadCategories() {
@@ -332,14 +416,85 @@ function renderCategoryChips() {
     const bar = document.getElementById('catsChips');
     if (!bar) return;
     const ST = STRINGS[LANG_CURRENT];
-    // "✨ الكل" دائماً أول
+    // "✨ الكل" يفعّل filter all على home
     let html = `<span class="chip ${activeFilter==='all'?'on':''}" onclick="setFilter('all')">${ST.chipAll}</span>`;
+    // كل قسم → يفتح Category VIEW (وليس filter محلي)
     for (const c of CATS) {
         const safe = String(c.tag_name).replace(/'/g, "\\'");
-        const isOn = (activeFilter === `cat:${c.tag_name}`) ? 'on' : '';
-        html += `<span class="chip ${isOn}" onclick="setFilter('cat:${safe}')"># ${c.tag_name}</span>`;
+        html += `<span class="chip" onclick="showCategoryView('${safe}')"># ${c.tag_name}</span>`;
     }
     bar.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//                  Category View Rendering
+// ═══════════════════════════════════════════════════════════════════════════
+function renderCategoryView(catName) {
+    const ST = STRINGS[LANG_CURRENT];
+    document.getElementById('catTitle').textContent = `# ${catName}`;
+    document.getElementById('catBackLbl').textContent = ST.home;
+    const matched = ALL.filter(s => (s.tags || []).map(t=>String(t).trim()).includes(catName));
+    const grid = document.getElementById('catGrid');
+    if (!matched.length) {
+        const msg = LANG_CURRENT === 'en'
+            ? 'No stores in this category yet.'
+            : 'لا توجد متاجر في هذا القسم بعد.';
+        grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--t3);padding:40px 20px;font-size:13px">${msg}</div>`;
+        return;
+    }
+    grid.innerHTML = matched.map(s => storeCardHTML(s)).join('');
+}
+
+// HTML لبطاقة متجر — مشتركة بين home grid و category grid
+function storeCardHTML(s) {
+    const trendBadge = s.trending
+        ? `<span style="position:absolute;top:8px;${LANG_CURRENT==='en'?'right':'left'}:8px;background:rgba(239,68,68,0.18);color:#FCA5A5;font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px;border:1px solid rgba(239,68,68,0.3)">🔥</span>`
+        : '';
+    const logoSrc = (s.logo || 'logo.png').replace(/"/g, '&quot;');
+    const ST = STRINGS[LANG_CURRENT];
+    return `
+    <div class="card glass" style="position:relative" onclick="showStoreView(${s.id})">
+        ${trendBadge}
+        <div class="c-ava"><img src="${logoSrc}" alt="${s.store_id}" onerror="this.onerror=null;this.src='logo.png'"></div>
+        <div class="c-name">${s.store_id}</div>
+        <div class="disc-badge">${s.disc}</div>
+        <div class="c-foot"><span class="go-lbl">${ST.detailsLabel}</span></div>
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//                  Store View Rendering — صفحة متجر كاملة
+// ═══════════════════════════════════════════════════════════════════════════
+function renderStoreView(storeId) {
+    const s = ALL.find(x => x.id === storeId);
+    if (!s) { goBack(); return; }
+    const ST = STRINGS[LANG_CURRENT];
+    document.getElementById('storeBackLbl').textContent = ST.home;
+    const logoSrc = (s.logo || 'logo.png').replace(/"/g, '&quot;');
+    const tagsHtml = (s.tags || []).length
+        ? `<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:10px">${
+              s.tags.map(t=>`<span style="font-size:10px;padding:4px 10px;border-radius:10px;background:rgba(16,185,129,0.1);color:var(--em);border:1px solid rgba(16,185,129,0.25)">#${t}</span>`).join('')
+          }</div>`
+        : '';
+    window._activeStore = s;
+
+    document.getElementById('storeBody').innerHTML = `
+    <div class="store-hero">
+        <img src="${logoSrc}" alt="${s.store_id}" onerror="this.onerror=null;this.src='logo.png'">
+        <h2>${s.store_id}${s.trending ? ' 🔥' : ''}</h2>
+        ${s.bio ? `<p>${s.bio}</p>` : ''}
+        ${tagsHtml}
+    </div>
+    <div class="coupon-box" onclick="copyCurrent()">
+        <div class="lbl">${ST.copyHint}</div>
+        <div class="code">${s.coupon || ST.noCoupon}</div>
+    </div>
+    <div class="cta-row">
+        <button class="cta-primary" onclick="openLinkCurrent()">${ST.goToStore}</button>
+    </div>
+    <div class="store-meta">
+        ${LANG_CURRENT==='en' ? 'Discount' : 'الخصم'}: <b style="color:var(--em)">${s.disc}</b>
+    </div>`;
 }
 
 // ── Force-Fetch loader — multiple cache-busting layers ─────────────────────
@@ -483,57 +638,11 @@ function renderStores() {
         return;
     }
 
-    grid.innerHTML = filtered.map(s => {
-        const trendBadge = s.trending
-            ? `<span style="position:absolute;top:8px;${LANG_CURRENT==='en'?'right':'left'}:8px;background:rgba(239,68,68,0.18);color:#FCA5A5;font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px;border:1px solid rgba(239,68,68,0.3)">🔥 ${S.trending}</span>`
-            : '';
-        // onerror يسقط لـ logo.png فقط لو فشل تحميل logo_url
-        const logoSrc = (s.logo || 'logo.png').replace(/"/g, '&quot;');
-        return `
-        <div class="card glass" style="position:relative" onclick="openStore(${s.id})">
-            ${trendBadge}
-            <div class="c-ava"><img src="${logoSrc}" alt="${s.store_id}" onerror="this.onerror=null;this.src='logo.png'"></div>
-            <div class="c-name">${s.store_id}</div>
-            <div class="disc-badge">${s.disc}</div>
-            <div class="c-foot"><span class="go-lbl">${S.detailsLabel}</span></div>
-        </div>
-    `;}).join('');
+    grid.innerHTML = filtered.map(storeCardHTML).join('');
 }
 
-function openStore(id) {
-    const s = ALL.find(x => x.id === id);
-    if(!s) return;
-
-    const logoSrc = (s.logo || 'logo.png').replace(/"/g, '&quot;');
-    // نخزّن المتجر الحالي للوصول إليه من copyCurrent/openLinkCurrent بدون تمرير quoted strings
-    window._activeStore = s;
-
-    document.getElementById('mBody').innerHTML = `
-        <div class="m-ava-big"><img src="${logoSrc}" alt="${s.store_id}" onerror="this.onerror=null;this.src='logo.png'"></div>
-        <h2 style="text-align:center; margin-bottom:5px;">${s.store_id}${s.trending ? ' 🔥' : ''}</h2>
-        <p style="text-align:center; color:var(--t3); font-size:12px; margin-bottom:20px;">${s.bio || ''}</p>
-
-        <div class="cpn-box" onclick="copyCurrent()">
-            <div style="font-size:10px; color:var(--t3); margin-bottom:5px;">${S.copyHint}</div>
-            <div class="big-cpn">${s.coupon || S.noCoupon}</div>
-        </div>
-
-        <button class="btn-p" onclick="openLinkCurrent()">${S.goToStore}</button>
-        <button class="glass" style="width:100%; padding:14px; margin-top:10px; border-radius:15px; color:var(--em); border:1px solid rgba(16,185,129,0.3);" onclick="openStorePageOnSite()">${LANG==='en'?'View on site':'صفحة المتجر على الموقع'}</button>
-        <button class="glass" style="width:100%; padding:14px; margin-top:10px; border-radius:15px; color:var(--t2); border:none;" onclick="closeModal()">${S.close}</button>
-    `;
-    document.getElementById('overlay').classList.add('on');
-}
-
-function openStorePageOnSite() {
-    // يفتح صفحة المتجر الكاملة على dealpulseksa.com — نمط المسار: /store/{store_id}
-    // (singular — تأكدت من فحص live: GET /store/X → 200، GET /stores/X → 404)
-    const s = window._activeStore;
-    if (!s) return;
-    const url = `${WEB_BASE}/store/${encodeURIComponent(s.store_id)}`;
-    if (tg && tg.openLink) tg.openLink(s.original_link);
-    else window.open(s.original_link, '_blank');
-}
+// Legacy openStore — أعيد توجيهها للـ inline view الجديد. لا modal بعد الآن.
+function openStore(id) { showStoreView(id); }
 
 function copyCurrent() {
     const s = window._activeStore;
@@ -577,7 +686,11 @@ function onSearch(v) {
     renderStores();
 }
 
-function closeModal() { document.getElementById('overlay').classList.remove('on'); }
+// closeModal: لم يعد مستخدماً (لا modal). محفوظ كـ no-op للـ backward compat.
+function closeModal() {
+    const o = document.getElementById('overlay');
+    if (o) o.classList.remove('on');
+}
 
 function showToast(msg) {
     const t = document.getElementById('toast');
@@ -591,33 +704,13 @@ async function refreshData() {
     await loadData();
 }
 
-// ── Filter ديناميكي بدون reload — يدعم: 'all' | 'trending' | 'cat:{name}' ──
+// ── Filter Home grid: 'all' | 'trending' فقط (لا cat — categories تفتح view) ──
 function setFilter(mode) {
     activeFilter = mode;
-    // تحديث nav tabs
-    document.getElementById('navHomeTab').classList.toggle('on', mode === 'all');
-    document.getElementById('navTrendTab').classList.toggle('on', mode === 'trending');
-    // إعادة رسم chips الأقسام (يُبرز القسم المختار)
+    if (currentView !== 'home') switchView('home');  // أرجع للـ home لو في sub-view
     renderCategoryChips();
     window.scrollTo({ top: 0, behavior: 'smooth' });
     renderStores();
-}
-
-function openWebSite() {
-    // backward compat — يفتح قائمة المتاجر
-    openWebPath('/stores');
-}
-
-// fancy deep-link لمسار محدد على الموقع الرسمي
-function openWebPath(path) {
-    // تأكيد البدء بـ / لمنع روابط مفتوحة
-    const safePath = path.startsWith('/') ? path : '/' + path;
-    const url = `${WEB_BASE}${safePath}`;
-    if (tg && tg.openLink) {
-        tg.openLink(url);              // يفتح في متصفّح خارجي (يبقي Mini App مفتوحاً)
-    } else {
-        window.open(url, '_blank');
-    }
 }
 
 // ── Visibility change: عند العودة لـ Mini App بعد فتحه، أعد التحميل ────
@@ -625,8 +718,14 @@ document.addEventListener('visibilitychange', () => {
     if (!document.hidden) { loadData(); loadCategories(); }
 });
 
-// إقلاع: حمّل البيانات + الأقسام بالتوازي
+// Telegram BackButton — onClick يستدعي goBack محلي (لا يُغلق Mini App)
+if (tg && tg.BackButton && typeof tg.BackButton.onClick === 'function') {
+    tg.BackButton.onClick(() => goBack());
+}
+
+// إقلاع: home view + تحميل البيانات + الأقسام بالتوازي
 document.addEventListener('DOMContentLoaded', () => {
+    switchView('home');
     loadCategories();
     loadData();
 });
