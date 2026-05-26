@@ -3,6 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
+<!-- Cache busting: Telegram WebView يحفظ نسخة آخر فتح بقوّة — هذه الـ headers
+     مع version param في fetches أدناه تضمن أن المستخدم يرى أحدث محتوى دائماً. -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>نبض الصفقات | Deal Pulse KSA</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -156,9 +161,13 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
 </div>
 
 <nav class="bnav glass">
-  <a href="#" class="nitem on" onclick="event.preventDefault();window.scrollTo({top:0,behavior:'smooth'})"><span id="navHome">الرئيسية</span></a>
-  <a href="#" class="nitem" onclick="event.preventDefault();showToast(LANG==='en'?'Coming soon':'قريباً')"><span id="navFav">المفضلة</span></a>
-  <a href="#" class="nitem" onclick="event.preventDefault();showToast(LANG==='en'?'Coming soon':'قريباً')"><span id="navMe">حسابي</span></a>
+  <!-- 3 tabs مُوحَّدة مع مسارات الموقع dealpulseksa.com:
+       • الرئيسية   → عرض كل المتاجر (filter محلي = all)
+       • الترند     → عرض المتاجر الرائجة فقط (filter محلي = trending)
+       • الموقع    → يفتح dealpulseksa.com/stores خارجياً (full experience)  -->
+  <a href="#" class="nitem on" id="navHomeTab" onclick="event.preventDefault();setFilter('all')"><span id="navHome">الرئيسية</span></a>
+  <a href="#" class="nitem" id="navTrendTab" onclick="event.preventDefault();setFilter('trending')"><span id="navFav">الترند 🔥</span></a>
+  <a href="#" class="nitem" onclick="event.preventDefault();openWebSite()"><span id="navMe">الموقع 🌐</span></a>
 </nav>
 
 <script>
@@ -241,13 +250,29 @@ const S = STRINGS[LANG];
   document.getElementById('navMe').textContent          = S.me;
 })();
 
+// ── Unified Source of Truth ─────────────────────────────────────────────
+// API_BASE: نفس الـ API الذي يستهلكه الموقع (api.dealpulseksa.com) — لا
+// fetches محلية ولا fallbacks. window.location.origin يكفل الاتساق سواء
+// كان الـ Mini App مُخدّماً من api.dealpulseksa.com أو من Railway URL.
 const API_BASE = window.location.origin + '/api/v1';
+// WEB_BASE: الموقع الرسمي — وجهة "صفحة المتجر الكاملة" والـ nav tabs.
+// يفتح خارج Mini App عبر tg.openLink() ليبقى Mini App مفتوحاً للعودة.
+const WEB_BASE = 'https://www.dealpulseksa.com';
+
+// activeFilter: 'all' | 'trending' — يتحكم بالـ nav tabs محلياً بدون reload
 let ALL = [];
 let activeSearch = '';
+let activeFilter = 'all';
 
 async function loadData() {
     try {
-        const res = await fetch(`${API_BASE}/coupons/?limit=50&lang=${LANG}`);
+        // ?_=timestamp يمنع Telegram WebView من إعادة استخدام نسخة قديمة من
+        // الـ response. الـ API نفسه يحترم Cache-Control headers.
+        const cacheBust = Date.now();
+        const res = await fetch(
+            `${API_BASE}/coupons/?limit=50&lang=${LANG}&_=${cacheBust}`,
+            { cache: 'no-store' }
+        );
         const payload = await res.json();
         const items = payload.results || [];
 
@@ -304,17 +329,18 @@ function updateStats() {
 
 function renderStores() {
     const grid = document.getElementById('storesGrid');
-    // البحث يشمل: الاسم + الوصف (الـ bio) — أوسع من الاسم فقط
+    // البحث يشمل: الاسم + الوصف (الـ bio) + Filter حسب الـ tab النشط
     const filtered = ALL.filter(s => {
+        if (activeFilter === 'trending' && !s.trending) return false;
         const hay = (s.store_id + ' ' + (s.bio || '')).toLowerCase();
         return hay.includes(activeSearch);
     });
 
     if (!filtered.length) {
-        const msg = LANG === 'en'
-            ? 'No matching stores. Try another search.'
-            : 'لا توجد نتائج مطابقة. جرّب كلمة أخرى.';
-        grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--t3);padding:40px 20px;font-size:13px">${msg}</div>`;
+        const emptyMsg = activeFilter === 'trending'
+            ? (LANG === 'en' ? 'No trending stores right now.' : 'لا توجد متاجر رائجة حالياً.')
+            : (LANG === 'en' ? 'No matching stores. Try another search.' : 'لا توجد نتائج مطابقة. جرّب كلمة أخرى.');
+        grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--t3);padding:40px 20px;font-size:13px">${emptyMsg}</div>`;
         return;
     }
 
@@ -354,9 +380,20 @@ function openStore(id) {
         </div>
 
         <button class="btn-p" onclick="openLinkCurrent()">${S.goToStore}</button>
+        <button class="glass" style="width:100%; padding:14px; margin-top:10px; border-radius:15px; color:var(--em); border:1px solid rgba(16,185,129,0.3);" onclick="openStorePageOnSite()">${LANG==='en'?'View on site':'صفحة المتجر على الموقع'}</button>
         <button class="glass" style="width:100%; padding:14px; margin-top:10px; border-radius:15px; color:var(--t2); border:none;" onclick="closeModal()">${S.close}</button>
     `;
     document.getElementById('overlay').classList.add('on');
+}
+
+function openStorePageOnSite() {
+    // يفتح صفحة المتجر الكاملة على dealpulseksa.com — نمط المسار: /store/{store_id}
+    // (singular — تأكدت من فحص live: GET /store/X → 200، GET /stores/X → 404)
+    const s = window._activeStore;
+    if (!s) return;
+    const url = `${WEB_BASE}/store/${encodeURIComponent(s.store_id)}`;
+    if (tg && tg.openLink) tg.openLink(s.original_link);
+    else window.open(s.original_link, '_blank');
 }
 
 function copyCurrent() {
@@ -374,7 +411,8 @@ function openLinkCurrent() {
     if (tg && tg.openLink) {
         tg.openLink(s.link);
     } else {
-        window.open(s.link, '_blank');
+        window.open(s.link, '_blank');if (tg && tg.openLink) tg.openLink(s.original_link);
+        else window.open(s.original_link, '_blank');
     }
 }
 
@@ -408,6 +446,29 @@ async function refreshData() {
     showToast(S.refreshing);
     await loadData();
 }
+
+// ── Nav tabs: filter محلي بدون reload ──────────────────────────────────
+function setFilter(mode) {
+    activeFilter = mode;                          // 'all' | 'trending'
+    document.getElementById('navHomeTab').classList.toggle('on', mode === 'all');
+    document.getElementById('navTrendTab').classList.toggle('on', mode === 'trending');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    renderStores();
+}
+
+function openWebSite() {
+    // يفتح قائمة المتاجر على الموقع — تجربة كاملة (مفضّلة + تسجيل دخول).
+    const url = `${WEB_BASE}/stores`;
+    if (tg && tg.openLink) tg.openLink(url);
+    else window.open(url, '_blank');
+}
+
+// ── Visibility change: عند العودة لـ Mini App بعد فتحه، أعد التحميل ────
+// Telegram WebView لا يُطلق unload فعلياً عند الـ minimize. visibilitychange
+// يطلق على iOS/Android حين يعود المستخدم للتطبيق.
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) loadData();             // silent refresh
+});
 
 document.addEventListener('DOMContentLoaded', loadData);
 </script>
