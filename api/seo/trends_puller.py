@@ -160,7 +160,7 @@ def fetch_keyword_score(keyword: str, *, geo: str = "SA",
             "data_points": len(series),
         })
 
-        # related queries (يُعاد استخدام نفس الـ payload — لا حاجة لـ build_payload ثاني)
+        # related queries من pytrends (قد تكون فارغة بسبب تغيير Google API)
         if with_related:
             try:
                 related = client.related_queries() or {}
@@ -172,12 +172,63 @@ def fetch_keyword_score(keyword: str, *, geo: str = "SA",
                 if rising_df is not None and not rising_df.empty:
                     out["related_rising"] = rising_df.head(10).to_dict(orient="records")
             except Exception as rel_exc:
-                # عدم الفشل لو related_queries فشل — السكور الأساسي محفوظ
-                _log.warning("related_queries failed for '%s': %s", keyword[:50], str(rel_exc)[:200])
+                _log.warning("related_queries failed for '%s': %s",
+                             keyword[:50], str(rel_exc)[:200])
+
+            # Fallback: لو pytrends ما رجّع top، استخدم Google Suggest
+            # (مصدر مختلف لكنه أكثر استقراراً ويرجع ما يكتبه الناس فعلياً)
+            if not out["related_top"]:
+                suggestions = fetch_google_suggestions(keyword, hl="ar", gl="sa")
+                if suggestions:
+                    out["related_top"] = suggestions
         return out
     except Exception as exc:
         out["error"] = f"{type(exc).__name__}: {str(exc)[:200]}"
         return out
+
+
+def fetch_google_suggestions(keyword: str, *, hl: str = "ar",
+                              gl: str = "sa") -> list[dict[str, Any]]:
+    """
+    يجلب اقتراحات Google Autocomplete (نفس ما يظهر في صندوق بحث Google).
+    هذا مكمّل لـ pytrends related_queries (الذي صار غير موثوق منذ تغيير
+    Google لـ API). الـ Suggest API:
+      • مجاني وبدون auth
+      • يرجع 10 اقتراحات حقيقية يكتبها الناس فعلاً
+      • أسرع وأكثر استقراراً من pytrends
+
+    Returns: list of {"query": str, "value": "suggest"}
+    """
+    import requests as _rq
+    try:
+        url = "https://suggestqueries.google.com/complete/search"
+        params = {
+            "client": "firefox",   # يرجع JSON نظيف
+            "q":  keyword,
+            "hl": hl,              # لغة الواجهة
+            "gl": gl,              # بلد الزائر (SA)
+        }
+        r = _rq.get(url, params=params, timeout=8,
+                    headers={"User-Agent": "DealPulseKSA-Opportunities/1.0"})
+        if r.status_code != 200:
+            return []
+        data = r.json()
+        # الصيغة: [query, [suggestion1, suggestion2, ...]]
+        if not isinstance(data, list) or len(data) < 2:
+            return []
+        suggestions = data[1] or []
+        kw_lower = keyword.lower().strip()
+        out = []
+        for s in suggestions[:10]:
+            s_text = str(s or "").strip()
+            if not s_text or s_text.lower() == kw_lower:
+                continue
+            out.append({"query": s_text, "value": "suggest"})
+        return out
+    except Exception as exc:
+        _log.warning("google_suggest failed for '%s': %s",
+                     keyword[:50], str(exc)[:200])
+        return []
 
 
 def fetch_related_queries(keyword: str, *, geo: str = "SA",
