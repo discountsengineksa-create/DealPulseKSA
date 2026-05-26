@@ -93,19 +93,18 @@ def get_init_status() -> dict:
 
 
 def fetch_keyword_score(keyword: str, *, geo: str = "SA",
-                         timeframe: str = "now 1-d") -> dict[str, Any]:
+                         timeframe: str = "today 3-m",
+                         with_related: bool = True) -> dict[str, Any]:
     """
-    يجلب درجة الاهتمام الحالية لـ keyword في منطقة معيّنة.
+    يجلب درجة الاهتمام + (اختيارياً) الكلمات المرتبطة لـ keyword في منطقة معيّنة.
 
     Args:
         keyword: الكلمة المستهدفة (مثلاً "كود خصم نون")
         geo: ISO country code ("SA" للسعودية، "" للعالم)
-        timeframe: نطاق Google Trends. الخيارات الشائعة:
-          - "now 1-H"   آخر ساعة (دقة دقيقة)
-          - "now 4-H"   آخر 4 ساعات
-          - "now 1-d"   آخر 24 ساعة
-          - "now 7-d"   آخر أسبوع
-          - "today 1-m" آخر شهر
+        timeframe: نطاق Google Trends. الافتراضي 3 أشهر لإعطاء بيانات
+            كافية للكلمات النيش. الخيارات: "now 1-d", "now 7-d",
+            "today 1-m", "today 3-m", "today 12-m", "today 5-y"
+        with_related: لو True، يجلب أيضاً top + rising related queries
 
     Returns:
         {
@@ -113,15 +112,19 @@ def fetch_keyword_score(keyword: str, *, geo: str = "SA",
           "keyword": str,
           "trend_score": int (0-100, آخر نقطة في الـ timeseries),
           "trend_avg": float (متوسط الفترة كاملة),
+          "trend_peak": int (أعلى نقطة في الفترة),
           "rising_pct": float (% تغير آخر نقطة عن متوسط الفترة),
           "data_points": int,
+          "related_top":    [{"query": str, "value": int}, ...]  # حتى 10
+          "related_rising": [{"query": str, "value": int|str}, ...]  # حتى 10
           "error": str | None,
         }
     """
-    out = {
+    out: dict[str, Any] = {
         "ok": False, "keyword": keyword,
-        "trend_score": 0, "trend_avg": 0.0,
+        "trend_score": 0, "trend_avg": 0.0, "trend_peak": 0,
         "rising_pct": 0.0, "data_points": 0,
+        "related_top": [], "related_rising": [],
         "error": None,
     }
     client = _get_client()
@@ -142,19 +145,35 @@ def fetch_keyword_score(keyword: str, *, geo: str = "SA",
             out["error"] = "no_data"
             return out
 
-        # العمود = اسم الـ keyword، نأخذ آخر قيمة + متوسط
         series = df[keyword]
         latest = int(series.iloc[-1])
         avg = float(series.mean())
+        peak = int(series.max())
         rising = ((latest - avg) / avg * 100.0) if avg > 0 else 0.0
 
         out.update({
             "ok": True,
             "trend_score": latest,
             "trend_avg": round(avg, 2),
+            "trend_peak": peak,
             "rising_pct": round(rising, 1),
             "data_points": len(series),
         })
+
+        # related queries (يُعاد استخدام نفس الـ payload — لا حاجة لـ build_payload ثاني)
+        if with_related:
+            try:
+                related = client.related_queries() or {}
+                kw_data = related.get(keyword) or {}
+                top_df = kw_data.get("top")
+                rising_df = kw_data.get("rising")
+                if top_df is not None and not top_df.empty:
+                    out["related_top"] = top_df.head(10).to_dict(orient="records")
+                if rising_df is not None and not rising_df.empty:
+                    out["related_rising"] = rising_df.head(10).to_dict(orient="records")
+            except Exception as rel_exc:
+                # عدم الفشل لو related_queries فشل — السكور الأساسي محفوظ
+                _log.warning("related_queries failed for '%s': %s", keyword[:50], str(rel_exc)[:200])
         return out
     except Exception as exc:
         out["error"] = f"{type(exc).__name__}: {str(exc)[:200]}"
@@ -199,10 +218,11 @@ def refresh_all_active_keywords(*, delay_between: float = 5.0) -> dict[str, int]
     """
     يستدعيه الـ scheduler كل ساعة.
     يقرأ كل keyword نشط من seo_opportunity_keywords،
-    يجلب درجة Trends، يحفظها.
+    يجلب درجة Trends + related queries، يحفظها.
 
     delay_between: ثوانٍ بين كل keyword لتفادي rate-limit (Google يحبّ ≥ 3s).
     """
+    import json as _json
     from psycopg2.extras import RealDictCursor
     from api.db import get_db_context
 
@@ -224,15 +244,22 @@ def refresh_all_active_keywords(*, delay_between: float = 5.0) -> dict[str, int]
                     cur2.execute(
                         """
                         UPDATE seo_opportunity_keywords
-                        SET trend_score   = %s,
-                            trend_avg     = %s,
-                            rising_pct    = %s,
+                        SET trend_score    = %s,
+                            trend_avg      = %s,
+                            trend_peak     = %s,
+                            rising_pct     = %s,
+                            related_top    = %s::jsonb,
+                            related_rising = %s::jsonb,
                             last_checked_at = NOW(),
-                            last_error    = NULL
+                            last_error     = NULL
                         WHERE id = %s
                         """,
                         (result["trend_score"], result["trend_avg"],
-                         result["rising_pct"], row["id"]),
+                         result.get("trend_peak", 0),
+                         result["rising_pct"],
+                         _json.dumps(result.get("related_top") or []),
+                         _json.dumps(result.get("related_rising") or []),
+                         row["id"]),
                     )
                     stats["updated"] += 1
                 else:

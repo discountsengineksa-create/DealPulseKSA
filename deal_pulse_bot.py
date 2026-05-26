@@ -145,6 +145,13 @@ def ensure_tracking_tables():
                 updated_at          TIMESTAMPTZ DEFAULT NOW()
             )
         """)
+        # migration_021 — أعمدة related queries + peak (idempotent عبر IF NOT EXISTS)
+        cur.execute("""
+            ALTER TABLE seo_opportunity_keywords
+              ADD COLUMN IF NOT EXISTS trend_peak     INTEGER DEFAULT 0,
+              ADD COLUMN IF NOT EXISTS related_top    JSONB   DEFAULT '[]'::jsonb,
+              ADD COLUMN IF NOT EXISTS related_rising JSONB   DEFAULT '[]'::jsonb
+        """)
         cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_seo_opp_active_score
                 ON seo_opportunity_keywords (active, trend_score DESC)

@@ -6834,6 +6834,105 @@ elif page == "🎯 محرك الفرص":
                             st.session_state[confirm_key] = True
                             st.rerun()
 
+                # ── related queries (الجدول الذي يعرضه Google Trends) ──
+                related_top    = kw.get("related_top")    or []
+                related_rising = kw.get("related_rising") or []
+                if related_top or related_rising:
+                    with st.expander(
+                        f"🔍 اقتراحات Google ({len(related_top)} رائج + "
+                        f"{len(related_rising)} صاعد) — اضغط [+ تتبّع] لإضافته للمراقبة",
+                        expanded=False,
+                    ):
+                        rc1, rc2 = st.columns(2)
+                        # ─ الأكثر رواجاً ─
+                        with rc1:
+                            st.markdown("**🔥 الأكثر رواجاً (Top)**")
+                            if not related_top:
+                                st.caption("—")
+                            for i, q in enumerate(related_top[:10]):
+                                q_text = str(q.get("query") or "").strip()
+                                q_val = q.get("value") or 0
+                                if not q_text:
+                                    continue
+                                rcol1, rcol2 = st.columns([3, 1])
+                                with rcol1:
+                                    st.markdown(
+                                        f"<div style='padding:4px 8px;background:#F3F4F6;"
+                                        f"border-radius:6px;margin-bottom:4px;'>"
+                                        f"<span style='color:#1F2937;'>{q_text}</span> "
+                                        f"<span style='color:#6B7280;font-size:12px;'> · "
+                                        f"شعبية {q_val}</span></div>",
+                                        unsafe_allow_html=True,
+                                    )
+                                with rcol2:
+                                    btn_key = f"tt_{kw['id']}_t_{i}"
+                                    if st.button("+ تتبّع", key=btn_key,
+                                                 use_container_width=True):
+                                        body = {"keyword": q_text,
+                                                "store_id": kw.get("store_id")}
+                                        res, err = _admin_post(
+                                            "/admin/seo-opportunities/track-related",
+                                            json_body=body,
+                                        )
+                                        if err:
+                                            st.error(err)
+                                        else:
+                                            already = res.get("already_tracked")
+                                            msg = ("موجود مسبقاً" if already
+                                                   else f"تمت الإضافة #{res.get('id')}")
+                                            st.toast(f"✅ {msg}", icon="✅")
+                                            st.rerun()
+
+                        # ─ الأسرع صعوداً ─
+                        with rc2:
+                            st.markdown("**↗️ الأسرع صعوداً (Rising)**")
+                            if not related_rising:
+                                st.caption("—")
+                            for i, q in enumerate(related_rising[:10]):
+                                q_text = str(q.get("query") or "").strip()
+                                q_val = q.get("value")
+                                if not q_text:
+                                    continue
+                                # value هنا قد يكون "Breakout" أو رقم مثل 5000 = +5000%
+                                if isinstance(q_val, (int, float)) and q_val:
+                                    badge = f"+{int(q_val)}%"
+                                    badge_color = "#DC2626" if q_val >= 100 else "#F59E0B"
+                                elif str(q_val).lower() == "breakout":
+                                    badge = "🚀 Breakout"
+                                    badge_color = "#7C3AED"
+                                else:
+                                    badge = str(q_val or "—")
+                                    badge_color = "#6B7280"
+                                rcol1, rcol2 = st.columns([3, 1])
+                                with rcol1:
+                                    st.markdown(
+                                        f"<div style='padding:4px 8px;background:#FEF3C7;"
+                                        f"border-radius:6px;margin-bottom:4px;"
+                                        f"border-right:3px solid {badge_color};'>"
+                                        f"<span style='color:#1F2937;'>{q_text}</span> "
+                                        f"<span style='color:{badge_color};font-weight:bold;"
+                                        f"font-size:12px;'> · {badge}</span></div>",
+                                        unsafe_allow_html=True,
+                                    )
+                                with rcol2:
+                                    btn_key = f"tt_{kw['id']}_r_{i}"
+                                    if st.button("+ تتبّع", key=btn_key,
+                                                 use_container_width=True):
+                                        body = {"keyword": q_text,
+                                                "store_id": kw.get("store_id")}
+                                        res, err = _admin_post(
+                                            "/admin/seo-opportunities/track-related",
+                                            json_body=body,
+                                        )
+                                        if err:
+                                            st.error(err)
+                                        else:
+                                            already = res.get("already_tracked")
+                                            msg = ("موجود مسبقاً" if already
+                                                   else f"تمت الإضافة #{res.get('id')}")
+                                            st.toast(f"✅ {msg}", icon="✅")
+                                            st.rerun()
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # الرصد الاجتماعي — Social Listener + Auto-Responder (Week 7-8)

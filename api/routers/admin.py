@@ -329,7 +329,11 @@ def seo_opportunities_list(
             cur.execute(
                 f"""
                 SELECT id, keyword, store_id, notes, active,
-                       trend_score, trend_avg, rising_pct,
+                       trend_score, trend_avg,
+                       COALESCE(trend_peak, 0)     AS trend_peak,
+                       rising_pct,
+                       COALESCE(related_top, '[]'::jsonb)    AS related_top,
+                       COALESCE(related_rising, '[]'::jsonb) AS related_rising,
                        to_char(last_checked_at, 'YYYY-MM-DD HH24:MI') AS last_checked_at,
                        last_error, generated_page_id,
                        to_char(created_at, 'YYYY-MM-DD HH24:MI') AS created_at
@@ -459,18 +463,24 @@ def seo_opportunities_refresh(
                 raise HTTPException(status_code=404, detail="keyword not found")
             kw = row["keyword"]
 
+        import json as _json
         result = fetch_keyword_score(kw)
         with conn.cursor() as cur2:
             if result["ok"]:
                 cur2.execute(
                     """
                     UPDATE seo_opportunity_keywords
-                    SET trend_score=%s, trend_avg=%s, rising_pct=%s,
+                    SET trend_score=%s, trend_avg=%s,
+                        trend_peak=%s, rising_pct=%s,
+                        related_top=%s::jsonb, related_rising=%s::jsonb,
                         last_checked_at=NOW(), last_error=NULL
                     WHERE id=%s
                     """,
                     (result["trend_score"], result["trend_avg"],
-                     result["rising_pct"], kw_id),
+                     result.get("trend_peak", 0), result["rising_pct"],
+                     _json.dumps(result.get("related_top") or []),
+                     _json.dumps(result.get("related_rising") or []),
+                     kw_id),
                 )
             else:
                 cur2.execute(
@@ -495,6 +505,50 @@ def seo_opportunities_refresh_all(
         return {"ok": True, "stats": refresh_all_active_keywords()}
     except Exception as exc:
         return {"ok": False, "error": str(exc)[:500]}
+
+
+class TrackRelatedQueryBody(BaseModel):
+    keyword: str
+    store_id: str | None = None
+
+
+@router.post("/seo-opportunities/track-related")
+def seo_opportunities_track_related(
+    payload: TrackRelatedQueryBody,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """
+    يحوّل related query من Google Trends إلى keyword مُتابع رسمياً.
+    استدعاء نقرة-واحدة من الـ dashboard عند ضغط [+ تتبّع] بجانب اقتراح.
+    Idempotent: لو الـ keyword موجود مسبقاً يُرجع id الموجود.
+    """
+    _verify_admin(x_admin_secret)
+    kw = (payload.keyword or "").strip()
+    if not kw or len(kw) > 200:
+        raise HTTPException(status_code=400, detail="invalid keyword")
+
+    from psycopg2.extras import RealDictCursor
+    from api.db import get_db_context
+    with get_db_context() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT id FROM seo_opportunity_keywords WHERE keyword = %s",
+                (kw,),
+            )
+            existing = cur.fetchone()
+            if existing:
+                return {"ok": True, "already_tracked": True, "id": existing["id"]}
+            cur.execute(
+                """
+                INSERT INTO seo_opportunity_keywords
+                    (keyword, store_id, notes, active)
+                VALUES (%s, %s, %s, TRUE)
+                RETURNING id
+                """,
+                (kw, payload.store_id, "auto-tracked من Google Trends related"),
+            )
+            new_id = cur.fetchone()["id"]
+    return {"ok": True, "created": True, "id": new_id}
 
 
 @router.get("/trends-debug")
