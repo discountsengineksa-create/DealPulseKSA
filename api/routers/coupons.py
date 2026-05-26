@@ -100,7 +100,7 @@ def get_categories(conn=Depends(get_db)):
 
 @router.get("/", response_model=SearchResponse)
 def get_all_coupons(
-    limit: int = Query(default=50, ge=1, le=200),
+    limit: int = Query(default=50, ge=1, le=1000),     # رفع السقف من 200 لـ 1000
     lang: Literal["ar", "en"] = Query(default="ar"),
     conn=Depends(get_db),
 ):

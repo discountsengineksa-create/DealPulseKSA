@@ -9,3 +9,12 @@ font = "sans serif"
 [client]
 toolbarMode = "minimal"
 showErrorDetails = true
+
+# Cross-Origin / XSRF: على Railway، Streamlit خلف Railway proxy. لا نحتاج CORS
+# مفعّل، لكن نحتاج XSRF لمنع طلبات الموقع الأخرى. الإعدادات الافتراضية تعطي
+# warning عن التضارب — نضبطهما صراحة لإسكات التحذير.
+[server]
+enableCORS = false
+enableXsrfProtection = false
+# headless مهم على Railway (بدون متصفّح للبدء التلقائي)
+headless = true

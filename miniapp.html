@@ -32,7 +32,9 @@
 
 /* ── RESET & BASE ── */
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html{height:100%;overflow:hidden}
+/* ⚠️ مهم: html بدون overflow:hidden — كان يمنع التمرير الرأسي على iOS Telegram WebView.
+   نتركه يرث overflow الافتراضي + ندعم safe-area للأجهزة ذات الـ notch. */
+html{height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 body{
   font-family:var(--font);
   background:var(--grad-bg);
@@ -40,7 +42,8 @@ body{
   min-height:100vh;
   overflow-x:hidden;
   overflow-y:auto;
-  padding-bottom:calc(80px + env(safe-area-inset-bottom,16px));
+  -webkit-overflow-scrolling:touch;
+  padding-bottom:calc(90px + env(safe-area-inset-bottom,16px));
 }
 
 .glass{ background:var(--card); backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur); border:1px solid var(--border); }
@@ -178,13 +181,15 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
 </div>
 
 <nav class="bnav glass">
-  <!-- 3 tabs مُوحَّدة مع مسارات الموقع dealpulseksa.com:
-       • الرئيسية   → عرض كل المتاجر (filter محلي = all)
-       • الترند     → عرض المتاجر الرائجة فقط (filter محلي = trending)
-       • الموقع    → يفتح dealpulseksa.com/stores خارجياً (full experience)  -->
-  <a href="#" class="nitem on" id="navHomeTab" onclick="event.preventDefault();setFilter('all')"><span id="navHome">الرئيسية</span></a>
-  <a href="#" class="nitem" id="navTrendTab" onclick="event.preventDefault();setFilter('trending')"><span id="navFav">الترند 🔥</span></a>
-  <a href="#" class="nitem" onclick="event.preventDefault();openWebSite()"><span id="navMe">الموقع 🌐</span></a>
+  <!-- 4 tabs deep-link لمسارات الموقع الفعلية:
+       • الرئيسية → / (الصفحة الرئيسية للموقع)
+       • المتاجر  → /stores
+       • الأقسام → /categories (أو /stores#categories لو لم تكن /categories متاحة)
+       • الترند   → /trending  -->
+  <a href="#" class="nitem on" id="navHomeTab" onclick="event.preventDefault();openWebPath('/')"><span id="navHome">الرئيسية</span></a>
+  <a href="#" class="nitem" id="navStoresTab" onclick="event.preventDefault();openWebPath('/stores')"><span id="navStores">المتاجر</span></a>
+  <a href="#" class="nitem" id="navCatsTab" onclick="event.preventDefault();openWebPath('/categories')"><span id="navCats">الأقسام</span></a>
+  <a href="#" class="nitem" id="navTrendTab" onclick="event.preventDefault();openWebPath('/trending')"><span id="navTrend">الترند 🔥</span></a>
 </nav>
 
 <script>
@@ -276,8 +281,9 @@ function applyLang() {
   document.getElementById('lblCats').textContent    = ST.cats;
   document.getElementById('lblTrend').textContent   = ST.trending;
   document.getElementById('navHome').textContent    = ST.home;
-  document.getElementById('navFav').textContent     = ST.trendTab;
-  document.getElementById('navMe').textContent      = ST.siteTab;
+  document.getElementById('navStores').textContent  = ST.stores;
+  document.getElementById('navCats').textContent    = ST.cats;
+  document.getElementById('navTrend').textContent   = ST.trendTab;
   // الزر يعرض اللغة المقابلة (لو نحن AR نعرض EN للتبديل)
   document.getElementById('langBtn').textContent    = (L === 'ar') ? 'EN' : 'ع';
 }
@@ -598,10 +604,20 @@ function setFilter(mode) {
 }
 
 function openWebSite() {
-    // يفتح قائمة المتاجر على الموقع — تجربة كاملة (مفضّلة + تسجيل دخول).
-    const url = `${WEB_BASE}/stores`;
-    if (tg && tg.openLink) tg.openLink(url);
-    else window.open(url, '_blank');
+    // backward compat — يفتح قائمة المتاجر
+    openWebPath('/stores');
+}
+
+// fancy deep-link لمسار محدد على الموقع الرسمي
+function openWebPath(path) {
+    // تأكيد البدء بـ / لمنع روابط مفتوحة
+    const safePath = path.startsWith('/') ? path : '/' + path;
+    const url = `${WEB_BASE}${safePath}`;
+    if (tg && tg.openLink) {
+        tg.openLink(url);              // يفتح في متصفّح خارجي (يبقي Mini App مفتوحاً)
+    } else {
+        window.open(url, '_blank');
+    }
 }
 
 // ── Visibility change: عند العودة لـ Mini App بعد فتحه، أعد التحميل ────
