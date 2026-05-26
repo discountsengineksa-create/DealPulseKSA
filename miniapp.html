@@ -132,7 +132,10 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
   <div class="hdr-row">
     <div class="logo">
       <img src="logo.png" class="logo-img" alt="Logo">
-      <div class="logo-txt"><h1 id="brandName">نبض الصفقات</h1><p>DEAL PULSE KSA</p></div>
+      <div class="logo-txt">
+        <h1 id="brandName">نبض الصفقات</h1>
+        <p>DEAL PULSE KSA · <span id="lastSync" style="opacity:0.6;font-size:9px;letter-spacing:0">--</span></p>
+      </div>
     </div>
     <button class="glass" id="refreshBtn" style="padding:8px 15px; border-radius:10px; color:var(--t2); border:none;" onclick="refreshData()">تحديث</button>
   </div>
@@ -264,37 +267,79 @@ let ALL = [];
 let activeSearch = '';
 let activeFilter = 'all';
 
+// ── Force-Fetch loader — multiple cache-busting layers ─────────────────────
+// طبقات منع الـ cache:
+//   1. ?t={Date.now()} + ?r={random} على URL (يمنع HTTP cache + Service Worker)
+//   2. cache: 'no-store' (يمنع HTTP cache على مستوى fetch)
+//   3. headers: Cache-Control/Pragma صريحة (يمنع reverse-proxy cache)
+//   4. console.log واضح يطبع timestamp + count لتأكيد كل تحميل من جديد
+// ملاحظة: لو البيانات ما تتحدث رغم كل ذلك، المشكلة في الـ DB نفسها وليست
+// في الـ frontend cache. افحص /api/v1/coupons في متصفّح خارجي مباشرةً.
 async function loadData() {
+    const t0 = Date.now();
+    const url = `${API_BASE}/coupons/?limit=50&lang=${LANG}&t=${t0}&r=${Math.random().toString(36).slice(2,10)}`;
+
     try {
-        // ?_=timestamp يمنع Telegram WebView من إعادة استخدام نسخة قديمة من
-        // الـ response. الـ API نفسه يحترم Cache-Control headers.
-        const cacheBust = Date.now();
-        const res = await fetch(
-            `${API_BASE}/coupons/?limit=50&lang=${LANG}&_=${cacheBust}`,
-            { cache: 'no-store' }
-        );
+        const res = await fetch(url, {
+            method: 'GET',
+            cache: 'no-store',
+            credentials: 'omit',
+            headers: {
+                'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+                'Pragma': 'no-cache',
+                'Accept': 'application/json',
+            },
+        });
+
+        if (!res.ok) {
+            console.error('[loadData] HTTP', res.status, res.statusText);
+            showToast(S.fetchErr);
+            return;
+        }
+
         const payload = await res.json();
         const items = payload.results || [];
+
+        // ── منطق الـ link (يعالج البيانات الفاسدة بأمان) ────────────────
+        // أولوية:
+        //   1. cloaked_slug → /go/{slug} (مُتتبَّع + bot challenge عبر Cloudflare)
+        //   2. affiliate_link لو URL سليم (يبدأ بـ http)
+        //   3. # fallback (يفتح نفس الصفحة — تجنّب JS exceptions)
+        const buildLink = (item) => {
+            if (item.cloaked_slug) {
+                return `${window.location.origin}/go/${item.cloaked_slug}`;
+            }
+            const raw = (item.affiliate_link || '').trim();
+            if (raw.startsWith('http://') || raw.startsWith('https://')) {
+                return raw;
+            }
+            return '#';   // لا nav إذا الرابط فاسد — نعرض toast بدل
+        };
 
         ALL = items.map(item => ({
             id: item.id,
             store_id: item.store_id || (LANG === 'en' ? 'Store' : 'متجر'),
             disc: item.discount_value || (LANG === 'en' ? 'Special offer' : 'خصم خاص'),
             coupon: item.public_coupon || '',
-            // نُفضّل /go/{cloaked_slug} (يمر بـ Cloudflare Worker للإحصاء + bot challenge)
-            // ثم نسقط للـ affiliate_link المباشر لو ما في cloaked
-            link: item.cloaked_slug
-                  ? `${window.location.origin}/go/${item.cloaked_slug}`
-                  : (item.affiliate_link || '#'),
-            // شعار المتجر الفردي — يسقط لـ logo.png لو ناقص
+            link: buildLink(item),
             logo: item.logo_url || 'logo.png',
             bio: item.store_bio || '',
-            trending: item.is_trending === 'ترند 🔥'
+            trending: item.is_trending === 'ترند 🔥',
         }));
+
+        const dt = Date.now() - t0;
+        console.log(`[loadData] OK · ${ALL.length} stores · ${dt}ms · ${new Date().toISOString()}`);
+        // عرض timestamp التحميل في الـ UI (يكشف فوراً لو البيانات قديمة)
+        const dbgEl = document.getElementById('lastSync');
+        if (dbgEl) {
+            const hh = new Date().toLocaleTimeString(LANG === 'en' ? 'en-US' : 'ar-SA');
+            dbgEl.textContent = `↻ ${hh} · ${ALL.length}`;
+        }
 
         renderStores();
         updateStats();
     } catch (err) {
+        console.error('[loadData] failed:', err);
         showToast(S.fetchErr);
     }
 }
@@ -406,13 +451,18 @@ function copyCurrent() {
 function openLinkCurrent() {
     const s = window._activeStore;
     if (!s) return;
+    // حماية: لو الـ link فاسد (#) لا نفتح أي شيء — نعرض toast بدلاً.
+    if (!s.link || s.link === '#') {
+        showToast(LANG === 'en' ? 'Link unavailable' : 'الرابط غير متوفّر');
+        return;
+    }
     trackEvent(s.store_id, 'click_link');
-    // Telegram WebApp يفتح روابط خارجية بشكل خاص
+    // مسار واحد فقط: s.link الذي بُني في loadData (يحترم cloaked_slug + يصفّي URL فاسد).
+    // ملاحظة: الـ API لا يُرجع حقل اسمه original_link — أي مرجع له خطأ تاريخي.
     if (tg && tg.openLink) {
         tg.openLink(s.link);
     } else {
-        if (tg && tg.openLink) tg.openLink(s.original_link);
-        else window.open(s.original_link, '_blank');
+        window.open(s.link, '_blank');
     }
 }
 
