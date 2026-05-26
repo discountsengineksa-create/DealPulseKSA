@@ -28,7 +28,14 @@ DB_CONFIG = {
     "port": os.getenv("DB_PORT"),
 }
 
-_API_SEARCH_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/") + "/api/v1/coupons/search"
+# ── Unified API endpoint ─────────────────────────────────────────────────
+# Source of Truth واحد: نفس الـ API الذي يخدم الموقع والـ Mini App.
+# في الإنتاج، البوت يقرأ كوبوناته من PostgreSQL مباشرة (أسرع)، لكن البحث
+# الذكي (trigram similarity) يمر عبر /coupons/search — لذا نضمن أن المسار
+# الافتراضي يشير للإنتاج الموحَّد، وليس localhost.
+# التطوير المحلي يضع API_BASE_URL=http://127.0.0.1:8000 في .env
+_API_BASE = os.getenv("API_BASE_URL", "https://api.dealpulseksa.com").rstrip("/")
+_API_SEARCH_URL = _API_BASE + "/api/v1/coupons/search"
 
 # إعدادات مراقب الخمول — مرحلتان (قابلة للتعديل من .env)
 IDLE_WARN_MINUTES           = int(os.getenv("IDLE_WARN_MINUTES",  "5"))   # تذكير
@@ -1250,27 +1257,78 @@ def show_lang_picker(chat_id):
 # ============================================================
 
 def _start_session(message):
-    register_or_update_user(message)
-    user_id   = message.from_user.id
-    chat_id   = message.chat.id
-    log_action(None, 'start', user_id=user_id)
+    """
+    إقلاع جلسة المستخدم. مُحصّن بـ multi-layer fallbacks بحيث الـ user
+    يحصل على رد دائماً حتى لو فشلت صورة الترحيب أو DB call أو i18n.
 
-    if needs_onboarding(user_id):
-        show_lang_picker(chat_id)
-        return
+    سلسلة الـ fallback:
+      1. الـ flow الكامل (image + main menu)
+      2. لو فشلت image → main menu نصي فقط
+      3. لو فشل DB/i18n → رسالة طوارئ ثابتة + لوحة افتراضية
+    """
+    chat_id = message.chat.id
+    user_id = message.from_user.id
 
-    lang      = get_lang(user_id)
+    # محاولة 1: register + onboarding check + log — كلها optional
+    try:
+        register_or_update_user(message)
+        log_action(None, 'start', user_id=user_id)
+        if needs_onboarding(user_id):
+            try:
+                show_lang_picker(chat_id)
+                return
+            except Exception as e:
+                print(f"⚠️ show_lang_picker failed: {e}")
+                # نُكمل للـ welcome العادي حتى لو فشل onboarding
+    except Exception as e:
+        print(f"⚠️ start preflight (register/onboarding) failed: {e}")
+
+    # محاولة 2: استخراج اللغة بأمان
+    try:
+        lang = get_lang(user_id)
+    except Exception:
+        lang = 'ar'
+
+    # محاولة 3: صورة الترحيب — اختيارية تماماً، نتخطّاها بصمت لو فشلت
     user_name = message.from_user.first_name or message.from_user.username or "زائر"
-    img_buf   = generate_welcome_image(user_name)
+    try:
+        img_buf = generate_welcome_image(user_name)
+        bot.send_photo(chat_id, img_buf, reply_markup=types.ReplyKeyboardRemove())
+    except Exception as e:
+        print(f"⚠️ welcome image failed (skipping): {e}")
+        # ReplyKeyboardRemove مهم لمسح أي لوحة قديمة
+        try:
+            bot.send_message(chat_id, "🟢", reply_markup=types.ReplyKeyboardRemove())
+        except Exception:
+            pass
 
-    # إزالة أي ReplyKeyboard قديم + إرسال صورة الترحيب
-    bot.send_photo(chat_id, img_buf, reply_markup=types.ReplyKeyboardRemove())
+    # محاولة 4: القائمة الرئيسية — الأهم. لو فشلت، نُرسل رسالة طوارئ.
+    try:
+        welcome_text = t(user_id, 'welcome')
+    except Exception:
+        welcome_text = "👋 أهلاً بك في نبض الصفقات!" if lang == 'ar' else "👋 Welcome to Deal Pulse!"
 
-    msg_id = _ensure_nav(chat_id, user_id, t(user_id, 'welcome'), _kb_main(lang))
-    _set_nav(user_id, {
-        'chat_id': chat_id, 'msg_id': msg_id,
-        'state': 'menu', 'stores': [], 'page': 0, 'source': 'codes',
-    })
+    try:
+        kb = _kb_main(lang)
+        msg_id = _ensure_nav(chat_id, user_id, welcome_text, kb)
+        _set_nav(user_id, {
+            'chat_id': chat_id, 'msg_id': msg_id,
+            'state': 'menu', 'stores': [], 'page': 0, 'source': 'codes',
+        })
+    except Exception as e:
+        print(f"❌ critical: main menu failed: {e}")
+        # رسالة طوارئ — لا تعتمد على أي helper. الـ user يجب أن يرى شيئاً.
+        fallback_text = (
+            "⚠️ حصل خطأ مؤقت في تحضير القائمة. جرّب /start مرة أخرى بعد لحظات.\n"
+            "للبحث المباشر، اكتب اسم المتجر."
+            if lang == 'ar' else
+            "⚠️ Temporary error preparing the menu. Try /start again in a moment.\n"
+            "For direct search, type a store name."
+        )
+        try:
+            bot.send_message(chat_id, fallback_text)
+        except Exception as e2:
+            print(f"❌❌ even fallback failed: {e2}")
 
 
 # ============================================================

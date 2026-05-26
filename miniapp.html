@@ -137,7 +137,10 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
         <p>DEAL PULSE KSA · <span id="lastSync" style="opacity:0.6;font-size:9px;letter-spacing:0">--</span></p>
       </div>
     </div>
-    <button class="glass" id="refreshBtn" style="padding:8px 15px; border-radius:10px; color:var(--t2); border:none;" onclick="refreshData()">تحديث</button>
+    <div style="display:flex;gap:6px;align-items:center">
+      <button class="glass" id="langBtn" title="Language" style="padding:8px 10px; border-radius:10px; color:var(--em); border:none; font-weight:800; font-size:11px;" onclick="toggleLang()">EN</button>
+      <button class="glass" id="refreshBtn" style="padding:8px 12px; border-radius:10px; color:var(--t2); border:none;" onclick="refreshData()">تحديث</button>
+    </div>
   </div>
   <div class="srch-wrap">
     <input class="srch glass" id="srchInput" type="text" placeholder="ابحث عن متجر أو كوبون..." oninput="onSearch(this.value)">
@@ -146,13 +149,24 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
 </header>
 
 <main>
+  <!-- 3 stats مطابقة للموقع dealpulseksa.com: ترند · قسم · متجر -->
   <div class="stats">
+    <div class="stat glass"><div class="stat-v" id="sTrend">0</div><div class="stat-l" id="lblTrend">ترند</div></div>
+    <div class="stat glass"><div class="stat-v" id="sCats">0</div><div class="stat-l" id="lblCats">قسم</div></div>
     <div class="stat glass"><div class="stat-v" id="sStores">0</div><div class="stat-l" id="lblStores">متجر</div></div>
-    <div class="stat glass"><div class="stat-v" id="sCoupons">0</div><div class="stat-l" id="lblCoupons">كوبون</div></div>
-    <div class="stat glass"><div class="stat-v" id="sTrend">0</div><div class="stat-l" id="lblTrend">رائج</div></div>
   </div>
 
+  <!-- شريحة الأقسام: chips أفقية قابلة للسحب — الضغط يُفلتر المتاجر -->
+  <div id="catsBar" style="padding:14px 18px 0;overflow-x:auto;white-space:nowrap;scrollbar-width:none">
+    <div id="catsChips" style="display:inline-flex;gap:8px"></div>
+  </div>
+  <style>#catsBar::-webkit-scrollbar{display:none}
+  .chip{display:inline-block;padding:8px 14px;border-radius:20px;background:rgba(255,255,255,0.04);border:1px solid var(--border);color:var(--t2);font-size:12px;font-weight:700;cursor:pointer;transition:0.2s;white-space:nowrap}
+  .chip:active{transform:scale(0.95)}
+  .chip.on{background:rgba(16,185,129,0.15);color:var(--em);border-color:rgba(16,185,129,0.4)}</style>
+
   <div class="stores">
+    <div id="sectionTitle" style="padding:0 18px 12px;font-size:14px;font-weight:800;color:var(--t1);opacity:0.85"></div>
     <div class="grid" id="storesGrid"></div>
   </div>
 </main>
@@ -197,10 +211,10 @@ const STRINGS = {
     brand:           'نبض الصفقات',
     refresh:         'تحديث',
     refreshing:      '🔄 جاري التحديث...',
-    searchHolder:    'ابحث عن متجر أو كوبون...',
+    searchHolder:    'ابحث عن متجر أو قسم...',
     stores:          'متجر',
-    coupons:         'كوبون',
-    trending:        'رائج',
+    cats:            'قسم',
+    trending:        'ترند',
     detailsLabel:    'تفاصيل العرض',
     copyHint:        'إضغط لنسخ الكود',
     noCoupon:        'لا يوجد كود',
@@ -209,17 +223,21 @@ const STRINGS = {
     copied:          '✅ تم نسخ الكود بنجاح',
     fetchErr:        '❌ عذراً، تعذر تحديث البيانات',
     home:            'الرئيسية',
-    fav:             'المفضلة',
-    me:              'حسابي',
+    trendTab:        'الترند 🔥',
+    siteTab:         'الموقع 🌐',
     title:           'نبض الصفقات | Deal Pulse KSA',
+    chipAll:         '✨ الكل',
+    sectionAll:      'أبرز المتاجر',
+    sectionTrend:    'الترند 🔥',
+    sectionCat:      'قسم: ',
   },
   en: {
     brand:           'Deal Pulse',
     refresh:         'Refresh',
     refreshing:      '🔄 Refreshing...',
-    searchHolder:    'Search for a store or coupon...',
+    searchHolder:    'Search store or category...',
     stores:          'Stores',
-    coupons:         'Coupons',
+    cats:            'Categories',
     trending:        'Trending',
     detailsLabel:    'View offer',
     copyHint:        'Tap to copy code',
@@ -229,29 +247,48 @@ const STRINGS = {
     copied:          '✅ Code copied successfully',
     fetchErr:        '❌ Sorry, failed to refresh data',
     home:            'Home',
-    fav:             'Favorites',
-    me:              'Account',
+    trendTab:        'Trending 🔥',
+    siteTab:         'Website 🌐',
     title:           'Deal Pulse KSA',
+    chipAll:         '✨ All',
+    sectionAll:      'Top Stores',
+    sectionTrend:    'Trending 🔥',
+    sectionCat:      'Category: ',
   }
 };
-const S = STRINGS[LANG];
+// LANG_OVERRIDE من localStorage يهيمن على Telegram language_code
+const LANG_STORED = (typeof localStorage !== 'undefined') ? localStorage.getItem('dp_lang') : null;
+let LANG_CURRENT = LANG_STORED || LANG;
+const S = STRINGS[LANG_CURRENT];
 
 // ── Apply direction + static labels at boot ─────────────────────────────
-(function applyLang() {
-  document.documentElement.lang = LANG;
-  document.documentElement.dir  = (LANG === 'en') ? 'ltr' : 'rtl';
-  document.body.style.direction = (LANG === 'en') ? 'ltr' : 'rtl';
-  document.title = S.title;
-  document.getElementById('brandName').textContent      = S.brand;
-  document.getElementById('refreshBtn').textContent     = S.refresh;
-  document.getElementById('srchInput').placeholder      = S.searchHolder;
-  document.getElementById('lblStores').textContent      = S.stores;
-  document.getElementById('lblCoupons').textContent     = S.coupons;
-  document.getElementById('lblTrend').textContent       = S.trending;
-  document.getElementById('navHome').textContent        = S.home;
-  document.getElementById('navFav').textContent         = S.fav;
-  document.getElementById('navMe').textContent          = S.me;
-})();
+function applyLang() {
+  const L = LANG_CURRENT;
+  const ST = STRINGS[L];
+  document.documentElement.lang = L;
+  document.documentElement.dir  = (L === 'en') ? 'ltr' : 'rtl';
+  document.body.style.direction = (L === 'en') ? 'ltr' : 'rtl';
+  document.title = ST.title;
+  document.getElementById('brandName').textContent  = ST.brand;
+  document.getElementById('refreshBtn').textContent = ST.refresh;
+  document.getElementById('srchInput').placeholder  = ST.searchHolder;
+  document.getElementById('lblStores').textContent  = ST.stores;
+  document.getElementById('lblCats').textContent    = ST.cats;
+  document.getElementById('lblTrend').textContent   = ST.trending;
+  document.getElementById('navHome').textContent    = ST.home;
+  document.getElementById('navFav').textContent     = ST.trendTab;
+  document.getElementById('navMe').textContent      = ST.siteTab;
+  // الزر يعرض اللغة المقابلة (لو نحن AR نعرض EN للتبديل)
+  document.getElementById('langBtn').textContent    = (L === 'ar') ? 'EN' : 'ع';
+}
+applyLang();
+
+function toggleLang() {
+    LANG_CURRENT = (LANG_CURRENT === 'ar') ? 'en' : 'ar';
+    try { localStorage.setItem('dp_lang', LANG_CURRENT); } catch(e){}
+    // نُعيد التحميل بلغة الجديدة (الـ API يردّ بـ name_en/store_bio_en حسب lang)
+    location.reload();
+}
 
 // ── Unified Source of Truth ─────────────────────────────────────────────
 // API_BASE: نفس الـ API الذي يستهلكه الموقع (api.dealpulseksa.com) — لا
@@ -262,10 +299,42 @@ const API_BASE = window.location.origin + '/api/v1';
 // يفتح خارج Mini App عبر tg.openLink() ليبقى Mini App مفتوحاً للعودة.
 const WEB_BASE = 'https://www.dealpulseksa.com';
 
-// activeFilter: 'all' | 'trending' — يتحكم بالـ nav tabs محلياً بدون reload
+// activeFilter: 'all' | 'trending' | 'cat:{name}' — يتحكم بكل الفلترة محلياً
 let ALL = [];
+let CATS = [];                 // قائمة الأقسام من /coupons/categories
 let activeSearch = '';
 let activeFilter = 'all';
+
+// ── Categories loader — chips قابلة للفلترة ─────────────────────────────
+async function loadCategories() {
+    try {
+        const res = await fetch(
+            `${API_BASE}/coupons/categories?_=${Date.now()}`,
+            { cache: 'no-store', headers: {'Cache-Control': 'no-cache'} }
+        );
+        if (!res.ok) { console.warn('[loadCategories] HTTP', res.status); return; }
+        const payload = await res.json();
+        CATS = payload.categories || [];
+        renderCategoryChips();
+        updateStats();
+    } catch (err) {
+        console.error('[loadCategories] failed:', err);
+    }
+}
+
+function renderCategoryChips() {
+    const bar = document.getElementById('catsChips');
+    if (!bar) return;
+    const ST = STRINGS[LANG_CURRENT];
+    // "✨ الكل" دائماً أول
+    let html = `<span class="chip ${activeFilter==='all'?'on':''}" onclick="setFilter('all')">${ST.chipAll}</span>`;
+    for (const c of CATS) {
+        const safe = String(c.tag_name).replace(/'/g, "\\'");
+        const isOn = (activeFilter === `cat:${c.tag_name}`) ? 'on' : '';
+        html += `<span class="chip ${isOn}" onclick="setFilter('cat:${safe}')"># ${c.tag_name}</span>`;
+    }
+    bar.innerHTML = html;
+}
 
 // ── Force-Fetch loader — multiple cache-busting layers ─────────────────────
 // طبقات منع الـ cache:
@@ -277,7 +346,7 @@ let activeFilter = 'all';
 // في الـ frontend cache. افحص /api/v1/coupons في متصفّح خارجي مباشرةً.
 async function loadData() {
     const t0 = Date.now();
-    const url = `${API_BASE}/coupons/?limit=50&lang=${LANG}&t=${t0}&r=${Math.random().toString(36).slice(2,10)}`;
+    const url = `${API_BASE}/coupons/?limit=50&lang=${LANG_CURRENT}&t=${t0}&r=${Math.random().toString(36).slice(2,10)}`;
 
     try {
         const res = await fetch(url, {
@@ -318,21 +387,23 @@ async function loadData() {
 
         ALL = items.map(item => ({
             id: item.id,
-            store_id: item.store_id || (LANG === 'en' ? 'Store' : 'متجر'),
-            disc: item.discount_value || (LANG === 'en' ? 'Special offer' : 'خصم خاص'),
+            store_id: item.store_id || (LANG_CURRENT === 'en' ? 'Store' : 'متجر'),
+            disc: item.discount_value || (LANG_CURRENT === 'en' ? 'Special offer' : 'خصم خاص'),
             coupon: item.public_coupon || '',
             link: buildLink(item),
             logo: item.logo_url || 'logo.png',
             bio: item.store_bio || '',
             trending: item.is_trending === 'ترند 🔥',
+            // store_tags array (يأتي مُسطّحاً من الـ API) — يدعم الفلترة بالقسم
+            tags: Array.isArray(item.store_tags) ? item.store_tags
+                  : (Array.isArray(item.store_tags_en) ? item.store_tags_en : []),
         }));
 
         const dt = Date.now() - t0;
         console.log(`[loadData] OK · ${ALL.length} stores · ${dt}ms · ${new Date().toISOString()}`);
-        // عرض timestamp التحميل في الـ UI (يكشف فوراً لو البيانات قديمة)
         const dbgEl = document.getElementById('lastSync');
         if (dbgEl) {
-            const hh = new Date().toLocaleTimeString(LANG === 'en' ? 'en-US' : 'ar-SA');
+            const hh = new Date().toLocaleTimeString(LANG_CURRENT === 'en' ? 'en-US' : 'ar-SA');
             dbgEl.textContent = `↻ ${hh} · ${ALL.length}`;
         }
 
@@ -340,7 +411,7 @@ async function loadData() {
         updateStats();
     } catch (err) {
         console.error('[loadData] failed:', err);
-        showToast(S.fetchErr);
+        showToast(STRINGS[LANG_CURRENT].fetchErr);
     }
 }
 
@@ -367,31 +438,48 @@ async function trackEvent(store_id, action) {
 }
 
 function updateStats() {
+    // 3 ستات بنفس ترتيب الموقع: ترند / قسم / متجر
+    document.getElementById('sTrend').textContent  = ALL.filter(x => x.trending).length;
+    document.getElementById('sCats').textContent   = CATS.length;
     document.getElementById('sStores').textContent = ALL.length;
-    document.getElementById('sCoupons').textContent = ALL.filter(x => x.coupon).length;
-    document.getElementById('sTrend').textContent = ALL.filter(x => x.trending).length;
+}
+
+function updateSectionTitle() {
+    const ST = STRINGS[LANG_CURRENT];
+    const el = document.getElementById('sectionTitle');
+    if (!el) return;
+    if (activeFilter === 'trending') el.textContent = ST.sectionTrend;
+    else if (activeFilter && activeFilter.startsWith('cat:'))
+        el.textContent = ST.sectionCat + activeFilter.slice(4);
+    else el.textContent = ST.sectionAll;
 }
 
 function renderStores() {
+    updateSectionTitle();
     const grid = document.getElementById('storesGrid');
-    // البحث يشمل: الاسم + الوصف (الـ bio) + Filter حسب الـ tab النشط
+    // الفلتر: 1) tab النشط (trending/cat)  2) بحث نصي على الاسم/bio/tags
+    const catFilter = (activeFilter && activeFilter.startsWith('cat:'))
+                      ? activeFilter.slice(4) : null;
     const filtered = ALL.filter(s => {
         if (activeFilter === 'trending' && !s.trending) return false;
-        const hay = (s.store_id + ' ' + (s.bio || '')).toLowerCase();
+        if (catFilter && !(s.tags || []).map(t=>String(t).trim()).includes(catFilter)) return false;
+        const hay = (s.store_id + ' ' + (s.bio || '') + ' ' + (s.tags || []).join(' ')).toLowerCase();
         return hay.includes(activeSearch);
     });
 
     if (!filtered.length) {
-        const emptyMsg = activeFilter === 'trending'
-            ? (LANG === 'en' ? 'No trending stores right now.' : 'لا توجد متاجر رائجة حالياً.')
-            : (LANG === 'en' ? 'No matching stores. Try another search.' : 'لا توجد نتائج مطابقة. جرّب كلمة أخرى.');
+        const isEn = LANG_CURRENT === 'en';
+        let emptyMsg;
+        if (activeFilter === 'trending') emptyMsg = isEn ? 'No trending stores right now.' : 'لا توجد متاجر رائجة حالياً.';
+        else if (catFilter) emptyMsg = isEn ? `No stores in this category yet.` : `لا توجد متاجر في هذا القسم بعد.`;
+        else emptyMsg = isEn ? 'No matching stores. Try another search.' : 'لا توجد نتائج مطابقة. جرّب كلمة أخرى.';
         grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--t3);padding:40px 20px;font-size:13px">${emptyMsg}</div>`;
         return;
     }
 
     grid.innerHTML = filtered.map(s => {
         const trendBadge = s.trending
-            ? `<span style="position:absolute;top:8px;${LANG==='en'?'right':'left'}:8px;background:rgba(239,68,68,0.18);color:#FCA5A5;font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px;border:1px solid rgba(239,68,68,0.3)">🔥 ${S.trending}</span>`
+            ? `<span style="position:absolute;top:8px;${LANG_CURRENT==='en'?'right':'left'}:8px;background:rgba(239,68,68,0.18);color:#FCA5A5;font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px;border:1px solid rgba(239,68,68,0.3)">🔥 ${S.trending}</span>`
             : '';
         // onerror يسقط لـ logo.png فقط لو فشل تحميل logo_url
         const logoSrc = (s.logo || 'logo.png').replace(/"/g, '&quot;');
@@ -453,7 +541,7 @@ function openLinkCurrent() {
     if (!s) return;
     // حماية: لو الـ link فاسد (#) لا نفتح أي شيء — نعرض toast بدلاً.
     if (!s.link || s.link === '#') {
-        showToast(LANG === 'en' ? 'Link unavailable' : 'الرابط غير متوفّر');
+        showToast(LANG_CURRENT === 'en' ? 'Link unavailable' : 'الرابط غير متوفّر');
         return;
     }
     trackEvent(s.store_id, 'click_link');
@@ -497,11 +585,14 @@ async function refreshData() {
     await loadData();
 }
 
-// ── Nav tabs: filter محلي بدون reload ──────────────────────────────────
+// ── Filter ديناميكي بدون reload — يدعم: 'all' | 'trending' | 'cat:{name}' ──
 function setFilter(mode) {
-    activeFilter = mode;                          // 'all' | 'trending'
+    activeFilter = mode;
+    // تحديث nav tabs
     document.getElementById('navHomeTab').classList.toggle('on', mode === 'all');
     document.getElementById('navTrendTab').classList.toggle('on', mode === 'trending');
+    // إعادة رسم chips الأقسام (يُبرز القسم المختار)
+    renderCategoryChips();
     window.scrollTo({ top: 0, behavior: 'smooth' });
     renderStores();
 }
@@ -514,13 +605,15 @@ function openWebSite() {
 }
 
 // ── Visibility change: عند العودة لـ Mini App بعد فتحه، أعد التحميل ────
-// Telegram WebView لا يُطلق unload فعلياً عند الـ minimize. visibilitychange
-// يطلق على iOS/Android حين يعود المستخدم للتطبيق.
 document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) loadData();             // silent refresh
+    if (!document.hidden) { loadData(); loadCategories(); }
 });
 
-document.addEventListener('DOMContentLoaded', loadData);
+// إقلاع: حمّل البيانات + الأقسام بالتوازي
+document.addEventListener('DOMContentLoaded', () => {
+    loadCategories();
+    loadData();
+});
 </script>
 </body>
 </html>
