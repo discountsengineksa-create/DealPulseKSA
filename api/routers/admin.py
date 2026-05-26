@@ -555,15 +555,25 @@ def seo_opportunities_track_related(
 def trends_debug(
     x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
 ):
-    """يتحقق من حالة pytrends على Railway (هل مثبتة، هل تستورد، إلخ)."""
+    """يتحقق من حالة pytrends + Google Suggest على Railway."""
     _verify_admin(x_admin_secret)
-    from api.seo.trends_puller import get_init_status, fetch_keyword_score
+    from api.seo.trends_puller import (
+        get_init_status, fetch_keyword_score, fetch_google_suggestions,
+    )
     out = {"init_status": get_init_status()}
-    # اختبار حيّ بكلمة إنجليزية بسيطة (تجنب أي مشكلة UTF-8)
+    # اختبار pytrends
     try:
-        out["live_test_english"] = fetch_keyword_score("noon", geo="SA")
+        out["pytrends_test"] = fetch_keyword_score("noon", geo="SA",
+                                                    with_related=False)
     except Exception as exc:
-        out["live_test_error"] = f"{type(exc).__name__}: {str(exc)[:300]}"
+        out["pytrends_error"] = f"{type(exc).__name__}: {str(exc)[:300]}"
+    # اختبار Google Suggest (لا يستخدم pytrends — مسار مستقل)
+    try:
+        out["suggest_test_arabic"] = fetch_google_suggestions(
+            "كود خصم نون", hl="ar", gl="sa"
+        )
+    except Exception as exc:
+        out["suggest_error"] = f"{type(exc).__name__}: {str(exc)[:300]}"
     return out
 
 
