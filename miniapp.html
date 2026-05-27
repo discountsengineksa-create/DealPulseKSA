@@ -293,6 +293,15 @@ let LANG_CURRENT = LANG_STORED || LANG;
 const S = STRINGS[LANG_CURRENT];
 
 // ── Apply direction + static labels at boot ─────────────────────────────
+// helper يكتب نص فقط لو العنصر موجود — يحمي السكربت من crash لو عنصر محذوف.
+function _setText(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+}
+function _setPlaceholder(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.placeholder = text;
+}
 function applyLang() {
   const L = LANG_CURRENT;
   const ST = STRINGS[L];
@@ -300,18 +309,15 @@ function applyLang() {
   document.documentElement.dir  = (L === 'en') ? 'ltr' : 'rtl';
   document.body.style.direction = (L === 'en') ? 'ltr' : 'rtl';
   document.title = ST.title;
-  document.getElementById('brandName').textContent  = ST.brand;
-  document.getElementById('refreshBtn').textContent = ST.refresh;
-  document.getElementById('srchInput').placeholder  = ST.searchHolder;
-  document.getElementById('lblStores').textContent  = ST.stores;
-  document.getElementById('lblCats').textContent    = ST.cats;
-  document.getElementById('lblTrend').textContent   = ST.trending;
-  document.getElementById('navHome').textContent    = ST.home;
-  document.getElementById('navStores').textContent  = ST.stores;
-  document.getElementById('navCats').textContent    = ST.cats;
-  document.getElementById('navTrend').textContent   = ST.trendTab;
-  // الزر يعرض اللغة المقابلة (لو نحن AR نعرض EN للتبديل)
-  document.getElementById('langBtn').textContent    = (L === 'ar') ? 'EN' : 'ع';
+  _setText('brandName', ST.brand);
+  _setText('refreshBtn', ST.refresh);
+  _setPlaceholder('srchInput', ST.searchHolder);
+  _setText('lblStores', ST.stores);
+  _setText('lblCats', ST.cats);
+  _setText('lblTrend', ST.trending);
+  // الزر يعرض اللغة المقابلة (لو AR نعرض EN للتبديل)
+  _setText('langBtn', (L === 'ar') ? 'EN' : 'ع');
+  // ملاحظة: navHome/navStores/navCats/navTrend أُزيلت مع bottom nav — لا مراجع بعد الآن.
 }
 applyLang();
 
