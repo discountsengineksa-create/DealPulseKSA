@@ -1,7 +1,16 @@
 import os
+import sys
 import threading
 import time
 from io import BytesIO
+
+# على ويندوز بـ locale عربي (cp1256) تفشل طباعة الإيموجي وتُسقط البوت عند أول print.
+# نفرض UTF-8 على stdout/stderr حتى يعمل التشغيل المحلي بأي طرفية.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
 import requests
 import telebot
 from telebot import types

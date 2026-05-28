@@ -100,7 +100,8 @@ plotly==6.7.0
 
 pooch==1.8.2
 
-protobuf==7.34.1
+# google-generativeai 0.8.3 يتطلب protobuf<6؛ التثبيت السابق على pip قديم سمح بـ 7.x بالخطأ
+protobuf<6
 
 psycopg2-binary==2.9.12
 
