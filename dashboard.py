@@ -1276,8 +1276,8 @@ with st.sidebar.expander("📋 القائمة الرئيسية", expanded=(_cur 
     # نستخدم 0 كافتراضي لكن الـ on_change هي المتحكم الفعلي
     _idx = _MAIN_PAGES.index(_cur) if _cur in _MAIN_PAGES else 0
     st.radio(
-        "", 
-        _MAIN_PAGES, 
+        "القائمة الرئيسية",
+        _MAIN_PAGES,
         index=_idx, 
         key="r_main", 
         on_change=handle_nav, 
@@ -1289,8 +1289,8 @@ with st.sidebar.expander("📋 القائمة الرئيسية", expanded=(_cur 
 with st.sidebar.expander("📊 التحليل", expanded=(_cur in _ANALYSIS_PAGES)):
     _idx2 = _ANALYSIS_PAGES.index(_cur) if _cur in _ANALYSIS_PAGES else 0
     st.radio(
-        "", 
-        _ANALYSIS_PAGES, 
+        "التحليل",
+        _ANALYSIS_PAGES,
         index=_idx2, 
         key="r_analysis", 
         on_change=handle_nav, 
@@ -1302,8 +1302,8 @@ with st.sidebar.expander("📊 التحليل", expanded=(_cur in _ANALYSIS_PAGE
 with st.sidebar.expander("🔧 أدوات متقدمة", expanded=(_cur in _OTHER_PAGES)):
     _idx3 = _OTHER_PAGES.index(_cur) if _cur in _OTHER_PAGES else 0
     st.radio(
-        "", 
-        _OTHER_PAGES, 
+        "أدوات متقدمة",
+        _OTHER_PAGES,
         index=_idx3, 
         key="r_other", 
         on_change=handle_nav, 
