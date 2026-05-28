@@ -2,7 +2,7 @@
 Admin endpoints — يستدعيها الـ dashboard فقط.
 
 POST /api/v1/admin/broadcast/{master_id}
-    يطلق نشر العرض على كل منصات السوشيال في الخلفية (FastAPI BackgroundTasks).
+    يطلق نشر العرض على كل منصات السوشيال في خيط خلفي (daemon thread).
     الـ Header `X-Admin-Secret` لازم يطابق ADMIN_SHARED_SECRET.
 
 POST /api/v1/admin/trigger-directive
@@ -12,10 +12,11 @@ from __future__ import annotations
 
 import os
 import secrets as _secrets
+import threading
 
 from pydantic import BaseModel
 
-from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 
 from api.social.dispatcher import broadcast_to_all_platforms
 from api.utils.rate_limit import LIMIT_ADMIN, limiter
@@ -37,11 +38,16 @@ def _verify_admin(x_admin_secret: str) -> None:
 def broadcast(
     master_id: int,
     request: Request,
-    background_tasks: BackgroundTasks,
     x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
 ):
     _verify_admin(x_admin_secret)
-    background_tasks.add_task(broadcast_to_all_platforms, master_id)
+    # خيط خلفي بدل FastAPI BackgroundTasks: حقن BackgroundTasks يتعارض مع decorator
+    # الـ rate-limit (slowapi) فيرجع 422. الـ dispatcher يفتح اتصاله الخاص فهو آمن للخيط.
+    threading.Thread(
+        target=broadcast_to_all_platforms,
+        args=(master_id,),
+        daemon=True,
+    ).start()
     from api.utils.ops import audit_log
     audit_log(action="broadcast", target=str(master_id))
     return {"status": "queued", "master_id": master_id}
