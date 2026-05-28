@@ -28,7 +28,7 @@ def cloudinary_variant(
     h: int,
     crop: str = "pad",
     bg: str = "white",
-    fmt: str = "webp",
+    fmt: str = "jpg",  # JPEG مقبول عند كل المنصّات؛ WebP ترفضه Meta (FB/IG/Threads)
     quality: str = "auto",
 ) -> str | None:
     """يُدرج تحويل المقاس في رابط Cloudinary. غير-Cloudinary يُعاد كما هو."""
