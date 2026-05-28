@@ -155,27 +155,22 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
      VIEW: HOME — الستات + chips الأقسام + grid المتاجر
      ═══════════════════════════════════════════════════════════════════ -->
 <main id="viewHome">
+  <!-- صف الستوري — المتاجر المروّجة (is_promoted) -->
+  <div id="storyRow" class="story-row"></div>
+
   <div class="stats">
-    <div class="stat glass" onclick="setFilter('trending')" style="cursor:pointer">
+    <div class="stat glass" onclick="showListView('trending')" style="cursor:pointer">
       <div class="stat-v" id="sTrend">0</div><div class="stat-l" id="lblTrend">ترند</div>
     </div>
-    <div class="stat glass" onclick="scrollToCats()" style="cursor:pointer">
+    <div class="stat glass" onclick="showCategoriesView()" style="cursor:pointer">
       <div class="stat-v" id="sCats">0</div><div class="stat-l" id="lblCats">قسم</div>
     </div>
-    <div class="stat glass" onclick="setFilter('all')" style="cursor:pointer">
+    <div class="stat glass" onclick="showListView('all')" style="cursor:pointer">
       <div class="stat-v" id="sStores">0</div><div class="stat-l" id="lblStores">متجر</div>
     </div>
   </div>
-
-  <div id="catsBar" style="padding:14px 18px 0;overflow-x:auto;white-space:nowrap;scrollbar-width:none">
-    <div id="catsChips" style="display:inline-flex;gap:8px"></div>
-  </div>
   <style>
-  #catsBar::-webkit-scrollbar{display:none}
-  .chip{display:inline-block;padding:8px 14px;border-radius:20px;background:rgba(255,255,255,0.04);border:1px solid var(--border);color:var(--t2);font-size:12px;font-weight:700;cursor:pointer;transition:0.2s;white-space:nowrap}
-  .chip:active{transform:scale(0.95)}
-  .chip.on{background:rgba(16,185,129,0.15);color:var(--em);border-color:rgba(16,185,129,0.4)}
-  /* Sub-view (Category / Store) — يستبدل home بالكامل */
+  /* Sub-view (List / Categories / Category / Store) — يستبدل home بالكامل */
   .subview{display:none;padding:18px;animation:slideIn 0.25s ease-out}
   .subview.on{display:block}
   @keyframes slideIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
@@ -193,6 +188,48 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
   .cta-primary{background:var(--em);color:#fff}
   .cta-ghost{background:rgba(255,255,255,0.04);color:var(--t2);border:1px solid var(--border) !important}
   .store-meta{margin-top:18px;padding-top:18px;border-top:1px solid var(--border);font-size:12px;color:var(--t3);text-align:center;line-height:1.8}
+
+  /* ── STORY ROW (دوائر المتاجر المروّجة) ── */
+  .story-row{display:flex;gap:14px;padding:14px 18px 4px;overflow-x:auto;scrollbar-width:none}
+  .story-row::-webkit-scrollbar{display:none}
+  .story-row:empty{display:none}
+  .story-item{display:flex;flex-direction:column;align-items:center;gap:6px;flex-shrink:0;cursor:pointer;background:none;border:none;font-family:var(--font)}
+  .story-item:active{transform:scale(0.94)}
+  .story-ring{width:66px;height:66px;border-radius:50%;padding:2px;display:grid;place-items:center;
+    background:conic-gradient(from 0deg,#10B981,#34D399,#059669,#10B981)}
+  .story-ring .inner{width:100%;height:100%;border-radius:50%;background:var(--bg2);overflow:hidden;display:grid;place-items:center;border:2px solid var(--bg)}
+  .story-ring img{width:78%;height:78%;object-fit:contain}
+  .story-name{font-size:10px;color:var(--t2);max-width:66px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
+
+  /* ── STORY VIEWER (ملء الشاشة) ── */
+  .story-viewer{position:fixed;inset:0;z-index:500;background:rgba(8,14,29,0.96);backdrop-filter:blur(10px);
+    display:none;flex-direction:column;align-items:center;justify-content:center}
+  .story-viewer.on{display:flex}
+  .story-progress{position:absolute;top:calc(10px + env(safe-area-inset-top,0));left:12px;right:12px;z-index:20;display:flex;gap:4px}
+  .story-progress .seg{flex:1;height:3px;border-radius:3px;background:rgba(255,255,255,0.25);overflow:hidden}
+  .story-progress .seg>i{display:block;height:100%;width:0;background:#fff}
+  .story-close{position:absolute;top:calc(20px + env(safe-area-inset-top,0));right:16px;z-index:30;width:36px;height:36px;border-radius:50%;
+    background:rgba(255,255,255,0.12);color:#fff;border:none;font-size:16px;cursor:pointer}
+  .story-tap{position:absolute;top:0;bottom:90px;width:35%;z-index:10}
+  html[dir="rtl"] .story-tap-prev{right:0} html[dir="rtl"] .story-tap-next{left:0}
+  html[dir="ltr"] .story-tap-prev{left:0} html[dir="ltr"] .story-tap-next{right:0}
+  .story-content{position:relative;z-index:15;width:100%;max-width:420px;padding:0 28px;text-align:center;color:#fff;pointer-events:none}
+  .story-content .s-logo{width:130px;height:130px;margin:0 auto 22px;border-radius:22px;background:#fff;overflow:hidden;display:grid;place-items:center}
+  .story-content .s-logo img{width:80%;height:80%;object-fit:contain}
+  .story-content h3{font-size:24px;font-weight:900;margin-bottom:8px}
+  .story-content .s-offer{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.6);margin-bottom:22px}
+  .story-content .s-code-lbl{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.5);margin-bottom:8px}
+  .story-content .s-code{display:inline-block;padding:12px 20px;border-radius:14px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);
+    font-family:monospace;font-size:18px;font-weight:900;letter-spacing:3px;margin-bottom:26px}
+  .story-content .s-visit{pointer-events:all;display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;max-width:300px;
+    padding:15px;border-radius:14px;background:#fff;color:#0C1527;font-weight:800;font-size:15px;border:none;cursor:pointer;font-family:var(--font)}
+
+  /* ── CATEGORIES PAGE ── */
+  .cats-page-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+  .cat-tile{display:flex;align-items:center;justify-content:space-between;padding:16px;border-radius:16px;
+    background:rgba(255,255,255,0.04);border:1px solid var(--border);color:var(--t1);font-weight:800;font-size:14px;cursor:pointer;transition:0.2s}
+  .cat-tile:active{transform:scale(0.96)}
+  .cat-tile .cnt{font-size:11px;color:var(--em);font-weight:700;background:rgba(16,185,129,0.12);padding:3px 9px;border-radius:20px}
   </style>
 
   <div class="stores">
@@ -217,6 +254,35 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
   <button class="sv-back" onclick="goBack()">← <span id="storeBackLbl">رجوع</span></button>
   <div id="storeBody"></div>
 </main>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     VIEW: LIST — صفحة مستقلة لكل المتاجر / الترند
+     ═══════════════════════════════════════════════════════════════════ -->
+<main id="viewList" class="subview">
+  <button class="sv-back" onclick="goBack()">← <span id="listBackLbl">رجوع</span></button>
+  <div class="sv-title" id="listTitle">المتاجر</div>
+  <div class="grid" id="listGrid"></div>
+</main>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     VIEW: CATEGORIES — صفحة مستقلة لكل الأقسام (chips منقولة من الهوم)
+     ═══════════════════════════════════════════════════════════════════ -->
+<main id="viewCategories" class="subview">
+  <button class="sv-back" onclick="goBack()">← <span id="catsBackLbl">رجوع</span></button>
+  <div class="sv-title" id="catsPageTitle">الأقسام</div>
+  <div id="catsPageGrid" class="cats-page-grid"></div>
+</main>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     STORY VIEWER — عارض ملء الشاشة (overlay، ليس view في switchView)
+     ═══════════════════════════════════════════════════════════════════ -->
+<div id="storyViewer" class="story-viewer">
+  <div class="story-progress" id="storyProgress"></div>
+  <button class="story-close" onclick="closeStory()" aria-label="إغلاق">✕</button>
+  <div class="story-tap story-tap-prev" onclick="storyPrev()"></div>
+  <div class="story-tap story-tap-next" onclick="storyNext()"></div>
+  <div class="story-content" id="storyContent"></div>
+</div>
 
 <script>
 // ── Telegram WebApp integration (ready/expand/theme) ─────────────────────
@@ -259,6 +325,7 @@ const STRINGS = {
     title:           'نبض الصفقات | Deal Pulse KSA',
     chipAll:         '✨ الكل',
     sectionAll:      'أبرز المتاجر',
+    allStores:       'كل المتاجر',
     sectionTrend:    'الترند 🔥',
     sectionCat:      'قسم: ',
   },
@@ -283,6 +350,7 @@ const STRINGS = {
     title:           'Deal Pulse KSA',
     chipAll:         '✨ All',
     sectionAll:      'Top Stores',
+    allStores:       'All Stores',
     sectionTrend:    'Trending 🔥',
     sectionCat:      'Category: ',
   }
@@ -343,8 +411,7 @@ const WEB_BASE = 'https://www.dealpulseksa.com';
 let ALL = [];
 let CATS = [];
 let activeSearch = '';
-let activeFilter = 'all';      // 'all' | 'trending' (للـ home grid فقط)
-let currentView = 'home';      // 'home' | 'category' | 'store'
+let currentView = 'home';      // 'home' | 'list' | 'categories' | 'category' | 'store'
 let viewStack = [];            // stack للرجوع (آخر view → الرجوع له)
 let viewContext = {};          // {category: 'عطور'} | {storeId: 17}
 
@@ -355,6 +422,8 @@ function switchView(name) {
     document.getElementById('viewHome').style.display     = (name === 'home') ? 'block' : 'none';
     document.getElementById('viewCategory').classList.toggle('on', name === 'category');
     document.getElementById('viewStore').classList.toggle('on', name === 'store');
+    document.getElementById('viewList').classList.toggle('on', name === 'list');
+    document.getElementById('viewCategories').classList.toggle('on', name === 'categories');
     // إخفاء البحث في sub-views (محصور على home)
     const srch = document.getElementById('srchWrap');
     if (srch) srch.style.display = (name === 'home') ? 'block' : 'none';
@@ -376,10 +445,10 @@ function goBack() {
     const prev = viewStack.pop() || { view: 'home', context: {} };
     viewContext = prev.context || {};
     switchView(prev.view);
-    // أعد رسم الـ view لو رجعنا لـ category سابق
-    if (prev.view === 'category' && viewContext.category) {
-        renderCategoryView(viewContext.category);
-    }
+    // أعد رسم الـ view المُرجَع إليه حسب نوعه
+    if (prev.view === 'category' && viewContext.category) renderCategoryView(viewContext.category);
+    else if (prev.view === 'list' && viewContext.listMode) renderListView(viewContext.listMode);
+    else if (prev.view === 'categories') renderCategoriesPage();
 }
 
 function showCategoryView(name) {
@@ -396,9 +465,53 @@ function showStoreView(storeId) {
     switchView('store');
 }
 
-function scrollToCats() {
-    const el = document.getElementById('catsBar');
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+// ── List view (كل المتاجر / الترند) ──
+function showListView(mode) {
+    viewStack.push({ view: currentView, context: { ...viewContext } });
+    viewContext = { listMode: mode };
+    renderListView(mode);
+    switchView('list');
+}
+
+function renderListView(mode) {
+    const ST = STRINGS[LANG_CURRENT];
+    document.getElementById('listTitle').textContent   = (mode === 'trending') ? ST.sectionTrend : ST.allStores;
+    document.getElementById('listBackLbl').textContent = ST.home;
+    const list = (mode === 'trending') ? ALL.filter(s => s.trending) : ALL;
+    const grid = document.getElementById('listGrid');
+    if (!list.length) {
+        const msg = (mode === 'trending')
+            ? (LANG_CURRENT === 'en' ? 'No trending stores right now.' : 'لا توجد متاجر رائجة حالياً.')
+            : (LANG_CURRENT === 'en' ? 'No stores yet.' : 'لا توجد متاجر بعد.');
+        grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--t3);padding:40px 20px;font-size:13px">${msg}</div>`;
+        return;
+    }
+    grid.innerHTML = list.map(storeCardHTML).join('');
+}
+
+// ── Categories page (chips منقولة من الهوم → tiles بعدّاد المتاجر) ──
+function showCategoriesView() {
+    viewStack.push({ view: currentView, context: { ...viewContext } });
+    viewContext = { categories: true };
+    renderCategoriesPage();
+    switchView('categories');
+}
+
+function renderCategoriesPage() {
+    const ST = STRINGS[LANG_CURRENT];
+    document.getElementById('catsPageTitle').textContent = ST.cats;
+    document.getElementById('catsBackLbl').textContent   = ST.home;
+    const grid = document.getElementById('catsPageGrid');
+    if (!CATS.length) {
+        grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--t3);padding:40px 20px;font-size:13px">${LANG_CURRENT === 'en' ? 'No categories.' : 'لا توجد أقسام.'}</div>`;
+        return;
+    }
+    grid.innerHTML = CATS.map(c => {
+        const name = String(c.tag_name);
+        const safe = name.replace(/'/g, "\\'");
+        const cnt  = ALL.filter(s => (s.tags || []).map(t => String(t).trim()).includes(name)).length;
+        return `<div class="cat-tile" onclick="showCategoryView('${safe}')"><span># ${name}</span><span class="cnt">${cnt}</span></div>`;
+    }).join('');
 }
 
 // ── Categories loader — chips قابلة للفلترة ─────────────────────────────
@@ -411,25 +524,11 @@ async function loadCategories() {
         if (!res.ok) { console.warn('[loadCategories] HTTP', res.status); return; }
         const payload = await res.json();
         CATS = payload.categories || [];
-        renderCategoryChips();
         updateStats();
+        if (currentView === 'categories') renderCategoriesPage();
     } catch (err) {
         console.error('[loadCategories] failed:', err);
     }
-}
-
-function renderCategoryChips() {
-    const bar = document.getElementById('catsChips');
-    if (!bar) return;
-    const ST = STRINGS[LANG_CURRENT];
-    // "✨ الكل" يفعّل filter all على home
-    let html = `<span class="chip ${activeFilter==='all'?'on':''}" onclick="setFilter('all')">${ST.chipAll}</span>`;
-    // كل قسم → يفتح Category VIEW (وليس filter محلي)
-    for (const c of CATS) {
-        const safe = String(c.tag_name).replace(/'/g, "\\'");
-        html += `<span class="chip" onclick="showCategoryView('${safe}')"># ${c.tag_name}</span>`;
-    }
-    bar.innerHTML = html;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -561,6 +660,7 @@ async function loadData() {
             logo: item.logo_url || 'logo.png',
             bio: item.store_bio || '',
             trending: item.is_trending === 'ترند 🔥',
+            promoted: !!item.is_promoted,
             // store_tags array (يأتي مُسطّحاً من الـ API) — يدعم الفلترة بالقسم
             tags: Array.isArray(item.store_tags) ? item.store_tags
                   : (Array.isArray(item.store_tags_en) ? item.store_tags_en : []),
@@ -576,6 +676,7 @@ async function loadData() {
 
         renderStores();
         updateStats();
+        renderStoryRow();
     } catch (err) {
         console.error('[loadData] failed:', err);
         showToast(STRINGS[LANG_CURRENT].fetchErr);
@@ -611,40 +712,28 @@ function updateStats() {
     document.getElementById('sStores').textContent = ALL.length;
 }
 
-function updateSectionTitle() {
-    const ST = STRINGS[LANG_CURRENT];
-    const el = document.getElementById('sectionTitle');
-    if (!el) return;
-    if (activeFilter === 'trending') el.textContent = ST.sectionTrend;
-    else if (activeFilter && activeFilter.startsWith('cat:'))
-        el.textContent = ST.sectionCat + activeFilter.slice(4);
-    else el.textContent = ST.sectionAll;
-}
-
 function renderStores() {
-    updateSectionTitle();
+    const ST = STRINGS[LANG_CURRENT];
+    const titleEl = document.getElementById('sectionTitle');
     const grid = document.getElementById('storesGrid');
-    // الفلتر: 1) tab النشط (trending/cat)  2) بحث نصي على الاسم/bio/tags
-    const catFilter = (activeFilter && activeFilter.startsWith('cat:'))
-                      ? activeFilter.slice(4) : null;
-    const filtered = ALL.filter(s => {
-        if (activeFilter === 'trending' && !s.trending) return false;
-        if (catFilter && !(s.tags || []).map(t=>String(t).trim()).includes(catFilter)) return false;
-        const hay = (s.store_id + ' ' + (s.bio || '') + ' ' + (s.tags || []).join(' ')).toLowerCase();
-        return hay.includes(activeSearch);
-    });
-
-    if (!filtered.length) {
-        const isEn = LANG_CURRENT === 'en';
-        let emptyMsg;
-        if (activeFilter === 'trending') emptyMsg = isEn ? 'No trending stores right now.' : 'لا توجد متاجر رائجة حالياً.';
-        else if (catFilter) emptyMsg = isEn ? `No stores in this category yet.` : `لا توجد متاجر في هذا القسم بعد.`;
-        else emptyMsg = isEn ? 'No matching stores. Try another search.' : 'لا توجد نتائج مطابقة. جرّب كلمة أخرى.';
-        grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--t3);padding:40px 20px;font-size:13px">${emptyMsg}</div>`;
+    let list;
+    if (activeSearch) {
+        list = ALL.filter(s => {
+            const hay = (s.store_id + ' ' + (s.bio || '') + ' ' + (s.tags || []).join(' ')).toLowerCase();
+            return hay.includes(activeSearch);
+        });
+        if (titleEl) titleEl.textContent = LANG_CURRENT === 'en' ? 'Search results' : 'نتائج البحث';
+    } else {
+        // أبرز المتاجر: الترند أولاً، بحد 8 — والباقي عبر بطاقة «متجر»
+        list = [...ALL].sort((a, b) => (b.trending ? 1 : 0) - (a.trending ? 1 : 0)).slice(0, 8);
+        if (titleEl) titleEl.textContent = ST.sectionAll;
+    }
+    if (!list.length) {
+        const msg = LANG_CURRENT === 'en' ? 'No matching stores. Try another search.' : 'لا توجد نتائج مطابقة. جرّب كلمة أخرى.';
+        grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--t3);padding:40px 20px;font-size:13px">${msg}</div>`;
         return;
     }
-
-    grid.innerHTML = filtered.map(storeCardHTML).join('');
+    grid.innerHTML = list.map(storeCardHTML).join('');
 }
 
 // Legacy openStore — أعيد توجيهها للـ inline view الجديد. لا modal بعد الآن.
@@ -710,13 +799,78 @@ async function refreshData() {
     await loadData();
 }
 
-// ── Filter Home grid: 'all' | 'trending' فقط (لا cat — categories تفتح view) ──
-function setFilter(mode) {
-    activeFilter = mode;
-    if (currentView !== 'home') switchView('home');  // أرجع للـ home لو في sub-view
-    renderCategoryChips();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    renderStores();
+// ═══════════════════════════════════════════════════════════════════════════
+//                  STORY VIEWER — صف دوائر + عارض ملء الشاشة
+// ═══════════════════════════════════════════════════════════════════════════
+let STORY = [];          // المتاجر المعروضة كـ stories
+let storyIdx = 0;
+let storyRAF = null;
+let storyStart = 0;
+const STORY_MS = 6000;
+
+function renderStoryRow() {
+    const row = document.getElementById('storyRow');
+    if (!row) return;
+    STORY = ALL.filter(s => s.promoted);
+    if (!STORY.length) STORY = ALL.filter(s => s.trending);   // fallback: الترند لو ما في promoted
+    STORY = STORY.slice(0, 12);
+    row.innerHTML = STORY.map((s, i) => {
+        const logo = (s.logo || 'logo.png').replace(/"/g, '&quot;');
+        return `<button class="story-item" onclick="openStory(${i})">
+            <span class="story-ring"><span class="inner"><img src="${logo}" onerror="this.onerror=null;this.src='logo.png'"></span></span>
+            <span class="story-name">${s.store_id}</span></button>`;
+    }).join('');
+}
+
+function openStory(i) {
+    if (i < 0 || i >= STORY.length) return;
+    storyIdx = i;
+    document.getElementById('storyViewer').classList.add('on');
+    renderStorySlide();
+    startStoryTimer();
+}
+
+function closeStory() {
+    document.getElementById('storyViewer').classList.remove('on');
+    if (storyRAF) cancelAnimationFrame(storyRAF);
+    storyRAF = null;
+}
+
+function storyNext() { if (storyIdx >= STORY.length - 1) { closeStory(); return; } storyIdx++; renderStorySlide(); startStoryTimer(); }
+function storyPrev() { if (storyIdx <= 0) return; storyIdx--; renderStorySlide(); startStoryTimer(); }
+
+function renderStorySlide() {
+    const s = STORY[storyIdx];
+    if (!s) return;
+    const ST = STRINGS[LANG_CURRENT];
+    const logo = (s.logo || 'logo.png').replace(/"/g, '&quot;');
+    document.getElementById('storyProgress').innerHTML =
+        STORY.map((_, i) => `<span class="seg"><i id="seg${i}" style="width:${i < storyIdx ? '100%' : '0'}"></i></span>`).join('');
+    document.getElementById('storyContent').innerHTML = `
+        <div class="s-logo"><img src="${logo}" onerror="this.onerror=null;this.src='logo.png'"></div>
+        <h3>${s.store_id}${s.trending ? ' 🔥' : ''}</h3>
+        ${s.disc ? `<div class="s-offer">Exclusive · ${s.disc}</div>` : ''}
+        ${s.coupon ? `<div class="s-code-lbl">${LANG_CURRENT === 'en' ? 'Coupon code' : 'كود الخصم'}</div><div class="s-code">${s.coupon}</div>` : ''}
+        <button class="s-visit" onclick="storyVisit(${s.id})">${ST.goToStore}</button>`;
+}
+
+function startStoryTimer() {
+    if (storyRAF) cancelAnimationFrame(storyRAF);
+    storyStart = performance.now();
+    const seg = document.getElementById('seg' + storyIdx);
+    const tick = (now) => {
+        const pct = Math.min((now - storyStart) / STORY_MS, 1);
+        if (seg) seg.style.width = (pct * 100) + '%';
+        if (pct >= 1) storyNext();
+        else storyRAF = requestAnimationFrame(tick);
+    };
+    storyRAF = requestAnimationFrame(tick);
+}
+
+// زيارة المتجر من الستوري — يفتح صفحة المتجر داخل الميني (لا تحويل خارجي)
+function storyVisit(id) {
+    closeStory();
+    showStoreView(id);
 }
 
 // ── Visibility change: عند العودة لـ Mini App بعد فتحه، أعد التحميل ────
