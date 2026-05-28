@@ -72,17 +72,36 @@ def _trigger_social_broadcast(master_id: int | None) -> None:
         "https://dealpulseksa-production.up.railway.app",
     ).rstrip("/")
     if not secret:
-        st.toast("ℹ️ النشر التلقائي معطّل — أضف ADMIN_SHARED_SECRET لتفعيله.")
+        st.warning(
+            "⚠️ النشر التلقائي معطّل — أضف `ADMIN_SHARED_SECRET` على خدمة الداشبورد "
+            "(بنفس قيمة الـ API) لتفعيل البث للسوشيال."
+        )
         return
     try:
-        requests.post(
+        resp = requests.post(
             f"{api_url}/api/v1/admin/broadcast/{master_id}",
             headers={"X-Admin-Secret": secret},
             timeout=4,
         )
-        st.toast("📢 جدولة نشر العرض على منصات السوشيال…")
     except Exception as e:
         st.warning(f"تم الحفظ، لكن فشلت جدولة النشر: {e}")
+        return
+
+    if resp.status_code < 300:
+        st.toast("📢 جدولة نشر العرض على منصات السوشيال…")
+    elif resp.status_code == 403:
+        st.error(
+            "❌ البث مرفوض (403): سرّ الإدمن غير متطابق بين الداشبورد والـ API. "
+            "تأكّد إن `ADMIN_SHARED_SECRET` نفس القيمة على الخدمتين."
+        )
+    elif resp.status_code == 503:
+        st.error(
+            "❌ البث غير مفعّل (503): `ADMIN_SHARED_SECRET` غير مضبوط على خدمة الـ API."
+        )
+    else:
+        st.warning(
+            f"تم الحفظ، لكن جدولة النشر رجّعت HTTP {resp.status_code}: {resp.text[:200]}"
+        )
 
 
 # ─── جسر الـ Admin API (للوحات SEO + الرصد الاجتماعي) ──────────────────────────
@@ -1259,6 +1278,7 @@ _OTHER_PAGES = [
 "رادار المناسبات", "مركز التوسع", "درع الحماية",
 "مركز الصيانة", "مدير القناة", "المحفز الفوري",
 "محرّك SEO", "📤 الصفحات المنشورة", "🎯 محرك الفرص", "الرصد الاجتماعي", "🎯 رادار الصفقات الفوري", "التدقيق والتجارب",
+"🩺 تشخيص النشر",
 ]
 
 # 1. تهيئة حالة الصفحة إذا لم تكن موجودة
@@ -1503,7 +1523,17 @@ if page == "إدخال بيانات الماستر":
                     if uploaded:
                         final_logo_url = uploaded
                     elif not _CLOUDINARY_OK:
-                        st.info("💡 لتفعيل الرفع التلقائي للشعارات، أضف CLOUDINARY_* في ملف .env")
+                        st.error(
+                            "❌ الشعار **ما انرفع** — Cloudinary غير مضبوط على هذه البيئة، "
+                            "فالمتجر بينحفظ **بدون شعار**. أضف متغيّرات `CLOUDINARY_CLOUD_NAME` "
+                            "و`CLOUDINARY_API_KEY` و`CLOUDINARY_API_SECRET` على خدمة الداشبورد، "
+                            "ثم عدّل المتجر وأعد رفع الشعار. (أو الصق رابط شعار مباشر في الحقل المجاور)."
+                        )
+                    else:
+                        st.error(
+                            "❌ فشل رفع الشعار إلى Cloudinary — المتجر بينحفظ **بدون شعار**. "
+                            "راجع رسالة الخطأ أعلاه، ثم عدّل المتجر وأعد الرفع."
+                        )
                 try:
                     conn = get_conn()
                     cur = conn.cursor()
@@ -7591,4 +7621,127 @@ elif page == "📊 تقرير الشركاء":
         "نسبة التحويل تُحسب كـ (نسخ ÷ نقرات) — وهي مقياس صناعي معتمد. "
         "جودة الأحداث ≥50/100 تعني تم فلترة البوتات/Datacenters تلقائياً عبر Cloudflare + heuristics."
     )
+
+
+# ─── صفحة: 🩺 تشخيص النشر ───────────────────────────────────────────────────
+if page == "🩺 تشخيص النشر":
+    st.header("🩺 تشخيص النشر والإعدادات")
+    st.caption(
+        "تكشف هذه الصفحة أسباب «الشعار ما وصل» و«ما اننشر شي للسوشيال» — "
+        "حالة الإعدادات على هذه البيئة + نتيجة كل منصة لآخر بث."
+    )
+
+    # 1) كشف إعدادات بيئة الداشبورد (حالة فقط — بدون كشف القيم السرّية)
+    st.subheader("⚙️ إعدادات بيئة الداشبورد")
+    _secret_set = bool(os.getenv("ADMIN_SHARED_SECRET"))
+    _api_url = os.getenv("INTERNAL_API_URL", "(افتراضي) dealpulseksa-production.up.railway.app")
+    d1, d2, d3 = st.columns(3)
+    d1.metric("Cloudinary (رفع الشعار)", "✅ مضبوط" if _CLOUDINARY_OK else "❌ مفقود")
+    d2.metric("ADMIN_SHARED_SECRET (البث)", "✅ مضبوط" if _secret_set else "❌ مفقود")
+    d3.metric("وجهة الـ API", "✅" if os.getenv("INTERNAL_API_URL") else "⚠️ افتراضي")
+    st.code(f"INTERNAL_API_URL = {_api_url}", language="text")
+    if not _CLOUDINARY_OK:
+        st.error(
+            "❌ Cloudinary غير مضبوط هنا → أي شعار يُرفع كملف بينحفظ فاضي (logo_url = NULL). "
+            "أضف `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` "
+            "على خدمة الداشبورد."
+        )
+    if not _secret_set:
+        st.error(
+            "❌ `ADMIN_SHARED_SECRET` غير مضبوط هنا → البث للسوشيال لن ينطلق إطلاقاً. "
+            "أضفه بنفس قيمة خدمة الـ API."
+        )
+
+    st.divider()
+
+    # 2) حالة آخر بث لمتجر معيّن (من social_posts_log في قاعدة الإنتاج)
+    st.subheader("📡 حالة البث لكل منصة")
+    _last_id = None
+    try:
+        _c = get_conn()
+        _c.rollback()  # نظّف أي transaction معلّقة (نمط متكرر في الداشبورد)
+        _last_id = pd.read_sql("SELECT MAX(id) AS m FROM master", _c)["m"].iloc[0]
+    except Exception as e:
+        st.warning(f"تعذّر جلب آخر متجر: {e}")
+    finally:
+        try:
+            _c.close()
+        except Exception:
+            pass
+
+    _default_id = int(_last_id) if _last_id else 0
+    master_id_in = st.number_input(
+        "🔢 رقم المتجر (master_id)",
+        min_value=0,
+        value=_default_id,
+        step=1,
+        help="افتراضياً آخر متجر مُضاف. غيّره لفحص متجر آخر.",
+    )
+
+    if st.button("🔍 افحص هذا المتجر", type="primary"):
+        try:
+            _c = get_conn()
+            _c.rollback()
+            _store_df = pd.read_sql(
+                "SELECT id, store_id, logo_url FROM master WHERE id = %s",
+                _c,
+                params=(int(master_id_in),),
+            )
+            if _store_df.empty:
+                st.error(f"ما فيه متجر بالرقم {int(master_id_in)}.")
+            else:
+                _row = _store_df.iloc[0]
+                st.markdown(f"**المتجر:** {_row['store_id']}  ·  **ID:** {int(_row['id'])}")
+                _logo = _row["logo_url"]
+                if _logo:
+                    lc1, lc2 = st.columns([3, 1])
+                    lc1.success(f"✅ logo_url موجود")
+                    lc1.code(_logo, language="text")
+                    try:
+                        lc2.image(_logo, width=90)
+                    except Exception:
+                        pass
+                else:
+                    st.error(
+                        "❌ `logo_url` فاضي (NULL) — هذا سبب اختفاء الصورة في الموقع/الميني-ويب/البوت. "
+                        "صحّح Cloudinary ثم عدّل المتجر وأعد رفع الشعار."
+                    )
+
+                _logs = pd.read_sql(
+                    """
+                    SELECT platform, status, error_message, attempted_at
+                    FROM social_posts_log
+                    WHERE master_id = %s
+                    ORDER BY id DESC
+                    """,
+                    _c,
+                    params=(int(master_id_in),),
+                )
+                if _logs.empty:
+                    st.warning(
+                        "⚠️ ما فيه أي صف في `social_posts_log` لهذا المتجر → البث **ما وصل الـ API** "
+                        "أصلاً. غالباً `ADMIN_SHARED_SECRET` ناقص/غير متطابق، أو `INTERNAL_API_URL` خاطئ "
+                        "على خدمة الداشبورد."
+                    )
+                else:
+                    _logs = _logs.rename(columns={
+                        "platform": "المنصة",
+                        "status": "الحالة",
+                        "error_message": "الخطأ",
+                        "attempted_at": "وقت المحاولة",
+                    })
+                    st.dataframe(_logs, hide_index=True, use_container_width=True)
+                    _counts = _logs["الحالة"].value_counts().to_dict()
+                    st.caption(
+                        "📊 " + " · ".join(f"{k}: {v}" for k, v in _counts.items())
+                        + "  —  `sent`=نُشر، `skipped`=المنصة غير مضبوطة (توكنات ناقصة على الـ API)، "
+                        "`failed`=حاول وفشل (راجع عمود الخطأ)."
+                    )
+        except Exception as e:
+            st.error(f"خطأ في الاستعلام: {e}")
+        finally:
+            try:
+                _c.close()
+            except Exception:
+                pass
 
