@@ -1342,6 +1342,21 @@ if page == "إدخال بيانات الماستر":
     if st.button("🔄 تحديث البيانات الآن"):
             st.rerun()
 
+    # بعد حفظ ناجح فقط: نظّف حقول النموذج واعرض رسالة النجاح (يُنفَّذ في إعادة التشغيل بعد الحفظ).
+    # عند فشل التحقق لا نمسح شيئاً — تبقى كل البيانات ليكمل المستخدم الحقل الناقص فقط.
+    if st.session_state.pop("_master_clear_form", False):
+        for _k in (
+            "m_store_id", "m_name_en", "m_aff_link", "m_pub_coupon", "m_disc_val",
+            "m_extra_offer", "m_extra_offer_en", "m_store_bio", "m_store_bio_en",
+            "m_description", "m_my_coupon", "m_source_platform",
+            "logo_url_add", "logo_upload_add", "is_promoted_add",
+        ):
+            st.session_state.pop(_k, None)
+    _master_ok_msg = st.session_state.pop("_master_success_msg", None)
+    if _master_ok_msg:
+        st.success(_master_ok_msg)
+        st.balloons()
+
     # 1. تهيئة قوائم التاقات (AR + EN) في Session State
     if 'custom_tags_list' not in st.session_state:
         try:
@@ -1421,27 +1436,27 @@ if page == "إدخال بيانات الماستر":
     st.divider()
 
     # 3. نموذج الإدخال — صفوف AR/EN جنباً إلى جنب
-    with st.form("master_final_form", clear_on_submit=True):
+    with st.form("master_final_form", clear_on_submit=False):
         # الصف 1: اسم المتجر AR + EN
         c_ar1, c_en1 = st.columns(2)
-        store_id = c_ar1.text_input("🏪 اسم المتجر (عربي/ID)")
-        name_en  = c_en1.text_input("🏪 Store Name (English)")
+        store_id = c_ar1.text_input("🏪 اسم المتجر (عربي/ID)", key="m_store_id")
+        name_en  = c_en1.text_input("🏪 Store Name (English)", key="m_name_en")
 
         # الصف 2: روابط/كوبون/خصم (لا يحتاج ترجمة)
         col_a, col_b, col_c = st.columns(3)
-        aff_link   = col_a.text_input("🔗 رابط الأفلييت")
-        pub_coupon = col_b.text_input("🎟️ كوبون العملاء")
-        disc_val   = col_c.text_input("💰 نسبة الخصم")
+        aff_link   = col_a.text_input("🔗 رابط الأفلييت", key="m_aff_link")
+        pub_coupon = col_b.text_input("🎟️ كوبون العملاء", key="m_pub_coupon")
+        disc_val   = col_c.text_input("💰 نسبة الخصم", key="m_disc_val")
 
         # الصف 3: عرض إضافي AR + EN
         e_ar, e_en = st.columns(2)
-        extra_offer    = e_ar.text_input("➕ عرض إضافي (عربي)")
-        extra_offer_en = e_en.text_input("➕ Extra Offer (English)")
+        extra_offer    = e_ar.text_input("➕ عرض إضافي (عربي)", key="m_extra_offer")
+        extra_offer_en = e_en.text_input("➕ Extra Offer (English)", key="m_extra_offer_en")
 
         # الصف 4: وصف المتجر AR + EN
         b_ar, b_en = st.columns(2)
-        store_bio    = b_ar.text_area("📝 وصف المتجر (عربي)")
-        store_bio_en = b_en.text_area("📝 Store Description (English)")
+        store_bio    = b_ar.text_area("📝 وصف المتجر (عربي)", key="m_store_bio")
+        store_bio_en = b_en.text_area("📝 Store Description (English)", key="m_store_bio_en")
 
         # الصف 4.5: تفاصيل العرض — تُستخدم في منشورات السوشيال
         description = st.text_area(
@@ -1449,6 +1464,7 @@ if page == "إدخال بيانات الماستر":
             placeholder="مثال: خصم حصري على جميع منتجات القسم النسائي حتى نهاية الأسبوع. شامل التوصيل المجاني.",
             height=90,
             help="هذا النص يظهر في المنشورات التلقائية على X, Instagram, Facebook, Pinterest, Telegram, Discord, Threads, LinkedIn.",
+            key="m_description",
         )
 
         st.divider()
@@ -1458,14 +1474,14 @@ if page == "إدخال بيانات الماستر":
         priority   = col7.selectbox("🚀 الأهمية", ["عادي", "مهم", "عاجل", "عاجل جداً"])
         date_start = col8.date_input("📅 تاريخ البداية", datetime.date.today())
         date_end   = col9.date_input("📅 تاريخ الانتهاء", datetime.date.today() + datetime.timedelta(days=30))
-        my_coupon  = col10.text_input("💵 عمولتي (كود التتبع)")
+        my_coupon  = col10.text_input("💵 عمولتي (كود التتبع)", key="m_my_coupon")
 
         # الصف 5.5: مصدر الكود (من أي منصة تابعة)
         source_platform = st.text_input(
             "🛰️ من أين (المنصة التابعة لهذا الكود)",
-            value="",
             placeholder="مثال: ArabClicks, CJ Affiliate, تواصل مباشر...",
             help="اكتب اسم المنصة التي جاء منها هذا الكود — مفيد عند تجديد الكود لاحقاً.",
+            key="m_source_platform",
         )
 
         # الصف 6: شعار المتجر
@@ -1514,7 +1530,10 @@ if page == "إدخال بيانات الماستر":
             if not selected_tags:    missing.append("Tags (AR)")
             if not selected_tags_en: missing.append("Tags (EN)")
             if missing:
-                st.warning("⚠️ الحقول التالية إجبارية: " + " ، ".join(missing))
+                st.warning(
+                    "⚠️ ينقصك إكمال: " + " ، ".join(missing)
+                    + "\n\n✅ بياناتك محفوظة كما هي — أكمل الناقص فقط واضغط حفظ مرة ثانية."
+                )
             else:
                 # ─── حل رابط الشعار ───────────────────────────────────────
                 final_logo_url = (logo_url_input or "").strip()
@@ -1534,6 +1553,7 @@ if page == "إدخال بيانات الماستر":
                             "❌ فشل رفع الشعار إلى Cloudinary — المتجر بينحفظ **بدون شعار**. "
                             "راجع رسالة الخطأ أعلاه، ثم عدّل المتجر وأعد الرفع."
                         )
+                saved_ok = False
                 try:
                     conn = get_conn()
                     cur = conn.cursor()
@@ -1573,13 +1593,18 @@ if page == "إدخال بيانات الماستر":
                         (new_master_id,),
                     )
                     conn.commit()
-                    st.success(f"✅ تم الحفظ! التاقات: {len(selected_tags)} AR / {len(selected_tags_en)} EN")
-                    st.balloons()
                     _trigger_social_broadcast(new_master_id)
+                    st.session_state["_master_success_msg"] = (
+                        f"✅ تم الحفظ! التاقات: {len(selected_tags)} AR / {len(selected_tags_en)} EN — النموذج جاهز لمتجر جديد."
+                    )
+                    st.session_state["_master_clear_form"] = True
+                    saved_ok = True
                 except Exception as e:
                     st.error(f"⚠️ مشكلة في القاعدة: {e}")
                 finally:
                     conn.close()
+                if saved_ok:
+                    st.rerun()
 
 
     # --- الصفحة الثانية: الاستعلام والتعديل (نسخة تعريب الجدول والبيانات الحقيقية) ---
