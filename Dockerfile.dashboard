@@ -1,0 +1,20 @@
+# صورة مخصّصة لخدمة لوحة التحكم (Streamlit) على Railway.
+# الـ Dockerfile الجذري يبني الـ API ويثبّت requirements-railway.txt (بدون streamlit)
+# — لذلك الداشبورد يحتاج صورته الخاصة التي تثبّت requirements.txt الكامل (فيه streamlit).
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# اعتماديات نظام لـ psycopg2 / Pillow / bidi
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq-dev gcc libffi-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+# لا تضع --server.enableCORS false (يسبب التحذير الأحمر + غير آمن).
+# إعدادات الأمان (CORS + XSRF مفعّلان) في .streamlit/config.toml.
+CMD ["sh", "-c", "streamlit run dashboard.py --server.port ${PORT:-8080} --server.address 0.0.0.0 --server.headless true --browser.gatherUsageStats false"]
