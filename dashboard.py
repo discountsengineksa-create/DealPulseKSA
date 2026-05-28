@@ -233,18 +233,39 @@ header[data-testid="stHeader"] {{ display: none !important; }}
 """, unsafe_allow_html=True)
 
 # ─── بوابة تسجيل الدخول ────────────────────────────────────────────────────
-# لا أي بيانات تظهر قبل المصادقة. الإعدادات في .streamlit/secrets.toml محلياً
-# وفي Settings > Variables (Streamlit secrets) على Railway للإنتاج.
-_auth_cfg = st.secrets["auth"]
-# streamlit-authenticator يُعدّل على credentials داخلياً (failed_login_attempts، logged_in...)
-# لذلك لازم تحويل deep من st.secrets (immutable) إلى dict عادي.
-_creds_raw = _auth_cfg["credentials"]
-_creds = _creds_raw.to_dict() if hasattr(_creds_raw, "to_dict") else dict(_creds_raw)
+# لا أي بيانات تظهر قبل المصادقة.
+# مصدر بيانات الدخول:
+#   • محليًا: .streamlit/secrets.toml (قسم [auth] بكلمة سر مُجزّأة bcrypt).
+#   • على Railway (لا secrets.toml): من متغيّرات البيئة username/password.
+# نُجزّئ كلمة سر البيئة مرّة واحدة في الجلسة، فيقبلها stauth مثل أي bcrypt hash.
+try:
+    _auth_cfg = st.secrets["auth"]
+    _creds_raw = _auth_cfg["credentials"]
+    _creds = _creds_raw.to_dict() if hasattr(_creds_raw, "to_dict") else dict(_creds_raw)
+    _cookie_name = _auth_cfg["cookie_name"]
+    _cookie_key  = _auth_cfg["cookie_key"]
+    _cookie_days = int(_auth_cfg.get("cookie_expiry_days", 1))
+except Exception:
+    _u = os.getenv("DASHBOARD_USER") or os.getenv("username") or "admin"
+    _p = os.getenv("DASHBOARD_PASSWORD") or os.getenv("password") or ""
+    if not _p:
+        st.error("⚠️ إعدادات الدخول ناقصة: أضف username و password في متغيّرات Railway.")
+        st.stop()
+    import hashlib as _hl
+    if "_dp_pwhash" not in st.session_state:
+        import bcrypt as _bc
+        st.session_state["_dp_pwhash"] = _bc.hashpw(_p.encode(), _bc.gensalt()).decode()
+    _cookie_name = os.getenv("DASHBOARD_COOKIE_NAME", "deal_pulse_admin")
+    _cookie_key  = os.getenv("DASHBOARD_COOKIE_KEY") or _hl.sha256(_p.encode()).hexdigest()
+    _cookie_days = int(os.getenv("DASHBOARD_COOKIE_DAYS", "1"))
+    _creds = {"usernames": {_u: {"name": "Admin", "email": "admin@dealpulse.local",
+                                 "password": st.session_state["_dp_pwhash"]}}}
+
 _authenticator = stauth.Authenticate(
 credentials=_creds,
-cookie_name=_auth_cfg["cookie_name"],
-cookie_key=_auth_cfg["cookie_key"],
-cookie_expiry_days=int(_auth_cfg.get("cookie_expiry_days", 1)),
+cookie_name=_cookie_name,
+cookie_key=_cookie_key,
+cookie_expiry_days=_cookie_days,
 )
 _authenticator.login(location="main")
 
