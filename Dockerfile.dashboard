@@ -1,7 +1,7 @@
 # صورة مخصّصة لخدمة لوحة التحكم (Streamlit) على Railway.
 # الـ Dockerfile الجذري يبني الـ API ويثبّت requirements-railway.txt (بدون streamlit)
 # — لذلك الداشبورد يحتاج صورته الخاصة التي تثبّت requirements.txt الكامل (فيه streamlit).
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 
