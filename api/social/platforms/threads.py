@@ -11,16 +11,12 @@ Setup:
 from __future__ import annotations
 
 import os
-import time
 
 import requests
 
 from api.social.base import BaseSocialPoster, PostResult
 
 GRAPH = "https://graph.threads.net/v1.0"
-
-_POLL_INTERVAL_SEC = 3
-_POLL_MAX_ATTEMPTS = 12  # ~36s — Threads يتطلّب انتظار معالجة الـ container قبل النشر (مثل انستقرام)
 
 
 class ThreadsPoster(BaseSocialPoster):
@@ -62,35 +58,7 @@ class ThreadsPoster(BaseSocialPoster):
         if not creation_id:
             return PostResult(error="no creation_id")
 
-        # Step 2: انتظر معالجة الـ container — Threads يرفض النشر الفوري (خصوصاً للصور)
-        last_status = None
-        for _ in range(_POLL_MAX_ATTEMPTS):
-            time.sleep(_POLL_INTERVAL_SEC)
-            try:
-                check = requests.get(
-                    f"{GRAPH}/{creation_id}",
-                    params={"fields": "status", "access_token": token},
-                    timeout=10,
-                )
-            except requests.RequestException:
-                continue
-            if check.status_code >= 400:
-                continue
-            try:
-                last_status = check.json().get("status")
-            except Exception:
-                continue
-            if last_status == "FINISHED":
-                break
-            if last_status in ("ERROR", "EXPIRED"):
-                return PostResult(error=f"container {last_status}")
-
-        if last_status != "FINISHED":
-            return PostResult(
-                error=f"container not ready after {_POLL_MAX_ATTEMPTS * _POLL_INTERVAL_SEC}s (last={last_status})"
-            )
-
-        # Step 3: publish
+        # Step 2: publish
         try:
             publish = requests.post(
                 f"{GRAPH}/{user_id}/threads_publish",
