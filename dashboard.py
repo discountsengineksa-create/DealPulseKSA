@@ -45,12 +45,13 @@ def _upload_logo(file_bytes: bytes, store_slug: str) -> str | None:
     if not _CLOUDINARY_OK:
         return None
     try:
+        # نخزّن نسخة أساسية عالية الدقة (تصغير فقط عند الحاجة، بدون تكبير ولا حشو)
+        # عشان نشتقّ منها لاحقاً مقاس كل منصة عبر تحويلات رابط Cloudinary.
         result = cloudinary.uploader.upload(
             file_bytes,
             public_id=f"store_logos/{store_slug}",
             overwrite=True,
-            format="webp",
-            transformation=[{"width": 400, "height": 400, "crop": "pad", "background": "white"}],
+            transformation=[{"width": 1600, "height": 1600, "crop": "limit"}],
         )
         return result.get("secure_url")
     except Exception as e:

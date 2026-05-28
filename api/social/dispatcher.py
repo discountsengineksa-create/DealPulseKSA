@@ -10,6 +10,7 @@ from psycopg2.extras import RealDictCursor
 
 from api.db import get_pool
 from api.social.base import BaseSocialPoster, NotConfiguredError, PostResult
+from api.social.image_specs import platform_image_url
 from api.social.platforms import REGISTERED_POSTERS
 from api.social.template import build_post_text
 
@@ -134,7 +135,7 @@ def broadcast_to_all_platforms(master_id: int) -> None:
             return
 
         post_text = build_post_text(store)
-        image_url = store.get("logo_url")
+        base_logo = store.get("logo_url")
 
         for poster_cls in REGISTERED_POSTERS:
             try:
@@ -142,6 +143,7 @@ def broadcast_to_all_platforms(master_id: int) -> None:
             except Exception as e:
                 print(f"[social] failed to instantiate {poster_cls.__name__}: {e}")
                 continue
+            image_url = platform_image_url(base_logo, poster.name)  # مقاس كل منصة
             _run_one_poster(conn, master_id, store, post_text, image_url, poster)
     finally:
         try:
