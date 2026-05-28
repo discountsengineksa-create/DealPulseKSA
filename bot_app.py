@@ -19,6 +19,20 @@ Deal Pulse KSA — Unified Service (Bot + API + Mini App)
     DATABASE_URL                    — postgres connection string
     ALLOWED_ORIGINS                 — افتراضي: null (لـ Telegram WebApp)
 """
+# ── Logging → stdout ──────────────────────────────────────────────────────
+# Railway يصنّف كل ما يُكتب على stderr كـ "error" (أحمر). تسجيل بايثون الافتراضي
+# يكتب لـ stderr، فتظهر تحذيراتنا (مثل فشل pytrends المتوقّع) حمراء. نوجّهها لـ
+# stdout ونُسكت FutureWarning من pytrends حتى تبقى السجلّات نظيفة.
+import sys as _sys
+import logging as _logging
+import warnings as _warnings
+_warnings.filterwarnings("ignore", category=FutureWarning)
+_logging.basicConfig(
+    level=_logging.INFO,
+    stream=_sys.stdout,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+
 import asyncio
 import os
 import pathlib

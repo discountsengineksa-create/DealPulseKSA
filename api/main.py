@@ -9,6 +9,17 @@ Deal Pulse KSA — FastAPI Backend (API-only entrypoint)
 تشغيل محلي:  uvicorn api.main:app --reload --port 8000
 توثيق تلقائي: http://localhost:8000/docs
 """
+# ── Logging → stdout + إسكات FutureWarning (نفس منطق bot_app.py) ──
+import sys as _sys
+import logging as _logging
+import warnings as _warnings
+_warnings.filterwarnings("ignore", category=FutureWarning)
+_logging.basicConfig(
+    level=_logging.INFO,
+    stream=_sys.stdout,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+
 import os
 import pathlib
 
