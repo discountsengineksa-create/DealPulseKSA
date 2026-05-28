@@ -110,8 +110,7 @@ def get_all_coupons(
             {_select_lang_clause(lang)},
             0 AS score_pct
         FROM master
-        WHERE public_coupon IS NOT NULL AND public_coupon != ''
-          AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+        WHERE (last_time IS NULL OR last_time >= CURRENT_DATE)
         ORDER BY
             CASE WHEN COALESCE(is_promoted, FALSE) THEN 0 ELSE 1 END,
             CASE WHEN is_trending = 'ترند 🔥'      THEN 0 ELSE 1 END,
