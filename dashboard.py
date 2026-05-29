@@ -1003,6 +1003,7 @@ def _sa_load_actions() -> pd.DataFrame:
                    a.is_datacenter, a.is_proxy, a.quality_score,
                    a.city          AS geo_city,                 -- web geo (من إثراء action_logs)
                    a.country_code,
+                   encode(a.ip_hash, 'hex') AS ip_hex,          -- بصمة ثابتة لزائر الويب المجهول
                    bu.device_type, bu.city AS bu_city, bu.country, bu.lang,
                    bu.username     AS bu_username,              -- هوية تيليجرام
                    wu.display_name AS web_name,                 -- هوية الويب المسجّل
@@ -2299,17 +2300,22 @@ elif page == "تحليل المتاجر":
     page_title("📊", "تحليل المتاجر",
                "لوحة قرار: مين تركّز عليه · مين تطيّره · مين تعطيه ترند — كل المتاجر بالأرقام الفعلية")
 
+    CHAN_MAP = {"bot": "📱 تيليجرام", "web": "🌐 ويب",
+                "telegram_miniapp": "🔹 ميني ويب", "miniapp": "🔹 ميني ويب"}
+    SRC_FILTER = {"📱 تيليجرام": ["bot"], "🌐 ويب": ["web"],
+                  "🔹 ميني ويب": ["telegram_miniapp", "miniapp"]}
+
     # ── شريط التحكم ──────────────────────────────────────────────────────────
-    c_ref, c_src, c_hint = st.columns([1, 1.9, 3])
+    c_ref, c_src, c_hint = st.columns([1, 2.4, 2.6])
     with c_ref:
         if st.button("🔄 تحديث", use_container_width=True):
             _sa_load_actions.clear(); _sa_load_master.clear(); _sa_load_searches.clear()
             st.rerun()
     with c_src:
-        src_choice = st.radio("المصدر:", ["الكل", "📱 تيليجرام", "🌐 ويب"],
+        src_choice = st.radio("المصدر:", ["الكل", "📱 تيليجرام", "🌐 ويب", "🔹 ميني ويب"],
                               horizontal=True, key="sm_src")
     with c_hint:
-        st.caption("كل الأرقام فعلية من action_logs و direct_search · مخزّنة 3 دقائق.")
+        st.caption("أرقام فعلية من action_logs و direct_search · مخزّنة 3 دقائق.")
 
     try:
         df_logs = _sa_load_actions()
@@ -2319,41 +2325,43 @@ elif page == "تحليل المتاجر":
         st.error(f"⚠️ تعذّر تحميل البيانات: {e}")
         st.stop()
 
-    if df_logs.empty:
-        st.info("📭 لا توجد حركات مسجّلة بعد.")
+    if df_master.empty:
+        st.info("📭 لا توجد متاجر في الماستر بعد.")
         st.stop()
 
     # ── توقيت الرياض + توحيد الحقول ──────────────────────────────────────────
     df_logs = df_logs.copy()
-    df_logs["action_time"] = (pd.to_datetime(df_logs["action_time"])
-                              + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
-    df_logs["adate"] = df_logs["action_time"].dt.date
-    df_logs["source"] = df_logs["source"].fillna("bot")
-    _is_web = df_logs["source"].eq("web")
+    if not df_logs.empty:
+        df_logs["action_time"] = (pd.to_datetime(df_logs["action_time"])
+                                  + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
+        df_logs["adate"] = df_logs["action_time"].dt.date
+        df_logs["source"] = df_logs["source"].fillna("bot")
+        # المدينة الحقيقية = من الـ IP (action_logs.city) لكل المصادر: البوت يلتقطها وقت
+        # نقر الرابط عبر التحويل /go، والويب/الميني من الإثراء. bu_city افتراضية فلا نعتمدها.
+        df_logs["city_c"] = (df_logs["geo_city"].fillna("").astype(str)
+                             .str.strip().replace("", "غير معروف"))
+        df_logs["src_ar"] = df_logs["source"].map(CHAN_MAP).fillna("🌐 ويب")
 
-    # المدينة: الويب من الـ IP، تيليجرام من ملف المستخدم
-    df_logs["city_c"] = (df_logs["geo_city"].fillna("").astype(str).str.strip()
-                         .where(_is_web, df_logs["bu_city"].fillna("").astype(str).str.strip())
-                         ).replace("", "غير معروف")
+        def _identity(r):
+            src = r["source"]
+            if src in ("web", "telegram_miniapp", "miniapp"):
+                for k in ("web_name", "web_email", "web_phone"):
+                    v = str(r.get(k) or "").strip()
+                    if v:
+                        return v
+                h = str(r.get("ip_hex") or "").strip()
+                lbl = "🔹 ميني ويب" if src != "web" else "🌐 زائر ويب"
+                return f"{lbl} #{h[:6]}" if h else f"{lbl} (غير مسجّل)"
+            u = str(r.get("bu_username") or "").strip()
+            if u:
+                return "@" + u.lstrip("@")
+            uid = r.get("user_id")
+            return f"تيليجرام {int(uid)}" if pd.notna(uid) else "مجهول"
+        df_logs["identity"] = df_logs.apply(_identity, axis=1)
+    else:
+        for c in ["adate", "source", "city_c", "src_ar", "identity"]:
+            df_logs[c] = pd.Series(dtype="object")
 
-    # هوية الناسخ: الويب = اسم/إيميل/جوال · تيليجرام = @username
-    def _identity(r):
-        if r["source"] == "web":
-            for k in ("web_name", "web_email", "web_phone"):
-                v = str(r.get(k) or "").strip()
-                if v:
-                    return v
-            return "زائر ويب (غير مسجّل)"
-        u = str(r.get("bu_username") or "").strip()
-        if u:
-            return "@" + u.lstrip("@")
-        uid = r.get("user_id")
-        return f"تيليجرام {int(uid)}" if pd.notna(uid) else "مجهول"
-    df_logs["identity"] = df_logs.apply(_identity, axis=1)
-    df_logs["src_ar"] = df_logs["source"].map(
-        {"web": "🌐 ويب", "bot": "📱 تيليجرام"}).fillna("📱 تيليجرام")
-
-    # البحث (direct_search) بتوقيت الرياض
     if not df_search.empty:
         df_search = df_search.copy()
         df_search["search_date"] = (pd.to_datetime(df_search["search_date"])
@@ -2361,61 +2369,75 @@ elif page == "تحليل المتاجر":
         df_search["adate"] = df_search["search_date"].dt.date
 
     # ── فلتر الفترة ──────────────────────────────────────────────────────────
-    _min_d, _max_d = df_logs["adate"].min(), df_logs["adate"].max()
+    if not df_logs.empty:
+        _min_d, _max_d = df_logs["adate"].min(), df_logs["adate"].max()
+    elif not df_search.empty:
+        _min_d, _max_d = df_search["adate"].min(), df_search["adate"].max()
+    else:
+        import datetime as _dt
+        _min_d = _max_d = _dt.date.today()
+
     dcol1, dcol2 = st.columns([2, 3])
     with dcol1:
         _dr = st.date_input("📅 الفترة (من → إلى):", value=(_min_d, _max_d),
                             min_value=_min_d, max_value=_max_d, key="sm_dates")
     d_start, d_end = (_dr if isinstance(_dr, (list, tuple)) and len(_dr) == 2 else (_min_d, _max_d))
-    df_logs = df_logs[(df_logs["adate"] >= d_start) & (df_logs["adate"] <= d_end)]
+    if not df_logs.empty:
+        df_logs = df_logs[(df_logs["adate"] >= d_start) & (df_logs["adate"] <= d_end)]
     if not df_search.empty:
         df_search = df_search[(df_search["adate"] >= d_start) & (df_search["adate"] <= d_end)]
 
-    # فلتر المصدر
-    if src_choice == "📱 تيليجرام":
-        df_logs = df_logs[df_logs["source"] == "bot"]
-        if not df_search.empty:
-            df_search = df_search[df_search["platform"].str.contains("elegram", case=False, na=False)]
-    elif src_choice == "🌐 ويب":
-        df_logs = df_logs[df_logs["source"] == "web"]
-        if not df_search.empty:
-            df_search = df_search[df_search["platform"].str.lower() == "web"]
+    # ── نطاق المصدر (يحدّد أرقام اللوحة) ──────────────────────────────────────
+    if src_choice in SRC_FILTER and not df_logs.empty:
+        df_scope = df_logs[df_logs["source"].isin(SRC_FILTER[src_choice])]
+    else:
+        df_scope = df_logs
+
+    def _search_scope(ds):
+        if ds is None or ds.empty:
+            return ds
+        p = ds["platform"].astype(str).str.lower()
+        if src_choice == "📱 تيليجرام":
+            return ds[p.str.contains("telegram") | p.str.contains("bot")]
+        if src_choice == "🌐 ويب":
+            return ds[p == "web"]
+        if src_choice == "🔹 ميني ويب":
+            return ds[p.str.contains("mini")]
+        return ds
+    df_search_scope = _search_scope(df_search)
 
     with dcol2:
         st.caption(f"📅 {d_start} ← {d_end} · المصدر: {src_choice} · "
-                   f"أحداث: **{len(df_logs):,}**")
+                   f"أحداث: **{len(df_scope):,}**")
 
-    if df_logs.empty:
-        st.warning("لا توجد أحداث ضمن الفترة/المصدر المختار.")
-        st.stop()
+    # ── تجميع لكل متجر (قاعدة = كل متاجر الماستر، حتى الخاملة بصفر) ───────────
+    def _store_agg(d, ds):
+        piv = (d.groupby(["store_id", "action_type"]).size().unstack(fill_value=0)
+               if not d.empty else pd.DataFrame())
+        for c in ["click_link", "copy_coupon"]:
+            if c not in piv.columns:
+                piv[c] = 0
+        piv = piv.rename(columns={"click_link": "نقرات", "copy_coupon": "نسخ"})
+        piv = piv[["نقرات", "نسخ"]] if not piv.empty else pd.DataFrame(columns=["نقرات", "نسخ"])
+        if ds is not None and not ds.empty:
+            sps = ds[ds["store_id"].notna()].groupby("store_id").size().rename("بحث")
+        else:
+            sps = pd.Series(dtype="int64", name="بحث")
+        return piv.join(sps, how="outer")
 
-    # ── تجميع لكل متجر (نسخ/نقرات من action_logs · بحث من direct_search) ──────
-    piv = df_logs.groupby(["store_id", "action_type"]).size().unstack(fill_value=0)
-    for c in ["click_link", "copy_coupon"]:
-        if c not in piv.columns:
-            piv[c] = 0
-    piv = piv.rename(columns={"click_link": "نقرات", "copy_coupon": "نسخ"})[["نقرات", "نسخ"]]
-
-    if not df_search.empty:
-        sps = (df_search[df_search["store_id"].notna()]
-               .groupby("store_id").size().rename("بحث"))
-    else:
-        sps = pd.Series(dtype="int64", name="بحث")
-
-    agg = piv.join(sps, how="outer")
+    ev = _store_agg(df_scope, df_search_scope)
+    stores_all = df_master[["store_id", "is_trending", "logo_url"]].drop_duplicates("store_id").copy()
+    agg = stores_all.merge(ev, left_on="store_id", right_index=True, how="left")
     for c in ["نقرات", "نسخ", "بحث"]:
         if c not in agg.columns:
             agg[c] = 0
-    agg[["نقرات", "نسخ", "بحث"]] = agg[["نقرات", "نسخ", "بحث"]].fillna(0).astype(int)
+        agg[c] = agg[c].fillna(0).astype(int)
     agg["الإجمالي"] = agg["نقرات"] + agg["نسخ"] + agg["بحث"]
-    agg = agg.reset_index().rename(columns={"index": "store_id"})
-
-    agg = agg.merge(df_master[["store_id", "is_trending", "logo_url"]], on="store_id", how="left")
     agg["is_trending"] = agg["is_trending"].fillna("عادي")
     agg["logo_url"] = agg["logo_url"].fillna("")
     agg["مُترند"] = agg["is_trending"].apply(lambda s: "🔥" if "ترند" in str(s) else "")
 
-    # ── محرّك التوصية (قواعد على المئينات — يقود قرار: ترند/إيقاف/تركيز) ──────
+    # ── محرّك التوصية ────────────────────────────────────────────────────────
     n_stores = len(agg)
     q_hi = agg["نسخ"].quantile(0.75) if n_stores >= 4 else agg["نسخ"].max()
     q_lo = agg["نسخ"].quantile(0.25) if n_stores >= 4 else 0
@@ -2435,24 +2457,26 @@ elif page == "تحليل المتاجر":
             return "🪫 ضعيف — قلّل التركيز"
         return "✅ مستقر"
     agg["التوصية"] = agg.apply(_reco, axis=1)
-
-    agg = agg.sort_values("نسخ", ascending=False).reset_index(drop=True)
+    agg = agg.sort_values(["نسخ", "الإجمالي"], ascending=False).reset_index(drop=True)
     agg.insert(0, "#", range(1, len(agg) + 1))
 
-    # ── بطاقات قرار سريعة ────────────────────────────────────────────────────
-    top_cp = agg.iloc[0]
-    _active = agg[agg["الإجمالي"] > 0]
-    bottom = _active.sort_values("الإجمالي").iloc[0] if not _active.empty else agg.iloc[-1]
-    by_search = agg.sort_values("بحث", ascending=False)
-    most_s = by_search.iloc[0]
-    _searched = by_search[by_search["بحث"] > 0]
-    least_s = _searched.iloc[-1] if not _searched.empty else by_search.iloc[-1]
+    # ── 6 كروت: الأعلى/الأقل لكل مؤشر ────────────────────────────────────────
+    def _hi(col):
+        return agg.sort_values([col, "الإجمالي"], ascending=False).iloc[0]
+    def _lo(col):
+        return agg.sort_values([col, "الإجمالي"], ascending=True).iloc[0]
+    hn, ln = _hi("نسخ"), _lo("نسخ")
+    hs, ls = _hi("بحث"), _lo("بحث")
+    hc, lc = _hi("نقرات"), _lo("نقرات")
 
-    k1, k2, k3, k4 = st.columns(4)
-    with k1: kpi_card("🏆", "الأعلى نسخاً (ركّز)", f"{top_cp['store_id']}", "emerald", note=f"{int(top_cp['نسخ'])} نسخة")
-    with k2: kpi_card("🗑️", "الأقل نشاطاً (طيّره؟)", f"{bottom['store_id']}", "danger", note=f"{int(bottom['الإجمالي'])} حدث")
-    with k3: kpi_card("🔍", "الأكثر بحثاً", f"{most_s['store_id']}", "info", note=f"{int(most_s['بحث'])} بحث")
-    with k4: kpi_card("📉", "الأقل بحثاً", f"{least_s['store_id']}", "warning", note=f"{int(least_s['بحث'])} بحث")
+    r1a, r1b, r1c = st.columns(3)
+    with r1a: kpi_card("🏆", "الأعلى نسخاً (ركّز)", f"{hn['store_id']}", "emerald", note=f"{int(hn['نسخ'])} نسخة")
+    with r1b: kpi_card("🔍", "الأعلى بحثاً", f"{hs['store_id']}", "info", note=f"{int(hs['بحث'])} بحث")
+    with r1c: kpi_card("🖱️", "الأعلى نقراً", f"{hc['store_id']}", "warning", note=f"{int(hc['نقرات'])} نقرة")
+    r2a, r2b, r2c = st.columns(3)
+    with r2a: kpi_card("🗑️", "الأقل نسخاً (طيّره؟)", f"{ln['store_id']}", "danger", note=f"{int(ln['نسخ'])} نسخة")
+    with r2b: kpi_card("📉", "الأقل بحثاً", f"{ls['store_id']}", "neutral", note=f"{int(ls['بحث'])} بحث")
+    with r2c: kpi_card("🔻", "الأقل نقراً", f"{lc['store_id']}", "neutral", note=f"{int(lc['نقرات'])} نقرة")
 
     tab_board, tab_who, tab_charts = st.tabs([
         "🏆 لوحة القرار (كل المتاجر)",
@@ -2462,8 +2486,8 @@ elif page == "تحليل المتاجر":
 
     # ─────────────────────────── لوحة القرار ───────────────────────────
     with tab_board:
-        st.caption("مرتّبة بالنسخ تنازلياً · «التوصية» قاعدة آلية: أعلى ربع نسخاً = ترند، "
-                   "أدنى ربع = ضعيف، خامل = إيقاف. اضغط رأس أي عمود للفرز.")
+        st.caption("كل متاجر الماستر تظهر (حتى الخاملة بصفر) · مرتّبة بالنسخ · «التوصية» قاعدة آلية. "
+                   "اضغط رأس أي عمود للفرز.")
         q = st.text_input("🔎 ابحث عن متجر:", key="sm_board_q")
         board = agg.copy()
         if q:
@@ -2491,6 +2515,24 @@ elif page == "تحليل المتاجر":
         st.download_button("📥 تحميل CSV", view.to_csv(index=False).encode("utf-8-sig"),
                            f"stores_decision_{d_start}_{d_end}.csv", "text/csv")
 
+        # تفصيل لكل مصدر (يظهر في وضع «الكل») — نسخ/نقر لكل متجر × مصدر
+        if src_choice == "الكل" and not df_logs.empty:
+            with st.expander("📱🌐🔹 تفصيل النسخ والنقر لكل متجر حسب المصدر"):
+                brk = (df_logs[df_logs["action_type"].isin(["copy_coupon", "click_link"])]
+                       .assign(chan=lambda d: d["source"].map(CHAN_MAP).fillna("أخرى"),
+                               نوع=lambda d: d["action_type"].map({"copy_coupon": "نسخ", "click_link": "نقر"}))
+                       .groupby(["store_id", "chan", "نوع"]).size().reset_index(name="ع"))
+                if brk.empty:
+                    st.info("لا توجد نسخ/نقر ضمن الفترة.")
+                else:
+                    pb = brk.pivot_table(index="store_id", columns=["chan", "نوع"],
+                                         values="ع", fill_value=0)
+                    pb.columns = [f"{a} {b}" for a, b in pb.columns]
+                    pb = pb.reset_index().rename(columns={"store_id": "المتجر"})
+                    st.dataframe(pb, hide_index=True, use_container_width=True)
+                    st.caption("النسخ والنقر مفصولة لكل مصدر (بوت/ويب/ميني-ويب). "
+                               "تظهر أرقام الميني-ويب بعد نشره واستخدامه فعلياً.")
+
         st.divider()
         cc1, cc2 = st.columns(2)
         with cc1:
@@ -2504,30 +2546,37 @@ elif page == "تحليل المتاجر":
 
     # ─────────────────────────── مين نسخ ───────────────────────────
     with tab_who:
-        st.caption("اختر متجراً تشوف مين نسخ كوبونه: اسمه/يوزره، من أي مصدر، كم مرة، متى، ومن أي مدينة.")
+        st.caption("اختر متجراً تشوف مين نسخ كوبونه: اسمه/يوزره، من أي مصدر، كم مرة، ومتى.")
         store_opts = agg.sort_values("نسخ", ascending=False)["store_id"].tolist()
         sel = st.selectbox("المتجر:", store_opts, key="sm_who_store")
-        sdf = df_logs[df_logs["store_id"] == sel]
-        scopy = sdf[sdf["action_type"] == "copy_coupon"]
-        sclick = sdf[sdf["action_type"] == "click_link"]
+        sdf = df_scope[df_scope["store_id"] == sel] if not df_scope.empty else df_scope
+        scopy = sdf[sdf["action_type"] == "copy_coupon"] if not sdf.empty else sdf
+        sclick = sdf[sdf["action_type"] == "click_link"] if not sdf.empty else sdf
 
         m1, m2, m3 = st.columns(3)
         with m1: kpi_card("🎟️", "إجمالي النسخ", f"{len(scopy):,}", "emerald")
-        with m2: kpi_card("👤", "ناسخون مختلفون", f"{scopy['identity'].nunique():,}", "info")
+        with m2: kpi_card("👤", "ناسخون مختلفون", f"{scopy['identity'].nunique() if not scopy.empty else 0:,}", "info")
         with m3: kpi_card("🖱️", "النقرات", f"{len(sclick):,}", "warning")
 
         if scopy.empty:
-            st.info("لا توجد نسخات لهذا المتجر ضمن الفترة.")
+            st.info("لا توجد نسخات لهذا المتجر ضمن الفترة/المصدر.")
         else:
             who = (scopy.groupby("identity").agg(
                        n=("action_time", "size"),
                        src=("src_ar", lambda s: "، ".join(sorted(set(s)))),
-                       city=("city_c", lambda s: s.mode().iat[0] if not s.mode().empty else "غير معروف"),
                        first=("action_time", "min"),
                        last=("action_time", "max"),
                    ).reset_index())
+            # المدينة من كل أحداث المستخدم لهذا المتجر (النقر يحمل IP-geo حتى لو النسخ لا)
+            _geo = sdf[sdf["city_c"] != "غير معروف"]
+            if not _geo.empty:
+                cmap = _geo.groupby("identity")["city_c"].agg(
+                    lambda s: s.mode().iat[0] if not s.mode().empty else "غير معروف")
+                who["المدينة"] = who["identity"].map(cmap).fillna("غير معروف")
+            else:
+                who["المدينة"] = "غير معروف"
             who = who.rename(columns={"identity": "المستخدم", "n": "مرات النسخ",
-                                      "src": "المصدر", "city": "المدينة",
+                                      "src": "المصدر",
                                       "first": "أول نسخ", "last": "آخر نسخ"})
             who = who.sort_values("مرات النسخ", ascending=False)
             who["أول نسخ"] = pd.to_datetime(who["أول نسخ"]).dt.strftime("%Y-%m-%d %H:%M")
@@ -2537,32 +2586,34 @@ elif page == "تحليل المتاجر":
             st.download_button("📥 تحميل قائمة الناسخين (CSV)",
                                who.to_csv(index=False).encode("utf-8-sig"),
                                f"copiers_{sel}_{d_start}_{d_end}.csv", "text/csv")
-
-            with st.expander("📜 كل عملية نسخ (سطر لكل نسخة)"):
-                log = scopy.sort_values("action_time", ascending=False)[
-                    ["identity", "src_ar", "city_c", "action_time"]].copy()
-                log["action_time"] = pd.to_datetime(log["action_time"]).dt.strftime("%Y-%m-%d %H:%M")
-                log = log.rename(columns={"identity": "المستخدم", "src_ar": "المصدر",
-                                          "city_c": "المدينة", "action_time": "وقت النسخ"})
-                st.dataframe(log, hide_index=True, use_container_width=True)
+            st.caption("«المدينة» من الـ IP وقت نقر الرابط (تحويل /go) — حقيقية بعد تفعيل الإثراء (Worker). "
+                       "تظهر «غير معروف» لمن نسخ بلا نقر رابط بعد. الزائر «#رمز» = بصمة جهاز غير مسجّل.")
 
     # ─────────────────────────── الرسوم والمعدلات ───────────────────────────
     with tab_charts:
         st.markdown("**🎟️ النسخ لكل متجر (أعلى 20)**")
-        topn = agg.sort_values("نسخ", ascending=False).head(20)
-        fig1 = px.bar(topn, x="نسخ", y="store_id", orientation="h",
-                      color="نسخ", color_continuous_scale="Greens")
-        fig1.update_layout(yaxis=dict(autorange="reversed"), xaxis_title="عدد النسخ", yaxis_title="")
-        st.plotly_chart(apply_brand_theme(fig1), use_container_width=True)
+        topn = agg[agg["نسخ"] > 0].sort_values("نسخ", ascending=False).head(20)
+        if topn.empty:
+            st.info("لا توجد نسخ ضمن الفلتر الحالي.")
+        else:
+            fig1 = px.bar(topn, x="نسخ", y="store_id", orientation="h",
+                          color="نسخ", color_continuous_scale="Greens")
+            fig1.update_layout(yaxis=dict(autorange="reversed"), xaxis_title="عدد النسخ", yaxis_title="")
+            st.plotly_chart(apply_brand_theme(fig1), use_container_width=True)
 
-        st.markdown("**📱🌐 النسخ والنقرات حسب المصدر**")
-        bys = (df_logs[df_logs["action_type"].isin(["copy_coupon", "click_link"])]
-               .assign(نوع=lambda d: d["action_type"].map({"copy_coupon": "نسخ", "click_link": "نقرات"}))
-               .groupby(["src_ar", "نوع"]).size().reset_index(name="العدد"))
-        if not bys.empty:
-            fig2 = px.bar(bys, x="نوع", y="العدد", color="src_ar", barmode="group")
-            fig2.update_layout(xaxis_title="", yaxis_title="العدد", legend_title_text="المصدر")
-            st.plotly_chart(apply_brand_theme(fig2), use_container_width=True)
+        st.markdown("**📱🌐🔹 النسخ والنقرات حسب المصدر**")
+        if not df_scope.empty:
+            bys = (df_scope[df_scope["action_type"].isin(["copy_coupon", "click_link"])]
+                   .assign(نوع=lambda d: d["action_type"].map({"copy_coupon": "نسخ", "click_link": "نقرات"}))
+                   .groupby(["src_ar", "نوع"]).size().reset_index(name="العدد"))
+            if not bys.empty:
+                fig2 = px.bar(bys, x="نوع", y="العدد", color="src_ar", barmode="group")
+                fig2.update_layout(xaxis_title="", yaxis_title="العدد", legend_title_text="المصدر")
+                st.plotly_chart(apply_brand_theme(fig2), use_container_width=True)
+            else:
+                st.info("لا توجد نسخ/نقر ضمن الفلتر.")
+        else:
+            st.info("لا توجد أحداث ضمن الفلتر.")
 
         st.divider()
         st.markdown("**📈 معدل النشاط عبر الزمن** — نسخ + نقرات + بحث")
@@ -2573,18 +2624,22 @@ elif page == "تحليل المتاجر":
             store_pick = st.selectbox("المتجر (الكل = إجمالي):",
                                       ["— الكل —"] + agg["store_id"].tolist(), key="sm_ts_store")
         rule = {"دقيقة": "min", "ساعة": "h", "يوم": "D"}[gran]
-        base = df_logs if store_pick == "— الكل —" else df_logs[df_logs["store_id"] == store_pick]
-        ev = (base[base["action_type"].isin(["copy_coupon", "click_link"])]
-              .assign(نوع=lambda d: d["action_type"].map({"copy_coupon": "نسخ", "click_link": "نقرات"})))
-        if ev.empty:
+        base = df_scope if store_pick == "— الكل —" else (
+            df_scope[df_scope["store_id"] == store_pick] if not df_scope.empty else df_scope)
+        if not base.empty:
+            ev_src = (base[base["action_type"].isin(["copy_coupon", "click_link"])]
+                      .assign(نوع=lambda d: d["action_type"].map({"copy_coupon": "نسخ", "click_link": "نقرات"})))
+        else:
+            ev_src = base
+        if ev_src is None or ev_src.empty:
             ev_ts = pd.DataFrame(columns=["نوع", "action_time", "العدد"])
         else:
-            ev_ts = (ev.set_index("action_time").groupby("نوع").resample(rule).size()
+            ev_ts = (ev_src.set_index("action_time").groupby("نوع").resample(rule).size()
                      .reset_index(name="العدد"))
-        if not df_search.empty:
-            sb = df_search if store_pick == "— الكل —" else df_search[df_search["store_id"] == store_pick]
+        if df_search_scope is not None and not df_search_scope.empty:
+            sb = df_search_scope if store_pick == "— الكل —" else df_search_scope[df_search_scope["store_id"] == store_pick]
             if not sb.empty:
-                sb_ts = (sb.set_index("search_date").resample(rule).size().reset_index(name="العدد"))
+                sb_ts = sb.set_index("search_date").resample(rule).size().reset_index(name="العدد")
                 sb_ts["نوع"] = "بحث"
                 sb_ts = sb_ts.rename(columns={"search_date": "action_time"})
                 ev_ts = pd.concat([ev_ts, sb_ts[["نوع", "action_time", "العدد"]]], ignore_index=True)
