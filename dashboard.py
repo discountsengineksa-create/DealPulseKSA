@@ -360,7 +360,7 @@ opacity: {BRAND["blob_op"]};
 /* ── Watermark: الشعار كعلامة مائية في مركز الصفحة الرئيسية ── */
 .stApp::after {{
 content: ""; position: fixed;
-top: 50%; left: 30%;                 /* التوسيط: 50% / 50% = منتصف الشاشة */
+top: 50%; left: 40%;                 /* التوسيط: 50% / 50% = منتصف الشاشة */
 transform: translate(-50%, -50%);
 width: 70vw; height: 70vw;           /* حجم العلامة (vw = نسبة من عرض الشاشة) */
 pointer-events: none; z-index: 0;
