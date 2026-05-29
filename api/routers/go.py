@@ -69,11 +69,13 @@ def _cache_store(slug: str, master_id: int, store_id: str, link: str) -> None:
         pass
 
 
-def _challenge_page(slug: str, source: str) -> str:
+def _challenge_page(slug: str, s: str, u: str = "") -> str:
     """صفحة تحدّي JS — تُعيد التوجيه لنفس الرابط مع h=1 لإثبات تشغيل JS."""
     safe_slug = "".join(c for c in slug if c.isalnum())
-    safe_src = "bot" if source == "bot" else "web"
-    target = f"/go/{safe_slug}?s={safe_src}&h=1"
+    safe_src = "".join(c for c in (s or "") if c.isalnum()) or "web"
+    safe_u = "".join(c for c in (u or "") if c.isdigit())
+    u_q = f"&u={safe_u}" if safe_u else ""
+    target = f"/go/{safe_slug}?s={safe_src}&h=1{u_q}"
     return f"""<!doctype html>
 <html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -117,6 +119,7 @@ def cloaked_redirect(
     request: Request,
     s: str = "web",
     h: str = "0",
+    u: str = "",
     conn=Depends(get_db),
 ):
     # 1) البحث عن المتجر — Redis cache أولاً، ثم DB
@@ -141,13 +144,16 @@ def cloaked_redirect(
     geo = extract_geo(request)
     quality, is_dc, is_proxy = compute_quality_score(geo)
     js_passed = h == "1"
-    source = "bot" if s == "bot" else "web"
+    # bot / miniapp يُحفظان منفصلين؛ أي شيء آخر = web
+    source = {"bot": "bot", "miniapp": "telegram_miniapp"}.get(s, "web")
+    # u = معرّف مستخدم تيليجرام (يمرّره البوت/الميني) → يربط النقرة + المدينة بالشخص
+    click_user_id = int(u) if (u or "").isdigit() else None
 
     # 3) Bot Challenge — مشكوك فيه ولم يُثبت JS بعد → صفحة تحدّي (بلا تسجيل/تحويل)
     if quality < QUALITY_THRESHOLD and not js_passed:
         _log.info("Bot challenge served: store=%s slug=%s quality=%d asn=%s",
                   store_id, slug, quality, geo.asn)
-        return HTMLResponse(_challenge_page(slug, source))
+        return HTMLResponse(_challenge_page(slug, s, u))
 
     # 4) مسموح — سجّل النقرة (idempotent). العدّاد يرتفع للجودة العالية فقط.
     counted = quality >= QUALITY_THRESHOLD
@@ -172,7 +178,7 @@ def cloaked_redirect(
             ON CONFLICT (event_id) DO NOTHING
             """,
             (
-                None, store_id,
+                click_user_id, store_id,
                 "via_cloak" if counted else "via_cloak_jschallenge", source,
                 geo.event_id, geo.ip_hash, geo.ua_hash,
                 geo.country_code, geo.region_code, geo.city, geo.postal_code,

@@ -44,6 +44,12 @@ DB_CONFIG = {
 # الافتراضي يشير للإنتاج الموحَّد، وليس localhost.
 # التطوير المحلي يضع API_BASE_URL=http://127.0.0.1:8000 في .env
 _API_BASE = os.getenv("API_BASE_URL", "https://api.dealpulseksa.com").rstrip("/")
+
+# دومين تحويل /go (يجب أن يكون خلف Cloudflare Worker لالتقاط الـ geo/IP).
+# نفضّل WEBHOOK_BASE_URL (نفس host الذي يخدم /go والميني-ويب)، ثم API_BASE.
+_GO_BASE = (os.getenv("GO_BASE_URL") or os.getenv("WEBHOOK_BASE_URL") or _API_BASE).rstrip("/")
+if _GO_BASE and not _GO_BASE.startswith("http"):
+    _GO_BASE = "https://" + _GO_BASE
 _API_SEARCH_URL = _API_BASE + "/api/v1/coupons/search"
 
 # إعدادات مراقب الخمول — مرحلتان (قابلة للتعديل من .env)
@@ -1549,8 +1555,6 @@ def handle_link_click(call):
     lang     = get_lang(user_id)
 
     _update_nav(user_id, chat_id=call.message.chat.id, msg_id=call.message.message_id)
-    increment_link_clicks(store_id)
-    log_action(store_id, 'click_link', user_id=user_id)
     update_user_behavior(user_id, 'click_link')
     bot.answer_callback_query(call.id, t(user_id, 'visit_logged'))
 
@@ -1558,7 +1562,7 @@ def handle_link_click(call):
         conn = get_db_connection()
         cur  = conn.cursor()
         cur.execute("""
-            SELECT affiliate_link FROM master
+            SELECT affiliate_link, cloaked_slug FROM master
             WHERE store_id = %s
               AND (last_time IS NULL OR last_time >= CURRENT_DATE)
             LIMIT 1
@@ -1569,13 +1573,27 @@ def handle_link_click(call):
         print(f"⚠️ link callback: {e}")
         return
 
-    if row and row[0]:
-        kb = types.InlineKeyboardMarkup()
-        kb.add(types.InlineKeyboardButton(t(user_id, 'open_store', sid=store_id), url=row[0]))
-        kb.add(types.InlineKeyboardButton(TEXTS['back_btn'][lang], callback_data='nav:card'))
-        _edit_nav(user_id, t(user_id, 'link_here'), kb)
+    affiliate_link = row[0] if row else None
+    cloaked_slug   = row[1] if row else None
+
+    if cloaked_slug:
+        # عبر /go → السيرفر يلتقط الـ IP (Worker) فيُعرف المدينة، ويسجّل النقرة + يرفع
+        # العدّاد. s=bot لفصل المصدر، u=معرّف المستخدم لربط النقرة/المدينة بالشخص.
+        # فلا نسجّل النقرة هنا تفادياً للتكرار.
+        open_url = f"{_GO_BASE}/go/{cloaked_slug}?s=bot&u={user_id}"
+    elif affiliate_link:
+        # متجر بلا cloaked_slug → رابط خام لا يمرّ على /go → نسجّل النقرة هنا (بلا مدينة)
+        open_url = affiliate_link
+        increment_link_clicks(store_id)
+        log_action(store_id, 'click_link', user_id=user_id)
     else:
         bot.answer_callback_query(call.id, t(user_id, 'link_unavailable'))
+        return
+
+    kb = types.InlineKeyboardMarkup()
+    kb.add(types.InlineKeyboardButton(t(user_id, 'open_store', sid=store_id), url=open_url))
+    kb.add(types.InlineKeyboardButton(TEXTS['back_btn'][lang], callback_data='nav:card'))
+    _edit_nav(user_id, t(user_id, 'link_here'), kb)
 
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("copy:"))

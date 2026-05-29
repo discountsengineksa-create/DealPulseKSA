@@ -642,7 +642,8 @@ async function loadData() {
         //   3. # fallback (يفتح نفس الصفحة — تجنّب JS exceptions)
         const buildLink = (item) => {
             if (item.cloaked_slug) {
-                return `${window.location.origin}/go/${item.cloaked_slug}`;
+                const uq = tgUserId ? `&u=${tgUserId}` : '';
+                return `${window.location.origin}/go/${item.cloaked_slug}?s=miniapp${uq}`;
             }
             const raw = (item.affiliate_link || '').trim();
             if (raw.startsWith('http://') || raw.startsWith('https://')) {
@@ -754,9 +755,11 @@ function openLinkCurrent() {
         showToast(LANG_CURRENT === 'en' ? 'Link unavailable' : 'الرابط غير متوفّر');
         return;
     }
-    trackEvent(s.store_id, 'click_link');
-    // مسار واحد فقط: s.link الذي بُني في loadData (يحترم cloaked_slug + يصفّي URL فاسد).
-    // ملاحظة: الـ API لا يُرجع حقل اسمه original_link — أي مرجع له خطأ تاريخي.
+    // نقرات /go تُسجَّل في السيرفر (مصدر telegram_miniapp + IP/مدينة)، فلا نكرّرها هنا.
+    // الرابط الخام (متجر بلا cloaked_slug) لا يمرّ على السيرفر → نسجّله هنا لتفادي ضياع النقرة.
+    if (!s.link.includes('/go/')) {
+        trackEvent(s.store_id, 'click_link');
+    }
     if (tg && tg.openLink) {
         tg.openLink(s.link);
     } else {
