@@ -1038,7 +1038,8 @@ def _sa_load_master() -> pd.DataFrame:
                    COALESCE(logo_url, '')         AS logo_url,
                    COALESCE(is_trending, 'عادي')  AS is_trending,
                    COALESCE(priority_score, 'عادي') AS priority_score,
-                   COALESCE(is_promoted, false)   AS is_promoted
+                   COALESCE(is_promoted, false)   AS is_promoted,
+                   last_time
             FROM   master
             WHERE  store_id IS NOT NULL AND store_id <> ''
             ORDER  BY store_id,
@@ -1977,6 +1978,82 @@ if page == "📦 أرشيف المنتهية":
                 else:
                     st.dataframe(display_df.loc[_mask_old], use_container_width=True, height=420)
 
+            # ─────────────── 📊 تحليل المتاجر المنتهية (تحليلها الخاص) ───────────────
+            st.divider()
+            st.subheader("📊 تحليل المنتهية")
+            st.caption("أداء المتاجر المنتهية طوال فترة نشاطها — راجعه قبل التمديد أو الحذف.")
+            an_rank, an_drill = st.tabs(["🏆 ترتيب المنتهية", "👤 مين تفاعل مع متجر"])
+
+            with an_rank:
+                rank = df_arch[["store_id", "total_coupon_copies",
+                                "total_link_clicks", "days_expired"]].copy()
+                rank = rank.rename(columns={"store_id": "المتجر",
+                                            "total_coupon_copies": "نسخ",
+                                            "total_link_clicks": "نقرات",
+                                            "days_expired": "منذ كم يوم"})
+                rank["نسخ"] = rank["نسخ"].fillna(0).astype(int)
+                rank["نقرات"] = rank["نقرات"].fillna(0).astype(int)
+                rank = rank.sort_values("نسخ", ascending=False)
+                top_r = rank[rank["نسخ"] > 0].head(20)
+                if top_r.empty:
+                    st.info("لا توجد نسخ مسجّلة لأي متجر منتهٍ.")
+                else:
+                    fig_r = px.bar(top_r, x="نسخ", y="المتجر", orientation="h",
+                                   color="نسخ", color_continuous_scale="Reds")
+                    fig_r.update_layout(yaxis=dict(autorange="reversed"),
+                                        xaxis_title="عدد النسخ", yaxis_title="")
+                    st.plotly_chart(apply_brand_theme(fig_r), use_container_width=True)
+                st.dataframe(rank, hide_index=True, use_container_width=True)
+
+            with an_drill:
+                _opts = df_arch.sort_values("total_coupon_copies",
+                                            ascending=False)["store_id"].tolist()
+                _sel = st.selectbox("اختر متجراً منتهياً:", _opts, key="arch_drill_store")
+                who = pd.DataFrame()
+                try:
+                    _c = get_conn(); _c.rollback()
+                    who = pd.read_sql("""
+                        SELECT
+                            CASE WHEN a.source IN ('web','telegram_miniapp','miniapp')
+                                 THEN COALESCE(NULLIF(wu.display_name,''), NULLIF(wu.email,''),
+                                              NULLIF(wu.phone_number,''), 'زائر ويب')
+                                 ELSE COALESCE('@'||NULLIF(bu.username,''),
+                                              'تيليجرام '||a.user_id::text, 'مجهول')
+                            END AS identity,
+                            COALESCE(a.source,'bot') AS src,
+                            COALESCE(NULLIF(a.city,''),'غير معروف') AS city,
+                            COUNT(*) FILTER (WHERE a.action_type='copy_coupon') AS copies,
+                            COUNT(*) FILTER (WHERE a.action_type='click_link')  AS clicks,
+                            TO_CHAR(MIN(a.action_time),'YYYY-MM-DD') AS first_seen,
+                            TO_CHAR(MAX(a.action_time),'YYYY-MM-DD') AS last_seen
+                        FROM action_logs a
+                        LEFT JOIN bot_users bu ON bu.telegram_id = a.user_id
+                        LEFT JOIN web_users wu ON wu.id = a.user_id AND a.source = 'web'
+                        WHERE a.store_id = %s
+                          AND a.action_type IN ('copy_coupon','click_link')
+                        GROUP BY 1,2,3
+                        ORDER BY copies DESC, clicks DESC
+                    """, _c, params=(_sel,))
+                    _c.close()
+                except Exception as e:
+                    st.error(f"تعذّر جلب التحليل: {e}")
+                if who.empty:
+                    st.info("لا يوجد تفاعل مسجّل لهذا المتجر.")
+                else:
+                    _smap = {"bot": "📱 تيليجرام", "web": "🌐 ويب",
+                             "telegram_miniapp": "🔹 ميني ويب", "miniapp": "🔹 ميني ويب"}
+                    who["src"] = who["src"].map(_smap).fillna(who["src"])
+                    ac1, ac2, ac3 = st.columns(3)
+                    with ac1: kpi_card("🎟️", "إجمالي النسخ", int(who["copies"].sum()), "danger")
+                    with ac2: kpi_card("🖱️", "إجمالي النقرات", int(who["clicks"].sum()), "warning")
+                    with ac3: kpi_card("👤", "متفاعلون مختلفون", int(who["identity"].nunique()), "info")
+                    who = who.rename(columns={"identity": "المستخدم", "src": "المصدر",
+                                              "city": "المدينة", "copies": "نسخ", "clicks": "نقرات",
+                                              "first_seen": "أول تفاعل", "last_seen": "آخر تفاعل"})
+                    st.dataframe(who[["المستخدم", "المصدر", "نسخ", "نقرات", "المدينة",
+                                      "أول تفاعل", "آخر تفاعل"]],
+                                 hide_index=True, use_container_width=True)
+
             st.divider()
             st.subheader("⚙️ إجراءات على متجر")
 
@@ -2044,7 +2121,8 @@ if page == "📦 أرشيف المنتهية":
     # --- الصفحة الثالثة: جدول الكوبونات (واجهة العميل مع الترند من القاعدة) ---
 if page == "جدول الكوبونات":
     st.header("🎟️ عرض الكوبونات المباشر (واجهة البوت)")
-    st.info("المتاجر المحددة كـ 'ترند' في قاعدة البيانات ستظهر بعلامة 🔥 وتتصدر القائمة.")
+    st.info("المتاجر المحددة كـ 'ترند' في قاعدة البيانات ستظهر بعلامة 🔥 وتتصدر القائمة. "
+            "الكوبونات المنتهية مخفية هنا تلقائياً ومكانها صفحة «📦 أرشيف المنتهية».")
     try:
         conn = get_conn()
         query = """
@@ -2064,6 +2142,7 @@ if page == "جدول الكوبونات":
                 total_coupon_copies,
                 total_link_clicks
             FROM master
+            WHERE last_time IS NULL OR last_time >= CURRENT_DATE
             ORDER BY
                 CASE WHEN is_trending = 'ترند 🔥' THEN 1 ELSE 2 END,
                 priority_score DESC
@@ -2328,6 +2407,20 @@ elif page == "تحليل المتاجر":
     if df_master.empty:
         st.info("📭 لا توجد متاجر في الماستر بعد.")
         st.stop()
+
+    # ── استبعاد الكوبونات المنتهية (تاريخ الانتهاء فات) — مكانها «📦 أرشيف المنتهية» ──
+    _today_d = pd.Timestamp.today().date()
+    if "last_time" in df_master.columns:
+        _lt = pd.to_datetime(df_master["last_time"], errors="coerce").dt.date
+        df_master = df_master[_lt.isna() | (_lt >= _today_d)].copy()
+    if df_master.empty:
+        st.info("📭 لا توجد متاجر فعّالة (غير منتهية) حالياً. شوف صفحة «📦 أرشيف المنتهية».")
+        st.stop()
+    active_ids = set(df_master["store_id"])
+    if not df_logs.empty:
+        df_logs = df_logs[df_logs["store_id"].isin(active_ids)].copy()
+    if not df_search.empty:
+        df_search = df_search[df_search["store_id"].isin(active_ids)].copy()
 
     # ── توقيت الرياض + توحيد الحقول ──────────────────────────────────────────
     df_logs = df_logs.copy()
