@@ -360,15 +360,15 @@ opacity: {BRAND["blob_op"]};
 /* ── Watermark: الشعار كعلامة مائية في مركز الصفحة الرئيسية ── */
 .stApp::after {{
 content: ""; position: fixed;
-top: 75%; left: 40%;
+top: 50%; left: 50%;                 /* التوسيط: 50% / 50% = منتصف الشاشة */
 transform: translate(-50%, -50%);
-width: 80vw; height: 80vw;
+width: 70vw; height: 70vw;           /* حجم العلامة (vw = نسبة من عرض الشاشة) */
 pointer-events: none; z-index: 0;
 background-image: url("{_wm_url}");
 background-repeat: no-repeat;
 background-size: contain;
 background-position: center;
-opacity: 0.10;
+opacity: 0.05;                       /* الشفافية: 0 = مخفي تماماً، 1 = واضح كامل */
 }}
 .main .block-container {{
 position: relative; z-index: auto !important;
