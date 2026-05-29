@@ -177,11 +177,13 @@ def _admin_delete(path: str):
         return None, str(e)
 
 # ─── لوحة ألوان "نبض الصفقات KSA" ──────────────────────────────────────────
-BRAND = {
+BRAND_LIGHT = {
 "bg":             "#FAFAF8",
 "bg_alt":         "#F5F5F0",
 "surface":        "#FFFFFF",
 "surface_elev":   "#FDFDFB",
+"glass":          "rgba(255,255,255,0.55)",
+"glass_strong":   "rgba(255,255,255,0.70)",
 "text":           "#1F2937",
 "text_soft":      "#2D3142",
 "text_muted":     "#6B7280",
@@ -201,6 +203,37 @@ BRAND = {
 "border":         "#E5E7EB",
 "border_soft":    "#F0F0EA",
 "grid":           "rgba(107,114,128,0.12)",
+"blob_op":        "1.0",
+}
+
+# لوحة غامقة (وضع ليلي) — نفس المفاتيح بقيم داكنة مريحة للعين
+BRAND_DARK = {
+"bg":             "#0E1117",
+"bg_alt":         "#161A23",
+"surface":        "#1A1D24",
+"surface_elev":   "#21252E",
+"glass":          "rgba(30,34,43,0.55)",
+"glass_strong":   "rgba(30,34,43,0.75)",
+"text":           "#E6E8EB",
+"text_soft":      "#CBD2D9",
+"text_muted":     "#9AA4B2",
+"text_faint":     "#6B7280",
+"emerald":        "#10B981",
+"emerald_deep":   "#34D399",
+"emerald_dark":   "#6EE7B7",
+"emerald_pastel": "#064E3B",
+"emerald_mint":   "#065F46",
+"saudi_green":    "#34D399",
+"warning":        "#FBBF24",
+"warning_soft":   "#3A2E12",
+"danger":         "#F87171",
+"danger_soft":    "#3A1A1A",
+"info":           "#38BDF8",
+"info_soft":      "#0C2A3A",
+"border":         "#2A2F3A",
+"border_soft":    "#21252E",
+"grid":           "rgba(230,232,235,0.12)",
+"blob_op":        "0.22",
 }
 
 
@@ -220,6 +253,11 @@ page_icon="🟢",
 layout="wide",
 initial_sidebar_state="expanded",
 )
+
+# اختيار المظهر: ليلي افتراضي. يُقرأ من مفتاح زر التبديل في الشريط الجانبي
+# (يُعرض بعد الدخول)؛ session_state يحفظ الاختيار فيُطبَّق على كل الـ CSS أدناه.
+_ui_dark = st.session_state.get("ui_theme_radio", "🌙 ليلي").startswith("🌙")
+BRAND = BRAND_DARK if _ui_dark else BRAND_LIGHT
 
 # ─── CSS حرج مبكّر: يمنع وميض التصميم الافتراضي (FOUC) قبل تحميل الستايل الكامل ─
 # يثبّت اتجاه RTL، يضع الـ sidebar على اليمين، ويفرض خلفية الثيم الفاتحة فوراً
@@ -317,6 +355,7 @@ content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
 background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 800' preserveAspectRatio='xMidYMid slice'><circle cx='80' cy='90' r='280' fill='%23D1FAE5' opacity='0.55'/><circle cx='1120' cy='720' r='340' fill='%23A7F3D0' opacity='0.45'/><circle cx='1080' cy='120' r='90' fill='%23ECFDF5' opacity='0.6'/></svg>");
 background-size: cover;
 background-position: center;
+opacity: {BRAND["blob_op"]};
 }}
 /* ── Watermark: الشعار كعلامة مائية في مركز الصفحة الرئيسية ── */
 .stApp::after {{
@@ -419,7 +458,7 @@ padding: 4px 2px !important;
 }}
 /* ── Expanders ── */
 [data-testid="stSidebar"] [data-testid="stExpander"] {{
-background: rgba(255,255,255,0.55) !important;
+background: {BRAND["glass"]} !important;
 border: 1px solid {BRAND["border"]} !important;
 border-radius: 12px !important;
 margin-bottom: 8px !important;
@@ -476,7 +515,7 @@ font-family: 'Cairo', sans-serif !important;
 
 /* ── Glassmorphism Metric Cards (Light) ── */
 [data-testid="stMetric"] {{
-background: rgba(255,255,255,0.7) !important;
+background: {BRAND["glass_strong"]} !important;
 backdrop-filter: blur(14px) !important;
 -webkit-backdrop-filter: blur(14px) !important;
 border-radius: 16px !important;
@@ -532,14 +571,14 @@ background: linear-gradient(135deg, #34D399 0%, {BRAND["emerald"]} 100%) !import
 border: 1px solid {BRAND["border"]} !important;
 border-radius: 16px !important;
 padding: 20px !important;
-background: rgba(255,255,255,0.55) !important;
+background: {BRAND["glass"]} !important;
 backdrop-filter: blur(8px) !important;
 -webkit-backdrop-filter: blur(8px) !important;
 box-shadow: 0 2px 12px rgba(31,41,55,0.04) !important;
 }}
 /* ── Glass Inputs ── */
 input, textarea {{
-background: rgba(255,255,255,0.5) !important;
+background: {BRAND["glass"]} !important;
 }}
 /* ── Transparent block wrappers ── */
 .main .block-container > div {{
@@ -611,19 +650,19 @@ color: {BRAND["text"]} !important;
 .stTextInput input, .stTextArea textarea,
 .stSelectbox > div > div, .stMultiSelect > div > div,
 .stNumberInput input, .stDateInput input {{
-background: #FFFFFF !important;
-border: 1.5px solid #D1D5DB !important;
-color: #111827 !important;
+background: {BRAND["surface"]} !important;
+border: 1.5px solid {BRAND["border"]} !important;
+color: {BRAND["text"]} !important;
 font-weight: 500 !important;
 }}
 .stTextInput input::placeholder, .stTextArea textarea::placeholder {{
-color: #6B7280 !important;
+color: {BRAND["text_muted"]} !important;
 opacity: 1 !important;
 }}
 .stTextInput label, .stTextArea label,
 .stSelectbox label, .stMultiSelect label,
 .stNumberInput label, .stDateInput label, .stRadio label {{
-color: #1F2937 !important;
+color: {BRAND["text"]} !important;
 font-weight: 600 !important;
 opacity: 1 !important;
 }}
@@ -1259,6 +1298,14 @@ if _logo_b64:
         style="width:90px; border-radius:8px;" />
 </div>
 """, unsafe_allow_html=True)
+
+# ── مبدّل المظهر: ليلي / نهاري (يحفظ الاختيار في الجلسة ويعيد بناء الثيم) ──
+st.sidebar.radio(
+    "🎨 المظهر",
+    ["🌙 ليلي", "☀️ نهاري"],
+    key="ui_theme_radio",
+    horizontal=True,
+)
 
 _MAIN_PAGES = [
 "إدخال بيانات الماستر", "الاستعلام والتعديل", "جدول الكوبونات",
