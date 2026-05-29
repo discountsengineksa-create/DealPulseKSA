@@ -1,13 +1,14 @@
 [theme]
-base = "light"
+base = "dark"
 primaryColor = "#10B981"
-backgroundColor = "#FAFAF8"
-secondaryBackgroundColor = "#F5F5F0"
-textColor = "#1F2937"
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#262730"
+textColor = "#FAFAFA"
 font = "sans serif"
 
 [client]
-toolbarMode = "minimal"
+# viewer: يُظهر قائمة الإعدادات (☰ → Settings → Theme) لتبديل ليلي/نهاري، بدون أدوات المطوّر.
+toolbarMode = "viewer"
 showErrorDetails = true
 
 # Cross-Origin / XSRF: نُبقي الحمايتين مفعّلتين (آمن) وهما متوافقتان فلا يظهر
