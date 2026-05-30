@@ -2285,6 +2285,29 @@ if page == "تحليل الأقسام":
                                   title="توزيع الأقسام ونوع الحركة داخلها")
                 st.plotly_chart(apply_brand_theme(fig), use_container_width=True)
 
+                # ── أعلى الأقسام بحثاً (Top searched categories) ──────
+                st.divider()
+                st.markdown("**🔍 أعلى الأقسام بحثاً**")
+                df_search_cat = df_exploded[df_exploded['action_type'] == 'search']
+                if df_search_cat.empty:
+                    st.info("لا توجد عمليات بحث ضمن النافذة الزمنية.")
+                else:
+                    top_cat_search = (df_search_cat.groupby('store_tags')
+                                                   .size().reset_index(name='عمليات البحث')
+                                                   .sort_values('عمليات البحث', ascending=False)
+                                                   .head(20)
+                                                   .rename(columns={'store_tags': 'القسم'}))
+                    cS1, cS2 = st.columns([3, 2])
+                    with cS1:
+                        fig_cs = px.bar(top_cat_search, x='عمليات البحث', y='القسم',
+                                        orientation='h', color='عمليات البحث',
+                                        color_continuous_scale='Blues')
+                        fig_cs.update_layout(yaxis=dict(autorange='reversed'),
+                                             xaxis_title='عدد عمليات البحث', yaxis_title='')
+                        st.plotly_chart(apply_brand_theme(fig_cs), use_container_width=True)
+                    with cS2:
+                        st.dataframe(top_cat_search, hide_index=True, use_container_width=True)
+
             with tab_ind_cat:
                 search_tag = st.selectbox("اختر القسم للمراقبة:", sorted(df_exploded['store_tags'].unique()), key="cat_sel_1")
                 tag_data = df_exploded[df_exploded['store_tags'] == search_tag]
@@ -2721,6 +2744,16 @@ elif page == "تحليل المتاجر":
                           color="نسخ", color_continuous_scale="Greens")
             fig1.update_layout(yaxis=dict(autorange="reversed"), xaxis_title="عدد النسخ", yaxis_title="")
             st.plotly_chart(apply_brand_theme(fig1), use_container_width=True)
+
+        st.markdown("**🔍 أعلى المتاجر بحثاً (أعلى 20)**")
+        tops = agg[agg["بحث"] > 0].sort_values("بحث", ascending=False).head(20)
+        if tops.empty:
+            st.info("لا توجد عمليات بحث ضمن الفلتر الحالي.")
+        else:
+            fig_s = px.bar(tops, x="بحث", y="store_id", orientation="h",
+                           color="بحث", color_continuous_scale="Blues")
+            fig_s.update_layout(yaxis=dict(autorange="reversed"), xaxis_title="عدد عمليات البحث", yaxis_title="")
+            st.plotly_chart(apply_brand_theme(fig_s), use_container_width=True)
 
         st.markdown("**📱🌐🔹 النسخ والنقرات حسب المصدر**")
         if not df_scope.empty:
@@ -3288,12 +3321,26 @@ elif page == "تحليل بحث الأكواد":
             # 4. تبويب الإدارة
             with t_admin:
                 st.write("### ⚙️ أدوات تنظيف البيانات")
-                if st.button("🗑️ تصفير السجل بالكامل"):
-                    cur = conn.cursor()
-                    cur.execute("TRUNCATE TABLE direct_search RESTART IDENTITY;")
-                    conn.commit()
-                    st.success("تم تصفير البيانات بنجاح")
-                    st.rerun()
+                # بدلاً من الكود القديم المباشر، ضع هذا:
+            if "confirm_truncate_search" not in st.session_state:
+                st.session_state.confirm_truncate_search = False
+
+            if st.button("🗑️ تصفير السجل بالكامل"):
+                st.session_state.confirm_truncate_search = True
+
+            if st.session_state.confirm_truncate_search:
+                st.warning("⚠️ هل أنت متأكد؟ هذا الإجراء سيمسح سجل البحث نهائياً ولا يمكن التراجع عنه!")
+                col1, col2 = st.columns(2)
+            if col1.button("نعم، احذف نهائياً"):
+                 cur = conn.cursor()
+                 cur.execute("TRUNCATE TABLE direct_search RESTART IDENTITY;")
+            conn.commit()
+            st.success("تم تصفير البيانات بنجاح")
+            st.session_state.confirm_truncate_search = False
+            st.rerun()
+            if col2.button("إلغاء"):
+                st.session_state.confirm_truncate_search = False
+            st.rerun()
 
         else:
             st.warning("لا توجد بيانات حالياً.")
@@ -4034,8 +4081,13 @@ elif page == "تحليل المستخدمين":
     page_title("📊", "مركز تحليل سلوك المستخدمين")
     st.info("تحليل معمق لقاعدة البيانات لفهم تفاعل العملاء وتصنيفهم بناءً على الـ 17 عموداً الأساسية.")
 
-    # إنشاء الثلاث تبويبات المطلوبة
-    tab_kpi, tab_gen_u, tab_ind_u = st.tabs(["🎯 مؤشرات الأداء (KPIs)", "📈 الأداء العام للعملاء", "🔍 الفحص الفردي (ID)"])
+    # إنشاء التبويبات
+    tab_kpi, tab_gen_u, tab_ind_u, tab_web = st.tabs([
+        "🎯 مؤشرات الأداء (KPIs)",
+        "📈 الأداء العام للعملاء",
+        "🔍 الفحص الفردي (ID)",
+        "🌐 الموقع — ديموغرافيا + بقاء",
+    ])
 
     try:
         conn = get_conn()
@@ -4159,6 +4211,196 @@ elif page == "تحليل المستخدمين":
                         st.error("❌ لا يوجد مستخدم بهذا الـ ID في قاعدة البيانات.")
         else:
             st.warning("⚠️ قاعدة البيانات فارغة. انتظر دخول مستخدمين لبدء التحليل.")
+
+        # ─── تبويب 4: ديموغرافيا الموقع (web_users) + منحنى البقاء ──────────
+        # مستقل عن bot_users؛ يعمل ولو قاعدة البوت فارغة.
+        with tab_web:
+            st.subheader("🌐 المسجّلون عبر الموقع — توزيع ديموغرافي + بقاء")
+            st.caption("البيانات من جدول `web_users` (تسجيل بحساب). فارغ = لم يسجّل أحد بعد عبر الموقع.")
+
+            # ── KPIs أساسية ─────────────────────────────────────────────
+            df_web_kpi = pd.read_sql("""
+                SELECT
+                    COUNT(*)                                                       AS total_users,
+                    COUNT(*) FILTER (WHERE last_seen >= NOW() - INTERVAL '7 days') AS active_7d,
+                    COUNT(*) FILTER (WHERE last_seen >= NOW() - INTERVAL '30 days') AS active_30d,
+                    COUNT(*) FILTER (WHERE gender IS NOT NULL)                     AS with_gender,
+                    COUNT(*) FILTER (WHERE birth_date IS NOT NULL)                 AS with_birth_date,
+                    COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days') AS new_7d
+                FROM web_users
+            """, conn)
+
+            if df_web_kpi.empty or int(df_web_kpi.iloc[0]['total_users']) == 0:
+                st.info("📭 لا يوجد مستخدمون مسجّلون عبر الموقع بعد.")
+            else:
+                k = df_web_kpi.iloc[0]
+                w1, w2, w3, w4 = st.columns(4)
+                w1.metric("🌐 إجمالي مسجّلي الموقع", int(k['total_users']))
+                w2.metric("🆕 جدد (7 أيام)", int(k['new_7d']))
+                w3.metric("🟢 نشط آخر 7 أيام", int(k['active_7d']))
+                w4.metric("🟢 نشط آخر 30 يوم", int(k['active_30d']))
+
+                st.divider()
+
+                # ── توزيع الجنس ─────────────────────────────────────────
+                col_g, col_a = st.columns(2)
+                with col_g:
+                    st.write("### 👥 توزيع الجنس")
+                    df_gender = pd.read_sql("""
+                        SELECT
+                            CASE gender WHEN 'male' THEN 'ذكر' WHEN 'female' THEN 'أنثى' END AS "الجنس",
+                            COUNT(*) AS "العدد"
+                        FROM web_users
+                        WHERE gender IS NOT NULL
+                        GROUP BY gender
+                        ORDER BY "العدد" DESC
+                    """, conn)
+                    if df_gender.empty:
+                        st.caption("لا توجد بيانات جنس بعد.")
+                    else:
+                        fig_g = px.pie(df_gender, names="الجنس", values="العدد", hole=0.4)
+                        st.plotly_chart(apply_brand_theme(fig_g), use_container_width=True)
+
+                # ── توزيع الأعمار ────────────────────────────────────────
+                with col_a:
+                    st.write("### 🎂 الفئات العمرية")
+                    df_age = pd.read_sql("""
+                        SELECT
+                            CASE
+                                WHEN EXTRACT(YEAR FROM AGE(birth_date)) < 18 THEN 'أقل من 18'
+                                WHEN EXTRACT(YEAR FROM AGE(birth_date)) BETWEEN 18 AND 24 THEN '18-24'
+                                WHEN EXTRACT(YEAR FROM AGE(birth_date)) BETWEEN 25 AND 34 THEN '25-34'
+                                WHEN EXTRACT(YEAR FROM AGE(birth_date)) BETWEEN 35 AND 44 THEN '35-44'
+                                WHEN EXTRACT(YEAR FROM AGE(birth_date)) BETWEEN 45 AND 54 THEN '45-54'
+                                ELSE '55+'
+                            END AS "الفئة",
+                            COUNT(*) AS "العدد",
+                            MIN(EXTRACT(YEAR FROM AGE(birth_date)))::int AS _order
+                        FROM web_users
+                        WHERE birth_date IS NOT NULL
+                        GROUP BY "الفئة"
+                        ORDER BY _order
+                    """, conn)
+                    if df_age.empty:
+                        st.caption("لا توجد بيانات تاريخ ميلاد بعد.")
+                    else:
+                        fig_a = px.bar(df_age, x="الفئة", y="العدد", text="العدد")
+                        st.plotly_chart(apply_brand_theme(fig_a), use_container_width=True)
+
+                st.divider()
+
+                # ── جدول تقاطع: الجنس × الفئة العمرية (للشراكات) ──────
+                st.write("### 🎯 الشريحة المستهدفة (جنس × عمر)")
+                df_cross = pd.read_sql("""
+                    SELECT
+                        CASE gender WHEN 'male' THEN 'ذكر' WHEN 'female' THEN 'أنثى' END AS "الجنس",
+                        CASE
+                            WHEN EXTRACT(YEAR FROM AGE(birth_date)) < 18 THEN 'أقل من 18'
+                            WHEN EXTRACT(YEAR FROM AGE(birth_date)) BETWEEN 18 AND 24 THEN '18-24'
+                            WHEN EXTRACT(YEAR FROM AGE(birth_date)) BETWEEN 25 AND 34 THEN '25-34'
+                            WHEN EXTRACT(YEAR FROM AGE(birth_date)) BETWEEN 35 AND 44 THEN '35-44'
+                            WHEN EXTRACT(YEAR FROM AGE(birth_date)) BETWEEN 45 AND 54 THEN '45-54'
+                            ELSE '55+'
+                        END AS "الفئة العمرية",
+                        COUNT(*) AS "العدد"
+                    FROM web_users
+                    WHERE gender IS NOT NULL AND birth_date IS NOT NULL
+                    GROUP BY "الجنس", "الفئة العمرية"
+                    ORDER BY "الجنس", "الفئة العمرية"
+                """, conn)
+                if df_cross.empty:
+                    st.caption("يحتاج بيانات جنس + ميلاد معاً.")
+                else:
+                    pivot = df_cross.pivot(index="الفئة العمرية", columns="الجنس", values="العدد").fillna(0).astype(int)
+                    st.dataframe(pivot, use_container_width=True)
+
+                st.divider()
+
+                # ── منحنى البقاء (Retention) ───────────────────────────
+                st.write("### 📉 منحنى البقاء (Retention)")
+                st.caption("نسبة المستخدمين الذين سجّلوا قبل N يوم ولا زالوا نشطين خلال آخر N يوم.")
+
+                df_ret = pd.read_sql("""
+                    WITH base AS (
+                        SELECT
+                            EXTRACT(DAY FROM (NOW() - created_at))::int AS days_since_signup,
+                            EXTRACT(DAY FROM (NOW() - COALESCE(last_seen, created_at)))::int AS days_since_last_seen
+                        FROM web_users
+                        WHERE created_at IS NOT NULL
+                    )
+                    SELECT
+                        '1 يوم'  AS "الفترة",
+                        1        AS _order,
+                        COUNT(*) FILTER (WHERE days_since_signup >= 1)::float                            AS cohort_size,
+                        COUNT(*) FILTER (WHERE days_since_signup >= 1  AND days_since_last_seen <= 1)::float AS retained
+                    FROM base
+                    UNION ALL
+                    SELECT '7 أيام',  7,
+                        COUNT(*) FILTER (WHERE days_since_signup >= 7)::float,
+                        COUNT(*) FILTER (WHERE days_since_signup >= 7  AND days_since_last_seen <= 7)::float
+                    FROM base
+                    UNION ALL
+                    SELECT '30 يوم', 30,
+                        COUNT(*) FILTER (WHERE days_since_signup >= 30)::float,
+                        COUNT(*) FILTER (WHERE days_since_signup >= 30 AND days_since_last_seen <= 30)::float
+                    FROM base
+                    UNION ALL
+                    SELECT '60 يوم', 60,
+                        COUNT(*) FILTER (WHERE days_since_signup >= 60)::float,
+                        COUNT(*) FILTER (WHERE days_since_signup >= 60 AND days_since_last_seen <= 60)::float
+                    FROM base
+                    UNION ALL
+                    SELECT '90 يوم', 90,
+                        COUNT(*) FILTER (WHERE days_since_signup >= 90)::float,
+                        COUNT(*) FILTER (WHERE days_since_signup >= 90 AND days_since_last_seen <= 90)::float
+                    FROM base
+                    ORDER BY _order
+                """, conn)
+
+                if df_ret.empty or df_ret['cohort_size'].sum() == 0:
+                    st.caption("لا توجد فترات كافية بعد لحساب البقاء (يحتاج مستخدمين سجّلوا قبل يوم على الأقل).")
+                else:
+                    df_ret['نسبة البقاء %'] = (
+                        df_ret.apply(
+                            lambda r: round(100 * r['retained'] / r['cohort_size'], 1) if r['cohort_size'] > 0 else 0.0,
+                            axis=1,
+                        )
+                    )
+                    df_ret_show = df_ret[['الفترة', 'cohort_size', 'retained', 'نسبة البقاء %']].rename(
+                        columns={'cohort_size': 'حجم الكوهورت', 'retained': 'المتبقّون'}
+                    )
+                    df_ret_show['حجم الكوهورت'] = df_ret_show['حجم الكوهورت'].astype(int)
+                    df_ret_show['المتبقّون']   = df_ret_show['المتبقّون'].astype(int)
+
+                    cR1, cR2 = st.columns([2, 3])
+                    with cR1:
+                        st.dataframe(df_ret_show, use_container_width=True, hide_index=True)
+                    with cR2:
+                        fig_ret = px.line(
+                            df_ret, x='الفترة', y='نسبة البقاء %',
+                            markers=True, range_y=[0, 100],
+                            title='Retention Curve',
+                        )
+                        st.plotly_chart(apply_brand_theme(fig_ret), use_container_width=True)
+
+                st.divider()
+
+                # ── خط زمني للتسجيلات ───────────────────────────────────
+                st.write("### 📈 التسجيلات الجديدة (آخر 60 يوماً)")
+                df_signups = pd.read_sql("""
+                    SELECT
+                        DATE(created_at) AS "اليوم",
+                        COUNT(*)          AS "تسجيلات"
+                    FROM web_users
+                    WHERE created_at >= NOW() - INTERVAL '60 days'
+                    GROUP BY DATE(created_at)
+                    ORDER BY "اليوم"
+                """, conn)
+                if df_signups.empty:
+                    st.caption("لا توجد تسجيلات في آخر 60 يوماً.")
+                else:
+                    fig_s = px.bar(df_signups, x="اليوم", y="تسجيلات")
+                    st.plotly_chart(apply_brand_theme(fig_s), use_container_width=True)
 
     except Exception as e:
         st.error(f"حدث خطأ في صفحة التحليلات: {e}")
