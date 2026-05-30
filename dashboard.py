@@ -3906,13 +3906,15 @@ elif page == "👥 الحضور الحي":
         cur = conn.cursor()
 
         # ── البوت ───────────────────────────────────────────────────
-        cur.execute("SELECT COUNT(*) FROM bot_users")
-        bot_reg = cur.fetchone()[0]
+        # عدد الناس = DISTINCT user_id من action_logs (أصدق من bot_users لو فُقدت صفوف)
         cur.execute("""SELECT COUNT(DISTINCT user_id) FROM action_logs
                        WHERE source='bot' AND user_id IS NOT NULL""")
-        bot_seen = cur.fetchone()[0]
-        cur.execute("""SELECT COUNT(*) FROM bot_users
-                       WHERE last_seen >= NOW() - make_interval(mins => %s)""",
+        bot_people = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM action_logs WHERE source='bot'")
+        bot_visits = cur.fetchone()[0]
+        cur.execute("""SELECT COUNT(DISTINCT user_id) FROM action_logs
+                       WHERE source='bot' AND user_id IS NOT NULL
+                         AND action_time >= NOW() - make_interval(mins => %s)""",
                     (window_min,))
         bot_live = cur.fetchone()[0]
 
@@ -3922,7 +3924,10 @@ elif page == "👥 الحضور الحي":
             FROM action_logs
             WHERE source IN ('telegram_miniapp','miniapp')
         """)
-        mini_total = cur.fetchone()[0]
+        mini_people = cur.fetchone()[0]
+        cur.execute("""SELECT COUNT(*) FROM action_logs
+                       WHERE source IN ('telegram_miniapp','miniapp')""")
+        mini_visits = cur.fetchone()[0]
         cur.execute("""
             SELECT COUNT(DISTINCT COALESCE(user_id::text, encode(ip_hash,'hex')))
             FROM action_logs
@@ -3931,28 +3936,32 @@ elif page == "👥 الحضور الحي":
         """, (window_min,))
         mini_live = cur.fetchone()[0]
 
-        # ── الموقع (مسجلون) ─────────────────────────────────────────
-        cur.execute("SELECT COUNT(*) FROM web_users")
-        web_reg = cur.fetchone()[0]
-        cur.execute("""SELECT COUNT(*) FROM web_users
-                       WHERE last_seen >= NOW() - make_interval(mins => %s)""",
-                    (window_min,))
-        web_reg_live = cur.fetchone()[0]
-
-        # ── الموقع (مجهولون) ────────────────────────────────────────
+        # ── الموقع: ناس / زيارات / متواجدون / مجهولون (٤ كروت غير متداخلة) ──
+        # عدد الناس الكلي = مسجَّلون + مجهولون مميَّزون (لا تداخل: المسجَّل له user_id، المجهول له ip_hash فقط)
+        cur.execute("""
+            SELECT
+              (SELECT COUNT(DISTINCT user_id) FROM action_logs
+                  WHERE source='web' AND user_id IS NOT NULL)
+              +
+              (SELECT COUNT(DISTINCT encode(ip_hash,'hex')) FROM action_logs
+                  WHERE source='web' AND user_id IS NULL AND ip_hash IS NOT NULL)
+        """)
+        web_people = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM action_logs WHERE source='web'")
+        web_visits = cur.fetchone()[0]
+        cur.execute("""
+            SELECT COUNT(DISTINCT COALESCE(user_id::text, encode(ip_hash,'hex')))
+            FROM action_logs
+            WHERE source='web'
+              AND action_time >= NOW() - make_interval(mins => %s)
+        """, (window_min,))
+        web_live = cur.fetchone()[0]
         cur.execute("""
             SELECT COUNT(DISTINCT encode(ip_hash,'hex'))
             FROM action_logs
             WHERE source='web' AND user_id IS NULL AND ip_hash IS NOT NULL
         """)
         web_anon = cur.fetchone()[0]
-        cur.execute("""
-            SELECT COUNT(DISTINCT encode(ip_hash,'hex'))
-            FROM action_logs
-            WHERE source='web' AND user_id IS NULL AND ip_hash IS NOT NULL
-              AND action_time >= NOW() - make_interval(mins => %s)
-        """, (window_min,))
-        web_anon_live = cur.fetchone()[0]
 
         conn.close()
 
@@ -3960,44 +3969,46 @@ elif page == "👥 الحضور الحي":
         st.markdown("### 📱 البوت (تيليجرام)")
         b1, b2, b3 = st.columns(3)
         with b1:
-            kpi_card("👥", "مسجَّلون (bot_users)", f"{bot_reg:,}", "info")
+            kpi_card("👥", "عدد الناس الكلي", f"{bot_people:,}", "info",
+                     note="مستخدم مميَّز (محمد = ١ مهما كرّر)")
         with b2:
-            kpi_card("🗂️", "ظهروا في السجلات",
-                     f"{bot_seen:,}", "neutral",
-                     note="DISTINCT user_id من action_logs — قد يفوق bot_users لو فُقدت صفوف سابقة")
+            kpi_card("📊", "إجمالي الزيارات", f"{bot_visits:,}", "neutral",
+                     note="كل تفاعل = زيارة (محمد ٣ مرات = ٣)")
         with b3:
-            kpi_card("🟢", f"متواجدون الآن (≤ {window_min} د)",
+            kpi_card("🟢", f"المتواجد الفعلي (≤ {window_min} د)",
                      f"{bot_live:,}",
                      "emerald" if bot_live else "neutral")
 
         st.markdown("### 🔹 الميني-ويب (Telegram Mini App)")
-        m1, m2, _m3 = st.columns(3)
+        m1, m2, m3 = st.columns(3)
         with m1:
-            kpi_card("👥", "إجمالي زوار مميَّز", f"{mini_total:,}", "info",
-                     note="user_id إن وُجد، وإلا ip_hash")
+            kpi_card("👥", "عدد الناس الكلي", f"{mini_people:,}", "info")
         with m2:
-            kpi_card("🟢", f"متواجدون الآن (≤ {window_min} د)",
+            kpi_card("📊", "إجمالي الزيارات", f"{mini_visits:,}", "neutral")
+        with m3:
+            kpi_card("🟢", f"المتواجد الفعلي (≤ {window_min} د)",
                      f"{mini_live:,}",
                      "emerald" if mini_live else "neutral")
-        if mini_total <= 1:
-            st.warning("⚠️ التتبّع فقير حالياً — حدث واحد فقط في `action_logs`. "
+        if mini_visits <= 1:
+            st.warning("⚠️ التتبّع فقير حالياً — لا يصل سوى نقر/نسخ. "
                        "تحتاج endpoint POST `/api/v1/track/visit` يضربه الـ frontend عند فتح الميني.")
 
         st.markdown("### 🌐 الموقع (dealpulseksa.com)")
         w1, w2, w3, w4 = st.columns(4)
         with w1:
-            kpi_card("👤", "مسجَّلون (web_users)", f"{web_reg:,}", "info")
+            kpi_card("👥", "عدد الناس الكلي", f"{web_people:,}", "info",
+                     note="مسجَّلون + مجهولون مميَّزون")
         with w2:
-            kpi_card("🟢", f"مسجَّلون متواجدون (≤ {window_min} د)",
-                     f"{web_reg_live:,}",
-                     "emerald" if web_reg_live else "neutral")
+            kpi_card("📊", "إجمالي الزيارات", f"{web_visits:,}", "neutral",
+                     note="كل تفاعل = زيارة")
         with w3:
-            kpi_card("👻", "زوّار مجهولون مميَّز", f"{web_anon:,}", "warning",
-                     note="ip_hash لمن نقر/نسخ بدون تسجيل دخول")
+            kpi_card("🟢", f"المتواجد الفعلي (≤ {window_min} د)",
+                     f"{web_live:,}",
+                     "emerald" if web_live else "neutral")
         with w4:
-            kpi_card("🟡", f"مجهولون متواجدون (≤ {window_min} د)",
-                     f"{web_anon_live:,}",
-                     "emerald" if web_anon_live else "neutral")
+            kpi_card("👻", "منهم زائر مجهول",
+                     f"{web_anon:,}", "warning",
+                     note="فتح وتفاعل بدون تسجيل دخول")
 
         st.divider()
         st.markdown("#### ℹ️ القيود الحالية والخارطة")
