@@ -2639,28 +2639,39 @@ elif page == "تحليل المتاجر":
 
     # ─────────────────────────── مين نسخ ───────────────────────────
     with tab_who:
-        st.caption("اختر متجراً تشوف مين نسخ كوبونه: اسمه/يوزره، من أي مصدر، كم مرة، ومتى.")
-        store_opts = agg.sort_values("نسخ", ascending=False)["store_id"].tolist()
+        st.caption("الافتراضي: كل المتاجر دفعة وحدة. اختر متجراً محدداً لو تبي تركّز عليه.")
+        _ALL_STORES = "— الكل (جميع المتاجر) —"
+        store_opts = [_ALL_STORES] + agg.sort_values("نسخ", ascending=False)["store_id"].tolist()
         sel = st.selectbox("المتجر:", store_opts, key="sm_who_store")
-        sdf = df_scope[df_scope["store_id"] == sel] if not df_scope.empty else df_scope
+
+        if sel == _ALL_STORES:
+            sdf = df_scope
+        else:
+            sdf = df_scope[df_scope["store_id"] == sel] if not df_scope.empty else df_scope
         scopy = sdf[sdf["action_type"] == "copy_coupon"] if not sdf.empty else sdf
         sclick = sdf[sdf["action_type"] == "click_link"] if not sdf.empty else sdf
 
         m1, m2, m3 = st.columns(3)
         with m1: kpi_card("🎟️", "إجمالي النسخ", f"{len(scopy):,}", "emerald")
-        with m2: kpi_card("👤", "ناسخون مختلفون", f"{scopy['identity'].nunique() if not scopy.empty else 0:,}", "info")
-        with m3: kpi_card("🖱️", "النقرات", f"{len(sclick):,}", "warning")
+        with m2: kpi_card("👤", "ناسخون مختلفون",
+                          f"{scopy['identity'].nunique() if not scopy.empty else 0:,}", "info")
+        if sel == _ALL_STORES:
+            with m3: kpi_card("🏪", "متاجر منسوخ منها",
+                              f"{scopy['store_id'].nunique() if not scopy.empty else 0:,}", "warning")
+        else:
+            with m3: kpi_card("🖱️", "النقرات", f"{len(sclick):,}", "warning")
 
         if scopy.empty:
-            st.info("لا توجد نسخات لهذا المتجر ضمن الفترة/المصدر.")
+            st.info("لا توجد نسخات ضمن الفترة/المصدر.")
         else:
-            who = (scopy.groupby("identity").agg(
+            _group_keys = ["identity", "store_id"] if sel == _ALL_STORES else ["identity"]
+            who = (scopy.groupby(_group_keys).agg(
                        n=("action_time", "size"),
                        src=("src_ar", lambda s: "، ".join(sorted(set(s)))),
                        first=("action_time", "min"),
                        last=("action_time", "max"),
                    ).reset_index())
-            # المدينة من كل أحداث المستخدم لهذا المتجر (النقر يحمل IP-geo حتى لو النسخ لا)
+            # المدينة من كل أحداث المستخدم ضمن النطاق (النقر يحمل IP-geo حتى لو النسخ لا)
             _geo = sdf[sdf["city_c"] != "غير معروف"]
             if not _geo.empty:
                 cmap = _geo.groupby("identity")["city_c"].agg(
@@ -2668,17 +2679,20 @@ elif page == "تحليل المتاجر":
                 who["المدينة"] = who["identity"].map(cmap).fillna("غير معروف")
             else:
                 who["المدينة"] = "غير معروف"
-            who = who.rename(columns={"identity": "المستخدم", "n": "مرات النسخ",
-                                      "src": "المصدر",
+            who = who.rename(columns={"identity": "المستخدم", "store_id": "المتجر",
+                                      "n": "مرات النسخ", "src": "المصدر",
                                       "first": "أول نسخ", "last": "آخر نسخ"})
             who = who.sort_values("مرات النسخ", ascending=False)
             who["أول نسخ"] = pd.to_datetime(who["أول نسخ"]).dt.strftime("%Y-%m-%d %H:%M")
             who["آخر نسخ"] = pd.to_datetime(who["آخر نسخ"]).dt.strftime("%Y-%m-%d %H:%M")
-            st.dataframe(who[["المستخدم", "المصدر", "مرات النسخ", "المدينة", "أول نسخ", "آخر نسخ"]],
-                         hide_index=True, use_container_width=True)
+            _cols = (["المستخدم", "المتجر", "المصدر", "مرات النسخ", "المدينة", "أول نسخ", "آخر نسخ"]
+                     if sel == _ALL_STORES else
+                     ["المستخدم", "المصدر", "مرات النسخ", "المدينة", "أول نسخ", "آخر نسخ"])
+            st.dataframe(who[_cols], hide_index=True, use_container_width=True)
+            _fname = "all" if sel == _ALL_STORES else sel
             st.download_button("📥 تحميل قائمة الناسخين (CSV)",
                                who.to_csv(index=False).encode("utf-8-sig"),
-                               f"copiers_{sel}_{d_start}_{d_end}.csv", "text/csv")
+                               f"copiers_{_fname}_{d_start}_{d_end}.csv", "text/csv")
             st.caption("«المدينة» من الـ IP وقت نقر الرابط (تحويل /go) — حقيقية بعد تفعيل الإثراء (Worker). "
                        "تظهر «غير معروف» لمن نسخ بلا نقر رابط بعد. الزائر «#رمز» = بصمة جهاز غير مسجّل.")
 

@@ -338,8 +338,8 @@ TEXTS = {
                           'en': '⚠️ Coupon not available right now.'},
     'coupon_err':        {'ar': '⚠️ تعذر جلب الكوبون.',
                           'en': '⚠️ Could not fetch the coupon.'},
-    'coupon_for':        {'ar': '🎫 *كوبون {sid}:*\n`{c}`\n\n_اضغط على الكود لنسخه تلقائياً_ 👆',
-                          'en': '🎫 *Coupon for {sid}:*\n`{c}`\n\n_Tap the code to copy it_ 👆'},
+    'coupon_for':        {'ar': '🎫 *كوبون {sid}:*\n`{c}`\n\n_اضغط زر النسخ تحت ↓_',
+                          'en': '🎫 *Coupon for {sid}:*\n`{c}`\n\n_Tap the copy button below ↓_'},
 
     # Reaction
     'fav_added':         {'ar': '❤️ تمت إضافة *{sid}* لمفضلتك',
@@ -1627,7 +1627,14 @@ def handle_coupon_copy(call):
     if coupon:
         bot.answer_callback_query(call.id, t(user_id, 'coupon_here'))
         _update_nav(user_id, state='coupon')
-        _edit_nav(user_id, t(user_id, 'coupon_for', sid=store_id, c=coupon), _kb_coupon_back(lang))
+        # Bot API 7.7 / telebot 4.21+: زر copy_text ينسخ النص للحافظة بضغطة وحدة فعلاً
+        # (لا حاجة للمستخدم يضغط على الكود نفسه).
+        kb_copy = types.InlineKeyboardMarkup()
+        kb_copy.add(types.InlineKeyboardButton(
+            f"📋 انسخ الكود: {coupon}",
+            copy_text=types.CopyTextButton(text=coupon)))
+        kb_copy.add(types.InlineKeyboardButton(TEXTS['back_btn'][lang], callback_data='nav:card'))
+        _edit_nav(user_id, t(user_id, 'coupon_for', sid=store_id, c=coupon), kb_copy)
     else:
         bot.answer_callback_query(call.id, t(user_id, 'coupon_unavailable'))
 
