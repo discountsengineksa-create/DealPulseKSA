@@ -850,9 +850,33 @@ function copyText(txt) {
     showToast(S.copied);
 }
 
+let _searchTrackTimer = null;
 function onSearch(v) {
     activeSearch = v.toLowerCase();
     renderStores();
+
+    // ── تتبع البحث في direct_search (debounced 800ms — لا نرسل لكل ضغطة) ──
+    clearTimeout(_searchTrackTimer);
+    const kw = (v || '').trim();
+    if (kw.length < 2) return;
+    _searchTrackTimer = setTimeout(() => {
+        const matches = ALL.filter(s => {
+            const hay = (s.store_id + ' ' + (s.bio || '') + ' ' + (s.tags || []).join(' ')).toLowerCase();
+            return hay.includes(kw.toLowerCase());
+        });
+        fetch(`${API_BASE}/track/search`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                keyword: kw,
+                store_id: matches[0] ? matches[0].store_id : null,
+                user_found: matches.length > 0,
+                platform: 'Miniapp',
+                user_id: tgUserId,
+            }),
+            keepalive: true,
+        }).catch(() => {});
+    }, 800);
 }
 
 // closeModal: لم يعد مستخدماً (لا modal). محفوظ كـ no-op للـ backward compat.
@@ -1075,12 +1099,15 @@ async function initProfileCheck() {
     } catch (e) { /* خطأ شبكة → نتركه يستخدم التطبيق */ }
 }
 
-// إقلاع: home view + تحميل البيانات + الأقسام بالتوازي + فحص البروفايل
+// إقلاع: home view + تحميل البيانات + الأقسام بالتوازي
+// ملاحظة: initProfileCheck() معطّل عمداً — قرار استراتيجي بإلغاء الموديال
+// الإلزامي للحفاظ على «صفر احتكاك». البنية كاملة (DB + API + dashboard tab)
+// خاملة جاهزة لتفعيلها مستقبلاً لو غيّرنا الاستراتيجية.
 document.addEventListener('DOMContentLoaded', () => {
     switchView('home');
     loadCategories();
     loadData();
-    initProfileCheck();
+    // initProfileCheck();  // disabled — see comment above
 });
 </script>
 </body>

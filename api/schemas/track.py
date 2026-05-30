@@ -15,7 +15,7 @@ class TrackRequest(BaseModel):
     store_id: str = Field(..., min_length=1, max_length=200)
     action: Literal["click_link", "copy_coupon", "search"]
     details: Optional[str] = Field(None, max_length=500)
-    source: Literal["bot", "web", "dashboard"] = "web"
+    source: Literal["bot", "web", "dashboard", "telegram_miniapp"] = "web"
     event_id: Optional[str] = Field(None, max_length=64, description="UUID اختياري لحماية الـ idempotency")
 
 
@@ -32,7 +32,7 @@ class SearchLogRequest(BaseModel):
     user_found: bool = False
     store_id: Optional[str] = None
     name_en: Optional[str] = None
-    platform: Literal["Web", "Bot", "Dashboard"] = "Web"
+    platform: Literal["Web", "Bot", "Dashboard", "Miniapp"] = "Web"
     user_email: Optional[str] = None
     user_id: Optional[int] = None
 
