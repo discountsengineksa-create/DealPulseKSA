@@ -3050,8 +3050,8 @@ elif page == "البحث عن كود":
             df_search['lang'] = df_search['search_keyword'].apply(_detect_lang)
             # تطبيع المنصة
             df_search['src'] = df_search['platform'].apply(
-                lambda p: 'bot' if 'bot' in str(p) or 'telegram' in str(p)
-                else ('web' if 'web' in str(p) else 'other')
+                lambda p: 'bot' if 'bot' in str(p).lower() or 'telegram' in str(p).lower()
+                else ('web' if 'web' in str(p).lower() else 'other')
             )
             df_search['search_date'] = pd.to_datetime(df_search['search_date'], errors='coerce')
 

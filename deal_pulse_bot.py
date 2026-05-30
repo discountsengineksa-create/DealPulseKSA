@@ -456,15 +456,16 @@ def increment_coupon_copies(store_id):
         print(f"⚠️ فشل تحديث نسخ الكوبون لـ {store_id}: {e}")
 
 
-def log_search(keyword, found, user_id=None):
-    """تسجيل عملية بحث في direct_search لتغذية صفحة 'تحليل بحث الأكواد'."""
+def log_search(keyword, found, user_id=None, store_id=None):
+    """تسجيل عملية بحث في direct_search لتغذية صفحة 'تحليل بحث الأكواد'.
+    store_id (اختياري): أقرب متجر مطابق — يسمح لـ«لوحة القرار» باحتساب البحث لكل متجر."""
     try:
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("""
-            INSERT INTO direct_search (search_keyword, user_found, search_date, platform, user_id)
-            VALUES (%s, %s, NOW(), 'TelegramBot', %s)
-        """, (keyword, found, user_id))
+            INSERT INTO direct_search (search_keyword, store_id, user_found, search_date, platform, user_id)
+            VALUES (%s, %s, %s, NOW(), 'TelegramBot', %s)
+        """, (keyword, store_id, found, user_id))
         conn.commit()
         release_conn(conn)
     except Exception as e:
@@ -1136,8 +1137,11 @@ def _process_search(message):
         # API شغال لكن لا نتائج → جرب DB كـ fallback إضافي
         rows = _db_search(search_term.lower())
 
-    log_search(search_term, found=bool(rows), user_id=user_id)
-    log_action(None, 'search', user_id=user_id,
+    # ربط البحث بأقرب متجر مطابق (إن وُجد) — يسمح لـ«لوحة القرار» باحتساب
+    # عمود «بحث» لكل متجر، تماشياً مع سلوك بحث الموقع.
+    top_store_id = (rows[0].get("store_id") if rows else None) or None
+    log_search(search_term, found=bool(rows), user_id=user_id, store_id=top_store_id)
+    log_action(top_store_id, 'search', user_id=user_id,
                details=f"keyword:{search_term};found:{bool(rows)}")
 
     if rows:
