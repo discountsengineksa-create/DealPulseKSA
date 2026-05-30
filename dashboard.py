@@ -2665,12 +2665,22 @@ elif page == "تحليل المتاجر":
             st.info("لا توجد نسخات ضمن الفترة/المصدر.")
         else:
             _group_keys = ["identity", "store_id"] if sel == _ALL_STORES else ["identity"]
-            who = (scopy.groupby(_group_keys).agg(
-                       n=("action_time", "size"),
-                       src=("src_ar", lambda s: "، ".join(sorted(set(s)))),
-                       first=("action_time", "min"),
-                       last=("action_time", "max"),
-                   ).reset_index())
+            # pivot لكل (مستخدم[+متجر]) × نوع الحدث → عدّاد نسخ/نقر/بحث
+            events = sdf[sdf["action_type"].isin(["copy_coupon", "click_link", "search"])]
+            counts = (events.groupby(_group_keys + ["action_type"])
+                            .size().unstack(fill_value=0).reset_index())
+            for c in ("copy_coupon", "click_link", "search"):
+                if c not in counts.columns:
+                    counts[c] = 0
+            # نُبقي فقط من نسخ (الـ tab مخصّص للناسخين)
+            counts = counts[counts["copy_coupon"] > 0].copy()
+            # ميتاداتا (المصدر/أول/آخر نسخ) من scopy لتظل الأزمنة محسوبة على النسخ
+            meta = (scopy.groupby(_group_keys).agg(
+                        src=("src_ar", lambda s: "، ".join(sorted(set(s)))),
+                        first=("action_time", "min"),
+                        last=("action_time", "max"),
+                    ).reset_index())
+            who = counts.merge(meta, on=_group_keys, how="left")
             # المدينة من كل أحداث المستخدم ضمن النطاق (النقر يحمل IP-geo حتى لو النسخ لا)
             _geo = sdf[sdf["city_c"] != "غير معروف"]
             if not _geo.empty:
@@ -2680,14 +2690,17 @@ elif page == "تحليل المتاجر":
             else:
                 who["المدينة"] = "غير معروف"
             who = who.rename(columns={"identity": "المستخدم", "store_id": "المتجر",
-                                      "n": "مرات النسخ", "src": "المصدر",
-                                      "first": "أول نسخ", "last": "آخر نسخ"})
-            who = who.sort_values("مرات النسخ", ascending=False)
+                                      "copy_coupon": "نسخ", "click_link": "نقر",
+                                      "search": "بحث",
+                                      "src": "المصدر", "first": "أول نسخ", "last": "آخر نسخ"})
+            who = who.sort_values("نسخ", ascending=False)
             who["أول نسخ"] = pd.to_datetime(who["أول نسخ"]).dt.strftime("%Y-%m-%d %H:%M")
             who["آخر نسخ"] = pd.to_datetime(who["آخر نسخ"]).dt.strftime("%Y-%m-%d %H:%M")
-            _cols = (["المستخدم", "المتجر", "المصدر", "مرات النسخ", "المدينة", "أول نسخ", "آخر نسخ"]
+            _cols = (["المستخدم", "المتجر", "المصدر", "نسخ", "نقر", "بحث",
+                      "المدينة", "أول نسخ", "آخر نسخ"]
                      if sel == _ALL_STORES else
-                     ["المستخدم", "المصدر", "مرات النسخ", "المدينة", "أول نسخ", "آخر نسخ"])
+                     ["المستخدم", "المصدر", "نسخ", "نقر", "بحث",
+                      "المدينة", "أول نسخ", "آخر نسخ"])
             st.dataframe(who[_cols], hide_index=True, use_container_width=True)
             _fname = "all" if sel == _ALL_STORES else sel
             st.download_button("📥 تحميل قائمة الناسخين (CSV)",
