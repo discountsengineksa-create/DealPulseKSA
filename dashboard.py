@@ -1323,6 +1323,7 @@ _MAIN_PAGES = [
 _ANALYSIS_PAGES = [
 "تحليل المتاجر", "تحليل الأقسام", "تحليل بحث الأكواد",
 "تحليل طلبات الأكواد", "تحليل المستخدمين", "تحليل الموقع",
+"👥 الحضور الحي",
 ]
 _OTHER_PAGES = [
 "📊 تقرير الشركاء",   # ← Demo Pack للشركات المتعاقدة (KPI نظيف + تصدير)
@@ -3877,6 +3878,144 @@ elif page == "مستخدمو الموقع":
     finally:
         if 'conn' in locals():
             conn.close()
+
+
+# --- صفحة الحضور الحي: زوار البوت/الميني/الموقع · إجمالي + متواجدون الآن ---
+elif page == "👥 الحضور الحي":
+    page_title("👥", "الحضور الحي عبر القنوات",
+               "إجمالي الزوار + المتواجدون الآن · البوت · الميني-ويب · الموقع")
+
+    c1, c2, c3 = st.columns([1.6, 1.6, 3])
+    with c1:
+        window_min = st.selectbox("نافذة «متواجد الآن» (دقائق)",
+                                  [5, 10, 15, 30, 60], index=0, key="presence_window",
+                                  help="مستخدم متواجد = آخر تفاعل صريح خلال X دقيقة")
+    with c2:
+        auto = st.checkbox("🔁 تحديث تلقائي كل 10 ث", value=False, key="presence_auto")
+    with c3:
+        if st.button("🔄 تحديث الآن", key="presence_refresh"):
+            st.rerun()
+
+    _now_riyadh = (pd.Timestamp.utcnow() + pd.Timedelta(hours=3)).strftime("%H:%M:%S")
+    st.caption(f"⏱️ آخر تحديث: **{_now_riyadh}** (الرياض) · "
+               f"«متواجد» = آخر تفاعل صريح (رسالة/نقر/نسخ/بحث) ≤ {window_min} د. "
+               f"لا يوجد heartbeat بعد، فالزائر الساكت لا يُعدّ متواجداً.")
+
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+
+        # ── البوت ───────────────────────────────────────────────────
+        cur.execute("SELECT COUNT(*) FROM bot_users")
+        bot_reg = cur.fetchone()[0]
+        cur.execute("""SELECT COUNT(DISTINCT user_id) FROM action_logs
+                       WHERE source='bot' AND user_id IS NOT NULL""")
+        bot_seen = cur.fetchone()[0]
+        cur.execute("""SELECT COUNT(*) FROM bot_users
+                       WHERE last_seen >= NOW() - make_interval(mins => %s)""",
+                    (window_min,))
+        bot_live = cur.fetchone()[0]
+
+        # ── الميني-ويب ──────────────────────────────────────────────
+        cur.execute("""
+            SELECT COUNT(DISTINCT COALESCE(user_id::text, encode(ip_hash,'hex')))
+            FROM action_logs
+            WHERE source IN ('telegram_miniapp','miniapp')
+        """)
+        mini_total = cur.fetchone()[0]
+        cur.execute("""
+            SELECT COUNT(DISTINCT COALESCE(user_id::text, encode(ip_hash,'hex')))
+            FROM action_logs
+            WHERE source IN ('telegram_miniapp','miniapp')
+              AND action_time >= NOW() - make_interval(mins => %s)
+        """, (window_min,))
+        mini_live = cur.fetchone()[0]
+
+        # ── الموقع (مسجلون) ─────────────────────────────────────────
+        cur.execute("SELECT COUNT(*) FROM web_users")
+        web_reg = cur.fetchone()[0]
+        cur.execute("""SELECT COUNT(*) FROM web_users
+                       WHERE last_seen >= NOW() - make_interval(mins => %s)""",
+                    (window_min,))
+        web_reg_live = cur.fetchone()[0]
+
+        # ── الموقع (مجهولون) ────────────────────────────────────────
+        cur.execute("""
+            SELECT COUNT(DISTINCT encode(ip_hash,'hex'))
+            FROM action_logs
+            WHERE source='web' AND user_id IS NULL AND ip_hash IS NOT NULL
+        """)
+        web_anon = cur.fetchone()[0]
+        cur.execute("""
+            SELECT COUNT(DISTINCT encode(ip_hash,'hex'))
+            FROM action_logs
+            WHERE source='web' AND user_id IS NULL AND ip_hash IS NOT NULL
+              AND action_time >= NOW() - make_interval(mins => %s)
+        """, (window_min,))
+        web_anon_live = cur.fetchone()[0]
+
+        conn.close()
+
+        st.divider()
+        st.markdown("### 📱 البوت (تيليجرام)")
+        b1, b2, b3 = st.columns(3)
+        with b1:
+            kpi_card("👥", "مسجَّلون (bot_users)", f"{bot_reg:,}", "info")
+        with b2:
+            kpi_card("🗂️", "ظهروا في السجلات",
+                     f"{bot_seen:,}", "neutral",
+                     note="DISTINCT user_id من action_logs — قد يفوق bot_users لو فُقدت صفوف سابقة")
+        with b3:
+            kpi_card("🟢", f"متواجدون الآن (≤ {window_min} د)",
+                     f"{bot_live:,}",
+                     "emerald" if bot_live else "neutral")
+
+        st.markdown("### 🔹 الميني-ويب (Telegram Mini App)")
+        m1, m2, _m3 = st.columns(3)
+        with m1:
+            kpi_card("👥", "إجمالي زوار مميَّز", f"{mini_total:,}", "info",
+                     note="user_id إن وُجد، وإلا ip_hash")
+        with m2:
+            kpi_card("🟢", f"متواجدون الآن (≤ {window_min} د)",
+                     f"{mini_live:,}",
+                     "emerald" if mini_live else "neutral")
+        if mini_total <= 1:
+            st.warning("⚠️ التتبّع فقير حالياً — حدث واحد فقط في `action_logs`. "
+                       "تحتاج endpoint POST `/api/v1/track/visit` يضربه الـ frontend عند فتح الميني.")
+
+        st.markdown("### 🌐 الموقع (dealpulseksa.com)")
+        w1, w2, w3, w4 = st.columns(4)
+        with w1:
+            kpi_card("👤", "مسجَّلون (web_users)", f"{web_reg:,}", "info")
+        with w2:
+            kpi_card("🟢", f"مسجَّلون متواجدون (≤ {window_min} د)",
+                     f"{web_reg_live:,}",
+                     "emerald" if web_reg_live else "neutral")
+        with w3:
+            kpi_card("👻", "زوّار مجهولون مميَّز", f"{web_anon:,}", "warning",
+                     note="ip_hash لمن نقر/نسخ بدون تسجيل دخول")
+        with w4:
+            kpi_card("🟡", f"مجهولون متواجدون (≤ {window_min} د)",
+                     f"{web_anon_live:,}",
+                     "emerald" if web_anon_live else "neutral")
+
+        st.divider()
+        st.markdown("#### ℹ️ القيود الحالية والخارطة")
+        st.info(
+            "- لا يوجد **heartbeat** من الـ frontend بعد، لذا الزائر الساكت غير المتفاعل لا يظهر «متواجد».\n"
+            "- زوّار الموقع الذين يفتحون ولا ينقرون شيئاً = صفر سجل (لا page-view tracking).\n"
+            "- الميني-ويب لا يسجّل فتح الواجهة — فقط النقر/النسخ يصل لـ `action_logs`.\n\n"
+            "**المرحلة 2** — heartbeat كل 30 ثانية من الـ web/mini عبر `/track/heartbeat` + جدول `live_presence`.\n"
+            "**المرحلة 3** — `visitor_id` UUID في localStorage لتمييز نفس الجهاز عبر تغيّر IP وربط المجهول بالمسجَّل بعد الدخول."
+        )
+
+        if auto:
+            import time
+            time.sleep(10)
+            st.rerun()
+
+    except Exception as e:
+        st.error(f"⚠️ خطأ في تحميل بيانات الحضور: {e}")
 
 
 # --- الصفحة الثانية عشرة: تحليل المستخدمين (Users Analytics) ---
