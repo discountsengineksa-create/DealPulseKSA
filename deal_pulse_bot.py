@@ -1816,13 +1816,16 @@ def idle_watcher():
 # ============================================================
 
 if __name__ == "__main__":
-    # في الإنتاج: التشغيل عبر bot_app.py (FastAPI webhook).
-    # هذا الـ block مخصّص للتطوير المحلي فقط — يعمل فقط عند RUN_MODE=polling.
-    if os.getenv("RUN_MODE", "polling").lower() != "polling":
-        raise SystemExit(
-            "deal_pulse_bot.py في وضع polling فقط. "
-            "للإنتاج شغّل: uvicorn bot_app:app"
-        )
+    # ⚠️ الإنتاج يعمل عبر bot_app.py (webhook). تشغيل هذا الملف محلياً ينفّذ
+    # remove_webhook() ويحذف webhook الإنتاج → البوت الحيّ يسكت ويختفي كل شي.
+    # لذلك نمنع التشغيل العرضي ونطلب علماً صريحاً (ALLOW_LOCAL_POLLING=1)
+    # للتطوير فقط وعندما يكون الإنتاج موقوفاً.
+    if os.getenv("ALLOW_LOCAL_POLLING") != "1":
+        print("\n⛔ ممنوع تشغيل البوت محلياً (polling): يحذف webhook الإنتاج فيوقف البوت الحيّ.")
+        print("   البوت يعمل على خدمة DealPulseKSA (webhook). لا تشغّله محلياً.")
+        print("   للتطوير فقط (والإنتاج موقوف):")
+        print("     PowerShell: $env:ALLOW_LOCAL_POLLING='1'; .\\venv\\Scripts\\python.exe deal_pulse_bot.py\n")
+        raise SystemExit(1)
     try:
         bot.remove_webhook()
         clean_legacy_columns()
