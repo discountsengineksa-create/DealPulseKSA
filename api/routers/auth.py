@@ -53,6 +53,8 @@ def _row_to_user(row: dict) -> UserResponse:
         city=row.get("city"),
         country=row.get("country"),
         lang=row.get("lang") or "ar",
+        gender=row.get("gender"),
+        birth_date=row["birth_date"].isoformat() if row.get("birth_date") else None,
         visited_clicks=row.get("visited_clicks") or 0,
         store_copy_count=row.get("store_copy_count") or 0,
         manual_favorites=list(row.get("manual_favorites") or []),
@@ -142,8 +144,9 @@ def register(payload: RegisterRequest, request: Request, conn=Depends(get_db)):
                 """
                 INSERT INTO web_users (
                     phone_number, email, display_name, city, country, lang,
+                    gender, birth_date,
                     password_hash, last_ip, last_seen, status
-                ) VALUES (%s, %s, %s, %s, 'SA', 'ar', %s, %s, NOW(), 'Active')
+                ) VALUES (%s, %s, %s, %s, 'SA', 'ar', %s, %s, %s, %s, NOW(), 'Active')
                 RETURNING *
                 """,
                 (
@@ -151,6 +154,8 @@ def register(payload: RegisterRequest, request: Request, conn=Depends(get_db)):
                     email_lower,
                     payload.display_name,
                     payload.city,
+                    payload.gender,
+                    payload.birth_date,
                     pw_hash,
                     client_ip,
                 ),

@@ -1,5 +1,6 @@
 """Pydantic schemas للمصادقة."""
-from typing import Optional
+from datetime import date, timedelta
+from typing import Literal, Optional
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
@@ -11,6 +12,8 @@ class RegisterRequest(BaseModel):
     email: EmailStr = Field(..., description="الإيميل")
     password: str = Field(..., min_length=8, max_length=128, description="كلمة المرور (8 أحرف على الأقل)")
     city: str = Field(..., min_length=2, max_length=50, description="المدينة")
+    gender: Literal["male", "female"] = Field(..., description="الجنس: male أو female")
+    birth_date: date = Field(..., description="تاريخ الميلاد (YYYY-MM-DD)")
 
     @field_validator("phone_number")
     @classmethod
@@ -34,6 +37,19 @@ class RegisterRequest(BaseModel):
     @classmethod
     def trim_strings(cls, v: str) -> str:
         return v.strip()
+
+    @field_validator("birth_date")
+    @classmethod
+    def validate_birth_date(cls, v: date) -> date:
+        """العمر يجب أن يكون بين 10 و 100 سنة (يطابق CHECK في DB)."""
+        today = date.today()
+        min_date = today - timedelta(days=100 * 365)
+        max_date = today - timedelta(days=10 * 365)
+        if v > max_date:
+            raise ValueError("العمر يجب أن يكون 10 سنوات على الأقل")
+        if v < min_date:
+            raise ValueError("تاريخ الميلاد غير منطقي")
+        return v
 
 
 class TokenResponse(BaseModel):
@@ -59,6 +75,8 @@ class UserResponse(BaseModel):
     city: Optional[str] = None
     country: Optional[str] = "SA"
     lang: str = "ar"
+    gender: Optional[Literal["male", "female"]] = None
+    birth_date: Optional[str] = None  # ISO YYYY-MM-DD
     visited_clicks: int = 0
     store_copy_count: int = 0
     manual_favorites: list[str] = []
