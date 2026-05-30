@@ -125,6 +125,27 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
 
 .toast{ position:fixed; top:20px; left:50%; transform:translateX(-50%); padding:12px 24px; background:var(--em); color:#fff; border-radius:50px; font-weight:700; z-index:400; opacity:0; transition:0.3s; }
 .toast.on{opacity:1; top:40px}
+
+/* ── PROFILE MODAL (إلزامي — gender + birth_date) ── */
+.pf-overlay{ z-index:500; align-items:center; justify-content:center; }
+.pf-sheet{ width:calc(100% - 32px); max-width:420px; background:var(--bg2); border-radius:24px; padding:24px 22px;
+  border:1px solid var(--border); transform:translateY(20px); opacity:0; transition:0.3s cubic-bezier(0.32,0.72,0,1); }
+.pf-overlay.on .pf-sheet{ transform:translateY(0); opacity:1; }
+.pf-title{ font-size:18px; font-weight:900; color:var(--t1); text-align:center; margin-bottom:6px; }
+.pf-subtitle{ font-size:12px; color:var(--t2); text-align:center; margin-bottom:20px; line-height:1.5; }
+.pf-label{ font-size:11px; font-weight:700; color:var(--t2); margin-bottom:8px; display:block; }
+.pf-row{ margin-bottom:16px; }
+.pf-gender-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.pf-gender-btn{ padding:14px; border-radius:14px; background:var(--card); border:1px solid var(--border);
+  color:var(--t2); font-family:var(--font); font-weight:800; font-size:14px; cursor:pointer; transition:0.2s; }
+.pf-gender-btn.sel{ background:rgba(16,185,129,0.12); border-color:var(--em); color:var(--em); }
+.pf-date{ width:100%; padding:14px; border-radius:14px; background:var(--card); border:1px solid var(--border);
+  color:var(--t1); font-family:var(--font); font-size:14px; outline:none; }
+.pf-date:focus{ border-color:var(--em); }
+.pf-error{ color:#f87171; font-size:12px; margin:8px 0; min-height:18px; text-align:center; }
+.pf-submit{ width:100%; padding:15px; border-radius:14px; background:var(--em); color:#fff; border:none;
+  font-family:var(--font); font-weight:800; font-size:15px; cursor:pointer; transition:0.2s; }
+.pf-submit:disabled{ opacity:0.5; cursor:not-allowed; }
 </style>
 </head>
 
@@ -284,6 +305,34 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
   <div class="story-content" id="storyContent"></div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════════════════
+     PROFILE MODAL — إلزامي عند أول فتح (gender + birth_date)
+     يُظهَر بعد فحص /users/telegram-profile/status لو has_demographics=false
+     ═══════════════════════════════════════════════════════════════════ -->
+<div id="pfOverlay" class="overlay pf-overlay" role="dialog" aria-modal="true" aria-labelledby="pfTitle">
+  <div class="pf-sheet">
+    <h2 id="pfTitle" class="pf-title">أكمل بياناتك بسرعة</h2>
+    <p class="pf-subtitle">معلومة واحدة فقط — حتى نعرض لك أنسب العروض</p>
+
+    <div class="pf-row">
+      <label class="pf-label">الجنس</label>
+      <div class="pf-gender-grid">
+        <button type="button" class="pf-gender-btn" id="pfGenderMale"   onclick="pfSelectGender('male')">ذكر</button>
+        <button type="button" class="pf-gender-btn" id="pfGenderFemale" onclick="pfSelectGender('female')">أنثى</button>
+      </div>
+    </div>
+
+    <div class="pf-row">
+      <label class="pf-label" for="pfBirthDate">تاريخ الميلاد</label>
+      <input type="date" id="pfBirthDate" class="pf-date" dir="ltr">
+    </div>
+
+    <div class="pf-error" id="pfError"></div>
+
+    <button id="pfSubmit" class="pf-submit" onclick="pfSubmit()">حفظ والمتابعة</button>
+  </div>
+</div>
+
 <script>
 // ── Telegram WebApp integration (ready/expand/theme) ─────────────────────
 const tg = window.Telegram && window.Telegram.WebApp;
@@ -328,6 +377,17 @@ const STRINGS = {
     allStores:       'كل المتاجر',
     sectionTrend:    'الترند 🔥',
     sectionCat:      'قسم: ',
+    pfTitle:         'أكمل بياناتك بسرعة',
+    pfSubtitle:      'معلومة واحدة فقط — حتى نعرض لك أنسب العروض',
+    pfGenderLbl:     'الجنس',
+    pfMale:          'ذكر',
+    pfFemale:        'أنثى',
+    pfBirthLbl:      'تاريخ الميلاد',
+    pfSubmit:        'حفظ والمتابعة',
+    pfSaving:        'جارٍ الحفظ...',
+    pfErrPick:       'الرجاء اختيار الجنس وتاريخ الميلاد',
+    pfErrAge:        'العمر يجب أن يكون 10 سنوات على الأقل',
+    pfErrSave:       'تعذّر الحفظ، حاول مرة أخرى',
   },
   en: {
     brand:           'Deal Pulse',
@@ -353,6 +413,17 @@ const STRINGS = {
     allStores:       'All Stores',
     sectionTrend:    'Trending 🔥',
     sectionCat:      'Category: ',
+    pfTitle:         'Complete your profile',
+    pfSubtitle:      'Just one quick step — so we show you the best deals',
+    pfGenderLbl:     'Gender',
+    pfMale:          'Male',
+    pfFemale:        'Female',
+    pfBirthLbl:      'Date of birth',
+    pfSubmit:        'Save & continue',
+    pfSaving:        'Saving...',
+    pfErrPick:       'Please select gender and date of birth',
+    pfErrAge:        'Age must be at least 10 years',
+    pfErrSave:       'Save failed, please try again',
   }
 };
 // LANG_OVERRIDE من localStorage يهيمن على Telegram language_code
@@ -886,11 +957,130 @@ if (tg && tg.BackButton && typeof tg.BackButton.onClick === 'function') {
     tg.BackButton.onClick(() => goBack());
 }
 
-// إقلاع: home view + تحميل البيانات + الأقسام بالتوازي
+// ═══════════════════════════════════════════════════════════════════════════
+//                  PROFILE MODAL — إلزامي عند أول فتح
+// ═══════════════════════════════════════════════════════════════════════════
+// يفحص /users/telegram-profile/status بـ initData؛ لو has_demographics=false
+// يعرض موديال يطلب gender + birth_date. لا يُغلق إلا بالحفظ الناجح.
+
+let pfSelectedGender = null;
+
+function pfApplyLabels() {
+    const ST = STRINGS[LANG_CURRENT];
+    _setText('pfTitle', ST.pfTitle);
+    const subEl = document.querySelector('#pfOverlay .pf-subtitle');
+    if (subEl) subEl.textContent = ST.pfSubtitle;
+    const lbls = document.querySelectorAll('#pfOverlay .pf-label');
+    if (lbls.length >= 2) {
+        lbls[0].textContent = ST.pfGenderLbl;
+        lbls[1].textContent = ST.pfBirthLbl;
+    }
+    _setText('pfGenderMale',   ST.pfMale);
+    _setText('pfGenderFemale', ST.pfFemale);
+    _setText('pfSubmit',       ST.pfSubmit);
+}
+
+function pfSetDateBounds() {
+    const today = new Date();
+    const max = new Date(today.getFullYear() - 10, today.getMonth(), today.getDate());
+    const min = new Date(today.getFullYear() - 100, today.getMonth(), today.getDate());
+    const fmt = (d) => d.toISOString().split('T')[0];
+    const inp = document.getElementById('pfBirthDate');
+    if (inp) {
+        inp.max = fmt(max);
+        inp.min = fmt(min);
+    }
+}
+
+function pfShow() {
+    pfApplyLabels();
+    pfSetDateBounds();
+    document.getElementById('pfOverlay').classList.add('on');
+    // BackButton لا يقدر يلغي الموديال — نخفيه أثناء عرضه
+    if (tg && tg.BackButton) try { tg.BackButton.hide(); } catch(e){}
+}
+
+function pfHide() {
+    document.getElementById('pfOverlay').classList.remove('on');
+}
+
+function pfSelectGender(g) {
+    pfSelectedGender = g;
+    document.getElementById('pfGenderMale').classList.toggle('sel',   g === 'male');
+    document.getElementById('pfGenderFemale').classList.toggle('sel', g === 'female');
+}
+
+async function pfSubmit() {
+    const ST = STRINGS[LANG_CURRENT];
+    const errEl = document.getElementById('pfError');
+    errEl.textContent = '';
+
+    const birth = document.getElementById('pfBirthDate').value;
+    if (!pfSelectedGender || !birth) {
+        errEl.textContent = ST.pfErrPick;
+        return;
+    }
+    // تحقق عمر محلي (server يتحقق أيضاً)
+    const birthDate = new Date(birth);
+    const ageYears = Math.floor((Date.now() - birthDate.getTime()) / (365.25 * 24 * 3600 * 1000));
+    if (ageYears < 10 || ageYears > 100) {
+        errEl.textContent = ST.pfErrAge;
+        return;
+    }
+
+    const initData = (tg && tg.initData) || '';
+    if (!initData) {
+        // خارج Telegram (متصفّح اختبار) — لا نقدر نحفظ. نخفي الموديال بهدوء.
+        pfHide();
+        return;
+    }
+
+    const btn = document.getElementById('pfSubmit');
+    btn.disabled = true;
+    const oldText = btn.textContent;
+    btn.textContent = ST.pfSaving;
+
+    try {
+        const res = await fetch(`${API_BASE}/users/telegram-profile`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                init_data: initData,
+                gender: pfSelectedGender,
+                birth_date: birth,
+            }),
+        });
+        if (!res.ok) throw new Error('save failed');
+        pfHide();
+    } catch (e) {
+        errEl.textContent = ST.pfErrSave;
+        btn.disabled = false;
+        btn.textContent = oldText;
+    }
+}
+
+async function initProfileCheck() {
+    // لو ما في initData (خارج Telegram أو نسخة قديمة) → تخطّى الفحص
+    const initData = (tg && tg.initData) || '';
+    if (!initData) return;
+    try {
+        const res = await fetch(`${API_BASE}/users/telegram-profile/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ init_data: initData }),
+        });
+        if (!res.ok) return;          // فشل التحقق = نتركه يستخدم التطبيق
+        const data = await res.json();
+        if (!data.has_demographics) pfShow();
+    } catch (e) { /* خطأ شبكة → نتركه يستخدم التطبيق */ }
+}
+
+// إقلاع: home view + تحميل البيانات + الأقسام بالتوازي + فحص البروفايل
 document.addEventListener('DOMContentLoaded', () => {
     switchView('home');
     loadCategories();
     loadData();
+    initProfileCheck();
 });
 </script>
 </body>

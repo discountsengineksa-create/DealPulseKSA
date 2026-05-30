@@ -4082,11 +4082,12 @@ elif page == "تحليل المستخدمين":
     st.info("تحليل معمق لقاعدة البيانات لفهم تفاعل العملاء وتصنيفهم بناءً على الـ 17 عموداً الأساسية.")
 
     # إنشاء التبويبات
-    tab_kpi, tab_gen_u, tab_ind_u, tab_web = st.tabs([
+    tab_kpi, tab_gen_u, tab_ind_u, tab_web, tab_bot_demo = st.tabs([
         "🎯 مؤشرات الأداء (KPIs)",
         "📈 الأداء العام للعملاء",
         "🔍 الفحص الفردي (ID)",
         "🌐 الموقع — ديموغرافيا + بقاء",
+        "📱 الميني-ويب — ديموغرافيا",
     ])
 
     try:
@@ -4401,6 +4402,113 @@ elif page == "تحليل المستخدمين":
                 else:
                     fig_s = px.bar(df_signups, x="اليوم", y="تسجيلات")
                     st.plotly_chart(apply_brand_theme(fig_s), use_container_width=True)
+
+        # ─── تبويب 5: ديموغرافيا الميني-ويب (bot_users) ────────────────────
+        # البيانات تُجمع من موديال إلزامي يطلب gender+birth_date عند أول فتح
+        # للميني-ويب (telegram WebApp). يُحفظ في bot_users بعد التحقق من initData.
+        with tab_bot_demo:
+            st.subheader("📱 مستخدمو الميني-ويب — توزيع ديموغرافي")
+            st.caption("البيانات من `bot_users` — تُجمَع عبر موديال إلزامي في الميني-ويب (migration_025).")
+
+            df_bot_kpi = pd.read_sql("""
+                SELECT
+                    COUNT(*)                                                       AS total_users,
+                    COUNT(*) FILTER (WHERE last_seen >= NOW() - INTERVAL '7 days') AS active_7d,
+                    COUNT(*) FILTER (WHERE last_seen >= NOW() - INTERVAL '30 days') AS active_30d,
+                    COUNT(*) FILTER (WHERE gender IS NOT NULL)                     AS with_gender,
+                    COUNT(*) FILTER (WHERE birth_date IS NOT NULL)                 AS with_birth_date,
+                    COUNT(*) FILTER (WHERE joined_at >= NOW() - INTERVAL '7 days') AS new_7d
+                FROM bot_users
+            """, conn)
+
+            if df_bot_kpi.empty or int(df_bot_kpi.iloc[0]['total_users']) == 0:
+                st.info("📭 لا يوجد مستخدمون في bot_users بعد.")
+            else:
+                k = df_bot_kpi.iloc[0]
+                w1, w2, w3, w4 = st.columns(4)
+                w1.metric("📱 إجمالي مستخدمي البوت", int(k['total_users']))
+                w2.metric("🆕 جدد (7 أيام)", int(k['new_7d']))
+                w3.metric("🟢 نشط آخر 7 أيام", int(k['active_7d']))
+                w4.metric("🟢 نشط آخر 30 يوم", int(k['active_30d']))
+
+                # نسبة التغطية الديموغرافية — مهمة لأن جمعها اختياري للقدامى
+                total = max(1, int(k['total_users']))
+                cov_g = round(100 * int(k['with_gender'])     / total, 1)
+                cov_b = round(100 * int(k['with_birth_date']) / total, 1)
+                cv1, cv2 = st.columns(2)
+                cv1.metric("👥 عبّأوا الجنس",       f"{int(k['with_gender'])}",     delta=f"{cov_g}% تغطية")
+                cv2.metric("🎂 عبّأوا تاريخ الميلاد", f"{int(k['with_birth_date'])}", delta=f"{cov_b}% تغطية")
+
+                st.divider()
+
+                col_g, col_a = st.columns(2)
+                with col_g:
+                    st.write("### 👥 توزيع الجنس")
+                    df_bg = pd.read_sql("""
+                        SELECT
+                            CASE gender WHEN 'male' THEN 'ذكر' WHEN 'female' THEN 'أنثى' END AS "الجنس",
+                            COUNT(*) AS "العدد"
+                        FROM bot_users
+                        WHERE gender IS NOT NULL
+                        GROUP BY gender
+                        ORDER BY "العدد" DESC
+                    """, conn)
+                    if df_bg.empty:
+                        st.caption("لا توجد بيانات جنس بعد.")
+                    else:
+                        fig_bg = px.pie(df_bg, names="الجنس", values="العدد", hole=0.4)
+                        st.plotly_chart(apply_brand_theme(fig_bg), use_container_width=True)
+
+                with col_a:
+                    st.write("### 🎂 الفئات العمرية")
+                    df_ba = pd.read_sql("""
+                        SELECT
+                            CASE
+                                WHEN EXTRACT(YEAR FROM AGE(birth_date)) < 18 THEN 'أقل من 18'
+                                WHEN EXTRACT(YEAR FROM AGE(birth_date)) BETWEEN 18 AND 24 THEN '18-24'
+                                WHEN EXTRACT(YEAR FROM AGE(birth_date)) BETWEEN 25 AND 34 THEN '25-34'
+                                WHEN EXTRACT(YEAR FROM AGE(birth_date)) BETWEEN 35 AND 44 THEN '35-44'
+                                WHEN EXTRACT(YEAR FROM AGE(birth_date)) BETWEEN 45 AND 54 THEN '45-54'
+                                ELSE '55+'
+                            END AS "الفئة",
+                            COUNT(*) AS "العدد",
+                            MIN(EXTRACT(YEAR FROM AGE(birth_date)))::int AS _order
+                        FROM bot_users
+                        WHERE birth_date IS NOT NULL
+                        GROUP BY "الفئة"
+                        ORDER BY _order
+                    """, conn)
+                    if df_ba.empty:
+                        st.caption("لا توجد بيانات تاريخ ميلاد بعد.")
+                    else:
+                        fig_ba = px.bar(df_ba, x="الفئة", y="العدد", text="العدد")
+                        st.plotly_chart(apply_brand_theme(fig_ba), use_container_width=True)
+
+                st.divider()
+                st.write("### 🎯 الشريحة المستهدفة (جنس × عمر) — مستخدمو البوت")
+                df_bcross = pd.read_sql("""
+                    SELECT
+                        CASE gender WHEN 'male' THEN 'ذكر' WHEN 'female' THEN 'أنثى' END AS "الجنس",
+                        CASE
+                            WHEN EXTRACT(YEAR FROM AGE(birth_date)) < 18 THEN 'أقل من 18'
+                            WHEN EXTRACT(YEAR FROM AGE(birth_date)) BETWEEN 18 AND 24 THEN '18-24'
+                            WHEN EXTRACT(YEAR FROM AGE(birth_date)) BETWEEN 25 AND 34 THEN '25-34'
+                            WHEN EXTRACT(YEAR FROM AGE(birth_date)) BETWEEN 35 AND 44 THEN '35-44'
+                            WHEN EXTRACT(YEAR FROM AGE(birth_date)) BETWEEN 45 AND 54 THEN '45-54'
+                            ELSE '55+'
+                        END AS "الفئة العمرية",
+                        COUNT(*) AS "العدد"
+                    FROM bot_users
+                    WHERE gender IS NOT NULL AND birth_date IS NOT NULL
+                    GROUP BY "الجنس", "الفئة العمرية"
+                    ORDER BY "الجنس", "الفئة العمرية"
+                """, conn)
+                if df_bcross.empty:
+                    st.caption("يحتاج بيانات جنس + ميلاد معاً.")
+                else:
+                    pivot_b = df_bcross.pivot(index="الفئة العمرية", columns="الجنس",
+                                              values="العدد").fillna(0).astype(int)
+                    st.dataframe(pivot_b, use_container_width=True)
 
     except Exception as e:
         st.error(f"حدث خطأ في صفحة التحليلات: {e}")

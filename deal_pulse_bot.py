@@ -108,19 +108,22 @@ def release_conn(conn):
 # ============================================================
 
 def clean_legacy_columns():
-    """حذف الأعمدة الثلاثة التي قرّر المستخدم إلغاءها نهائياً."""
+    """حذف الأعمدة التخمينية التي قرّر المستخدم إلغاءها نهائياً.
+
+    ملاحظة: birth_date أُعيد في migration_025 بقيم صريحة من موديال الميني-ويب
+    (لا تخمين)، لذا لا يُحذف هنا بعد الآن.
+    """
     try:
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("""
             ALTER TABLE bot_users
               DROP COLUMN IF EXISTS social_rank,
-              DROP COLUMN IF EXISTS emotional_score,
-              DROP COLUMN IF EXISTS birth_date
+              DROP COLUMN IF EXISTS emotional_score
         """)
         conn.commit()
         release_conn(conn)
-        print("✅ Schema cleanup: dropped social_rank, emotional_score, birth_date")
+        print("✅ Schema cleanup: dropped social_rank, emotional_score")
     except Exception as e:
         print(f"⚠️ clean_legacy_columns: {e}")
 

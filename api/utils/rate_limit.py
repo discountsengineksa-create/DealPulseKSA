@@ -93,3 +93,5 @@ LIMIT_TRACK            = "120/minute"
 LIMIT_GO_REDIRECT      = "60/minute"
 LIMIT_SOCIAL_INGEST    = "30/minute"
 LIMIT_ADMIN            = "30/minute"
+LIMIT_TG_PROFILE_READ  = "60/minute"   # status check (idempotent)
+LIMIT_TG_PROFILE_SAVE  = "10/hour"     # write — أبطأ لتفادي الإغراق
