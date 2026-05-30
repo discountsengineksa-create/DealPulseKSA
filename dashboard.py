@@ -2459,17 +2459,41 @@ elif page == "تحليل المتاجر":
                              .str.strip().replace("", "غير معروف"))
         df_logs["src_ar"] = df_logs["source"].map(CHAN_MAP).fillna("🌐 ويب")
 
+        def _clean(v):
+            """يحوّل أي قيمة لـ str ويتجاهل NaN/None (تجنّب ظهور 'nan' حرفياً)."""
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return ""
+            s = str(v).strip()
+            return "" if s.lower() == "nan" else s
+
         def _identity(r):
             src = r["source"]
-            if src in ("web", "telegram_miniapp", "miniapp"):
+            # ميني-ويب: مستخدم تيليجرام معروف — استخدم اسم التيليجرام أولاً
+            # (نفس منطق البوت). LEFT JOIN bot_users يربط user_id → bu_username
+            # تلقائياً في SQL، فالاسم متاح هنا حتى لمصدر telegram_miniapp.
+            if src in ("telegram_miniapp", "miniapp"):
+                u = _clean(r.get("bu_username"))
+                if u:
+                    return "@" + u.lstrip("@")
+                uid = r.get("user_id")
+                if pd.notna(uid):
+                    return f"🔹 ميني ويب {int(uid)}"
+                h = _clean(r.get("ip_hex"))
+                if h:
+                    return f"🔹 ميني ويب #{h[:6]}"
+                return "🔹 ميني ويب (غير مسجّل)"
+            # ويب عادي: زائر مجهول → name/email/phone لو مسجّل، وإلا ip_hex
+            if src == "web":
                 for k in ("web_name", "web_email", "web_phone"):
-                    v = str(r.get(k) or "").strip()
+                    v = _clean(r.get(k))
                     if v:
                         return v
-                h = str(r.get("ip_hex") or "").strip()
-                lbl = "🔹 ميني ويب" if src != "web" else "🌐 زائر ويب"
-                return f"{lbl} #{h[:6]}" if h else f"{lbl} (غير مسجّل)"
-            u = str(r.get("bu_username") or "").strip()
+                h = _clean(r.get("ip_hex"))
+                if h:
+                    return f"🌐 زائر ويب #{h[:6]}"
+                return "🌐 زائر ويب (غير مسجّل)"
+            # البوت (افتراضي): اسم تيليجرام → id → مجهول
+            u = _clean(r.get("bu_username"))
             if u:
                 return "@" + u.lstrip("@")
             uid = r.get("user_id")
