@@ -7,14 +7,62 @@ from api.routers.auth import get_current_user
 from api.schemas.users import (
     FavoriteRequest,
     FavoritesResponse,
+    TelegramFavoriteRequest,
+    TelegramFavoritesListRequest,
     TelegramProfileSaveRequest,
     TelegramProfileStatusRequest,
     TelegramProfileStatusResponse,
 )
-from api.utils.rate_limit import LIMIT_TG_PROFILE_READ, LIMIT_TG_PROFILE_SAVE, limiter
+from api.utils.rate_limit import (
+    LIMIT_TG_FAVORITE,
+    LIMIT_TG_PROFILE_READ,
+    LIMIT_TG_PROFILE_SAVE,
+    limiter,
+)
 from api.utils.telegram_init_data import TelegramAuthError, verify_init_data
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+# ─── Helpers: كتابة الجدول الموحّد user_favorites (SSOT) ───────────────────
+# يُستدعى بجانب تحديث manual_favorites (dual-write) ضمن نفس المعاملة، فلا
+# يحتاج commit هنا — get_db يؤكّد المعاملة عند نجاح الطلب.
+def _uf_upsert(cur, store_id, *, platform, web_user_id=None, telegram_id=None):
+    """يضيف صفاً للمفضلة (idempotent). مالك واحد بالضبط: ويب أو تيليجرام."""
+    if web_user_id is not None:
+        cur.execute(
+            """
+            INSERT INTO user_favorites (platform, web_user_id, store_id)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (web_user_id, store_id) WHERE web_user_id IS NOT NULL
+            DO NOTHING
+            """,
+            (platform, web_user_id, store_id),
+        )
+    else:
+        cur.execute(
+            """
+            INSERT INTO user_favorites (platform, telegram_id, store_id)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (telegram_id, store_id) WHERE telegram_id IS NOT NULL
+            DO NOTHING
+            """,
+            (platform, telegram_id, store_id),
+        )
+
+
+def _uf_delete(cur, store_id, *, web_user_id=None, telegram_id=None):
+    """يحذف صف المفضلة لمالكه."""
+    if web_user_id is not None:
+        cur.execute(
+            "DELETE FROM user_favorites WHERE web_user_id = %s AND store_id = %s",
+            (web_user_id, store_id),
+        )
+    else:
+        cur.execute(
+            "DELETE FROM user_favorites WHERE telegram_id = %s AND store_id = %s",
+            (telegram_id, store_id),
+        )
 
 
 @router.get("/me/favorites", response_model=FavoritesResponse)
@@ -49,6 +97,9 @@ def add_favorite(
         )
         row = cur.fetchone()
 
+        # SSOT الموحّد للتحليل/التنبيهات (dual-write ضمن نفس المعاملة)
+        _uf_upsert(cur, payload.store_id, platform="web", web_user_id=user["id"])
+
     return FavoritesResponse(favorites=list(row["manual_favorites"] or []))
 
 
@@ -70,6 +121,9 @@ def remove_favorite(
             (store_id, user["id"]),
         )
         row = cur.fetchone()
+
+        # حذف من SSOT الموحّد (dual-write)
+        _uf_delete(cur, store_id, web_user_id=user["id"])
 
     return FavoritesResponse(favorites=list(row["manual_favorites"] or []))
 
@@ -155,3 +209,116 @@ def telegram_profile_save(
         )
 
     return {"ok": True, "telegram_id": telegram_id}
+
+
+# ─── Telegram Mini-App Favorites (initData-authenticated) ──────────────────
+# نفس نمط telegram-profile: التحقق بـ initData (لا JWT — مستخدم تيليجرام).
+# يكتب في الجدول الموحّد user_favorites (platform='miniapp') + يُزامن
+# bot_users.manual_favorites (dual-write) للتوافق مع استنتاج البوت والداشبورد.
+@router.post("/telegram-favorites/list", response_model=FavoritesResponse)
+@limiter.limit(LIMIT_TG_PROFILE_READ)
+def telegram_favorites_list(
+    payload: TelegramFavoritesListRequest,
+    request: Request,
+    conn=Depends(get_db),
+):
+    """قائمة مفضلة مستخدم الميني-ويب (من SSOT الموحّد)."""
+    try:
+        tg_user = verify_init_data(payload.init_data)
+    except TelegramAuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+    telegram_id = int(tg_user["id"])
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            "SELECT store_id FROM user_favorites WHERE telegram_id = %s ORDER BY created_at DESC",
+            (telegram_id,),
+        )
+        favorites = [r["store_id"] for r in cur.fetchall()]
+
+    return FavoritesResponse(favorites=favorites)
+
+
+@router.post("/telegram-favorites", response_model=FavoritesResponse, status_code=201)
+@limiter.limit(LIMIT_TG_FAVORITE)
+def telegram_favorite_add(
+    payload: TelegramFavoriteRequest,
+    request: Request,
+    conn=Depends(get_db),
+):
+    """إضافة متجر لمفضلة مستخدم الميني-ويب (idempotent)."""
+    try:
+        tg_user = verify_init_data(payload.init_data)
+    except TelegramAuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+    telegram_id = int(tg_user["id"])
+    username = tg_user.get("username") or tg_user.get("first_name") or "Anonymous"
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute("SELECT 1 FROM master WHERE store_id = %s", (payload.store_id,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail=f"store '{payload.store_id}' not found")
+
+        # UPSERT bot_users + زامن manual_favorites (cache) — يضمن وجود السجل
+        cur.execute(
+            """
+            INSERT INTO bot_users (telegram_id, username, joined_at, last_seen,
+                                   user_status, manual_favorites)
+            VALUES (%s, %s, NOW(), NOW(), 'Active', ARRAY[%s]::text[])
+            ON CONFLICT (telegram_id) DO UPDATE
+                SET manual_favorites = (
+                        SELECT array_agg(DISTINCT x)
+                        FROM unnest(array_append(
+                            COALESCE(bot_users.manual_favorites, '{}'), EXCLUDED.manual_favorites[1]
+                        )) AS x
+                    ),
+                    last_seen = NOW()
+            """,
+            (telegram_id, username, payload.store_id),
+        )
+
+        # SSOT الموحّد
+        _uf_upsert(cur, payload.store_id, platform="miniapp", telegram_id=telegram_id)
+
+        cur.execute(
+            "SELECT store_id FROM user_favorites WHERE telegram_id = %s ORDER BY created_at DESC",
+            (telegram_id,),
+        )
+        favorites = [r["store_id"] for r in cur.fetchall()]
+
+    return FavoritesResponse(favorites=favorites)
+
+
+@router.delete("/telegram-favorites", response_model=FavoritesResponse)
+@limiter.limit(LIMIT_TG_FAVORITE)
+def telegram_favorite_remove(
+    payload: TelegramFavoriteRequest,
+    request: Request,
+    conn=Depends(get_db),
+):
+    """حذف متجر من مفضلة مستخدم الميني-ويب."""
+    try:
+        tg_user = verify_init_data(payload.init_data)
+    except TelegramAuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+    telegram_id = int(tg_user["id"])
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            UPDATE bot_users
+            SET manual_favorites = array_remove(COALESCE(manual_favorites, '{}'), %s)
+            WHERE telegram_id = %s
+            """,
+            (payload.store_id, telegram_id),
+        )
+        _uf_delete(cur, payload.store_id, telegram_id=telegram_id)
+
+        cur.execute(
+            "SELECT store_id FROM user_favorites WHERE telegram_id = %s ORDER BY created_at DESC",
+            (telegram_id,),
+        )
+        favorites = [r["store_id"] for r in cur.fetchall()]
+
+    return FavoritesResponse(favorites=favorites)

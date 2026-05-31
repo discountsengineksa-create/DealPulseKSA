@@ -122,6 +122,9 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
 .bnav{ position:fixed;bottom:0;width:100%; padding:12px 20px calc(12px + env(safe-area-inset-bottom)); display:flex;justify-content:space-around; background:rgba(8,14,29,0.8); border-top:1px solid var(--border); z-index:150; }
 .nitem{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--t3);text-decoration:none;font-size:10px;font-weight:700}
 .nitem.on{color:var(--em)}
+.fav-btn{z-index:5;background:rgba(8,14,29,0.55);border:1px solid var(--border);border-radius:50%;line-height:1;cursor:pointer;backdrop-filter:blur(6px);transition:transform .15s ease}
+.fav-btn:active{transform:scale(0.82)}
+.fav-btn.on{background:rgba(239,68,68,0.16);border-color:rgba(239,68,68,0.35)}
 
 .toast{ position:fixed; top:20px; left:50%; transform:translateX(-50%); padding:12px 24px; background:var(--em); color:#fff; border-radius:50px; font-weight:700; z-index:400; opacity:0; transition:0.3s; }
 .toast.on{opacity:1; top:40px}
@@ -188,6 +191,9 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
     </div>
     <div class="stat glass" onclick="showListView('all')" style="cursor:pointer">
       <div class="stat-v" id="sStores">0</div><div class="stat-l" id="lblStores">متجر</div>
+    </div>
+    <div class="stat glass" onclick="showFavoritesView()" style="cursor:pointer">
+      <div class="stat-v" id="sFavs">0</div><div class="stat-l" id="lblFavs">❤️</div>
     </div>
   </div>
   <style>
@@ -388,6 +394,13 @@ const STRINGS = {
     pfErrPick:       'الرجاء اختيار الجنس وتاريخ الميلاد',
     pfErrAge:        'العمر يجب أن يكون 10 سنوات على الأقل',
     pfErrSave:       'تعذّر الحفظ، حاول مرة أخرى',
+    favorites:       'مفضلتي',
+    favEmpty:        'لم تُضِف أي متجر لمفضلتك بعد.\nاضغط ❤️ على أي متجر لإضافته.',
+    favAdded:        '❤️ أُضيف للمفضلة',
+    favRemoved:      '🤍 أُزيل من المفضلة',
+    favErr:          '❌ تعذّر تحديث المفضلة',
+    favAddBtn:       '🤍 أضف للمفضلة',
+    favInBtn:        '❤️ في المفضلة',
   },
   en: {
     brand:           'Deal Pulse',
@@ -424,6 +437,13 @@ const STRINGS = {
     pfErrPick:       'Please select gender and date of birth',
     pfErrAge:        'Age must be at least 10 years',
     pfErrSave:       'Save failed, please try again',
+    favorites:       'My Favorites',
+    favEmpty:        "You haven't added any store yet.\nTap ❤️ on any store to add it.",
+    favAdded:        '❤️ Added to favorites',
+    favRemoved:      '🤍 Removed from favorites',
+    favErr:          '❌ Failed to update favorites',
+    favAddBtn:       '🤍 Add to favorites',
+    favInBtn:        '❤️ In favorites',
   }
 };
 // LANG_OVERRIDE من localStorage يهيمن على Telegram language_code
@@ -482,7 +502,8 @@ const WEB_BASE = 'https://www.dealpulseksa.com';
 let ALL = [];
 let CATS = [];
 let activeSearch = '';
-let currentView = 'home';      // 'home' | 'list' | 'categories' | 'category' | 'store'
+let FAVS = new Set();          // store_id strings — مفضلة المستخدم (سيرفرية)
+let currentView = 'home';      // 'home' | 'list' | 'categories' | 'category' | 'store' | 'favorites'
 let viewStack = [];            // stack للرجوع (آخر view → الرجوع له)
 let viewContext = {};          // {category: 'عطور'} | {storeId: 17}
 
@@ -549,15 +570,22 @@ function showListView(mode) {
 
 function renderListView(mode) {
     const ST = STRINGS[LANG_CURRENT];
-    document.getElementById('listTitle').textContent   = (mode === 'trending') ? ST.sectionTrend : ST.allStores;
+    const title = (mode === 'trending') ? ST.sectionTrend
+                : (mode === 'favorites') ? ST.favorites
+                : ST.allStores;
+    document.getElementById('listTitle').textContent   = title;
     document.getElementById('listBackLbl').textContent = ST.home;
-    const list = (mode === 'trending') ? ALL.filter(s => s.trending) : ALL;
+    const list = (mode === 'trending')  ? ALL.filter(s => s.trending)
+               : (mode === 'favorites') ? ALL.filter(s => FAVS.has(s.store_id))
+               : ALL;
     const grid = document.getElementById('listGrid');
     if (!list.length) {
         const msg = (mode === 'trending')
             ? (LANG_CURRENT === 'en' ? 'No trending stores right now.' : 'لا توجد متاجر رائجة حالياً.')
+            : (mode === 'favorites')
+            ? ST.favEmpty
             : (LANG_CURRENT === 'en' ? 'No stores yet.' : 'لا توجد متاجر بعد.');
-        grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--t3);padding:40px 20px;font-size:13px">${msg}</div>`;
+        grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--t3);padding:40px 20px;font-size:13px;white-space:pre-line">${msg}</div>`;
         return;
     }
     grid.innerHTML = list.map(storeCardHTML).join('');
@@ -634,6 +662,7 @@ function storeCardHTML(s) {
     return `
     <div class="card glass" style="position:relative" onclick="showStoreView(${s.id})">
         ${trendBadge}
+        ${favHeartHTML(s)}
         <div class="c-ava"><img src="${logoSrc}" alt="${s.store_id}" onerror="this.onerror=null;this.src='logo.png'"></div>
         <div class="c-name">${s.store_id}</div>
         <div class="disc-badge">${s.disc}</div>
@@ -670,6 +699,7 @@ function renderStoreView(storeId) {
     </div>
     <div class="cta-row">
         <button class="cta-primary" onclick="openLinkCurrent()">${ST.goToStore}</button>
+        <button class="cta-ghost" onclick="toggleFav(${s.id}, event)">${FAVS.has(s.store_id) ? ST.favInBtn : ST.favAddBtn}</button>
     </div>
     <div class="store-meta">
         ${LANG_CURRENT==='en' ? 'Discount' : 'الخصم'}: <b style="color:var(--em)">${s.disc}</b>
@@ -780,11 +810,96 @@ async function trackEvent(store_id, action) {
     } catch (e) { /* silent */ }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+//                  Favorites — مفضلة سيرفرية موحّدة (user_favorites)
+//   التحقق بـ initData (نفس نمط telegram-profile). لا localStorage.
+// ═══════════════════════════════════════════════════════════════════════════
+function _initData() { return (tg && tg.initData) || ''; }
+
+async function loadFavorites() {
+    const initData = _initData();
+    if (!initData) return;   // خارج Telegram → لا مفضلة سيرفرية
+    try {
+        const res = await fetch(`${API_BASE}/users/telegram-favorites/list`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ init_data: initData }),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        FAVS = new Set(data.favorites || []);
+        // أعد رسم العرض الحالي ليُظهِر حالة القلوب الصحيحة
+        renderStores();
+        if (currentView === 'list')     renderListView(viewContext.listMode);
+        if (currentView === 'category') renderCategoryView(viewContext.category);
+        if (currentView === 'store' && window._activeStore) renderStoreView(window._activeStore.id);
+    } catch (e) { /* silent */ }
+}
+
+async function toggleFav(storeId, event) {
+    if (event) { event.stopPropagation(); event.preventDefault(); }
+    const s = ALL.find(x => x.id === storeId);
+    if (!s) return;
+    const sid = s.store_id;
+    const ST = STRINGS[LANG_CURRENT];
+    const initData = _initData();
+    if (!initData) { showToast(ST.favErr); return; }
+
+    const wasFav = FAVS.has(sid);
+    // تفاؤلي: حدّث الواجهة فوراً
+    if (wasFav) FAVS.delete(sid); else FAVS.add(sid);
+    _refreshFavUI();
+
+    try {
+        const res = await fetch(`${API_BASE}/users/telegram-favorites`, {
+            method: wasFav ? 'DELETE' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ init_data: initData, store_id: sid }),
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        FAVS = new Set(data.favorites || []);
+        _refreshFavUI();
+        showToast(wasFav ? ST.favRemoved : ST.favAdded);
+        if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.impactOccurred('light'); } catch (_) {} }
+    } catch (e) {
+        // رجوع عن التغيير التفاؤلي عند الفشل
+        if (wasFav) FAVS.add(sid); else FAVS.delete(sid);
+        _refreshFavUI();
+        showToast(ST.favErr);
+    }
+}
+
+// زر القلب لبطاقة/صفحة متجر — يستقبل store object
+function favHeartHTML(s, big) {
+    const on = FAVS.has(s.store_id);
+    const sz = big ? 'font-size:22px;padding:10px' : 'font-size:16px;padding:7px';
+    const pos = big ? '' : `position:absolute;top:8px;${LANG_CURRENT==='en'?'left':'right'}:8px;`;
+    return `<button class="fav-btn${on ? ' on' : ''}" style="${pos}${sz}"
+        onclick="toggleFav(${s.id}, event)" aria-label="favorite">${on ? '❤️' : '🤍'}</button>`;
+}
+
+// إعادة رسم كل القلوب + ستات المفضلة بعد أي تبديل
+function _refreshFavUI() {
+    renderStores();
+    if (currentView === 'list')     renderListView(viewContext.listMode);
+    if (currentView === 'category') renderCategoryView(viewContext.category);
+    if (currentView === 'store' && window._activeStore) renderStoreView(window._activeStore.id);
+    const favEl = document.getElementById('sFavs');
+    if (favEl) favEl.textContent = FAVS.size;
+}
+
+function showFavoritesView() {
+    showListView('favorites');
+}
+
 function updateStats() {
     // 3 ستات بنفس ترتيب الموقع: ترند / قسم / متجر
     document.getElementById('sTrend').textContent  = ALL.filter(x => x.trending).length;
     document.getElementById('sCats').textContent   = CATS.length;
     document.getElementById('sStores').textContent = ALL.length;
+    const favEl = document.getElementById('sFavs');
+    if (favEl) favEl.textContent = FAVS.size;
 }
 
 function renderStores() {
@@ -1153,6 +1268,7 @@ document.addEventListener('DOMContentLoaded', () => {
     switchView('home');
     loadCategories();
     loadData();
+    loadFavorites();   // مفضلة المستخدم السيرفرية (initData) — تُحدّث القلوب بعد جلبها
     // initProfileCheck();  // disabled — see comment above
 
     // Enter = إرسال فوري (نيّة واضحة)

@@ -1072,6 +1072,35 @@ def _sa_load_searches() -> pd.DataFrame:
         conn.close()
 
 
+@st.cache_data(ttl=180, show_spinner=False)
+def _sa_load_favorites() -> pd.DataFrame:
+    """
+    مفضلة المستخدمين الموحّدة (user_favorites) + هوية المالك.
+    كل صف = (شخص واحد × متجر واحد) — UNIQUE في الجدول يمنع التكرار، فعدّ
+    الصفوف لكل متجر = عدد الأشخاص الذين فضّلوه. مخزّنة 3 دقائق.
+    """
+    conn = get_conn()
+    try:
+        conn.rollback()
+        return pd.read_sql(
+            """
+            SELECT uf.store_id, uf.platform, uf.created_at,
+                   uf.web_user_id, uf.telegram_id,
+                   bu.username     AS bu_username,   -- هوية تيليجرام (بوت/ميني)
+                   bu.city         AS bu_city,
+                   wu.display_name AS web_name,       -- هوية ويب مسجّل
+                   wu.email        AS web_email,
+                   wu.city         AS web_city
+            FROM   user_favorites uf
+            LEFT JOIN bot_users bu ON bu.telegram_id = uf.telegram_id
+            LEFT JOIN web_users wu ON wu.id          = uf.web_user_id
+            """,
+            conn,
+        )
+    finally:
+        conn.close()
+
+
 @st.cache_data(ttl=60, show_spinner=False)
 def _sa_recent_raw(n: int = 20) -> pd.DataFrame:
     """آخر n عملية خام من action_logs (للتحقّق الشفّاف — بدون أي فلترة)."""
@@ -2619,10 +2648,11 @@ elif page == "تحليل المتاجر":
     with r2b: kpi_card("📉", "الأقل بحثاً", f"{ls['store_id']}", "neutral", note=f"{int(ls['بحث'])} بحث")
     with r2c: kpi_card("🔻", "الأقل نقراً", f"{lc['store_id']}", "neutral", note=f"{int(lc['نقرات'])} نقرة")
 
-    tab_board, tab_who, tab_charts = st.tabs([
+    tab_board, tab_who, tab_charts, tab_fav = st.tabs([
         "🏆 لوحة القرار (كل المتاجر)",
         "👤 مين نسخ من متجر",
         "📈 الرسوم والمعدلات",
+        "❤️ المفضلة",
     ])
 
     # ─────────────────────────── لوحة القرار ───────────────────────────
@@ -2831,6 +2861,110 @@ elif page == "تحليل المتاجر":
                                 yaxis_title="العدد", legend_title_text="")
             st.plotly_chart(apply_brand_theme(figts), use_container_width=True)
             st.caption("«دقيقة» لرصد دفعات النشاط اللحظية · «يوم» لرؤية الاتجاه العام.")
+
+    # ─────────────────────────── ❤️ المفضلة ───────────────────────────
+    with tab_fav:
+        st.caption("من جدول `user_favorites` الموحّد (بوت + ميني-ويب + ويب). كل شخص يُحتسب "
+                   "مرة واحدة لكل متجر · أساس للتنبيهات المستقبلية (حقل last_notified_at جاهز).")
+        try:
+            df_fav = _sa_load_favorites()
+        except Exception as e:
+            st.error(f"⚠️ تعذّر تحميل المفضلة: {e}")
+            df_fav = pd.DataFrame()
+
+        # فلتر المصدر (platform) — يحترم نفس اختيار شريط التحكم أعلى الصفحة
+        PLAT_FILTER = {"📱 تيليجرام": ["bot"], "🌐 ويب": ["web"], "🔹 ميني ويب": ["miniapp"]}
+        if src_choice in PLAT_FILTER and not df_fav.empty:
+            df_fav = df_fav[df_fav["platform"].isin(PLAT_FILTER[src_choice])].copy()
+
+        if df_fav.empty:
+            st.info("📭 لا توجد مفضلات بعد. بمجرد ما يبدأ المستخدمون بإضافة متاجرهم المفضلة ستظهر هنا.")
+        else:
+            _plat_ar = {"bot": "📱 تيليجرام", "web": "🌐 ويب", "miniapp": "🔹 ميني ويب"}
+
+            # مفتاح هوية الشخص (ويب أو تيليجرام) لعدّ الأشخاص الفعليين
+            def _person_key(r):
+                if pd.notna(r.web_user_id):
+                    return f"w{int(r.web_user_id)}"
+                if pd.notna(r.telegram_id):
+                    return f"t{int(r.telegram_id)}"
+                return "?"
+
+            total_fav    = len(df_fav)
+            uniq_stores  = df_fav["store_id"].nunique()
+            uniq_people  = df_fav.apply(_person_key, axis=1).nunique()
+            k1, k2, k3 = st.columns(3)
+            k1.metric("❤️ إجمالي الإضافات", f"{total_fav:,}")
+            k2.metric("🏪 متاجر مفضّلة",     f"{uniq_stores:,}")
+            k3.metric("👤 أشخاص فعّالون",    f"{uniq_people:,}")
+
+            # ── لوحة أكثر المتاجر تفضيلاً ──
+            st.markdown("**🏆 أكثر المتاجر تفضيلاً (عدد الأشخاص)**")
+            board_f = (df_fav.groupby("store_id").size()
+                       .reset_index(name="عدد الأشخاص")
+                       .sort_values("عدد الأشخاص", ascending=False))
+            board_f = board_f.merge(df_master[["store_id", "logo_url"]], on="store_id", how="left")
+            view_f = pd.DataFrame({
+                "الشعار": board_f["logo_url"].fillna("").values,
+                "المتجر": board_f["store_id"].values,
+                "عدد الأشخاص": board_f["عدد الأشخاص"].values,
+            })
+            _maxp = int(max(1, board_f["عدد الأشخاص"].max()))
+            st.dataframe(
+                view_f, hide_index=True, use_container_width=True,
+                column_config={
+                    "الشعار": st.column_config.ImageColumn("🏪", width="small"),
+                    "عدد الأشخاص": st.column_config.ProgressColumn(
+                        "عدد الأشخاص", format="%d", min_value=0, max_value=_maxp),
+                },
+            )
+            st.download_button("📥 تحميل CSV", view_f.to_csv(index=False).encode("utf-8-sig"),
+                               "favorites_leaderboard.csv", "text/csv", key="fav_csv")
+
+            # ── التوزيع حسب المنصة ──
+            if src_choice == "الكل":
+                st.markdown("**📊 التوزيع حسب المنصة**")
+                dist_f = (df_fav.assign(منصة=lambda d: d["platform"].map(_plat_ar).fillna(d["platform"]))
+                          .groupby("منصة").size().reset_index(name="العدد"))
+                fig_fp = px.pie(dist_f, names="منصة", values="العدد", hole=0.45)
+                st.plotly_chart(apply_brand_theme(fig_fp), use_container_width=True)
+
+            # ── من فضّل متجراً معيّناً؟ (الأساس لإرسال التنبيهات) ──
+            st.divider()
+            st.markdown("**🔍 مين فضّل متجراً معيّناً؟**")
+            store_sel = st.selectbox("اختر متجراً:", board_f["store_id"].tolist(), key="fav_store_sel")
+            sub_f = df_fav[df_fav["store_id"] == store_sel].copy()
+
+            def _fav_who(r):
+                if pd.notna(r.web_name) and str(r.web_name).strip():
+                    return str(r.web_name)
+                if pd.notna(r.web_email) and str(r.web_email).strip():
+                    return str(r.web_email)
+                if pd.notna(r.bu_username) and str(r.bu_username).strip():
+                    return "@" + str(r.bu_username).lstrip("@")
+                if pd.notna(r.telegram_id):
+                    return f"تيليجرام {int(r.telegram_id)}"
+                if pd.notna(r.web_user_id):
+                    return f"ويب #{int(r.web_user_id)}"
+                return "غير معروف"
+
+            def _fav_city(r):
+                for v in (r.web_city, r.bu_city):
+                    if pd.notna(v) and str(v).strip():
+                        return str(v)
+                return "—"
+
+            _ca = (pd.to_datetime(sub_f["created_at"], utc=True, errors="coerce")
+                   + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
+            out_f = pd.DataFrame({
+                "الشخص": sub_f.apply(_fav_who, axis=1).values,
+                "المدينة": sub_f.apply(_fav_city, axis=1).values,
+                "المنصة": sub_f["platform"].map(_plat_ar).fillna(sub_f["platform"]).values,
+                "تاريخ الإضافة": _ca.dt.strftime("%Y-%m-%d %H:%M").values,
+            })
+            st.dataframe(out_f, hide_index=True, use_container_width=True)
+            st.caption(f"👥 {len(out_f)} شخص فضّلوا «{store_sel}» — هؤلاء جمهور التنبيه المستقبلي "
+                       "عند نزول كوبون/خصم جديد لهذا المتجر.")
 
 
 # ---  الصفحة الخامسة : مركز قيادة الأقسام والتاقات (إدارة الـ 10 أعمدة) ---

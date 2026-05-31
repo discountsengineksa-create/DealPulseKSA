@@ -95,6 +95,7 @@ LIMIT_SOCIAL_INGEST    = "30/minute"
 LIMIT_ADMIN            = "30/minute"
 LIMIT_TG_PROFILE_READ  = "60/minute"   # status check (idempotent)
 LIMIT_TG_PROFILE_SAVE  = "10/hour"     # write — أبطأ لتفادي الإغراق
+LIMIT_TG_FAVORITE      = "60/minute"   # تبديل مفضلة الميني-ويب (إجراء حميد متكرر)
 LIMIT_CHANGE_PASSWORD  = "5/hour"      # تغيير كلمة سر للمسجّل دخوله
 LIMIT_DELETE_ACCOUNT   = "3/hour"      # حذف حساب — حد منخفض جداً
 LIMIT_PROFILE_UPDATE   = "20/hour"     # تعديل بروفايل

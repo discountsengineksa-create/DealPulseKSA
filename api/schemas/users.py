@@ -12,6 +12,18 @@ class FavoritesResponse(BaseModel):
     favorites: List[str]
 
 
+# ─── Telegram Mini-App Favorites (initData-authenticated) ──────────────────
+class TelegramFavoriteRequest(BaseModel):
+    """إضافة/حذف متجر من مفضلة مستخدم الميني-ويب — يتحقق من initData."""
+    init_data: str = Field(..., min_length=10, description="Telegram WebApp initData الخام")
+    store_id: str = Field(..., min_length=1, max_length=200)
+
+
+class TelegramFavoritesListRequest(BaseModel):
+    """جلب قائمة مفضلة مستخدم الميني-ويب — يحتاج initData فقط."""
+    init_data: str = Field(..., min_length=10)
+
+
 # ─── Telegram Mini-App Profile (gender + birth_date) ───────────────────────
 class TelegramProfileStatusRequest(BaseModel):
     """يطلب حالة بروفايل المستخدم — يحتاج initData فقط."""

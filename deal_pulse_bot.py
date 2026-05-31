@@ -278,6 +278,7 @@ TEXTS = {
     'menu_categories':   {'ar': '📂 الأقسام',          'en': '📂 Categories'},
     'menu_search':       {'ar': '🔎 البحث عن كود',     'en': '🔎 Search Code'},
     'menu_request':      {'ar': '➕ طلب كود',          'en': '➕ Request Code'},
+    'menu_favorites':    {'ar': '❤️ مفضلتي',           'en': '❤️ My Favorites'},
     'menu_end':          {'ar': '🛑 إنهاء',            'en': '🛑 End'},
     'start_btn':         {'ar': 'بدء الاستخدام 🚀',    'en': 'Start 🚀'},
     'back_btn':          {'ar': '🔙 عودة',             'en': '🔙 Back'},
@@ -347,6 +348,13 @@ TEXTS = {
     # Reaction
     'fav_added':         {'ar': '❤️ تمت إضافة *{sid}* لمفضلتك',
                           'en': '❤️ Added *{sid}* to your favorites'},
+    'fav_removed':       {'ar': '💔 أُزيل *{sid}* من مفضلتك',
+                          'en': '💔 Removed *{sid}* from your favorites'},
+    'btn_add_fav':       {'ar': '❤️ أضف للمفضلة',       'en': '❤️ Add to favorites'},
+    'btn_remove_fav':    {'ar': '💔 إزالة من المفضلة',  'en': '💔 Remove from favorites'},
+    'favs_title':        {'ar': '❤️ متاجرك المفضلة',    'en': '❤️ Your favorite stores'},
+    'favs_empty':        {'ar': 'ما أضفت أي متجر لمفضلتك بعد.\nاضغط ❤️ تحت أي كوبون لإضافته.',
+                          'en': "You haven't added any store yet.\nTap ❤️ under any coupon to add it."},
 
     # Idle — مرحلة 1: تذكير
     'idle_warn':         {'ar': '⏰ غبت عنّا {m} دقائق...\n'
@@ -701,6 +709,7 @@ def _kb_main(lang):
         types.InlineKeyboardButton(TEXTS['menu_search'][lang],  callback_data='nav:search'),
         types.InlineKeyboardButton(TEXTS['menu_request'][lang], callback_data='nav:request'),
     )
+    kb.add(types.InlineKeyboardButton(TEXTS['menu_favorites'][lang], callback_data='nav:favs'))
     kb.add(types.InlineKeyboardButton(TEXTS['menu_end'][lang], callback_data='nav:end'))
     return kb
 
@@ -713,13 +722,15 @@ def _kb_cats(lang, tags):
     return kb
 
 
-def _kb_card(lang, store, page, total, source):
+def _kb_card(lang, store, page, total, source, is_fav=False):
     kb  = types.InlineKeyboardMarkup(row_width=2)
     sid = store['store_id']
     kb.add(
         types.InlineKeyboardButton(TEXTS['btn_get_link'][lang],      callback_data=f"link:{sid}"),
         types.InlineKeyboardButton(TEXTS['btn_copied_coupon'][lang], callback_data=f"copy:{sid}"),
     )
+    fav_key = 'btn_remove_fav' if is_fav else 'btn_add_fav'
+    kb.add(types.InlineKeyboardButton(TEXTS[fav_key][lang], callback_data=f"fav:{sid}"))
     dot       = " "
     prev_btn  = (types.InlineKeyboardButton("◀", callback_data='nav:prev')
                  if page > 0 else types.InlineKeyboardButton(dot, callback_data='nav:noop'))
@@ -911,7 +922,7 @@ def _show_card(user_id, page):
     lang   = get_lang(user_id)
     source = nav.get('source', 'codes')
     text   = _card_text(s, lang)
-    markup = _kb_card(lang, s, page, len(stores), source)
+    markup = _kb_card(lang, s, page, len(stores), source, is_fav=_is_favorite(user_id, s['store_id']))
 
     nav2 = _get_nav(user_id)
     if nav2.get('msg_id'):
@@ -1523,6 +1534,9 @@ def handle_nav(call):
         _update_nav(user_id, state='request')
         _edit_nav(user_id, t(user_id, 'request_prompt'), _kb_cancel(lang))
 
+    elif action == 'favs':
+        _load_favorites(user_id, lang)
+
     elif action == 'end':
         log_action(None, 'end_session', user_id=user_id)
         _update_nav(user_id, state='ended')
@@ -1647,6 +1661,145 @@ def handle_coupon_copy(call):
 
 
 # ============================================================
+#  Favorites — مفضلة موحّدة (user_favorites = SSOT) + cache في bot_users
+# ============================================================
+
+def _is_favorite(user_id, store_id):
+    """هل هذا المتجر ضمن مفضلة المستخدم؟ (يُستعلم من الجدول الموحّد)."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur  = conn.cursor()
+        cur.execute(
+            "SELECT 1 FROM user_favorites WHERE telegram_id = %s AND store_id = %s LIMIT 1",
+            (user_id, store_id),
+        )
+        return cur.fetchone() is not None
+    except Exception as e:
+        print(f"⚠️ _is_favorite: {e}")
+        if conn is not None:
+            try: conn.rollback()
+            except Exception: pass
+        return False
+    finally:
+        if conn is not None:
+            release_conn(conn)
+
+
+def _add_favorite_db(user_id, store_id):
+    """يضيف للمفضلة في الجدول الموحّد + يزامن bot_users.manual_favorites (cache)."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur  = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO user_favorites (platform, telegram_id, store_id)
+            VALUES ('bot', %s, %s)
+            ON CONFLICT (telegram_id, store_id) WHERE telegram_id IS NOT NULL DO NOTHING
+            """,
+            (user_id, store_id),
+        )
+        cur.execute(
+            """
+            UPDATE bot_users
+            SET manual_favorites = CASE
+                WHEN manual_favorites IS NULL         THEN ARRAY[%s]::text[]
+                WHEN NOT (%s = ANY(manual_favorites)) THEN manual_favorites || ARRAY[%s]::text[]
+                ELSE manual_favorites
+                END,
+                fav_store_inferred = %s
+            WHERE telegram_id = %s
+            """,
+            (store_id, store_id, store_id, store_id, user_id),
+        )
+        conn.commit()
+    except Exception as e:
+        print(f"⚠️ _add_favorite_db: {e}")
+        if conn is not None:
+            try: conn.rollback()
+            except Exception: pass
+    finally:
+        if conn is not None:
+            release_conn(conn)
+
+
+def _remove_favorite_db(user_id, store_id):
+    """يحذف من المفضلة في الجدول الموحّد + من cache bot_users."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur  = conn.cursor()
+        cur.execute(
+            "DELETE FROM user_favorites WHERE telegram_id = %s AND store_id = %s",
+            (user_id, store_id),
+        )
+        cur.execute(
+            "UPDATE bot_users SET manual_favorites = array_remove(COALESCE(manual_favorites, '{}'), %s) WHERE telegram_id = %s",
+            (store_id, user_id),
+        )
+        conn.commit()
+    except Exception as e:
+        print(f"⚠️ _remove_favorite_db: {e}")
+        if conn is not None:
+            try: conn.rollback()
+            except Exception: pass
+    finally:
+        if conn is not None:
+            release_conn(conn)
+
+
+def _load_favorites(user_id, lang):
+    """يحمّل متاجر المستخدم المفضّلة (النشطة فقط) ويعرضها ككروت قابلة للتصفّح."""
+    log_action(None, 'view_favorites', user_id=user_id)
+    try:
+        conn = get_db_connection()
+        cur  = conn.cursor(cursor_factory=extras.DictCursor)
+        cur.execute("""
+            SELECT m.* FROM master m
+            WHERE m.store_id IN (
+                SELECT store_id FROM user_favorites WHERE telegram_id = %s
+            )
+              AND (m.last_time IS NULL OR m.last_time >= CURRENT_DATE)
+            ORDER BY (
+                SELECT MAX(uf.created_at) FROM user_favorites uf
+                WHERE uf.telegram_id = %s AND uf.store_id = m.store_id
+            ) DESC
+        """, (user_id, user_id))
+        rows = [dict(r) for r in cur.fetchall()]
+        release_conn(conn)
+    except Exception as e:
+        print(f"⚠️ _load_favorites: {e}")
+        _edit_nav(user_id, t(user_id, 'tech_error'), _kb_cancel(lang))
+        return
+    if not rows:
+        _edit_nav(user_id, t(user_id, 'favs_empty'), _kb_cancel(lang))
+        return
+    _update_nav(user_id, stores=rows, page=0, source='favs', state='codes')
+    _show_card(user_id, 0)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("fav:"))
+def handle_favorite_toggle(call):
+    store_id = call.data.split(":", 1)[1]
+    user_id  = call.from_user.id
+
+    _update_nav(user_id, chat_id=call.message.chat.id, msg_id=call.message.message_id)
+
+    if _is_favorite(user_id, store_id):
+        _remove_favorite_db(user_id, store_id)
+        bot.answer_callback_query(call.id, t(user_id, 'fav_removed', sid=store_id))
+    else:
+        _add_favorite_db(user_id, store_id)
+        bot.answer_callback_query(call.id, t(user_id, 'fav_added', sid=store_id))
+        log_action(store_id, 'favorite_add', user_id=user_id)
+        update_user_behavior(user_id, 'favorite_add', store_id=store_id)
+
+    # أعِد عرض نفس الكرت ليتحدّث زر المفضلة (أضف ↔ إزالة)
+    _show_card(user_id, _get_nav(user_id).get('page', 0))
+
+
+# ============================================================
 #  Reaction Handler — ❤️ يضيف للمفضلة بصمت (لا رسالة جديدة)
 # ============================================================
 
@@ -1679,6 +1832,12 @@ def _process_heart_reaction(chat_id, message_id, user_id):
                 fav_store_inferred = %s
             WHERE telegram_id = %s
         """, (store_id, store_id, store_id, store_id, user_id))
+        # SSOT الموحّد (dual-write) — نفس متجر تفاعل ❤️
+        cur.execute("""
+            INSERT INTO user_favorites (platform, telegram_id, store_id)
+            VALUES ('bot', %s, %s)
+            ON CONFLICT (telegram_id, store_id) WHERE telegram_id IS NOT NULL DO NOTHING
+        """, (user_id, store_id))
         conn.commit()
     except Exception as e:
         print(f"⚠️ _process_heart_reaction: {e}")
