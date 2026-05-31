@@ -74,6 +74,8 @@ def email_status(x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
 
 class EmailTestRequest(BaseModel):
     to: str
+    # اختياري — اختبر بعنوان From مختلف (مثلاً onboarding@resend.dev للسندبوكس)
+    from_override: str | None = None
 
 
 @router.post("/email-test")
@@ -81,15 +83,88 @@ def email_test(
     payload: EmailTestRequest,
     x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
 ):
-    """يرسل إيميل اختبار للعنوان المعطى ويرجع نتيجة _send_email الفعلية."""
+    """يرسل اختبار إيميل + يرجع رد Resend الكامل (status + id + error).
+
+    sent:true لا يعني وصول الإيميل — يعني Resend قَبِل الطلب فقط. للتحقق
+    من التوصيل الفعلي افحص لوحة Resend (resend.com/emails) أو استدعِ
+    GET /admin/email-trace/{id} بالـ id المرجع.
+    """
     _verify_admin(x_admin_secret)
-    from api.auth_utils import _send_email
-    ok = _send_email(
-        to=payload.to,
-        subject="✅ اختبار إرسال — نبض الصفقات",
-        html="<p>هذه رسالة اختبار. لو وصلتك → الإعدادات تعمل.</p>",
-    )
-    return {"sent": ok, "to": payload.to}
+    import requests as _rq
+    resend_key = os.getenv("RESEND_API_KEY")
+    smtp_from = payload.from_override or os.getenv("SMTP_FROM") or "onboarding@resend.dev"
+    smtp_from_name = os.getenv("SMTP_FROM_NAME", "نبض الصفقات")
+
+    if not resend_key:
+        return {
+            "sent": False,
+            "transport": "none",
+            "error": "RESEND_API_KEY غير معرّف على Railway",
+        }
+
+    try:
+        resp = _rq.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {resend_key}",
+                     "Content-Type": "application/json"},
+            json={
+                "from": f"{smtp_from_name} <{smtp_from}>",
+                "to": [payload.to],
+                "subject": "✅ اختبار إرسال — نبض الصفقات",
+                "html": "<p>هذه رسالة اختبار. لو وصلتك → الإعدادات تعمل.</p>"
+                        "<p>If you received this, your config works.</p>",
+            },
+            timeout=15,
+        )
+        body = {}
+        try:
+            body = resp.json() if resp.content else {}
+        except Exception:
+            body = {"raw": resp.text[:500]}
+        return {
+            "sent": resp.status_code in (200, 201, 202),
+            "status_code": resp.status_code,
+            "from_used": f"{smtp_from_name} <{smtp_from}>",
+            "to": payload.to,
+            "resend_id": body.get("id"),
+            "resend_response": body,
+            "hint": (
+                "لو status_code=403 → الدومين غير موثّق على Resend. "
+                "جرّب from_override='onboarding@resend.dev' (سندبوكس Resend)."
+                if resp.status_code == 403
+                else "افحص resend.com/emails لرؤية delivery status (delivered/bounced/spam)."
+            ),
+        }
+    except Exception as e:
+        return {"sent": False, "error": f"{type(e).__name__}: {str(e)[:300]}"}
+
+
+@router.get("/email-trace/{email_id}")
+def email_trace(
+    email_id: str,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """يفحص حالة إيميل من Resend عبر الـ id (delivered/bounced/complained).
+
+    يستدعى بعد /admin/email-test بـ resend_id المُرجَع.
+    """
+    _verify_admin(x_admin_secret)
+    import requests as _rq
+    resend_key = os.getenv("RESEND_API_KEY")
+    if not resend_key:
+        return {"error": "RESEND_API_KEY غير معرّف"}
+    try:
+        resp = _rq.get(
+            f"https://api.resend.com/emails/{email_id}",
+            headers={"Authorization": f"Bearer {resend_key}"},
+            timeout=10,
+        )
+        return {
+            "status_code": resp.status_code,
+            "data": resp.json() if resp.content else {},
+        }
+    except Exception as e:
+        return {"error": f"{type(e).__name__}: {str(e)[:300]}"}
 
 
 @router.post("/broadcast/{master_id}")
