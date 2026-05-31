@@ -39,3 +39,11 @@ site_home.html
 site_home_full.html
 robots.txt
 sitemap.xml
+
+# ─── ملفات مؤقتة/نفايات (logs, locks, ملاحظات طلبات) ────────────────────────
+BOOTEX.LOG
+*.log
+.claude/scheduled_tasks.lock
+.claude/*.lock
+طلب اصلاح الميني ويب.txt
+طلب اصلاح الميني وي ب.txt
