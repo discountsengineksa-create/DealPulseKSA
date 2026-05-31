@@ -23,10 +23,9 @@ _logging.basicConfig(
 import os
 import pathlib
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from slowapi import _rate_limit_exceeded_handler
+from fastapi.responses import FileResponse, JSONResponse
 from slowapi.errors import RateLimitExceeded
 
 from api.routers import admin, auth, coupons, go, seo, social, track, users
@@ -51,7 +50,23 @@ app = FastAPI(
 
 # ─── Rate limiting (slowapi + Redis) ─────────────────────────────────────────
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+def _rate_limit_with_cors_handler(request: Request, exc: RateLimitExceeded):
+    """Handler 429 يضمن CORS headers — انظر التفصيل في bot_app.py."""
+    response = JSONResponse(
+        status_code=429,
+        content={"detail": f"Rate limit exceeded: {exc.detail}"},
+    )
+    origin = request.headers.get("origin", "")
+    if origin and (origin in ALLOWED_ORIGINS or origin == "null"):
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Vary"] = "Origin"
+    return response
+
+
+app.add_exception_handler(RateLimitExceeded, _rate_limit_with_cors_handler)
 
 # ─── CORS ────────────────────────────────────────────────────────────────────
 # X-Admin-Secret لا يُمرَّر cross-origin (الداشبورد محلي/مباشر، ليس متصفّح ويب).

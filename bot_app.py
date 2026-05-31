@@ -40,9 +40,8 @@ import threading
 
 from fastapi import FastAPI, Request, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from telebot.types import Update
 
@@ -98,7 +97,29 @@ app = FastAPI(
 # الـ limiter يُسجَّل على الـ app + handler للـ 429 responses.
 # الحدود الفعلية تُطبَّق بـ @limiter.limit("...") في كل router.
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+def _rate_limit_with_cors_handler(request: Request, exc: RateLimitExceeded):
+    """Handler مخصّص لـ 429 يضمن وجود CORS headers.
+
+    لماذا: handler الافتراضي من slowapi يُرجع JSONResponse مباشرة قبل أن
+    يصل الطلب لـ CORSMiddleware في chain الـ Starlette → المتصفح يرى رد
+    بدون 'Access-Control-Allow-Origin' فيحجب الرد ويظهر للمستخدم كخطأ
+    شبكة بدل رسالة "حاولت كثيراً". هذا الـ handler يضيف الـ headers يدوياً.
+    """
+    response = JSONResponse(
+        status_code=429,
+        content={"detail": f"Rate limit exceeded: {exc.detail}"},
+    )
+    origin = request.headers.get("origin", "")
+    if origin and (origin in ALLOWED_ORIGINS or origin == "null"):
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Vary"] = "Origin"
+    return response
+
+
+app.add_exception_handler(RateLimitExceeded, _rate_limit_with_cors_handler)
 
 # CORS hardening:
 #   - X-Admin-Secret أُزيل من allow_headers — لا يُستخدم cross-origin أبداً
