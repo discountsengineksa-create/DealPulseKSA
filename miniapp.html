@@ -530,6 +530,8 @@ function showCategoryView(name) {
 }
 
 function showStoreView(storeId) {
+    // المستخدم اختار نتيجة بحث — flush البحث المعلّق قبل التحويل
+    flushSearchTrack();
     viewStack.push({ view: currentView, context: { ...viewContext } });
     viewContext = { storeId };
     renderStoreView(storeId);
@@ -850,33 +852,65 @@ function copyText(txt) {
     showToast(S.copied);
 }
 
+// ── تتبع البحث ──────────────────────────────────────────────────────────
+// المشكلة الواقعية: النتائج تظهر فوراً مع كل حرف، فالمستخدم ينقر متجراً قبل
+// ما الـ debounce يخلص. الحل: debounce 400ms + flush فوري عند (نقر متجر،
+// Enter، تغيير شاشة). sendBeacon يضمن الإرسال حتى لو الواجهة تغيّرت.
 let _searchTrackTimer = null;
+let _searchPending = null;        // {kw, matches} ينتظر الإرسال
+
+function _sendSearchTrack() {
+    if (!_searchPending) return;
+    const p = _searchPending;
+    _searchPending = null;
+    const body = JSON.stringify({
+        keyword: p.kw,
+        store_id: p.matches[0] ? p.matches[0].store_id : null,
+        user_found: p.matches.length > 0,
+        platform: 'Miniapp',
+        user_id: tgUserId,
+    });
+    // sendBeacon = fire-and-forget موثوق حتى عند تغيير الشاشة فوراً بعد الإرسال
+    try {
+        if (navigator.sendBeacon) {
+            const ok = navigator.sendBeacon(
+                `${API_BASE}/track/search`,
+                new Blob([body], { type: 'application/json' })
+            );
+            if (ok) return;
+        }
+    } catch (e) {}
+    // fallback لو sendBeacon غير متاح (نسخ قديمة من Telegram WebView)
+    fetch(`${API_BASE}/track/search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: body,
+        keepalive: true,
+    }).catch(() => {});
+}
+
+function flushSearchTrack() {
+    // يُستدعى من showStoreView وEnter وأي transition — يفرض الإرسال فوراً
+    clearTimeout(_searchTrackTimer);
+    _sendSearchTrack();
+}
+
 function onSearch(v) {
     activeSearch = v.toLowerCase();
     renderStores();
 
-    // ── تتبع البحث في direct_search (debounced 800ms — لا نرسل لكل ضغطة) ──
     clearTimeout(_searchTrackTimer);
     const kw = (v || '').trim();
-    if (kw.length < 2) return;
-    _searchTrackTimer = setTimeout(() => {
-        const matches = ALL.filter(s => {
-            const hay = (s.store_id + ' ' + (s.bio || '') + ' ' + (s.tags || []).join(' ')).toLowerCase();
-            return hay.includes(kw.toLowerCase());
-        });
-        fetch(`${API_BASE}/track/search`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                keyword: kw,
-                store_id: matches[0] ? matches[0].store_id : null,
-                user_found: matches.length > 0,
-                platform: 'Miniapp',
-                user_id: tgUserId,
-            }),
-            keepalive: true,
-        }).catch(() => {});
-    }, 800);
+    if (kw.length < 2) {
+        _searchPending = null;
+        return;
+    }
+    const matches = ALL.filter(s => {
+        const hay = (s.store_id + ' ' + (s.bio || '') + ' ' + (s.tags || []).join(' ')).toLowerCase();
+        return hay.includes(kw.toLowerCase());
+    });
+    _searchPending = { kw, matches };
+    _searchTrackTimer = setTimeout(_sendSearchTrack, 400);
 }
 
 // closeModal: لم يعد مستخدماً (لا modal). محفوظ كـ no-op للـ backward compat.
@@ -1108,7 +1142,23 @@ document.addEventListener('DOMContentLoaded', () => {
     loadCategories();
     loadData();
     // initProfileCheck();  // disabled — see comment above
+
+    // Enter في خانة البحث = flush فوري (لا انتظار للـ debounce)
+    const _srch = document.getElementById('srchInput');
+    if (_srch) {
+        _srch.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                flushSearchTrack();
+                _srch.blur();   // يخفي الـ keyboard على الجوال
+            }
+        });
+    }
 });
+
+// لو المستخدم سكّر الميني-ويب أو ضغط back فجأة — اضمن إرسال البحث الأخير
+window.addEventListener('pagehide', flushSearchTrack);
+window.addEventListener('beforeunload', flushSearchTrack);
 </script>
 </body>
 </html>
