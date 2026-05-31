@@ -139,6 +139,93 @@ def email_test(
         return {"sent": False, "error": f"{type(e).__name__}: {str(e)[:300]}"}
 
 
+class UserLookupRequest(BaseModel):
+    username: str  # جوال أو إيميل
+
+
+@router.post("/user-lookup")
+def user_lookup(
+    payload: UserLookupRequest,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """يفحص هل الـ username (جوال أو إيميل) مسجّل في web_users.
+
+    forgot-password يُرجع نفس الرد العام حتى لو الحساب غير موجود (حماية ضد
+    user enumeration). هذا endpoint للأدمن فقط — يكشف إن كان الحساب موجوداً
+    + يعرض آخر طلبات استعادة كلمة المرور لهذا المستخدم.
+    """
+    _verify_admin(x_admin_secret)
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+    db_url = os.getenv("DATABASE_URL") or os.getenv("DATABASE_PUBLIC_URL")
+    if not db_url:
+        return {"error": "DATABASE_URL not set"}
+
+    username = payload.username.strip()
+    phone = username
+    if phone.startswith("00"):
+        phone = "+" + phone[2:]
+    if phone.startswith("0"):
+        phone = "+966" + phone[1:]
+    if phone.startswith("5") and len(phone) == 9:
+        phone = "+966" + phone
+
+    conn = psycopg2.connect(db_url)
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT id, email, phone_number, display_name, created_at,
+                       email_verified_at, status
+                FROM web_users
+                WHERE phone_number = %s OR email = %s OR phone_number = %s
+                LIMIT 1
+                """,
+                (username, username.lower(), phone),
+            )
+            user = cur.fetchone()
+            if not user:
+                return {
+                    "found": False,
+                    "hint": f"لا حساب في web_users يطابق '{username}'. "
+                            "forgot-password يُرجع 200 generic ولا يرسل إيميل.",
+                }
+            cur.execute(
+                """
+                SELECT created_at, expires_at, used, request_ip
+                FROM password_reset_tokens
+                WHERE user_id = %s
+                ORDER BY created_at DESC
+                LIMIT 5
+                """,
+                (user["id"],),
+            )
+            recent_tokens = cur.fetchall()
+        return {
+            "found": True,
+            "user": {
+                "id": user["id"],
+                "email": user["email"],
+                "phone_number": user["phone_number"],
+                "display_name": user["display_name"],
+                "created_at": str(user["created_at"]),
+                "email_verified_at": str(user["email_verified_at"]) if user["email_verified_at"] else None,
+                "status": user["status"],
+            },
+            "recent_reset_requests": [
+                {
+                    "created_at": str(t["created_at"]),
+                    "expires_at": str(t["expires_at"]),
+                    "used": t["used"],
+                    "ip": str(t["request_ip"]) if t["request_ip"] else None,
+                }
+                for t in recent_tokens
+            ],
+        }
+    finally:
+        conn.close()
+
+
 @router.get("/email-trace/{email_id}")
 def email_trace(
     email_id: str,
