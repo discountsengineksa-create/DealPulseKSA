@@ -59,7 +59,7 @@ class RegisterRequest(BaseModel):
     display_name: str = Field(..., min_length=2, max_length=100, description="الاسم الكامل")
     phone_number: str = Field(..., description="رقم الجوال (يقبل 5XXXXXXXX أو +9665XXXXXXXX)")
     email: EmailStr = Field(..., description="الإيميل")
-    password: str = Field(..., min_length=8, max_length=128, description="كلمة المرور (8 أحرف على الأقل)")
+    password: str = Field(..., min_length=6, max_length=128, description="كلمة المرور (6 أحرف على الأقل)")
     city: str = Field(..., min_length=2, max_length=50, description="المدينة")
     gender: Literal["male", "female"] = Field(..., description="الجنس: male أو female")
     birth_date: date = Field(..., description="تاريخ الميلاد (YYYY-MM-DD)")
@@ -150,14 +150,14 @@ class ResetPasswordRequest(BaseModel):
     """تغيير كلمة المرور بالكود."""
     username: str = Field(..., min_length=3, max_length=200)
     code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
-    new_password: str = Field(..., min_length=8, max_length=128)
+    new_password: str = Field(..., min_length=6, max_length=128)
 
 
 # ─── Change Password (logged-in user) ──────────────────────────────────────
 class ChangePasswordRequest(BaseModel):
     """تغيير كلمة السر للمستخدم المسجّل دخوله."""
     current_password: str = Field(..., min_length=1, max_length=128)
-    new_password: str = Field(..., min_length=8, max_length=128)
+    new_password: str = Field(..., min_length=6, max_length=128)
 
 
 # ─── Profile Update ────────────────────────────────────────────────────────
