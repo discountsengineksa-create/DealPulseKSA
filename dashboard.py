@@ -4195,47 +4195,252 @@ elif page == "تحليل المستخدمين":
                 st.download_button("📥 تحميل التقرير الكامل (Excel)",
                                    u_anal_excel.getvalue(), "total_users_analytics.xlsx")
 
-            # --- تبويب 3: الفحص الفردي (بالـ ID) ---
+            # --- تبويب 3: الفحص الفردي (بحث ذكي + بطاقة موحّدة) ---
             with tab_ind_u:
-                st.subheader("🔍 تفاصيل ملف العميل")
-                search_id = st.text_input("أدخل Telegram ID للمستخدم:", placeholder="مثال: 123456789")
+                st.subheader("🔍 بطاقة المستخدم الكاملة")
+                st.caption("ابحث بـ: إيميل · جوال (5XXXXXXXX أو +966...) · @اسم_تيليجرام · ID رقمي · أو جزء من الاسم")
 
-                if search_id:
-                    user_data = df_users[df_users['telegram_id'].astype(str) == search_id.strip()]
+                q_raw = st.text_input(
+                    "بحث:",
+                    placeholder="example@mail.com  أو  5XXXXXXXX  أو  @username  أو  123456789  أو  محمد",
+                    key="user_card_search",
+                )
 
-                    if not user_data.empty:
-                        u = user_data.iloc[0]
-                        st.success(f"✅ ملف: {u['username']} ({u['telegram_id']})")
+                if q_raw and q_raw.strip():
+                    q = q_raw.strip()
+                    q_lc = q.lstrip("@").lower()
 
-                        bc1, bc2, bc3, bc4 = st.columns(4)
-                        bc1.info(f"**تاريخ الانضمام**\n\n{u['joined_at'].date() if pd.notna(u['joined_at']) else '—'}")
-                        bc2.info(f"**آخر ظهور**\n\n{u['last_seen'].date() if pd.notna(u['last_seen']) else '—'}")
-                        bc3.info(f"**عدد الجلسات**\n\n{int(u['sessions'])}")
-                        bc4.info(f"**إجمالي الحركات**\n\n{int(u['total_actions'])}")
+                    # ── تطبيع الجوال لمطابقة web_users.phone_number ───────
+                    phone_norm = q.replace(" ", "").replace("-", "")
+                    if phone_norm.startswith("00"):
+                        phone_norm = "+" + phone_norm[2:]
+                    if phone_norm.startswith("0"):
+                        phone_norm = "+966" + phone_norm[1:]
+                    if phone_norm.startswith("5") and len(phone_norm) == 9:
+                        phone_norm = "+966" + phone_norm
 
-                        st.divider()
-                        # سجل تفصيلي مأخوذ من action_logs لهذا المستخدم
-                        st.write("### 📜 آخر 30 حركة لهذا المستخدم")
-                        df_personal = pd.read_sql("""
-                            SELECT
-                                TO_CHAR(a.action_time, 'YYYY-MM-DD HH24:MI:SS') AS "الوقت",
-                                a.action_type AS "الحركة",
-                                COALESCE(a.store_id, '—') AS "المتجر",
-                                COALESCE(m.name_en, '') AS "English Name",
-                                COALESCE(a.details, '') AS "التفاصيل"
-                            FROM action_logs a
-                            LEFT JOIN master m ON a.store_id = m.store_id
-                            WHERE a.user_id = %s
-                            ORDER BY a.action_time DESC
-                            LIMIT 30
-                        """, conn, params=(int(u['telegram_id']),))
+                    # ── ابحث في web_users (إيميل/جوال/تيليجرام/اسم/id) ───
+                    web_user = None
+                    try:
+                        with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
+                            cur.execute("""
+                                SELECT * FROM web_users
+                                WHERE LOWER(email) = %s
+                                   OR phone_number = %s
+                                   OR LOWER(telegram_username) = %s
+                                   OR LOWER(display_name) LIKE %s
+                                   OR (CASE WHEN %s ~ '^[0-9]+$' THEN id = %s::bigint ELSE FALSE END)
+                                ORDER BY last_seen DESC NULLS LAST
+                                LIMIT 1
+                            """, (q_lc, phone_norm, q_lc, f"%{q_lc}%",
+                                  q, q if q.isdigit() else "0"))
+                            web_user = cur.fetchone()
+                    except Exception as _e:
+                        st.warning(f"تعذّر البحث في web_users: {_e}")
 
-                        if not df_personal.empty:
-                            st.dataframe(df_personal, use_container_width=True, hide_index=True)
-                        else:
-                            st.info("📭 لا توجد حركات لهذا المستخدم بعد.")
+                    # ── ابحث في bot_users (username من web إن وُجد، وإلا مباشر) ─
+                    bot_user = None
+                    bot_lookup_keys = []
+                    if web_user and web_user.get("telegram_username"):
+                        bot_lookup_keys.append(("username", web_user["telegram_username"].lower()))
+                    if q.isdigit():
+                        bot_lookup_keys.append(("telegram_id", int(q)))
+                    bot_lookup_keys.append(("username", q_lc))
+
+                    try:
+                        with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
+                            for col, val in bot_lookup_keys:
+                                if col == "telegram_id":
+                                    cur.execute(
+                                        "SELECT * FROM bot_users WHERE telegram_id = %s LIMIT 1",
+                                        (val,),
+                                    )
+                                else:
+                                    cur.execute(
+                                        "SELECT * FROM bot_users WHERE LOWER(username) = %s LIMIT 1",
+                                        (val,),
+                                    )
+                                bot_user = cur.fetchone()
+                                if bot_user:
+                                    break
+                    except Exception as _e:
+                        st.warning(f"تعذّر البحث في bot_users: {_e}")
+
+                    if not web_user and not bot_user:
+                        st.error("❌ لا يوجد مستخدم مطابق. جرّب صيغة أخرى.")
                     else:
-                        st.error("❌ لا يوجد مستخدم بهذا الـ ID في قاعدة البيانات.")
+                        # ════════ بطاقة الهوية ════════
+                        st.success(
+                            f"✅ تم العثور على المستخدم — "
+                            f"{'حساب ويب ✓' if web_user else 'بدون حساب ويب'} · "
+                            f"{'مستخدم تيليجرام ✓' if bot_user else 'بدون نشاط تيليجرام'}"
+                        )
+
+                        # الـ user_ids التي نستعلم بها action_logs (قد يكونان معاً)
+                        user_ids: list[int] = []
+                        if web_user:
+                            user_ids.append(int(web_user["id"]))
+                        if bot_user:
+                            user_ids.append(int(bot_user["telegram_id"]))
+
+                        # ── بلوك الهوية ────────────────────────────────
+                        ic1, ic2 = st.columns([2, 3])
+                        with ic1:
+                            name = (web_user or {}).get("display_name") or \
+                                   (bot_user or {}).get("username") or "—"
+                            st.markdown(f"### 👤 {name}")
+                            badges = []
+                            if web_user and web_user.get("email_verified_at"):
+                                badges.append("✉️ مؤكّد")
+                            if web_user and web_user.get("consent_at"):
+                                badges.append("✅ PDPL")
+                            if bot_user:
+                                badges.append("📱 تيليجرام")
+                            st.caption(" · ".join(badges) if badges else "—")
+                        with ic2:
+                            details = []
+                            if web_user:
+                                if web_user.get("email"):
+                                    details.append(f"📧 `{web_user['email']}`")
+                                if web_user.get("phone_number"):
+                                    details.append(f"📞 `{web_user['phone_number']}`")
+                            tg_username = (web_user or {}).get("telegram_username") or \
+                                          (bot_user or {}).get("username")
+                            if tg_username:
+                                details.append(f"💬 [@{tg_username}](https://t.me/{tg_username})")
+                            if bot_user and bot_user.get("telegram_id"):
+                                details.append(f"🆔 Telegram ID: `{int(bot_user['telegram_id'])}`")
+                            st.markdown("  \n".join(details) if details else "—")
+
+                        # ── الديموغرافيا (أولوية: web ← bot) ───────────
+                        st.divider()
+                        gender_v = (web_user or {}).get("gender") or (bot_user or {}).get("gender")
+                        birth_v  = (web_user or {}).get("birth_date") or (bot_user or {}).get("birth_date")
+                        city_v   = (web_user or {}).get("city")
+                        if not city_v and bot_user:
+                            city_v = bot_user.get("city")
+
+                        age_str = "—"
+                        if birth_v:
+                            today = pd.Timestamp.today().date()
+                            try:
+                                age_years = today.year - birth_v.year - (
+                                    (today.month, today.day) < (birth_v.month, birth_v.day)
+                                )
+                                age_str = f"{age_years} سنة"
+                            except Exception:
+                                pass
+
+                        dc1, dc2, dc3, dc4 = st.columns(4)
+                        dc1.metric("👥 الجنس", "ذكر" if gender_v == "male" else "أنثى" if gender_v == "female" else "—")
+                        dc2.metric("🎂 العمر", age_str)
+                        dc3.metric("📍 المدينة", city_v or "—")
+                        join_v = (web_user or {}).get("created_at") or (bot_user or {}).get("joined_at")
+                        dc4.metric("📅 الانضمام", join_v.strftime("%Y-%m-%d") if join_v else "—")
+
+                        # ── إحصائيات النشاط (web + bot + miniapp) ──────
+                        st.divider()
+                        st.write("### 📊 إجمالي النشاط (كل المصادر مجموعة)")
+
+                        if user_ids:
+                            df_act_summary = pd.read_sql("""
+                                SELECT
+                                    COALESCE(source, 'bot') AS source,
+                                    action_type,
+                                    COUNT(*) AS cnt
+                                FROM action_logs
+                                WHERE user_id = ANY(%s)
+                                GROUP BY source, action_type
+                            """, conn, params=(user_ids,))
+
+                            def _sum(action: str, sources: list[str] | None = None) -> int:
+                                d = df_act_summary[df_act_summary["action_type"] == action]
+                                if sources is not None:
+                                    d = d[d["source"].isin(sources)]
+                                return int(d["cnt"].sum()) if not d.empty else 0
+
+                            tot_copy   = _sum("copy_coupon")
+                            tot_click  = _sum("click_link")
+                            tot_search = _sum("search")
+                            ac1, ac2, ac3 = st.columns(3)
+                            ac1.metric("🎟️ نسخ كوبونات", tot_copy)
+                            ac2.metric("🖱️ نقرات روابط", tot_click)
+                            ac3.metric("🔍 عمليات بحث", tot_search)
+
+                            # تفصيل حسب المصدر (لو فيه نشاط)
+                            if not df_act_summary.empty:
+                                pivot_src = (df_act_summary
+                                             .pivot_table(index="source",
+                                                          columns="action_type",
+                                                          values="cnt",
+                                                          fill_value=0,
+                                                          aggfunc="sum")
+                                             .rename(columns={
+                                                 "copy_coupon": "نسخ",
+                                                 "click_link":  "نقر",
+                                                 "search":      "بحث",
+                                             }))
+                                src_map = {"web": "🌐 ويب", "bot": "📱 تيليجرام",
+                                           "telegram_miniapp": "🔹 ميني ويب",
+                                           "miniapp": "🔹 ميني ويب"}
+                                pivot_src.index = pivot_src.index.map(lambda s: src_map.get(s, s))
+                                st.caption("التفصيل حسب المصدر:")
+                                st.dataframe(pivot_src.astype(int), use_container_width=True)
+                        else:
+                            st.info("لا توجد user_ids مرتبطة بأي جدول events.")
+
+                        # ── أعلى المتاجر تفاعلاً مع هذا المستخدم ──────
+                        if user_ids:
+                            st.divider()
+                            st.write("### 🏪 المتاجر التي تفاعل معها (مرتّبة بالنشاط)")
+                            df_stores = pd.read_sql("""
+                                SELECT
+                                    a.store_id AS "المتجر",
+                                    COUNT(*) FILTER (WHERE a.action_type = 'copy_coupon') AS "نسخ",
+                                    COUNT(*) FILTER (WHERE a.action_type = 'click_link')  AS "نقر",
+                                    COUNT(*) FILTER (WHERE a.action_type = 'search')      AS "بحث",
+                                    TO_CHAR(MAX(a.action_time), 'YYYY-MM-DD HH24:MI') AS "آخر تفاعل"
+                                FROM action_logs a
+                                WHERE a.user_id = ANY(%s) AND a.store_id IS NOT NULL
+                                GROUP BY a.store_id
+                                ORDER BY COUNT(*) DESC
+                                LIMIT 30
+                            """, conn, params=(user_ids,))
+                            if df_stores.empty:
+                                st.info("لم يتفاعل مع أي متجر بعد.")
+                            else:
+                                st.dataframe(df_stores, use_container_width=True, hide_index=True)
+
+                        # ── آخر 30 حركة ───────────────────────────────
+                        if user_ids:
+                            st.divider()
+                            st.write("### 📜 آخر 30 حركة")
+                            df_recent = pd.read_sql("""
+                                SELECT
+                                    TO_CHAR(a.action_time, 'YYYY-MM-DD HH24:MI:SS') AS "الوقت",
+                                    a.action_type   AS "الحركة",
+                                    COALESCE(a.source, 'bot') AS "المصدر",
+                                    COALESCE(a.store_id, '—') AS "المتجر",
+                                    COALESCE(a.city, '')      AS "المدينة",
+                                    COALESCE(a.details, '')   AS "التفاصيل"
+                                FROM action_logs a
+                                WHERE a.user_id = ANY(%s)
+                                ORDER BY a.action_time DESC
+                                LIMIT 30
+                            """, conn, params=(user_ids,))
+                            if df_recent.empty:
+                                st.info("لا توجد حركات بعد.")
+                            else:
+                                st.dataframe(df_recent, use_container_width=True, hide_index=True)
+
+                                # تصدير سريع للبطاقة كاملة (CSV واحد)
+                                _csv = df_recent.to_csv(index=False).encode("utf-8-sig")
+                                st.download_button(
+                                    "📥 تنزيل سجل الحركات (CSV)",
+                                    _csv,
+                                    f"user_{user_ids[0]}_activity.csv",
+                                    "text/csv",
+                                )
         else:
             st.warning("⚠️ قاعدة البيانات فارغة. انتظر دخول مستخدمين لبدء التحليل.")
 
