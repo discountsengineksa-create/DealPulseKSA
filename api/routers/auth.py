@@ -176,14 +176,32 @@ def register(payload: RegisterRequest, request: Request, conn=Depends(get_db)):
             )
             user = cur.fetchone()
     except UniqueViolation as e:
+        # نوضّح الحقل المتكرّر + نقترح تسجيل الدخول/استعادة كلمة المرور.
+        # أوضح بكثير من رسائل عامة → يمنع المستخدم من محاولة التسجيل مرتين
+        # وهو ناسي أنه مسجّل أصلاً.
         msg = str(e).lower()
         if "telegram_username" in msg or "idx_web_users_telegram_username" in msg:
-            raise HTTPException(status_code=409, detail="اسم المستخدم في تيليجرام مرتبط بحساب آخر")
+            raise HTTPException(
+                status_code=409,
+                detail="اسم المستخدم في تيليجرام مرتبط بحساب آخر. "
+                       "استخدم اسم تيليجرام مختلف أو سجّل دخولك بالحساب القديم.",
+            )
         if "phone" in msg:
-            raise HTTPException(status_code=409, detail="رقم الجوال مسجّل مسبقاً")
+            raise HTTPException(
+                status_code=409,
+                detail="رقم الجوال مسجّل مسبقاً لديك حساب. "
+                       "سجّل دخولك أو استخدم 'نسيت كلمة المرور' للاستعادة.",
+            )
         if "email" in msg:
-            raise HTTPException(status_code=409, detail="الإيميل مسجّل مسبقاً")
-        raise HTTPException(status_code=409, detail="مستخدم موجود مسبقاً")
+            raise HTTPException(
+                status_code=409,
+                detail="الإيميل مسجّل مسبقاً لديك حساب. "
+                       "سجّل دخولك أو استخدم 'نسيت كلمة المرور' للاستعادة.",
+            )
+        raise HTTPException(
+            status_code=409,
+            detail="هذا الحساب موجود مسبقاً. سجّل دخولك بدلاً من إنشاء حساب جديد.",
+        )
 
     token = create_jwt_token(user["id"])
     return TokenResponse(token=token, user=_row_to_user(user))
@@ -226,12 +244,24 @@ def forgot_password(
     لأمان أكبر: نرجع نفس الرد دائماً (سواء وُجد المستخدم أو لا).
     """
     user = _find_user_by_username(conn, payload.username)
-    generic_response = ForgotPasswordResponse(
-        message="إذا كان الحساب موجوداً، تم إرسال كود لإيميلك المسجّل."
-    )
 
-    if not user or not user.get("email"):
-        return generic_response
+    # ── قرار تصميمي: نُعطي إشارة صريحة للمستخدم بدل الرد العام ────────────
+    # السبب: المستخدمون يملكون إيميلات متعددة وقد ينسون أيهم سجّلوا به.
+    # الرد العام (حماية ضد user-enumeration) يجعلهم ينتظرون كود لن يصل أبداً
+    # = UX سيء جداً. نختار صراحة الإفصاح + نطلب من المستخدم استخدام
+    # /register أو إيميل آخر.
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="لا يوجد حساب مسجّل بهذا الإيميل/الجوال. تأكّد من البيانات "
+                   "أو سجّل حساباً جديداً.",
+        )
+    if not user.get("email"):
+        raise HTTPException(
+            status_code=400,
+            detail="الحساب موجود لكن بدون إيميل مسجّل. تواصل مع الدعم لتحديث "
+                   "بياناتك.",
+        )
 
     # rate-limit بسيط: لا أكثر من 3 طلبات في 15 دقيقة لنفس المستخدم
     with conn.cursor() as cur:
@@ -245,8 +275,12 @@ def forgot_password(
         recent_count = cur.fetchone()[0]
 
     if recent_count >= 3:
-        # ما نقول للمستخدم بصراحة، بس ما نرسل كود إضافي
-        return generic_response
+        # نُخبر المستخدم بصراحة بدل صمت مُربك
+        raise HTTPException(
+            status_code=429,
+            detail="طلبت كوداً 3 مرات خلال آخر 15 دقيقة. تحقّق من إيميلك "
+                   "(والـ spam) أو حاول بعد 15 دقيقة.",
+        )
 
     # ولّد كود + خزّنه
     code = generate_reset_code()
