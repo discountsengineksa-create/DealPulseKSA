@@ -25,7 +25,7 @@ zone_name = "dealpulseksa.com"
 
 # ─── Variables (public — تُكتب على CF dashboard وفي الكود) ─────────────
 [vars]
-ORIGIN_BASE = "https://dealpulseksa-production.up.railway.app"
+ORIGIN_BASE = "API_BASE_URL = "https://api.dealpulseksa.com""
 LOG_LEVEL = "info"
 
 # ─── Secrets (سرية — تُضاف عبر wrangler) ───────────────────────────────

@@ -68,8 +68,8 @@ def _trigger_social_broadcast(master_id: int | None) -> None:
         return
     secret = os.getenv("ADMIN_SHARED_SECRET")
     api_url = os.getenv(
-        "INTERNAL_API_URL",
-        "https://dealpulseksa-production.up.railway.app",
+    "INTERNAL_API_URL", 
+    "https://api.dealpulseksa.com"
     ).rstrip("/")
     if not secret:
         st.warning(
@@ -109,7 +109,8 @@ def _admin_api():
     """يرجّع (base_url, secret) للـ admin API على الإنتاج."""
     secret = os.getenv("ADMIN_SHARED_SECRET")
     base = os.getenv(
-        "INTERNAL_API_URL", "https://dealpulseksa-production.up.railway.app"
+    "INTERNAL_API_URL", 
+    "https://api.dealpulseksa.com"
     ).rstrip("/")
     return base, secret
 
@@ -8580,7 +8581,7 @@ if page == "🩺 تشخيص النشر":
     # 1) كشف إعدادات بيئة الداشبورد (حالة فقط — بدون كشف القيم السرّية)
     st.subheader("⚙️ إعدادات بيئة الداشبورد")
     _secret_set = bool(os.getenv("ADMIN_SHARED_SECRET"))
-    _api_url = os.getenv("INTERNAL_API_URL", "(افتراضي) dealpulseksa-production.up.railway.app")
+    api_url = os.getenv("INTERNAL_API_URL", "https://api.dealpulseksa.com")
     d1, d2, d3 = st.columns(3)
     d1.metric("Cloudinary (رفع الشعار)", "✅ مضبوط" if _CLOUDINARY_OK else "❌ مفقود")
     d2.metric("ADMIN_SHARED_SECRET (البث)", "✅ مضبوط" if _secret_set else "❌ مفقود")
