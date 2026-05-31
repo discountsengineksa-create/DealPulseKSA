@@ -853,16 +853,16 @@ function copyText(txt) {
 }
 
 // ── تتبع البحث ──────────────────────────────────────────────────────────
-// المشكلة الواقعية: النتائج تظهر فوراً مع كل حرف، فالمستخدم ينقر متجراً قبل
-// ما الـ debounce يخلص. الحل: debounce 400ms + flush فوري عند (نقر متجر،
-// Enter، تغيير شاشة). sendBeacon يضمن الإرسال حتى لو الواجهة تغيّرت.
-let _searchTrackTimer = null;
-let _searchPending = null;        // {kw, matches} ينتظر الإرسال
+// قاعدة التصميم: **بحث واحد لكل نيّة واحدة** (intent-based).
+// لا نُسجِّل أثناء الكتابة (يضخّم العدد مع كل pause طويل). نسجّل فقط عند
+// لحظة الـ action: نقر نتيجة / Enter / blur / خروج من الميني-ويب. وعند
+// كل action نُرسل آخر pending فقط، ثم نُصفّره لتفادي التكرار.
+let _searchPending = null;        // {kw, matches} ينتظر action للإرسال
 
 function _sendSearchTrack() {
     if (!_searchPending) return;
     const p = _searchPending;
-    _searchPending = null;
+    _searchPending = null;        // تصفير فوري لتفادي إرسال مكرّر
     const body = JSON.stringify({
         keyword: p.kw,
         store_id: p.matches[0] ? p.matches[0].store_id : null,
@@ -890,8 +890,7 @@ function _sendSearchTrack() {
 }
 
 function flushSearchTrack() {
-    // يُستدعى من showStoreView وEnter وأي transition — يفرض الإرسال فوراً
-    clearTimeout(_searchTrackTimer);
+    // يُستدعى من showStoreView وEnter وblur وpagehide
     _sendSearchTrack();
 }
 
@@ -899,7 +898,7 @@ function onSearch(v) {
     activeSearch = v.toLowerCase();
     renderStores();
 
-    clearTimeout(_searchTrackTimer);
+    // نُحدّث pending فقط — لا نُرسل. الإرسال يتم عند action لاحقاً.
     const kw = (v || '').trim();
     if (kw.length < 2) {
         _searchPending = null;
@@ -910,7 +909,6 @@ function onSearch(v) {
         return hay.includes(kw.toLowerCase());
     });
     _searchPending = { kw, matches };
-    _searchTrackTimer = setTimeout(_sendSearchTrack, 400);
 }
 
 // closeModal: لم يعد مستخدماً (لا modal). محفوظ كـ no-op للـ backward compat.
@@ -1143,7 +1141,8 @@ document.addEventListener('DOMContentLoaded', () => {
     loadData();
     // initProfileCheck();  // disabled — see comment above
 
-    // Enter في خانة البحث = flush فوري (لا انتظار للـ debounce)
+    // Enter = إرسال فوري (نيّة واضحة)
+    // blur = خرج المستخدم من خانة البحث (انتقل لشي ثاني) — إرسال أيضاً
     const _srch = document.getElementById('srchInput');
     if (_srch) {
         _srch.addEventListener('keydown', (e) => {
@@ -1153,12 +1152,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 _srch.blur();   // يخفي الـ keyboard على الجوال
             }
         });
+        _srch.addEventListener('blur', flushSearchTrack);
     }
 });
 
-// لو المستخدم سكّر الميني-ويب أو ضغط back فجأة — اضمن إرسال البحث الأخير
+// خروج/إخفاء الميني-ويب — آخر فرصة لإرسال البحث المعلّق
 window.addEventListener('pagehide', flushSearchTrack);
 window.addEventListener('beforeunload', flushSearchTrack);
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) flushSearchTrack();
+});
 </script>
 </body>
 </html>
