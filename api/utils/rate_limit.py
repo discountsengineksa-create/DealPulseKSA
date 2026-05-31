@@ -86,7 +86,10 @@ limiter: Limiter = _build_limiter()
 # ─── ثوابت الحدود ─────────────────────────────────────────────────────────────
 # تُجمع هنا للتعديل المركزي بدلاً من تكرار السلاسل في كل router.
 LIMIT_LOGIN            = "10/minute"
-LIMIT_REGISTER         = "5/hour"
+# 5/hour كان صارماً جداً للحالات الواقعية (المستخدم يخطئ في الجوال/الإيميل
+# مرات قبل التسجيل الناجح). نضع سقفاً يحمي من spam bots دون قتل UX:
+# 5/minute = burst limit، 20/hour = مجموع طويل المدى. slowapi يطبّقهما معاً.
+LIMIT_REGISTER         = "5/minute;20/hour"
 LIMIT_FORGOT_PASSWORD  = "3/15 minutes"
 LIMIT_RESET_PASSWORD   = "5/15 minutes"
 LIMIT_TRACK            = "120/minute"
