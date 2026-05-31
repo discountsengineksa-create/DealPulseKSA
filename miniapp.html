@@ -503,6 +503,7 @@ let ALL = [];
 let CATS = [];
 let activeSearch = '';
 let FAVS = new Set();          // store_id strings — مفضلة المستخدم (سيرفرية)
+let FAV_CATS = new Set();      // category names — مفضلة الأقسام (سيرفرية kind='category')
 let currentView = 'home';      // 'home' | 'list' | 'categories' | 'category' | 'store' | 'favorites'
 let viewStack = [];            // stack للرجوع (آخر view → الرجوع له)
 let viewContext = {};          // {category: 'عطور'} | {storeId: 17}
@@ -612,7 +613,10 @@ function renderCategoriesPage() {
         const name = String(c.tag_name);
         const safe = name.replace(/'/g, "\\'");
         const cnt  = ALL.filter(s => (s.tags || []).map(t => String(t).trim()).includes(name)).length;
-        return `<div class="cat-tile" onclick="showCategoryView('${safe}')"><span># ${name}</span><span class="cnt">${cnt}</span></div>`;
+        const isFav = FAV_CATS.has(name);
+        const heart = `<button class="fav-btn${isFav ? ' on' : ''}" style="position:absolute;top:6px;${LANG_CURRENT==='en'?'right':'left'}:6px;font-size:14px;padding:5px"
+            onclick="toggleCatFav('${safe}', event)" aria-label="favorite-category">${isFav ? '❤️' : '🤍'}</button>`;
+        return `<div class="cat-tile" style="position:relative" onclick="showCategoryView('${safe}')">${heart}<span># ${name}</span><span class="cnt">${cnt}</span></div>`;
     }).join('');
 }
 
@@ -638,7 +642,15 @@ async function loadCategories() {
 // ═══════════════════════════════════════════════════════════════════════════
 function renderCategoryView(catName) {
     const ST = STRINGS[LANG_CURRENT];
-    document.getElementById('catTitle').textContent = `# ${catName}`;
+    const titleEl = document.getElementById('catTitle');
+    const isFav = FAV_CATS.has(catName);
+    const safe = catName.replace(/'/g, "\\'");
+    // عنوان + قلب (يحفظ القسم) — يُعرض دائماً (حتى لو لا متاجر)
+    titleEl.innerHTML = `# ${catName}
+        <button class="fav-btn${isFav ? ' on' : ''}"
+            style="margin:0 8px;font-size:18px;padding:6px 10px;vertical-align:middle"
+            onclick="toggleCatFav('${safe}', event)"
+            aria-label="favorite-category">${isFav ? '❤️' : '🤍'}</button>`;
     document.getElementById('catBackLbl').textContent = ST.home;
     const matched = ALL.filter(s => (s.tags || []).map(t=>String(t).trim()).includes(catName));
     const grid = document.getElementById('catGrid');
@@ -887,6 +899,61 @@ function _refreshFavUI() {
     if (currentView === 'store' && window._activeStore) renderStoreView(window._activeStore.id);
     const favEl = document.getElementById('sFavs');
     if (favEl) favEl.textContent = FAVS.size;
+}
+
+// ─── مفضلة الأقسام (kind='category') ──────────────────────────────────
+async function loadCategoryFavorites() {
+    const initData = _initData();
+    if (!initData) return;
+    try {
+        const res = await fetch(`${API_BASE}/users/telegram-favorite-categories/list`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ init_data: initData }),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        FAV_CATS = new Set(data.categories || []);
+        // أعد رسم صفحة الأقسام إن كانت ظاهرة
+        if (currentView === 'categories') renderCategoriesPage();
+        if (currentView === 'category') renderCategoryView(viewContext.category);
+    } catch (e) { /* silent */ }
+}
+
+async function toggleCatFav(catName, event) {
+    if (event) { event.stopPropagation(); event.preventDefault(); }
+    const ST = STRINGS[LANG_CURRENT];
+    const initData = _initData();
+    if (!initData) { showToast(ST.favErr || 'خطأ'); return; }
+
+    const wasFav = FAV_CATS.has(catName);
+    // تفاؤلي
+    if (wasFav) FAV_CATS.delete(catName); else FAV_CATS.add(catName);
+    if (currentView === 'categories') renderCategoriesPage();
+    if (currentView === 'category')   renderCategoryView(viewContext.category);
+
+    try {
+        const res = await fetch(`${API_BASE}/users/telegram-favorite-categories`, {
+            method: wasFav ? 'DELETE' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ init_data: initData, category_name: catName }),
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        FAV_CATS = new Set(data.categories || []);
+        if (currentView === 'categories') renderCategoriesPage();
+        if (currentView === 'category')   renderCategoryView(viewContext.category);
+        showToast(wasFav
+            ? (LANG_CURRENT === 'en' ? '🤍 Category removed' : '🤍 أُزيل القسم من المفضلة')
+            : (LANG_CURRENT === 'en' ? '❤️ Category added'   : '❤️ تمت إضافة القسم لمفضلتك'));
+        if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.impactOccurred('light'); } catch (_) {} }
+    } catch (e) {
+        // rollback تفاؤلي
+        if (wasFav) FAV_CATS.add(catName); else FAV_CATS.delete(catName);
+        if (currentView === 'categories') renderCategoriesPage();
+        if (currentView === 'category')   renderCategoryView(viewContext.category);
+        showToast(ST.favErr || 'خطأ');
+    }
 }
 
 function showFavoritesView() {
@@ -1269,6 +1336,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadCategories();
     loadData();
     loadFavorites();   // مفضلة المستخدم السيرفرية (initData) — تُحدّث القلوب بعد جلبها
+    loadCategoryFavorites();   // مفضلة الأقسام (نفس initData)
     // initProfileCheck();  // disabled — see comment above
 
     // Enter = إرسال فوري (نيّة واضحة)

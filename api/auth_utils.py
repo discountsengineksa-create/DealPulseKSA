@@ -124,8 +124,13 @@ def _send_email(to: str, subject: str, html: str) -> bool:
     يرجع True لو نجح، False لو فشل.
     """
     if not RESEND_API_KEY and not (SMTP_USER and SMTP_PASS):
-        print(f"[DEV MODE] Email to {to} | subject: {subject}")
-        return True
+        # ⚠️ كان يرجع True وكأن الرسالة وصلت — يُخفي مشكلة config على الإنتاج.
+        # الآن: dev mode = فشل صريح، الـ caller يقرّر هل يخدع المستخدم أو لا.
+        # المسار محلياً: ALLOW_DEV_EMAIL=1 لتجنّب كسر التطوير المحلي.
+        print(f"[DEV MODE] No email transport configured. Subject: {subject} → {to}")
+        if os.getenv("ALLOW_DEV_EMAIL") == "1":
+            return True
+        return False
 
     # ── المسار 1: Resend HTTPS API (port 443، لا يُحجب على المنصات السحابية) ──
     if RESEND_API_KEY:
@@ -191,7 +196,10 @@ def send_verify_email(to_email: str, user_name: str, code: str) -> bool:
     """
     if not RESEND_API_KEY and not (SMTP_USER and SMTP_PASS):
         print(f"[DEV MODE] Email verification code for {to_email}: {code}")
-        return True
+        # نفس قرار _send_email — لا نخدع بـ True على الإنتاج.
+        if os.getenv("ALLOW_DEV_EMAIL") == "1":
+            return True
+        return False
 
     subject = "✉️ تأكيد إيميلك — نبض الصفقات"
     html = f"""<!DOCTYPE html>
@@ -241,7 +249,9 @@ def send_reset_email(to_email: str, user_name: str, code: str) -> bool:
     """
     if not RESEND_API_KEY and not (SMTP_USER and SMTP_PASS):
         print(f"[DEV MODE] Reset code for {to_email}: {code}")
-        return True
+        if os.getenv("ALLOW_DEV_EMAIL") == "1":
+            return True
+        return False
 
     subject = "🔐 استعادة كلمة المرور — نبض الصفقات"
     reset_url = f"https://dealpulseksa.com/forgot-password"

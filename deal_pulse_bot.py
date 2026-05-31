@@ -348,13 +348,19 @@ TEXTS = {
     # Reaction
     'fav_added':         {'ar': '❤️ تمت إضافة *{sid}* لمفضلتك',
                           'en': '❤️ Added *{sid}* to your favorites'},
-    'fav_removed':       {'ar': '💔 أُزيل *{sid}* من مفضلتك',
-                          'en': '💔 Removed *{sid}* from your favorites'},
-    'btn_add_fav':       {'ar': '❤️ أضف للمفضلة',       'en': '❤️ Add to favorites'},
-    'btn_remove_fav':    {'ar': '💔 إزالة من المفضلة',  'en': '💔 Remove from favorites'},
+    'fav_removed':       {'ar': '🤍 أُزيل *{sid}* من المفضلة',
+                          'en': '🤍 Removed *{sid}* from favorites'},
+    'btn_add_fav':       {'ar': '🤍 أضف للمفضلة',       'en': '🤍 Add to favorites'},
+    'btn_remove_fav':    {'ar': '❤️ إزالة من المفضلة',  'en': '❤️ Remove from favorites'},
     'favs_title':        {'ar': '❤️ متاجرك المفضلة',    'en': '❤️ Your favorite stores'},
     'favs_empty':        {'ar': 'ما أضفت أي متجر لمفضلتك بعد.\nاضغط ❤️ تحت أي كوبون لإضافته.',
                           'en': "You haven't added any store yet.\nTap ❤️ under any coupon to add it."},
+
+    # Category favorites
+    'cat_fav_added':     {'ar': '❤️ تمت إضافة قسم *{tag}* لمفضلتك',
+                          'en': '❤️ Added *{tag}* category to your favorites'},
+    'cat_fav_removed':   {'ar': '🤍 أُزيل قسم *{tag}* من المفضلة',
+                          'en': '🤍 Removed *{tag}* category from favorites'},
 
     # Idle — مرحلة 1: تذكير
     'idle_warn':         {'ar': '⏰ غبت عنّا {m} دقائق...\n'
@@ -714,10 +720,17 @@ def _kb_main(lang):
     return kb
 
 
-def _kb_cats(lang, tags):
+def _kb_cats(lang, tags, fav_tags=None):
+    """لوحة الأقسام مع زر ❤️/🤍 لكل قسم. fav_tags = set من الأقسام المفضّلة الحالية.
+    التصميم: ❤️ = مفضّل (ممتلئ) · 🤍 = غير مفضّل (شفّاف صامت). لا 💔."""
+    fav_tags = fav_tags or set()
     kb = types.InlineKeyboardMarkup(row_width=2)
     for tag in tags:
-        kb.add(types.InlineKeyboardButton(f"🏷️ {tag}", callback_data=f"ntag:{tag[:50]}"))
+        heart = "❤️" if tag in fav_tags else "🤍"
+        kb.row(
+            types.InlineKeyboardButton(f"🏷️ {tag}", callback_data=f"ntag:{tag[:50]}"),
+            types.InlineKeyboardButton(heart,       callback_data=f"cfav:{tag[:50]}"),
+        )
     kb.add(types.InlineKeyboardButton(TEXTS['back_btn'][lang], callback_data='nav:menu'))
     return kb
 
@@ -1026,7 +1039,8 @@ def _show_cats(user_id, lang):
         _edit_nav(user_id, t(user_id, 'no_sections'), _kb_cancel(lang))
         return
     _update_nav(user_id, state='cats')
-    _edit_nav(user_id, t(user_id, 'pick_section'), _kb_cats(lang, tags))
+    fav_cats = _get_category_favorites(user_id)
+    _edit_nav(user_id, t(user_id, 'pick_section'), _kb_cats(lang, tags, fav_cats))
 
 
 def _load_tag_stores(user_id, lang, tag):
@@ -1749,6 +1763,80 @@ def _remove_favorite_db(user_id, store_id):
             release_conn(conn)
 
 
+# ─── Category Favorites (kind='category' في user_favorites) ──────────────
+# لا يوجد cache على bot_users للأقسام — المصدر الوحيد user_favorites.
+def _get_category_favorites(user_id) -> set:
+    """يرجع مجموعة الأقسام المفضّلة للمستخدم (set للسرعة في keyboard build)."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur  = conn.cursor()
+        cur.execute(
+            "SELECT category_name FROM user_favorites "
+            "WHERE kind = 'category' AND telegram_id = %s",
+            (user_id,),
+        )
+        return {r[0] for r in cur.fetchall()}
+    except Exception as e:
+        print(f"⚠️ _get_category_favorites: {e}")
+        return set()
+    finally:
+        if conn is not None:
+            release_conn(conn)
+
+
+def _is_category_favorite(user_id, tag) -> bool:
+    return tag in _get_category_favorites(user_id)
+
+
+def _add_category_favorite_db(user_id, tag):
+    """يضيف قسماً لمفضلة المستخدم في user_favorites (kind='category')."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur  = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO user_favorites (kind, platform, telegram_id, category_name)
+            VALUES ('category', 'bot', %s, %s)
+            ON CONFLICT (telegram_id, category_name)
+            WHERE telegram_id IS NOT NULL AND kind = 'category' DO NOTHING
+            """,
+            (user_id, tag),
+        )
+        conn.commit()
+    except Exception as e:
+        print(f"⚠️ _add_category_favorite_db: {e}")
+        if conn is not None:
+            try: conn.rollback()
+            except Exception: pass
+    finally:
+        if conn is not None:
+            release_conn(conn)
+
+
+def _remove_category_favorite_db(user_id, tag):
+    """يحذف قسماً من مفضلة المستخدم."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur  = conn.cursor()
+        cur.execute(
+            "DELETE FROM user_favorites WHERE kind = 'category' "
+            "AND telegram_id = %s AND category_name = %s",
+            (user_id, tag),
+        )
+        conn.commit()
+    except Exception as e:
+        print(f"⚠️ _remove_category_favorite_db: {e}")
+        if conn is not None:
+            try: conn.rollback()
+            except Exception: pass
+    finally:
+        if conn is not None:
+            release_conn(conn)
+
+
 def _load_favorites(user_id, lang):
     """يحمّل متاجر المستخدم المفضّلة (النشطة فقط) ويعرضها ككروت قابلة للتصفّح."""
     log_action(None, 'view_favorites', user_id=user_id)
@@ -1797,6 +1885,35 @@ def handle_favorite_toggle(call):
 
     # أعِد عرض نفس الكرت ليتحدّث زر المفضلة (أضف ↔ إزالة)
     _show_card(user_id, _get_nav(user_id).get('page', 0))
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("cfav:"))
+def handle_category_favorite_toggle(call):
+    """toggle مفضّلة قسم — يحدّث القلب فوراً في لوحة الأقسام."""
+    tag      = call.data.split(":", 1)[1]
+    user_id  = call.from_user.id
+    lang     = get_lang(user_id)
+
+    _update_nav(user_id, chat_id=call.message.chat.id, msg_id=call.message.message_id)
+
+    fav_set = _get_category_favorites(user_id)
+    if tag in fav_set:
+        _remove_category_favorite_db(user_id, tag)
+        bot.answer_callback_query(call.id, t(user_id, 'cat_fav_removed', tag=tag))
+    else:
+        _add_category_favorite_db(user_id, tag)
+        bot.answer_callback_query(call.id, t(user_id, 'cat_fav_added', tag=tag))
+        log_action(None, 'category_favorite_add', user_id=user_id,
+                   details=f"tag:{tag}")
+
+    # أعِد عرض نفس لوحة الأقسام ليتحدّث ❤️↔💔
+    try:
+        tags = _get_cats(lang)
+        new_fav = _get_category_favorites(user_id)
+        _edit_nav(user_id, t(user_id, 'pick_section'),
+                  _kb_cats(lang, tags, new_fav))
+    except Exception as e:
+        print(f"⚠️ handle_category_favorite_toggle redraw: {e}")
 
 
 # ============================================================

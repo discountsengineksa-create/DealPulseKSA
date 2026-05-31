@@ -1084,7 +1084,11 @@ def _sa_load_favorites() -> pd.DataFrame:
         conn.rollback()
         return pd.read_sql(
             """
-            SELECT uf.store_id, uf.platform, uf.created_at,
+            SELECT uf.store_id,
+                   -- migration_028: kind discriminator + category_name (NULL لو 'store')
+                   COALESCE(uf.kind, 'store') AS kind,
+                   uf.category_name,
+                   uf.platform, uf.created_at,
                    uf.web_user_id, uf.telegram_id,
                    bu.username     AS bu_username,   -- هوية تيليجرام (بوت/ميني)
                    bu.city         AS bu_city,
@@ -2279,87 +2283,423 @@ if page == "جدول الكوبونات":
 
 
 
-if page == "تحليل الأقسام":
-    st.header("📂 مركز تحليل أداء الأقسام الذكي")
-    tab_gen_cat, tab_ind_cat, tab_time_analyser, tab_priority = st.tabs([
-        "🌎 الأداء العام", "🏷️ تحليل فردي", "⏰ التحليل الزمني", "🏅 الأولويات"
-    ])
+# ════════════════════════════════════════════════════════════════════════════
+#  صفحة «تحليل الأقسام» — نسخة معمارية موازية لـ «تحليل المتاجر»
+#  مصدر البيانات: نفس caches الـ _sa_*  (إعادة استخدام لا نسخ مكرّر).
+#  تبويبات: الأداء العام · الفحص الفردي · الجغرافيا · ❤️ الأكثر تفضيلاً · الزمني · 🏅 الأولويات
+# ════════════════════════════════════════════════════════════════════════════
+@st.cache_data(ttl=300, show_spinner=False)
+def _ca_store_tags() -> pd.DataFrame:
+    """خريطة store_id → list[tag] (موسّعة). مخزّنة 5 دقائق.
+    نعتمد store_tags (العربية) لأنها المعتمدة في كل التحليلات."""
+    conn = get_conn()
+    try:
+        conn.rollback()
+        df = pd.read_sql(
+            "SELECT store_id, COALESCE(store_tags, '') AS store_tags FROM master "
+            "WHERE store_id IS NOT NULL AND store_id <> ''",
+            conn,
+        )
+    finally:
+        conn.close()
+    if df.empty:
+        return pd.DataFrame(columns=["store_id", "tag"])
+    df["tags"] = df["store_tags"].apply(parse_tags)
+    expanded = df.explode("tags").rename(columns={"tags": "tag"}).dropna(subset=["tag"])
+    expanded["tag"] = expanded["tag"].astype(str).str.strip()
+    expanded = expanded[expanded["tag"] != ""]
+    return expanded[["store_id", "tag"]].reset_index(drop=True)
 
-    # ─── نافذة زمنية لتجنّب تحميل ملايين الصفوف بعد الإطلاق ──────────────────
-    # سقف 90 يوم + 100k صف يحمي الذاكرة ويُسرّع الصفحة بشكل ملحوظ.
-    days_window = st.slider("📅 نافذة التحليل (أيام)", 7, 365, 90, key="cat_days_window")
+
+if page == "تحليل الأقسام":
+    page_title("📂", "تحليل الأقسام",
+               "لوحة قرار: أي قسم يأخذ نقرات/نسخ/بحث · مين يدخله · مين فضّله — كل قسم بالأرقام الفعلية")
+
+    CHAN_MAP = {"bot": "📱 تيليجرام", "web": "🌐 ويب",
+                "telegram_miniapp": "🔹 ميني ويب", "miniapp": "🔹 ميني ويب"}
+    SRC_FILTER = {"📱 تيليجرام": ["bot"], "🌐 ويب": ["web"],
+                  "🔹 ميني ويب": ["telegram_miniapp", "miniapp"]}
+
+    # ── شريط التحكم ──────────────────────────────────────────────────────────
+    c_ref, c_src, c_hint = st.columns([1, 2.4, 2.6])
+    with c_ref:
+        if st.button("🔄 تحديث", use_container_width=True, key="ca_refresh"):
+            _sa_load_actions.clear(); _sa_load_master.clear()
+            _sa_load_searches.clear(); _sa_load_favorites.clear()
+            _ca_store_tags.clear()
+            st.rerun()
+    with c_src:
+        src_choice = st.radio("المصدر:", ["الكل", "📱 تيليجرام", "🌐 ويب", "🔹 ميني ويب"],
+                              horizontal=True, key="ca_src")
+    with c_hint:
+        st.caption("أرقام فعلية من action_logs + direct_search + user_favorites · مخزّنة 3 دقائق.")
 
     try:
-        conn = get_conn()
-        cat_query = """
-            SELECT m.store_tags, a.action_time, a.action_type, a.user_id
-            FROM action_logs a
-            JOIN master m ON a.store_id = m.store_id
-            WHERE a.store_id IS NOT NULL
-              AND a.action_time >= NOW() - (%s || ' days')::interval
-            ORDER BY a.action_time DESC
-            LIMIT 100000
-        """
-        df_raw = pd.read_sql(cat_query, conn, params=(days_window,))
-        conn.close()
+        df_logs   = _sa_load_actions()
+        df_master = _sa_load_master()
+        df_search = _sa_load_searches()
+        df_favs   = _sa_load_favorites()
+        df_tags   = _ca_store_tags()
+    except Exception as e:
+        st.error(f"⚠️ تعذّر تحميل البيانات: {e}")
+        st.stop()
 
-        if not df_raw.empty:
-            df_raw['store_tags'] = df_raw['store_tags'].apply(parse_tags)
-            df_exploded = df_raw.explode('store_tags').dropna(subset=['store_tags'])
-            df_exploded['store_tags'] = df_exploded['store_tags'].astype(str).str.strip()
+    if df_tags.empty:
+        st.info("📭 لا توجد أقسام محدّدة في master.store_tags بعد.")
+        st.stop()
 
-            with tab_gen_cat:
-                st.subheader("📊 مقارنة نشاط الأقسام")
-                fig = px.sunburst(df_exploded, path=['store_tags', 'action_type'],
-                                  title="توزيع الأقسام ونوع الحركة داخلها")
+    # ── استبعاد المتاجر منتهية الكوبون ───────────────────────────────────────
+    _today_d = pd.Timestamp.today().date()
+    if "last_time" in df_master.columns:
+        _lt = pd.to_datetime(df_master["last_time"], errors="coerce").dt.date
+        df_master = df_master[_lt.isna() | (_lt >= _today_d)].copy()
+    active_ids = set(df_master["store_id"])
+    df_tags = df_tags[df_tags["store_id"].isin(active_ids)].copy()
+    if not df_logs.empty:
+        df_logs = df_logs[df_logs["store_id"].isin(active_ids)].copy()
+    if not df_search.empty:
+        df_search = df_search[df_search["store_id"].isin(active_ids) | df_search["store_id"].isna()].copy()
+
+    # ── توقيت الرياض + توحيد المصادر (نفس منطق تحليل المتاجر) ─────────────────
+    if not df_logs.empty:
+        df_logs = df_logs.copy()
+        df_logs["action_time"] = (pd.to_datetime(df_logs["action_time"])
+                                  + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
+        df_logs["adate"] = df_logs["action_time"].dt.date
+        df_logs["hour"]  = df_logs["action_time"].dt.hour
+        df_logs["source"] = df_logs["source"].fillna("bot")
+        df_logs["city_c"] = (df_logs["geo_city"].fillna("").astype(str)
+                             .str.strip().replace("", "غير معروف"))
+        df_logs["src_ar"] = df_logs["source"].map(CHAN_MAP).fillna("🌐 ويب")
+
+    if not df_search.empty:
+        df_search = df_search.copy()
+        df_search["search_date"] = (pd.to_datetime(df_search["search_date"])
+                                    + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
+        df_search["adate"] = df_search["search_date"].dt.date
+
+    # ── فلتر الفترة ──────────────────────────────────────────────────────────
+    if not df_logs.empty:
+        _min_d, _max_d = df_logs["adate"].min(), df_logs["adate"].max()
+    elif not df_search.empty:
+        _min_d, _max_d = df_search["adate"].min(), df_search["adate"].max()
+    else:
+        import datetime as _dt
+        _min_d = _max_d = _dt.date.today()
+
+    dcol1, dcol2 = st.columns([2, 3])
+    with dcol1:
+        _dr = st.date_input("📅 الفترة (من → إلى):", value=(_min_d, _max_d),
+                            min_value=_min_d, max_value=_max_d, key="ca_dates")
+    d_start, d_end = (_dr if isinstance(_dr, (list, tuple)) and len(_dr) == 2 else (_min_d, _max_d))
+    if not df_logs.empty:
+        df_logs = df_logs[(df_logs["adate"] >= d_start) & (df_logs["adate"] <= d_end)]
+    if not df_search.empty:
+        df_search = df_search[(df_search["adate"] >= d_start) & (df_search["adate"] <= d_end)]
+
+    # ── نطاق المصدر ──────────────────────────────────────────────────────────
+    if src_choice in SRC_FILTER and not df_logs.empty:
+        df_scope = df_logs[df_logs["source"].isin(SRC_FILTER[src_choice])]
+    else:
+        df_scope = df_logs
+
+    def _search_scope_ca(ds):
+        if ds is None or ds.empty:
+            return ds
+        p = ds["platform"].astype(str).str.lower()
+        if src_choice == "📱 تيليجرام":
+            return ds[p.str.contains("telegram") | p.str.contains("bot")]
+        if src_choice == "🌐 ويب":
+            return ds[p == "web"]
+        if src_choice == "🔹 ميني ويب":
+            return ds[p.str.contains("mini")]
+        return ds
+    df_search_scope = _search_scope_ca(df_search)
+
+    with dcol2:
+        st.caption(f"📅 {d_start} ← {d_end} · المصدر: {src_choice} · "
+                   f"أحداث: **{len(df_scope):,}** · أقسام: **{df_tags['tag'].nunique()}**")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # تجميع: لكل قسم نحسب نقرات/نسخ/بحث/مستخدمون فريدون
+    # طريقة العمل: JOIN على store_id من df_scope ↔ df_tags، ثم GROUP BY tag.
+    # عمل واحد يخدم كل التبويبات.
+    # ─────────────────────────────────────────────────────────────────────────
+    if not df_scope.empty:
+        scoped_with_tag = df_scope.merge(df_tags, on="store_id", how="left")
+        scoped_with_tag = scoped_with_tag.dropna(subset=["tag"])
+    else:
+        scoped_with_tag = pd.DataFrame(columns=list(df_scope.columns) + ["tag"])
+
+    if df_search_scope is not None and not df_search_scope.empty:
+        search_with_tag = (df_search_scope[df_search_scope["store_id"].notna()]
+                           .merge(df_tags, on="store_id", how="left")
+                           .dropna(subset=["tag"]))
+    else:
+        search_with_tag = pd.DataFrame(columns=["tag"])
+
+    def _cat_agg() -> pd.DataFrame:
+        """قاعدة كل التبويبات: صف لكل قسم بأرقامه. الأقسام بدون نشاط = صفر."""
+        all_tags = sorted(df_tags["tag"].unique())
+        out = pd.DataFrame({"tag": all_tags})
+        if not scoped_with_tag.empty:
+            piv = (scoped_with_tag.groupby(["tag", "action_type"])
+                   .size().unstack(fill_value=0))
+            for c in ["click_link", "copy_coupon"]:
+                if c not in piv.columns:
+                    piv[c] = 0
+            piv = piv.rename(columns={"click_link": "نقرات", "copy_coupon": "نسخ"})
+            piv = piv[["نقرات", "نسخ"]]
+            out = out.merge(piv, on="tag", how="left")
+        else:
+            out["نقرات"] = 0; out["نسخ"] = 0
+        if not search_with_tag.empty:
+            sps = search_with_tag.groupby("tag").size().rename("بحث")
+            out = out.merge(sps, on="tag", how="left")
+        else:
+            out["بحث"] = 0
+        out[["نقرات", "نسخ", "بحث"]] = out[["نقرات", "نسخ", "بحث"]].fillna(0).astype(int)
+        if not scoped_with_tag.empty:
+            uniq = (scoped_with_tag.dropna(subset=["user_id"])
+                    .groupby("tag")["user_id"].nunique().rename("مستخدمون فريدون"))
+            out = out.merge(uniq, on="tag", how="left")
+        else:
+            out["مستخدمون فريدون"] = 0
+        out["مستخدمون فريدون"] = out["مستخدمون فريدون"].fillna(0).astype(int)
+        # عدد المتاجر الفعلية تحت كل قسم (للتفسير)
+        stores_per_tag = df_tags.groupby("tag")["store_id"].nunique().rename("متاجر")
+        out = out.merge(stores_per_tag, on="tag", how="left")
+        out["متاجر"] = out["متاجر"].fillna(0).astype(int)
+        out["إجمالي"] = out["نقرات"] + out["نسخ"] + out["بحث"]
+        return out.sort_values(["إجمالي", "نقرات"], ascending=False).reset_index(drop=True)
+
+    df_cat_agg = _cat_agg()
+
+    # ── أعداد المفضّلين لكل قسم (kind='category' فقط) ────────────────────────
+    if not df_favs.empty and "kind" in df_favs.columns:
+        fav_cats_only = df_favs[df_favs["kind"] == "category"].copy()
+    elif not df_favs.empty:
+        # قبل migration 028 — لا أعمدة kind بعد
+        fav_cats_only = df_favs.iloc[0:0].copy()
+        fav_cats_only["category_name"] = pd.Series(dtype="object")
+    else:
+        fav_cats_only = pd.DataFrame(columns=["category_name", "platform",
+                                              "web_user_id", "telegram_id"])
+
+    if not fav_cats_only.empty:
+        fav_per_cat = (fav_cats_only.groupby("category_name").size()
+                       .rename("مفضّلون").reset_index()
+                       .rename(columns={"category_name": "tag"}))
+        df_cat_agg = df_cat_agg.merge(fav_per_cat, on="tag", how="left")
+    else:
+        df_cat_agg["مفضّلون"] = 0
+    df_cat_agg["مفضّلون"] = df_cat_agg["مفضّلون"].fillna(0).astype(int)
+
+    # ── التبويبات ────────────────────────────────────────────────────────────
+    tab_overview, tab_individual, tab_geo, tab_favs, tab_time, tab_priority = st.tabs([
+        "📊 الأداء العام",
+        "🏷️ الفحص الفردي",
+        "🏙️ التوزيع الجغرافي",
+        "❤️ الأكثر تفضيلاً",
+        "⏰ التحليل الزمني",
+        "🏅 الأولويات",
+    ])
+
+    # ── 1) الأداء العام ──────────────────────────────────────────────────────
+    with tab_overview:
+        total_clicks  = int(df_cat_agg["نقرات"].sum())
+        total_copies  = int(df_cat_agg["نسخ"].sum())
+        total_search  = int(df_cat_agg["بحث"].sum())
+        total_users   = int(scoped_with_tag["user_id"].dropna().nunique()) if not scoped_with_tag.empty else 0
+        total_favs    = int(df_cat_agg["مفضّلون"].sum())
+
+        k1, k2, k3, k4, k5 = st.columns(5)
+        k1.metric("🖱️ نقرات", f"{total_clicks:,}")
+        k2.metric("📋 نسخ",   f"{total_copies:,}")
+        k3.metric("🔍 بحث",   f"{total_search:,}")
+        k4.metric("👥 مستخدمون", f"{total_users:,}")
+        k5.metric("❤️ تفضيلات", f"{total_favs:,}")
+
+        st.divider()
+        st.markdown("### 🏆 لوحة الأقسام (مرتّبة بالنشاط الكلي)")
+        st.caption("الإجمالي = نقرات + نسخ + بحث · القسم بصفر نشاط يظهر كذلك ليكون قرار التطيير واضحاً.")
+        st.dataframe(
+            df_cat_agg[["tag", "نقرات", "نسخ", "بحث", "مفضّلون",
+                        "مستخدمون فريدون", "متاجر", "إجمالي"]]
+                .rename(columns={"tag": "القسم"}),
+            use_container_width=True, hide_index=True,
+        )
+
+        st.divider()
+        cTop, cBot = st.columns(2)
+        with cTop:
+            st.markdown("**🔝 أعلى 10 أقسام نشاطاً**")
+            top10 = df_cat_agg.head(10)
+            if not top10.empty and top10["إجمالي"].sum() > 0:
+                fig = px.bar(top10, x="إجمالي", y="tag", orientation="h",
+                             color="إجمالي", color_continuous_scale="Blues")
+                fig.update_layout(yaxis=dict(autorange="reversed"), xaxis_title="إجمالي الأحداث",
+                                  yaxis_title="")
+                st.plotly_chart(apply_brand_theme(fig), use_container_width=True)
+            else:
+                st.info("لا نشاط بعد ضمن النطاق.")
+        with cBot:
+            st.markdown("**🥶 أقل الأقسام نشاطاً (مرشّحة للتطيير)**")
+            bot10 = df_cat_agg.tail(10).iloc[::-1]
+            if not bot10.empty:
+                fig = px.bar(bot10, x="إجمالي", y="tag", orientation="h",
+                             color="إجمالي", color_continuous_scale="Reds_r")
+                fig.update_layout(yaxis=dict(autorange="reversed"), xaxis_title="إجمالي الأحداث",
+                                  yaxis_title="")
+                st.plotly_chart(apply_brand_theme(fig), use_container_width=True)
+            else:
+                st.info("لا توجد أقسام كافية.")
+
+    # ── 2) الفحص الفردي ──────────────────────────────────────────────────────
+    with tab_individual:
+        st.subheader("🏷️ بطاقة القسم الكاملة")
+        st.caption("اختر قسماً → كل ما يخصّه: مين دخل (بهوية كاملة) · ماذا فعل · متى · من أي مصدر.")
+
+        all_tags_sorted = df_cat_agg["tag"].tolist()
+        if not all_tags_sorted:
+            st.info("لا أقسام للفحص.")
+        else:
+            picked_tag = st.selectbox("القسم:", all_tags_sorted, key="ca_picked")
+            row = df_cat_agg[df_cat_agg["tag"] == picked_tag].iloc[0]
+
+            mc1, mc2, mc3, mc4, mc5 = st.columns(5)
+            mc1.metric("🖱️ نقرات",  int(row["نقرات"]))
+            mc2.metric("📋 نسخ",    int(row["نسخ"]))
+            mc3.metric("🔍 بحث",    int(row["بحث"]))
+            mc4.metric("👥 مستخدمون", int(row["مستخدمون فريدون"]))
+            mc5.metric("❤️ مفضّلون", int(row["مفضّلون"]))
+
+            st.divider()
+            # المتاجر داخل هذا القسم — قاعدة قرار "كم متجر يعيش تحت هذا القسم"
+            stores_in_tag = df_tags[df_tags["tag"] == picked_tag]["store_id"].unique().tolist()
+            st.markdown(f"**🏪 المتاجر في «{picked_tag}» ({len(stores_in_tag)}):**")
+            st.code(" · ".join(stores_in_tag) if stores_in_tag else "—",
+                    language=None)
+
+            # مين دخل: قائمة المستخدمين بهوية واضحة
+            st.divider()
+            st.markdown("### 👤 مين دخل هذا القسم")
+            if scoped_with_tag.empty or "identity" not in scoped_with_tag.columns:
+                st.info("لا أحداث ضمن النطاق.")
+            else:
+                in_tag = scoped_with_tag[scoped_with_tag["tag"] == picked_tag]
+                if in_tag.empty:
+                    st.info("لا أحداث بعد لهذا القسم ضمن النطاق.")
+                else:
+                    per_user = (in_tag.groupby(["identity", "src_ar"])
+                                .agg(نقرات=("action_type", lambda s: (s == "click_link").sum()),
+                                     نسخ  =("action_type", lambda s: (s == "copy_coupon").sum()),
+                                     آخر_تفاعل=("action_time", "max"))
+                                .reset_index()
+                                .rename(columns={"identity": "المستخدم",
+                                                 "src_ar":  "المصدر"})
+                                .sort_values("آخر_تفاعل", ascending=False))
+                    st.dataframe(per_user, use_container_width=True, hide_index=True)
+
+            # مين فضّل القسم: من user_favorites
+            st.divider()
+            st.markdown("### ❤️ مين فضّل هذا القسم")
+            who_fav = fav_cats_only[fav_cats_only["category_name"] == picked_tag] \
+                if not fav_cats_only.empty else pd.DataFrame()
+            if who_fav.empty:
+                st.info("لا أحد فضّل هذا القسم بعد.")
+            else:
+                def _fav_identity(r):
+                    if pd.notna(r.get("telegram_id")):
+                        u = (r.get("bu_username") or "").strip()
+                        return ("@" + u.lstrip("@")) if u else f"تيليجرام {int(r['telegram_id'])}"
+                    n = (r.get("web_name") or "").strip()
+                    e = (r.get("web_email") or "").strip()
+                    return n or e or f"ويب #{int(r['web_user_id']) if pd.notna(r.get('web_user_id')) else '?'}"
+                w = who_fav.copy()
+                w["المستخدم"] = w.apply(_fav_identity, axis=1)
+                w["المصدر"]   = w["platform"].map(CHAN_MAP).fillna(w["platform"])
+                st.dataframe(
+                    w[["المستخدم", "المصدر", "created_at"]]
+                       .rename(columns={"created_at": "تاريخ التفضيل"})
+                       .sort_values("تاريخ التفضيل", ascending=False),
+                    use_container_width=True, hide_index=True,
+                )
+
+    # ── 3) التوزيع الجغرافي ──────────────────────────────────────────────────
+    with tab_geo:
+        st.subheader("🏙️ من أين يأتي نشاط كل قسم؟")
+        if scoped_with_tag.empty:
+            st.info("لا أحداث ضمن النطاق.")
+        else:
+            geo = (scoped_with_tag.groupby(["tag", "city_c"]).size()
+                   .reset_index(name="الأحداث"))
+            top_cities = (geo.groupby("city_c")["الأحداث"].sum()
+                          .sort_values(ascending=False).head(10).index.tolist())
+            geo = geo[geo["city_c"].isin(top_cities)]
+            if geo.empty:
+                st.info("لا مدن كافية ضمن النطاق.")
+            else:
+                fig = px.bar(geo, x="الأحداث", y="city_c", color="tag",
+                             orientation="h", title="أعلى 10 مدن × أقسام")
+                fig.update_layout(yaxis=dict(autorange="reversed"),
+                                  yaxis_title="المدينة", xaxis_title="عدد الأحداث")
                 st.plotly_chart(apply_brand_theme(fig), use_container_width=True)
 
-                # ── أعلى الأقسام بحثاً (Top searched categories) ──────
-                st.divider()
-                st.markdown("**🔍 أعلى الأقسام بحثاً**")
-                df_search_cat = df_exploded[df_exploded['action_type'] == 'search']
-                if df_search_cat.empty:
-                    st.info("لا توجد عمليات بحث ضمن النافذة الزمنية.")
-                else:
-                    top_cat_search = (df_search_cat.groupby('store_tags')
-                                                   .size().reset_index(name='عمليات البحث')
-                                                   .sort_values('عمليات البحث', ascending=False)
-                                                   .head(20)
-                                                   .rename(columns={'store_tags': 'القسم'}))
-                    cS1, cS2 = st.columns([3, 2])
-                    with cS1:
-                        fig_cs = px.bar(top_cat_search, x='عمليات البحث', y='القسم',
-                                        orientation='h', color='عمليات البحث',
-                                        color_continuous_scale='Blues')
-                        fig_cs.update_layout(yaxis=dict(autorange='reversed'),
-                                             xaxis_title='عدد عمليات البحث', yaxis_title='')
-                        st.plotly_chart(apply_brand_theme(fig_cs), use_container_width=True)
-                    with cS2:
-                        st.dataframe(top_cat_search, hide_index=True, use_container_width=True)
+    # ── 4) ❤️ الأكثر تفضيلاً ────────────────────────────────────────────────
+    with tab_favs:
+        st.subheader("❤️ لوحة الأقسام الأكثر تفضيلاً")
+        st.caption("هذه قاعدة الـ push المستقبلي: لو نزل كوبون قسم «أحذية رياضية» → نُنبّه كل من فضّله.")
 
-            with tab_ind_cat:
-                search_tag = st.selectbox("اختر القسم للمراقبة:", sorted(df_exploded['store_tags'].unique()), key="cat_sel_1")
-                tag_data = df_exploded[df_exploded['store_tags'] == search_tag]
-                c1, c2, c3 = st.columns(3)
-                c1.metric("إجمالي الحركات", len(tag_data))
-                c2.metric("👥 مستخدمون فريدون", int(tag_data['user_id'].dropna().nunique()))
-                c3.metric("السلوك الغالب", tag_data['action_type'].mode()[0] if not tag_data.empty else "N/A")
-
-            with tab_time_analyser:
-                st.subheader("📅 متى ينشط هذا القسم؟")
-                df_exploded['hour'] = pd.to_datetime(df_exploded['action_time']).dt.hour
-                time_stats = (df_exploded[df_exploded['store_tags'] == search_tag]
-                              .groupby('hour').size().reset_index(name='الزيارات'))
-                fig_time = px.line(time_stats, x='hour', y='الزيارات',
-                                   title=f"نشاط قسم {search_tag} خلال ساعات اليوم", markers=True)
-                st.plotly_chart(apply_brand_theme(fig_time), use_container_width=True)
+        if df_cat_agg["مفضّلون"].sum() == 0:
+            st.info("لا تفضيلات بعد. زر ❤️ في البوت/الميني-ويب/الموقع → كل قلب يظهر هنا فوراً.")
         else:
-            with tab_gen_cat:
-                st.info("📭 لا توجد حركات مسجّلة بعد.")
-    except Exception as e:
-        st.error(f"حدث خطأ فني: {e}")
+            ranked = df_cat_agg[df_cat_agg["مفضّلون"] > 0] \
+                .sort_values("مفضّلون", ascending=False)
+            cL, cR = st.columns([3, 2])
+            with cL:
+                fig = px.bar(ranked.head(20), x="مفضّلون", y="tag",
+                             orientation="h", color="مفضّلون",
+                             color_continuous_scale="Reds")
+                fig.update_layout(yaxis=dict(autorange="reversed"),
+                                  xaxis_title="عدد المفضّلين", yaxis_title="")
+                st.plotly_chart(apply_brand_theme(fig), use_container_width=True)
+            with cR:
+                st.dataframe(
+                    ranked[["tag", "مفضّلون", "متاجر", "إجمالي"]]
+                        .rename(columns={"tag": "القسم", "إجمالي": "نشاط"}),
+                    use_container_width=True, hide_index=True,
+                )
 
-    # ─── تبويب الأولويات ───────────────────────────────────────────────────────
+            st.divider()
+            # توزيع المنصات: من أين تأتي القلوب؟
+            if not fav_cats_only.empty:
+                by_platform = (fav_cats_only.groupby("platform").size()
+                               .reset_index(name="القلوب"))
+                by_platform["platform"] = by_platform["platform"].map(CHAN_MAP).fillna(by_platform["platform"])
+                fig_p = px.pie(by_platform, values="القلوب", names="platform",
+                               title="توزيع التفضيلات على المنصات")
+                st.plotly_chart(apply_brand_theme(fig_p), use_container_width=True)
+
+    # ── 5) التحليل الزمني ────────────────────────────────────────────────────
+    with tab_time:
+        st.subheader("⏰ متى تنشط الأقسام؟")
+        if scoped_with_tag.empty:
+            st.info("لا أحداث ضمن النطاق.")
+        else:
+            pick_tag2 = st.selectbox("القسم:", df_cat_agg["tag"].tolist(),
+                                     key="ca_time_pick")
+            d_one = scoped_with_tag[scoped_with_tag["tag"] == pick_tag2]
+            if d_one.empty:
+                st.info("لا أحداث لهذا القسم ضمن النطاق.")
+            else:
+                st.plotly_chart(
+                    _sa_hourly_fig(d_one, title=f"نشاط «{pick_tag2}» على مدار اليوم",
+                                   include_search=False),
+                    use_container_width=True,
+                )
+
+    # ── 6) الأولويات (يبقى كما كان — إدارة يدوية) ───────────────────────────
     with tab_priority:
         st.subheader("🏅 إدارة ترتيب الأقسام يدوياً")
         st.caption("الرقم 1 = يظهر أولاً في البوت والموقع · الرقم 5 = الافتراضي")
@@ -2871,6 +3211,11 @@ elif page == "تحليل المتاجر":
         except Exception as e:
             st.error(f"⚠️ تعذّر تحميل المفضلة: {e}")
             df_fav = pd.DataFrame()
+
+        # تحليل المتاجر يعرض مفضلة المتاجر فقط — نُقصي صفوف الأقسام
+        # (موجودة في نفس الجدول بعد migration_028).
+        if not df_fav.empty and "kind" in df_fav.columns:
+            df_fav = df_fav[df_fav["kind"] == "store"].copy()
 
         # فلتر المصدر (platform) — يحترم نفس اختيار شريط التحكم أعلى الصفحة
         PLAT_FILTER = {"📱 تيليجرام": ["bot"], "🌐 ويب": ["web"], "🔹 ميني ويب": ["miniapp"]}

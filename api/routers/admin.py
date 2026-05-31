@@ -33,6 +33,65 @@ def _verify_admin(x_admin_secret: str) -> None:
         raise HTTPException(status_code=403, detail="forbidden")
 
 
+# ─── Email Diagnostics ────────────────────────────────────────────────────
+# يكشف لماذا "نسيت كلمة المرور" لا يصل: غالباً RESEND_API_KEY مفقود في Railway،
+# أو الدومين غير موثّق على Resend. كلا المسارين الفرعيين يطبع رسائل واضحة.
+@router.get("/email-status")
+def email_status(x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
+    """يرجع حالة إعدادات الإيميل — يساعد في تشخيص عدم وصول الرسائل."""
+    _verify_admin(x_admin_secret)
+    resend_key = os.getenv("RESEND_API_KEY")
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_pass = os.getenv("SMTP_PASS")
+    smtp_from = os.getenv("SMTP_FROM", smtp_user or "onboarding@resend.dev")
+
+    if resend_key:
+        transport = "resend"
+        configured = True
+        hint = "Resend مفعّل. تأكد من توثيق الدومين (DNS records في Cloudflare) "\
+               "وأن SMTP_FROM يستخدم الدومين الموثّق."
+    elif smtp_user and smtp_pass:
+        transport = "smtp"
+        configured = True
+        hint = "SMTP مفعّل. ملاحظة: Railway يحجب outbound SMTP عادةً — "\
+               "الأفضل التحويل إلى Resend."
+    else:
+        transport = "dev_mode"
+        configured = False
+        hint = "⚠️ لا RESEND_API_KEY ولا SMTP creds — الكود يطبع للوغ فقط. "\
+               "اضبط RESEND_API_KEY في Railway → Variables، ثم أعد التشغيل."
+
+    return {
+        "transport": transport,
+        "configured": configured,
+        "resend_key_set": bool(resend_key),
+        "smtp_user_set": bool(smtp_user),
+        "smtp_pass_set": bool(smtp_pass),
+        "from_address": smtp_from,
+        "hint": hint,
+    }
+
+
+class EmailTestRequest(BaseModel):
+    to: str
+
+
+@router.post("/email-test")
+def email_test(
+    payload: EmailTestRequest,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """يرسل إيميل اختبار للعنوان المعطى ويرجع نتيجة _send_email الفعلية."""
+    _verify_admin(x_admin_secret)
+    from api.auth_utils import _send_email
+    ok = _send_email(
+        to=payload.to,
+        subject="✅ اختبار إرسال — نبض الصفقات",
+        html="<p>هذه رسالة اختبار. لو وصلتك → الإعدادات تعمل.</p>",
+    )
+    return {"sent": ok, "to": payload.to}
+
+
 @router.post("/broadcast/{master_id}")
 @limiter.limit(LIMIT_ADMIN)
 def broadcast(

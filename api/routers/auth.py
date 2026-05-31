@@ -263,12 +263,19 @@ def forgot_password(
             (user["id"], code_hash, expires_at, client_ip),
         )
 
-    # أرسل الإيميل
-    send_reset_email(
+    # أرسل الإيميل — لو فشل لا نخدع المستخدم برسالة "تم الإرسال"
+    sent = send_reset_email(
         to_email=user["email"],
         user_name=user.get("display_name") or "عزيزي العميل",
         code=code,
     )
+    if not sent:
+        # 502 Bad Gateway = الخدمة الخارجية (Resend/SMTP) فشلت
+        # الـ frontend يعرض الرسالة للمستخدم بدلاً من توهم النجاح.
+        raise HTTPException(
+            status_code=502,
+            detail="تعذّر إرسال الإيميل حالياً. حاول بعد دقائق، أو راسل الدعم.",
+        )
 
     return ForgotPasswordResponse(
         message="تم إرسال كود الاستعادة لإيميلك.",

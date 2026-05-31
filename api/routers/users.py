@@ -5,8 +5,11 @@ from psycopg2.extras import RealDictCursor
 from api.db import get_db
 from api.routers.auth import get_current_user
 from api.schemas.users import (
+    CategoryFavoriteRequest,
+    CategoryFavoritesResponse,
     FavoriteRequest,
     FavoritesResponse,
+    TelegramCategoryFavoriteRequest,
     TelegramFavoriteRequest,
     TelegramFavoritesListRequest,
     TelegramProfileSaveRequest,
@@ -63,6 +66,70 @@ def _uf_delete(cur, store_id, *, web_user_id=None, telegram_id=None):
             "DELETE FROM user_favorites WHERE telegram_id = %s AND store_id = %s",
             (telegram_id, store_id),
         )
+
+
+# ─── Category favorites helpers (kind='category') ─────────────────────────
+def _uf_category_upsert(cur, category_name, *, platform,
+                        web_user_id=None, telegram_id=None):
+    """يضيف صف مفضلة قسم (idempotent). store_id NULL + kind='category'."""
+    if web_user_id is not None:
+        cur.execute(
+            """
+            INSERT INTO user_favorites (kind, platform, web_user_id, category_name)
+            VALUES ('category', %s, %s, %s)
+            ON CONFLICT (web_user_id, category_name)
+            WHERE web_user_id IS NOT NULL AND kind = 'category'
+            DO NOTHING
+            """,
+            (platform, web_user_id, category_name),
+        )
+    else:
+        cur.execute(
+            """
+            INSERT INTO user_favorites (kind, platform, telegram_id, category_name)
+            VALUES ('category', %s, %s, %s)
+            ON CONFLICT (telegram_id, category_name)
+            WHERE telegram_id IS NOT NULL AND kind = 'category'
+            DO NOTHING
+            """,
+            (platform, telegram_id, category_name),
+        )
+
+
+def _uf_category_delete(cur, category_name, *, web_user_id=None, telegram_id=None):
+    """يحذف صف مفضلة قسم لمالكه."""
+    if web_user_id is not None:
+        cur.execute(
+            "DELETE FROM user_favorites WHERE kind = 'category' "
+            "AND web_user_id = %s AND category_name = %s",
+            (web_user_id, category_name),
+        )
+    else:
+        cur.execute(
+            "DELETE FROM user_favorites WHERE kind = 'category' "
+            "AND telegram_id = %s AND category_name = %s",
+            (telegram_id, category_name),
+        )
+
+
+def _category_exists(cur, category_name: str) -> bool:
+    """يتحقق أن القسم موجود فعلاً في master.store_tags — يمنع abuse بقيم وهمية."""
+    # store_tags نصّ بصيغة '{a,b,c}'. نستعمل ILIKE على النصّ المفصول
+    # (انظر CLAUDE.md — العمود text وليس text[]).
+    cur.execute(
+        """
+        SELECT 1 FROM master
+        WHERE EXISTS (
+            SELECT 1 FROM unnest(string_to_array(
+                trim(both '{}' from COALESCE(store_tags, '')), ','
+            )) AS t
+            WHERE trim(t) = %s
+        )
+        LIMIT 1
+        """,
+        (category_name,),
+    )
+    return cur.fetchone() is not None
 
 
 @router.get("/me/favorites", response_model=FavoritesResponse)
@@ -126,6 +193,69 @@ def remove_favorite(
         _uf_delete(cur, store_id, web_user_id=user["id"])
 
     return FavoritesResponse(favorites=list(row["manual_favorites"] or []))
+
+
+# ─── Web Category Favorites (JWT) ───────────────────────────────────────────
+# مفضلة الأقسام لمستخدم الموقع المسجّل دخوله. لا dual-write — الأقسام تعيش في
+# user_favorites فقط (لا توجد manual_categories على web_users).
+@router.get("/me/favorite-categories", response_model=CategoryFavoritesResponse)
+def get_favorite_categories(user=Depends(get_current_user), conn=Depends(get_db)):
+    """قائمة أقسام مفضلة المستخدم الحالي (ترتيب تنازلي بتاريخ الإضافة)."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            "SELECT category_name FROM user_favorites "
+            "WHERE kind = 'category' AND web_user_id = %s "
+            "ORDER BY created_at DESC",
+            (user["id"],),
+        )
+        cats = [r["category_name"] for r in cur.fetchall()]
+    return CategoryFavoritesResponse(categories=cats)
+
+
+@router.post("/me/favorite-categories",
+             response_model=CategoryFavoritesResponse, status_code=201)
+def add_favorite_category(
+    payload: CategoryFavoriteRequest,
+    user=Depends(get_current_user),
+    conn=Depends(get_db),
+):
+    """إضافة قسم لمفضلة الويب (idempotent). يتحقق أن القسم موجود في master."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        if not _category_exists(cur, payload.category_name):
+            raise HTTPException(
+                status_code=404,
+                detail=f"category '{payload.category_name}' not found",
+            )
+        _uf_category_upsert(cur, payload.category_name,
+                            platform="web", web_user_id=user["id"])
+        cur.execute(
+            "SELECT category_name FROM user_favorites "
+            "WHERE kind = 'category' AND web_user_id = %s "
+            "ORDER BY created_at DESC",
+            (user["id"],),
+        )
+        cats = [r["category_name"] for r in cur.fetchall()]
+    return CategoryFavoritesResponse(categories=cats)
+
+
+@router.delete("/me/favorite-categories/{category_name}",
+               response_model=CategoryFavoritesResponse)
+def remove_favorite_category(
+    category_name: str,
+    user=Depends(get_current_user),
+    conn=Depends(get_db),
+):
+    """حذف قسم من مفضلة الويب."""
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        _uf_category_delete(cur, category_name.strip(), web_user_id=user["id"])
+        cur.execute(
+            "SELECT category_name FROM user_favorites "
+            "WHERE kind = 'category' AND web_user_id = %s "
+            "ORDER BY created_at DESC",
+            (user["id"],),
+        )
+        cats = [r["category_name"] for r in cur.fetchall()]
+    return CategoryFavoritesResponse(categories=cats)
 
 
 # ─── Telegram Mini-App Profile ─────────────────────────────────────────────
@@ -231,7 +361,8 @@ def telegram_favorites_list(
     telegram_id = int(tg_user["id"])
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            "SELECT store_id FROM user_favorites WHERE telegram_id = %s ORDER BY created_at DESC",
+            "SELECT store_id FROM user_favorites WHERE telegram_id = %s "
+            "AND kind = 'store' ORDER BY created_at DESC",
             (telegram_id,),
         )
         favorites = [r["store_id"] for r in cur.fetchall()]
@@ -282,7 +413,8 @@ def telegram_favorite_add(
         _uf_upsert(cur, payload.store_id, platform="miniapp", telegram_id=telegram_id)
 
         cur.execute(
-            "SELECT store_id FROM user_favorites WHERE telegram_id = %s ORDER BY created_at DESC",
+            "SELECT store_id FROM user_favorites WHERE telegram_id = %s "
+            "AND kind = 'store' ORDER BY created_at DESC",
             (telegram_id,),
         )
         favorites = [r["store_id"] for r in cur.fetchall()]
@@ -316,9 +448,116 @@ def telegram_favorite_remove(
         _uf_delete(cur, payload.store_id, telegram_id=telegram_id)
 
         cur.execute(
-            "SELECT store_id FROM user_favorites WHERE telegram_id = %s ORDER BY created_at DESC",
+            "SELECT store_id FROM user_favorites WHERE telegram_id = %s "
+            "AND kind = 'store' ORDER BY created_at DESC",
             (telegram_id,),
         )
         favorites = [r["store_id"] for r in cur.fetchall()]
 
     return FavoritesResponse(favorites=favorites)
+
+
+# ─── Telegram Category Favorites (bot + miniapp) ───────────────────────────
+# نفس نمط مفضلة المتاجر لكن للأقسام. لا dual-write — لا يوجد عمود manual
+# للأقسام على bot_users، المصدر الوحيد هو user_favorites (kind='category').
+@router.post("/telegram-favorite-categories/list",
+             response_model=CategoryFavoritesResponse)
+@limiter.limit(LIMIT_TG_PROFILE_READ)
+def telegram_category_favorites_list(
+    payload: TelegramFavoritesListRequest,
+    request: Request,
+    conn=Depends(get_db),
+):
+    """قائمة أقسام مفضلة مستخدم تيليجرام (بوت أو ميني-ويب)."""
+    try:
+        tg_user = verify_init_data(payload.init_data)
+    except TelegramAuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+    telegram_id = int(tg_user["id"])
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            "SELECT category_name FROM user_favorites "
+            "WHERE kind = 'category' AND telegram_id = %s "
+            "ORDER BY created_at DESC",
+            (telegram_id,),
+        )
+        cats = [r["category_name"] for r in cur.fetchall()]
+
+    return CategoryFavoritesResponse(categories=cats)
+
+
+@router.post("/telegram-favorite-categories",
+             response_model=CategoryFavoritesResponse, status_code=201)
+@limiter.limit(LIMIT_TG_FAVORITE)
+def telegram_category_favorite_add(
+    payload: TelegramCategoryFavoriteRequest,
+    request: Request,
+    conn=Depends(get_db),
+):
+    """إضافة قسم لمفضلة مستخدم تيليجرام (يتحقق من وجود القسم)."""
+    try:
+        tg_user = verify_init_data(payload.init_data)
+    except TelegramAuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+    telegram_id = int(tg_user["id"])
+    username = tg_user.get("username") or tg_user.get("first_name") or "Anonymous"
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        if not _category_exists(cur, payload.category_name):
+            raise HTTPException(
+                status_code=404,
+                detail=f"category '{payload.category_name}' not found",
+            )
+
+        # نضمن وجود سجل bot_users (نفس النمط في telegram_favorite_add).
+        cur.execute(
+            """
+            INSERT INTO bot_users (telegram_id, username, joined_at, last_seen, user_status)
+            VALUES (%s, %s, NOW(), NOW(), 'Active')
+            ON CONFLICT (telegram_id) DO UPDATE SET last_seen = NOW()
+            """,
+            (telegram_id, username),
+        )
+
+        _uf_category_upsert(cur, payload.category_name,
+                            platform="miniapp", telegram_id=telegram_id)
+
+        cur.execute(
+            "SELECT category_name FROM user_favorites "
+            "WHERE kind = 'category' AND telegram_id = %s "
+            "ORDER BY created_at DESC",
+            (telegram_id,),
+        )
+        cats = [r["category_name"] for r in cur.fetchall()]
+
+    return CategoryFavoritesResponse(categories=cats)
+
+
+@router.delete("/telegram-favorite-categories",
+               response_model=CategoryFavoritesResponse)
+@limiter.limit(LIMIT_TG_FAVORITE)
+def telegram_category_favorite_remove(
+    payload: TelegramCategoryFavoriteRequest,
+    request: Request,
+    conn=Depends(get_db),
+):
+    """حذف قسم من مفضلة مستخدم تيليجرام."""
+    try:
+        tg_user = verify_init_data(payload.init_data)
+    except TelegramAuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+    telegram_id = int(tg_user["id"])
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        _uf_category_delete(cur, payload.category_name, telegram_id=telegram_id)
+        cur.execute(
+            "SELECT category_name FROM user_favorites "
+            "WHERE kind = 'category' AND telegram_id = %s "
+            "ORDER BY created_at DESC",
+            (telegram_id,),
+        )
+        cats = [r["category_name"] for r in cur.fetchall()]
+
+    return CategoryFavoritesResponse(categories=cats)
