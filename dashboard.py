@@ -2729,8 +2729,10 @@ elif page == "تحليل المتاجر":
                         last=("action_time", "max"),
                     ).reset_index())
             who = counts.merge(meta, on=_group_keys, how="left")
-            # المدينة من كل أحداث المستخدم ضمن النطاق (النقر يحمل IP-geo حتى لو النسخ لا)
-            _geo = sdf[sdf["city_c"] != "غير معروف"]
+            # المدينة من **كل أحداث المستخدم** في الفترة (لا تنحصر بالمتجر/المصدر
+            # المُختار). السبب: المدينة خاصية للمستخدم، فإذا التقطها /go على
+            # متجر آخر، يجب أن تظهر هنا حتى لو هذا المتجر بعينه لم يلتقطها.
+            _geo = df_logs[df_logs["city_c"] != "غير معروف"]
             if not _geo.empty:
                 cmap = _geo.groupby("identity")["city_c"].agg(
                     lambda s: s.mode().iat[0] if not s.mode().empty else "غير معروف")
