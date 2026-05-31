@@ -66,12 +66,15 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 # ─── JWT Tokens ─────────────────────────────────────────────────────────────
-def create_jwt_token(user_id: int, extra: Optional[dict] = None) -> str:
-    """يولّد JWT token صالح JWT_EXPIRY_DAYS يوم."""
+def create_jwt_token(user_id: int, extra: Optional[dict] = None,
+                     expiry_days: Optional[int] = None) -> str:
+    """يولّد JWT token. الافتراضي JWT_EXPIRY_DAYS (14)؛ ممرّر expiry_days يطغى
+    (يستخدمه login مع remember_me لتمديد الجلسة)."""
+    days = expiry_days if expiry_days is not None else JWT_EXPIRY_DAYS
     payload = {
         "sub": str(user_id),
         "iat": datetime.now(timezone.utc),
-        "exp": datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRY_DAYS),
+        "exp": datetime.now(timezone.utc) + timedelta(days=days),
     }
     if extra:
         payload.update(extra)
@@ -179,6 +182,54 @@ def _send_email(to: str, subject: str, html: str) -> bool:
     except Exception as e:
         print(f"❌ فشل إرسال إيميل لـ {to}: {e}")
         return False
+
+
+def send_verify_email(to_email: str, user_name: str, code: str) -> bool:
+    """
+    يرسل كود تأكيد الإيميل (6 أرقام) — مماثل لـ send_reset_email لكن
+    رسالة الـ html مختلفة (subject + body).
+    """
+    if not RESEND_API_KEY and not (SMTP_USER and SMTP_PASS):
+        print(f"[DEV MODE] Email verification code for {to_email}: {code}")
+        return True
+
+    subject = "✉️ تأكيد إيميلك — نبض الصفقات"
+    html = f"""<!DOCTYPE html>
+<html dir="rtl" lang="ar"><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#F5F5F0;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0"
+         style="background:#F5F5F0;padding:40px 16px;"><tr><td>
+    <table width="520" cellpadding="0" cellspacing="0" align="center"
+           style="background:#FFFFFF;border-radius:20px;overflow:hidden;
+                  box-shadow:0 4px 32px rgba(0,0,0,0.08);max-width:100%;">
+      <tr><td style="background:linear-gradient(135deg,#10B981,#059669);
+                     padding:32px 40px;text-align:center;">
+        <h1 style="color:white;margin:0;font-size:22px;font-weight:800;">
+          نبض الصفقات</h1>
+        <p style="color:rgba(255,255,255,0.8);margin:6px 0 0;font-size:13px;">
+          dealpulseksa.com</p>
+      </td></tr>
+      <tr><td style="padding:36px 40px 24px;">
+        <h2 style="color:#111827;font-size:20px;margin:0 0 12px;font-weight:800;">
+          مرحباً {user_name} 👋</h2>
+        <p style="color:#374151;font-size:15px;line-height:1.7;margin:0 0 24px;">
+          لتأكيد إيميلك، استخدم الكود التالي خلال 15 دقيقة:</p>
+        <div style="background:#F0FDF4;border:2px dashed #10B981;
+                    border-radius:14px;padding:24px;text-align:center;margin:0 0 24px;">
+          <div style="font-family:'Courier New',monospace;font-size:36px;
+                      font-weight:900;color:#059669;letter-spacing:8px;">{code}</div>
+        </div>
+        <p style="color:#6B7280;font-size:13px;line-height:1.7;margin:0;">
+          لو ما طلبت تأكيد إيميلك، تجاهل هذه الرسالة.</p>
+      </td></tr>
+      <tr><td style="background:#F9FAFB;padding:20px 40px;text-align:center;
+                     color:#9CA3AF;font-size:12px;border-top:1px solid #E5E7EB;">
+        © نبض الصفقات · dealpulseksa.com
+      </td></tr>
+    </table>
+  </td></tr></table>
+</body></html>"""
+    return _send_email(to_email, subject, html)
 
 
 def send_reset_email(to_email: str, user_name: str, code: str) -> bool:

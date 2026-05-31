@@ -51,6 +51,27 @@ def track_action(payload: TrackRequest, request: Request, conn=Depends(get_db)):
     quality, is_dc, is_proxy = compute_quality_score(geo)
     event_id = payload.event_id or geo.event_id
 
+    # 1.5) Anti-abuse: throttle نسخ كوبونات لمسجّلي الموقع — حد 30 ثانية
+    #     يحمي من scraping للأكواد بعد التسجيل. لا يطبق على البوت/الميني-ويب.
+    if (payload.action == "copy_coupon"
+            and payload.source == "web"
+            and payload.user_id):
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT EXTRACT(EPOCH FROM (NOW() - last_copy_at))::int AS seconds_ago
+                FROM web_users WHERE id = %s
+                """,
+                (payload.user_id,),
+            )
+            row = cur.fetchone()
+            if row and row[0] is not None and row[0] < 30:
+                wait = 30 - int(row[0])
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"الرجاء الانتظار {wait} ثانية قبل نسخ كوبون جديد",
+                )
+
     # 2) التحقق من وجود المتجر
     with conn.cursor() as cur:
         cur.execute("SELECT 1 FROM master WHERE store_id = %s", (payload.store_id,))
@@ -116,6 +137,7 @@ def track_action(payload: TrackRequest, request: Request, conn=Depends(get_db)):
                         UPDATE web_users
                         SET store_copy_count = store_copy_count + 1,
                             copied_coupons_history = array_append(copied_coupons_history, %s),
+                            last_copy_at = NOW(),
                             last_seen = NOW()
                         WHERE id = %s
                         """,

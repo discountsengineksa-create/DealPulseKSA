@@ -19,23 +19,33 @@ from api.auth_utils import (
     hash_password,
     hash_reset_code,
     send_reset_email,
+    send_verify_email,
     verify_password,
 )
 from api.db import get_db
 from api.schemas.auth import (
+    ChangePasswordRequest,
     ForgotPasswordRequest,
     ForgotPasswordResponse,
     LoginRequest,
+    ProfileUpdateRequest,
     RegisterRequest,
     ResetPasswordRequest,
+    SimpleOkResponse,
     TokenResponse,
     UserResponse,
+    VerifyEmailRequest,
 )
 from api.utils.rate_limit import (
+    LIMIT_CHANGE_PASSWORD,
+    LIMIT_DELETE_ACCOUNT,
     LIMIT_FORGOT_PASSWORD,
     LIMIT_LOGIN,
+    LIMIT_PROFILE_UPDATE,
     LIMIT_REGISTER,
     LIMIT_RESET_PASSWORD,
+    LIMIT_SEND_VERIFY,
+    LIMIT_VERIFY_EMAIL,
     limiter,
 )
 
@@ -55,6 +65,9 @@ def _row_to_user(row: dict) -> UserResponse:
         lang=row.get("lang") or "ar",
         gender=row.get("gender"),
         birth_date=row["birth_date"].isoformat() if row.get("birth_date") else None,
+        telegram_username=row.get("telegram_username"),
+        email_verified=row.get("email_verified_at") is not None,
+        consent_at=row["consent_at"].isoformat() if row.get("consent_at") else None,
         visited_clicks=row.get("visited_clicks") or 0,
         store_copy_count=row.get("store_copy_count") or 0,
         manual_favorites=list(row.get("manual_favorites") or []),
@@ -144,9 +157,9 @@ def register(payload: RegisterRequest, request: Request, conn=Depends(get_db)):
                 """
                 INSERT INTO web_users (
                     phone_number, email, display_name, city, country, lang,
-                    gender, birth_date,
+                    gender, birth_date, telegram_username, consent_at,
                     password_hash, last_ip, last_seen, status
-                ) VALUES (%s, %s, %s, %s, 'SA', 'ar', %s, %s, %s, %s, NOW(), 'Active')
+                ) VALUES (%s, %s, %s, %s, 'SA', 'ar', %s, %s, %s, NOW(), %s, %s, NOW(), 'Active')
                 RETURNING *
                 """,
                 (
@@ -156,14 +169,16 @@ def register(payload: RegisterRequest, request: Request, conn=Depends(get_db)):
                     payload.city,
                     payload.gender,
                     payload.birth_date,
+                    payload.telegram_username,
                     pw_hash,
                     client_ip,
                 ),
             )
             user = cur.fetchone()
     except UniqueViolation as e:
-        # PostgreSQL يرجع 'phone_number' أو 'email' في رسالة الخطأ
         msg = str(e).lower()
+        if "telegram_username" in msg or "idx_web_users_telegram_username" in msg:
+            raise HTTPException(status_code=409, detail="اسم المستخدم في تيليجرام مرتبط بحساب آخر")
         if "phone" in msg:
             raise HTTPException(status_code=409, detail="رقم الجوال مسجّل مسبقاً")
         if "email" in msg:
@@ -177,7 +192,7 @@ def register(payload: RegisterRequest, request: Request, conn=Depends(get_db)):
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit(LIMIT_LOGIN)
 def login(payload: LoginRequest, request: Request, conn=Depends(get_db)):
-    """تسجيل دخول. username = جوال أو إيميل."""
+    """تسجيل دخول. username = جوال أو إيميل. remember_me=true → JWT 30 يوم."""
     user = _find_user_by_username(conn, payload.username)
     if not user or not user.get("password_hash"):
         raise HTTPException(status_code=401, detail="بيانات الدخول غير صحيحة")
@@ -189,7 +204,9 @@ def login(payload: LoginRequest, request: Request, conn=Depends(get_db)):
     with conn.cursor() as cur:
         cur.execute("UPDATE web_users SET last_seen = NOW() WHERE id = %s", (user["id"],))
 
-    token = create_jwt_token(user["id"])
+    # remember_me يمدّد الجلسة لـ 30 يوم بدل 14 الافتراضية
+    expiry_days = 30 if payload.remember_me else None
+    token = create_jwt_token(user["id"], expiry_days=expiry_days)
     return TokenResponse(token=token, user=_row_to_user(user))
 
 
@@ -310,3 +327,187 @@ def reset_password(payload: ResetPasswordRequest, request: Request, conn=Depends
 
     jwt_token = create_jwt_token(updated_user["id"])
     return TokenResponse(token=jwt_token, user=_row_to_user(updated_user))
+
+
+# ─── Logged-in user endpoints (PATCH/DELETE/change-password/verify-email) ──
+@router.post("/change-password", response_model=SimpleOkResponse)
+@limiter.limit(LIMIT_CHANGE_PASSWORD)
+def change_password(
+    payload: ChangePasswordRequest,
+    request: Request,
+    user=Depends(get_current_user),
+    conn=Depends(get_db),
+):
+    """تغيير كلمة السر للمستخدم المسجّل دخوله (يتطلّب كلمة السر الحالية)."""
+    if not user.get("password_hash") or not verify_password(payload.current_password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="كلمة السر الحالية غير صحيحة")
+
+    if payload.current_password == payload.new_password:
+        raise HTTPException(status_code=400, detail="كلمة السر الجديدة مطابقة للحالية")
+
+    new_hash = hash_password(payload.new_password)
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE web_users SET password_hash = %s, last_seen = NOW() WHERE id = %s",
+            (new_hash, user["id"]),
+        )
+        # نظّف أي كودات استعادة معلّقة بعد تغيير الكلمة (أمان)
+        cur.execute(
+            "UPDATE password_reset_tokens SET used = TRUE WHERE user_id = %s AND used = FALSE",
+            (user["id"],),
+        )
+    return SimpleOkResponse(message="تم تغيير كلمة السر")
+
+
+@router.patch("/me", response_model=UserResponse)
+@limiter.limit(LIMIT_PROFILE_UPDATE)
+def update_profile(
+    payload: ProfileUpdateRequest,
+    request: Request,
+    user=Depends(get_current_user),
+    conn=Depends(get_db),
+):
+    """تعديل البروفايل: display_name / city / gender / birth_date / telegram_username.
+    الإيميل/الجوال غير قابلين للتعديل من هنا. كل الحقول اختيارية — ما تُمرّره يُحدَّث.
+    """
+    # ابني UPDATE ديناميكي للحقول الممرّرة فقط
+    fields = []
+    values = []
+    if payload.display_name is not None:
+        fields.append("display_name = %s"); values.append(payload.display_name)
+    if payload.city is not None:
+        fields.append("city = %s"); values.append(payload.city)
+    if payload.gender is not None:
+        fields.append("gender = %s"); values.append(payload.gender)
+    if payload.birth_date is not None:
+        fields.append("birth_date = %s"); values.append(payload.birth_date)
+    if payload.telegram_username is not None:
+        fields.append("telegram_username = %s"); values.append(payload.telegram_username)
+
+    if not fields:
+        # لا تعديل — رجّع البيانات الحالية بدون SQL
+        return _row_to_user(user)
+
+    fields.append("last_seen = NOW()")
+    values.append(user["id"])
+
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                f"UPDATE web_users SET {', '.join(fields)} WHERE id = %s RETURNING *",
+                tuple(values),
+            )
+            updated = cur.fetchone()
+    except UniqueViolation as e:
+        msg = str(e).lower()
+        if "telegram_username" in msg or "idx_web_users_telegram_username" in msg:
+            raise HTTPException(status_code=409, detail="اسم المستخدم في تيليجرام مرتبط بحساب آخر")
+        raise HTTPException(status_code=409, detail="القيمة مستخدمة بالفعل")
+
+    return _row_to_user(updated)
+
+
+@router.delete("/me", response_model=SimpleOkResponse)
+@limiter.limit(LIMIT_DELETE_ACCOUNT)
+def delete_account(
+    request: Request,
+    user=Depends(get_current_user),
+    conn=Depends(get_db),
+):
+    """حذف الحساب نهائياً (PDPL — حق النسيان).
+    يحذف الصف من web_users؛ CASCADE ينظّف password_reset_tokens و
+    email_verification_codes. سجلات action_logs تبقى (بـ user_id يتيم — لا
+    معلومات شخصية فيه)، للحفاظ على ثبات تحليلات الأعمال التاريخية.
+    """
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM web_users WHERE id = %s", (user["id"],))
+    return SimpleOkResponse(message="تم حذف الحساب نهائياً")
+
+
+@router.post("/send-verify-email", response_model=SimpleOkResponse)
+@limiter.limit(LIMIT_SEND_VERIFY)
+def send_verify_email_endpoint(
+    request: Request,
+    user=Depends(get_current_user),
+    conn=Depends(get_db),
+):
+    """يرسل كود 6 أرقام لتأكيد إيميل المستخدم. صالح 15 دقيقة."""
+    if user.get("email_verified_at"):
+        raise HTTPException(status_code=400, detail="الإيميل مؤكّد سابقاً")
+    if not user.get("email"):
+        raise HTTPException(status_code=400, detail="لا يوجد إيميل في الحساب")
+
+    # حد بسيط: لا أكثر من 3 كودات في 15 دقيقة (يطابق LIMIT_SEND_VERIFY)
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT COUNT(*) FROM email_verification_codes
+            WHERE user_id = %s AND created_at > NOW() - INTERVAL '15 minutes'
+            """,
+            (user["id"],),
+        )
+        recent = cur.fetchone()[0]
+    if recent >= 3:
+        raise HTTPException(status_code=429, detail="أرسلت كودات كثيرة، انتظر قليلاً")
+
+    from datetime import datetime, timedelta, timezone
+    code = generate_reset_code()
+    code_hash = hash_reset_code(code)
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+    client_ip = request.client.host if request.client else None
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO email_verification_codes (user_id, code_hash, expires_at, request_ip)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (user["id"], code_hash, expires_at, client_ip),
+        )
+
+    send_verify_email(
+        to_email=user["email"],
+        user_name=user.get("display_name") or "عزيزي العميل",
+        code=code,
+    )
+    return SimpleOkResponse(message=f"تم إرسال كود التأكيد إلى {_mask_email(user['email'])}")
+
+
+@router.post("/verify-email", response_model=UserResponse)
+@limiter.limit(LIMIT_VERIFY_EMAIL)
+def verify_email_endpoint(
+    payload: VerifyEmailRequest,
+    request: Request,
+    user=Depends(get_current_user),
+    conn=Depends(get_db),
+):
+    """تأكيد الإيميل بكود 6 أرقام (المُرسَل عبر /send-verify-email)."""
+    if user.get("email_verified_at"):
+        return _row_to_user(user)  # مؤكّد فعلاً — idempotent
+
+    code_hash = hash_reset_code(payload.code)
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT * FROM email_verification_codes
+            WHERE user_id = %s AND code_hash = %s
+              AND used = FALSE AND expires_at > NOW()
+            ORDER BY created_at DESC LIMIT 1
+            """,
+            (user["id"], code_hash),
+        )
+        token_row = cur.fetchone()
+    if not token_row:
+        raise HTTPException(status_code=400, detail="كود غير صحيح أو منتهي الصلاحية")
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            "UPDATE web_users SET email_verified_at = NOW() WHERE id = %s RETURNING *",
+            (user["id"],),
+        )
+        updated = cur.fetchone()
+        cur.execute(
+            "UPDATE email_verification_codes SET used = TRUE WHERE user_id = %s AND used = FALSE",
+            (user["id"],),
+        )
+    return _row_to_user(updated)
