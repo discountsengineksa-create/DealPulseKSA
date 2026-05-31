@@ -892,28 +892,16 @@ function _sendSearchTrack() {
     _lastSentKw = p.kw;
     _lastSentAt = now;
 
-    const matchedStoreId = p.matches[0] ? p.matches[0].store_id : null;
-
-    // (1) direct_search — لـ«لوحة القرار» + تحليل فجوات الكلمات (مع/بدون match)
+    // استدعاء واحد فقط: السيرفر يكتب في direct_search + action_logs (atomic).
+    // كتابتان من العميل عبر sendBeacon متتاليتين غير موثوقتين على Telegram
+    // WebView (Android خاصةً). dual-write في السيرفر يحلّ هذا.
     _postFireAndForget(`${API_BASE}/track/search`, JSON.stringify({
         keyword: p.kw,
-        store_id: matchedStoreId,
+        store_id: p.matches[0] ? p.matches[0].store_id : null,
         user_found: p.matches.length > 0,
         platform: 'Miniapp',
         user_id: tgUserId,
     }));
-
-    // (2) action_logs — لـ«مين نسخ من متجر» (مرآة لسلوك البوت)
-    //     يُرسل فقط إذا في متجر مطابق (store_id مطلوب في /track).
-    if (matchedStoreId) {
-        _postFireAndForget(`${API_BASE}/track`, JSON.stringify({
-            user_id: tgUserId,
-            store_id: matchedStoreId,
-            action: 'search',
-            source: 'telegram_miniapp',
-            details: `keyword:${p.kw}`,
-        }));
-    }
 }
 
 function flushSearchTrack() {

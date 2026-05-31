@@ -145,14 +145,27 @@ def track_action(payload: TrackRequest, request: Request, conn=Depends(get_db)):
     )
 
 
+_PLATFORM_TO_SOURCE = {
+    "Web": "web",
+    "Bot": "bot",
+    "Dashboard": "dashboard",
+    "Miniapp": "telegram_miniapp",
+}
+
+
 @router.post("/search", response_model=SearchLogResponse, status_code=201)
 @limiter.limit(LIMIT_TRACK_SEARCH)
 def log_search(payload: SearchLogRequest, request: Request, conn=Depends(get_db)):
     """
-    تسجيل كلمة بحث في direct_search — لتحليل ما يبحث عنه المستخدمون.
-    user_found=False يُحدّد فجوات المحتوى (متاجر مطلوبة لكنها غير موجودة).
+    تسجيل كلمة بحث — كتابتان atomic في DB:
+      1. direct_search: للوحة القرار + تحليل فجوات الكلمات (دائماً).
+      2. action_logs (action_type='search'): لـ«مين نسخ من متجر» — فقط
+         إذا في store_id مطابق (لأن «مين نسخ» يجمع بـ store_id).
+    هذا يطابق سلوك البوت (log_search + log_action) فيوحّد المخرَجات بين
+    التبويبات بغض النظر عن مصدر العميل (web / miniapp / bot).
     """
     with conn.cursor() as cur:
+        # (1) direct_search — لكل بحث (مع/بدون match) لتحليل الفجوات
         cur.execute(
             """
             INSERT INTO direct_search
@@ -165,6 +178,43 @@ def log_search(payload: SearchLogRequest, request: Request, conn=Depends(get_db)
                 payload.user_id, payload.user_email,
             ),
         )
+
+        # (2) action_logs — فقط إذا في store_id (مرآة لـ log_action في البوت)
+        if payload.store_id:
+            geo = extract_geo(request)
+            quality, is_dc, is_proxy = compute_quality_score(geo)
+            source = _PLATFORM_TO_SOURCE.get(payload.platform, "web")
+            cur.execute(
+                """
+                INSERT INTO action_logs (
+                    user_id, store_id, action_type, details, source,
+                    event_id, ip_hash, user_agent_hash,
+                    country_code, region_code, city, postal_code,
+                    lat, lng, isp, asn,
+                    is_datacenter, is_proxy, device_class,
+                    cf_bot_score, quality_score
+                )
+                VALUES (
+                    %s, %s, 'search', %s, %s,
+                    %s::uuid, decode(%s, 'hex'), decode(%s, 'hex'),
+                    %s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s, %s,
+                    %s, %s
+                )
+                ON CONFLICT (event_id) DO NOTHING
+                """,
+                (
+                    payload.user_id, payload.store_id,
+                    f"keyword:{payload.keyword};found:{payload.user_found}",
+                    source,
+                    geo.event_id, geo.ip_hash, geo.ua_hash,
+                    geo.country_code, geo.region_code, geo.city, geo.postal_code,
+                    geo.lat, geo.lng, geo.isp, geo.asn,
+                    is_dc, is_proxy, geo.device_class,
+                    geo.cf_bot_score, quality,
+                ),
+            )
     return SearchLogResponse(ok=True, keyword=payload.keyword)
 
 
