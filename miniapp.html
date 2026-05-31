@@ -530,8 +530,9 @@ function showCategoryView(name) {
 }
 
 function showStoreView(storeId) {
-    // المستخدم اختار نتيجة بحث — flush البحث المعلّق قبل التحويل
-    flushSearchTrack();
+    // flush فقط لو المستخدم في وضع بحث نشط (يعني فعلاً اختار نتيجة بحث).
+    // بدون هذا الشرط، نقر متجر من «أبرز المتاجر» سيُسجّل بحثاً معلّقاً قديماً.
+    if (activeSearch && _searchPending) flushSearchTrack();
     viewStack.push({ view: currentView, context: { ...viewContext } });
     viewContext = { storeId };
     renderStoreView(storeId);
@@ -853,16 +854,28 @@ function copyText(txt) {
 }
 
 // ── تتبع البحث ──────────────────────────────────────────────────────────
-// قاعدة التصميم: **بحث واحد لكل نيّة واحدة** (intent-based).
-// لا نُسجِّل أثناء الكتابة (يضخّم العدد مع كل pause طويل). نسجّل فقط عند
-// لحظة الـ action: نقر نتيجة / Enter / blur / خروج من الميني-ويب. وعند
-// كل action نُرسل آخر pending فقط، ثم نُصفّره لتفادي التكرار.
-let _searchPending = null;        // {kw, matches} ينتظر action للإرسال
+// قاعدة التصميم: **بحث واحد لكل نيّة واحدة**.
+// نسجّل فقط عند action صريح: نقر نتيجة بحث، Enter، أو إغلاق الميني-ويب.
+// حماية ثانية: dedup بالكلمة + الوقت (نفس الكلمة خلال 30s = تجاهل) —
+// يحمي من أي سلوك مزدوج للـ sendBeacon في Telegram WebView على Android.
+let _searchPending = null;
+let _lastSentKw = null;
+let _lastSentAt = 0;
+const _DEDUP_MS = 30000;
 
 function _sendSearchTrack() {
     if (!_searchPending) return;
     const p = _searchPending;
-    _searchPending = null;        // تصفير فوري لتفادي إرسال مكرّر
+    _searchPending = null;        // تصفير فوري
+
+    // dedup: نفس الكلمة + خلال 30 ثانية = تجاهل
+    const now = Date.now();
+    if (_lastSentKw === p.kw && (now - _lastSentAt) < _DEDUP_MS) {
+        return;
+    }
+    _lastSentKw = p.kw;
+    _lastSentAt = now;
+
     const body = JSON.stringify({
         keyword: p.kw,
         store_id: p.matches[0] ? p.matches[0].store_id : null,
@@ -870,7 +883,6 @@ function _sendSearchTrack() {
         platform: 'Miniapp',
         user_id: tgUserId,
     });
-    // sendBeacon = fire-and-forget موثوق حتى عند تغيير الشاشة فوراً بعد الإرسال
     try {
         if (navigator.sendBeacon) {
             const ok = navigator.sendBeacon(
@@ -880,7 +892,6 @@ function _sendSearchTrack() {
             if (ok) return;
         }
     } catch (e) {}
-    // fallback لو sendBeacon غير متاح (نسخ قديمة من Telegram WebView)
     fetch(`${API_BASE}/track/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -890,7 +901,6 @@ function _sendSearchTrack() {
 }
 
 function flushSearchTrack() {
-    // يُستدعى من showStoreView وEnter وblur وpagehide
     _sendSearchTrack();
 }
 
@@ -898,7 +908,7 @@ function onSearch(v) {
     activeSearch = v.toLowerCase();
     renderStores();
 
-    // نُحدّث pending فقط — لا نُرسل. الإرسال يتم عند action لاحقاً.
+    // نُحدّث pending فقط. الإرسال عند action لاحقاً.
     const kw = (v || '').trim();
     if (kw.length < 2) {
         _searchPending = null;
@@ -1142,7 +1152,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // initProfileCheck();  // disabled — see comment above
 
     // Enter = إرسال فوري (نيّة واضحة)
-    // blur = خرج المستخدم من خانة البحث (انتقل لشي ثاني) — إرسال أيضاً
+    // أزلت blur + beforeunload + visibilitychange — كلها triggers مشكوك فيها
+    // في Telegram WebView (تُطلق على فتح/إغلاق keyboard وغيره). نكتفي بـ:
+    //   showStoreView (نقر نتيجة بحث)، Enter، pagehide.
     const _srch = document.getElementById('srchInput');
     if (_srch) {
         _srch.addEventListener('keydown', (e) => {
@@ -1152,16 +1164,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 _srch.blur();   // يخفي الـ keyboard على الجوال
             }
         });
-        _srch.addEventListener('blur', flushSearchTrack);
     }
 });
 
-// خروج/إخفاء الميني-ويب — آخر فرصة لإرسال البحث المعلّق
+// إغلاق الميني-ويب فقط — آخر فرصة لإرسال البحث المعلّق
 window.addEventListener('pagehide', flushSearchTrack);
-window.addEventListener('beforeunload', flushSearchTrack);
-document.addEventListener('visibilitychange', () => {
-    if (document.hidden) flushSearchTrack();
-});
 </script>
 </body>
 </html>
