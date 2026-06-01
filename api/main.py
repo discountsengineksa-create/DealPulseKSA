@@ -22,6 +22,7 @@ _logging.basicConfig(
 
 import os
 import pathlib
+import re
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,6 +40,11 @@ _raw_origins = os.getenv(
     "http://localhost:3000,http://localhost:5173,http://127.0.0.1:8000"
 )
 ALLOWED_ORIGINS: list[str] = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+
+# ALLOWED_ORIGIN_REGEX يلتقط Vercel preview URLs (تتغير مع كل deployment).
+# مثال: ^https://dealpulseksa(-[a-z0-9]+)?-salah-asiri-s-projects\.vercel\.app$
+ALLOWED_ORIGIN_REGEX: str | None = os.getenv("ALLOWED_ORIGIN_REGEX") or None
+_origin_regex_compiled = re.compile(ALLOWED_ORIGIN_REGEX) if ALLOWED_ORIGIN_REGEX else None
 
 app = FastAPI(
     title="Deal Pulse KSA API",
@@ -59,7 +65,12 @@ def _rate_limit_with_cors_handler(request: Request, exc: RateLimitExceeded):
         content={"detail": f"Rate limit exceeded: {exc.detail}"},
     )
     origin = request.headers.get("origin", "")
-    if origin and (origin in ALLOWED_ORIGINS or origin == "null"):
+    origin_allowed = (
+        origin in ALLOWED_ORIGINS
+        or origin == "null"
+        or (_origin_regex_compiled is not None and bool(_origin_regex_compiled.match(origin)))
+    )
+    if origin and origin_allowed:
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Vary"] = "Origin"
@@ -75,6 +86,7 @@ if "*" in ALLOWED_ORIGINS:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=ALLOWED_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE", "PUT", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
