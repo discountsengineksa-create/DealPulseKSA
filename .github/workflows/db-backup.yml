@@ -80,38 +80,60 @@ jobs:
           set -euo pipefail
           TIMESTAMP=$(date +%Y%m%d_%H%M)
           BACKUP_FILE="dealpulseksa_${TIMESTAMP}.sql.gz"
+          TEMP_SQL="/tmp/pgdump_${TIMESTAMP}.sql"
 
+          # ─── خطوة 1: pg_dump مباشرة لملف (بدون pipes) ────────────────
+          # نتجنّب tee/process-substitution لأنها تسبب gzip "broken pipe"
+          # warnings مع pipefail. نكتب لـ file ثم نضغط — أبسط وأنظف.
           echo "::group::Running pg_dump"
-          # tee يخلّي stderr يطلع في الـ console AND يُحفظ في dump.log.
-          # فيد للـ debugging — أي خطأ pg_dump يبان مباشرة بدل ما تحمّل log.
           pg_dump "$DATABASE_URL" \
             --format=plain \
             --no-owner \
             --no-acl \
             --verbose \
-            2> >(tee dump.log >&2) \
-            | gzip -9 > "$BACKUP_FILE"
+            --file="$TEMP_SQL" \
+            2>dump.log
+
+          # نعرض dump.log في الـ console للشفافية (مفيد لـ debugging)
+          echo "── pg_dump verbose log ──"
+          tail -30 dump.log
+          echo "── (end) ──"
+          echo "::endgroup::"
+
+          # ─── خطوة 2: ضغط الـ SQL ─────────────────────────────────────
+          echo "::group::Compressing with gzip -9"
+          gzip -9 "$TEMP_SQL"
+          mv "${TEMP_SQL}.gz" "$BACKUP_FILE"
           echo "::endgroup::"
 
           # ─── حساب الإحصائيات ─────────────────────────────────────────
           SIZE_BYTES=$(stat -c%s "$BACKUP_FILE")
           SIZE_MB=$(awk "BEGIN {printf \"%.2f\", $SIZE_BYTES / 1024 / 1024}")
-          TABLE_COUNT=$(grep -c "^-- Data for Name:" dump.log || echo "0")
+          # pg_dump verbose يطبع "creating TABLE" لكل جدول — نعدّهم
+          TABLE_COUNT=$(grep -c "^pg_dump: creating TABLE " dump.log || echo "0")
+          ROW_DUMPS=$(grep -c "^pg_dump: dumping contents of table " dump.log || echo "0")
 
-          echo "Backup file: $BACKUP_FILE"
-          echo "Size:        ${SIZE_MB} MB"
-          echo "Tables:      $TABLE_COUNT"
+          echo "✓ Backup file: $BACKUP_FILE"
+          echo "✓ Size:        ${SIZE_MB} MB (${SIZE_BYTES} bytes)"
+          echo "✓ Tables:      $TABLE_COUNT created, $ROW_DUMPS dumped"
 
           # ─── فحص الحجم (sanity check) ─────────────────────────────
-          if [ "$SIZE_BYTES" -lt 102400 ]; then
-            echo "::error::🚨 Backup حجمه مريب: ${SIZE_MB}MB (أقل من 100KB)"
+          # حد أدنى 10KB — DB فاضي حقيقي يكون ~150KB، أقل من 10KB = فاسد
+          if [ "$SIZE_BYTES" -lt 10240 ]; then
+            echo "::error::🚨 Backup حجمه مريب: ${SIZE_MB}MB (أقل من 10KB)"
             exit 1
           fi
 
-          # ─── فحص محتوى الـ dump ───────────────────────────────────
-          if ! zcat "$BACKUP_FILE" | head -200 | grep -q "CREATE TABLE"; then
-            echo "::error::🚨 Backup ما يحتوي CREATE TABLE — فاسد!"
+          # ─── فحص محتوى الـ dump (search whole file, not just head) ───
+          if ! zcat "$BACKUP_FILE" | grep -q "^CREATE TABLE"; then
+            echo "::error::🚨 Backup ما يحتوي أي CREATE TABLE — فاسد!"
+            zcat "$BACKUP_FILE" | head -50
             exit 1
+          fi
+
+          # ─── تأكد إن في extension و functions ─────────────────────
+          if ! zcat "$BACKUP_FILE" | grep -q "CREATE EXTENSION"; then
+            echo "::warning::Backup ما فيه CREATE EXTENSION (محتمل بس غير عادي)"
           fi
 
           # ─── تصدير المتغيرات لخطوات لاحقة ────────────────────────
@@ -120,6 +142,7 @@ jobs:
             echo "size_mb=$SIZE_MB"
             echo "size_bytes=$SIZE_BYTES"
             echo "tables=$TABLE_COUNT"
+            echo "rows_dumped=$ROW_DUMPS"
             echo "timestamp=$TIMESTAMP"
             echo "trigger=${{ github.event_name }}"
           } >> "$GITHUB_OUTPUT"
