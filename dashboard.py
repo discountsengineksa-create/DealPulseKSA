@@ -4914,6 +4914,67 @@ elif page == "تحليل المستخدمين":
                             else:
                                 st.dataframe(df_stores, use_container_width=True, hide_index=True)
 
+                        # ── ❤️ المفضلة (منفصلة لكل حساب — لا دمج للحسابات) ──
+                        # كل حساب (الموقع / تيليجرام) يُعرض مستقلاً، وداخله المتاجر
+                        # منفصلة عن الأقسام. هذه قاعدة التنبيه المخصّص مستقبلاً.
+                        st.divider()
+                        st.write("### ❤️ المفضلة")
+                        st.caption("مفضلة كل حساب تُعرض منفصلة (الموقع ≠ تيليجرام) · "
+                                   "المتاجر منفصلة عن الأقسام · من جدول `user_favorites` الموحّد.")
+
+                        _fav_plat = {"bot": "📱 تيليجرام", "web": "🌐 ويب",
+                                     "miniapp": "🔹 ميني ويب"}
+
+                        def _render_favs_block(owner_col, owner_val, label):
+                            """يعرض مفضلة حساب واحد: متاجر + أقسام منفصلتين."""
+                            # owner_col قيمة حرفية مضبوطة (web_user_id | telegram_id) — لا حقن.
+                            fav_df = pd.read_sql(
+                                f"""
+                                SELECT kind, store_id, category_name, platform,
+                                       TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI') AS added_at
+                                FROM user_favorites
+                                WHERE {owner_col} = %s
+                                ORDER BY created_at DESC
+                                """,
+                                conn, params=(owner_val,),
+                            )
+                            st.markdown(f"**{label}**")
+                            if fav_df.empty:
+                                st.caption("— لا مفضلة لهذا الحساب بعد —")
+                                return
+                            stores_df = fav_df[fav_df["kind"] == "store"]
+                            cats_df   = fav_df[fav_df["kind"] == "category"]
+                            fc1, fc2 = st.columns(2)
+                            with fc1:
+                                st.markdown(f"🏪 متاجر مفضّلة ({len(stores_df)})")
+                                if stores_df.empty:
+                                    st.caption("—")
+                                else:
+                                    v = (stores_df[["store_id", "platform", "added_at"]]
+                                         .rename(columns={"store_id": "المتجر",
+                                                          "platform": "المنصة",
+                                                          "added_at": "أُضيف"}))
+                                    v["المنصة"] = v["المنصة"].map(_fav_plat).fillna(v["المنصة"])
+                                    st.dataframe(v, use_container_width=True, hide_index=True)
+                            with fc2:
+                                st.markdown(f"🏷️ أقسام مفضّلة ({len(cats_df)})")
+                                if cats_df.empty:
+                                    st.caption("—")
+                                else:
+                                    v = (cats_df[["category_name", "platform", "added_at"]]
+                                         .rename(columns={"category_name": "القسم",
+                                                          "platform": "المنصة",
+                                                          "added_at": "أُضيف"}))
+                                    v["المنصة"] = v["المنصة"].map(_fav_plat).fillna(v["المنصة"])
+                                    st.dataframe(v, use_container_width=True, hide_index=True)
+
+                        if web_user:
+                            _render_favs_block("web_user_id", int(web_user["id"]),
+                                               "🌐 مفضلة حساب الموقع")
+                        if bot_user:
+                            _render_favs_block("telegram_id", int(bot_user["telegram_id"]),
+                                               "📱 مفضلة حساب تيليجرام")
+
                         # ── آخر 30 حركة ───────────────────────────────
                         if user_ids:
                             st.divider()
