@@ -3134,9 +3134,9 @@ elif page == "تحليل المتاجر":
             else:
                 who["المدينة"] = "غير معروف"
 
-            # ── ❤️ المفضلة: هل هذا الناسخ أضاف المتجر لمفضلته ومن أي منصة؟ ──
+            # ── ❤️ المفضلة: هل أضاف هذا الناسخ هذا المتجر لمفضلته؟ ──
             # نطابق المفضلة بنفس منطق identity (@username للتيليجرام، الاسم/الإيميل
-            # للويب) فتظهر بجانب من نسخ — لمعرفة مين فضّل ومن أي منصة.
+            # للويب). لو فضّله نكتب **اسم المتجر** (لا المنصة — المصدر يبيّنها أصلاً).
             def _cln(v):
                 if v is None or (isinstance(v, float) and pd.isna(v)):
                     return ""
@@ -3147,10 +3147,9 @@ elif page == "تحليل المتاجر":
                 _fw = _sa_load_favorites()
             except Exception:
                 _fw = pd.DataFrame()
-            _fav_lookup = {}
+            _fav_set = set()   # {(identity, store_id)} لمن فضّل متجراً (kind='store')
             if not _fw.empty and "kind" in _fw.columns:
                 _fw = _fw[_fw["kind"] == "store"]
-                _plat_ar = {"bot": "📱 تيليجرام", "web": "🌐 ويب", "miniapp": "🔹 ميني ويب"}
 
                 def _fav_ident(r):
                     if pd.notna(r.get("telegram_id")):
@@ -3170,13 +3169,11 @@ elif page == "تحليل المتاجر":
                     _id = _fav_ident(_fr)
                     if _id is None or pd.isna(_fr.get("store_id")):
                         continue
-                    _fav_lookup[(_id, _fr["store_id"])] = _plat_ar.get(
-                        _fr.get("platform"), _fr.get("platform"))
+                    _fav_set.add((_id, _fr["store_id"]))
 
             def _who_fav(r):
                 _sid = r["store_id"] if sel == _ALL_STORES else sel
-                p = _fav_lookup.get((r["identity"], _sid))
-                return f"❤️ {p}" if p else "—"
+                return f"❤️ {_sid}" if (r["identity"], _sid) in _fav_set else "—"
 
             who["❤️ المفضلة"] = who.apply(_who_fav, axis=1)
 
