@@ -117,24 +117,33 @@ jobs:
           echo "✓ Size:        ${SIZE_MB} MB (${SIZE_BYTES} bytes)"
           echo "✓ Tables:      $TABLE_COUNT created, $ROW_DUMPS dumped"
 
-          # ─── فحص الحجم (sanity check) ─────────────────────────────
-          # حد أدنى 10KB — DB فاضي حقيقي يكون ~150KB، أقل من 10KB = فاسد
+          # ─── فحوصات الجودة (بدون pipes لتجنّب pipefail+SIGPIPE) ────
+
+          # (1) الحجم الأدنى — DB فاضي حقيقي يكون ~150KB
           if [ "$SIZE_BYTES" -lt 10240 ]; then
             echo "::error::🚨 Backup حجمه مريب: ${SIZE_MB}MB (أقل من 10KB)"
             exit 1
           fi
 
-          # ─── فحص محتوى الـ dump (search whole file, not just head) ───
-          if ! zcat "$BACKUP_FILE" | grep -q "^CREATE TABLE"; then
-            echo "::error::🚨 Backup ما يحتوي أي CREATE TABLE — فاسد!"
-            zcat "$BACKUP_FILE" | head -50
+          # (2) ملف gzip سليم — gunzip -t يفحص الـ integrity بدون decompression
+          # كامل، وبدون pipes (لا pipefail issues).
+          if ! gunzip -t "$BACKUP_FILE" 2>gunzip_test.log; then
+            echo "::error::🚨 Backup ملف gzip فاسد:"
+            cat gunzip_test.log
             exit 1
           fi
+          echo "✓ gzip integrity check passed"
 
-          # ─── تأكد إن في extension و functions ─────────────────────
-          if ! zcat "$BACKUP_FILE" | grep -q "CREATE EXTENSION"; then
-            echo "::warning::Backup ما فيه CREATE EXTENSION (محتمل بس غير عادي)"
+          # (3) pg_dump verbose قال إنه أنشأ جداول
+          # هذا أوثق من grep على ملف الـ .sql.gz — يجي من stderr مباشرة
+          # من العملية الفعلية، لذا لو الـ dump فشل صامتاً، TABLE_COUNT=0.
+          if [ "$TABLE_COUNT" -lt 1 ]; then
+            echo "::error::🚨 pg_dump verbose log ما يحتوي أي 'creating TABLE' — dump فشل صامتاً"
+            echo "── آخر 30 سطر من dump.log: ──"
+            tail -30 dump.log
+            exit 1
           fi
+          echo "✓ pg_dump created $TABLE_COUNT tables"
 
           # ─── تصدير المتغيرات لخطوات لاحقة ────────────────────────
           {
