@@ -3133,6 +3133,53 @@ elif page == "تحليل المتاجر":
                 who["المدينة"] = who["identity"].map(cmap).fillna("غير معروف")
             else:
                 who["المدينة"] = "غير معروف"
+
+            # ── ❤️ المفضلة: هل هذا الناسخ أضاف المتجر لمفضلته ومن أي منصة؟ ──
+            # نطابق المفضلة بنفس منطق identity (@username للتيليجرام، الاسم/الإيميل
+            # للويب) فتظهر بجانب من نسخ — لمعرفة مين فضّل ومن أي منصة.
+            def _cln(v):
+                if v is None or (isinstance(v, float) and pd.isna(v)):
+                    return ""
+                s = str(v).strip()
+                return "" if s.lower() == "nan" else s
+
+            try:
+                _fw = _sa_load_favorites()
+            except Exception:
+                _fw = pd.DataFrame()
+            _fav_lookup = {}
+            if not _fw.empty and "kind" in _fw.columns:
+                _fw = _fw[_fw["kind"] == "store"]
+                _plat_ar = {"bot": "📱 تيليجرام", "web": "🌐 ويب", "miniapp": "🔹 ميني ويب"}
+
+                def _fav_ident(r):
+                    if pd.notna(r.get("telegram_id")):
+                        u = _cln(r.get("bu_username"))
+                        if u:
+                            return "@" + u.lstrip("@")
+                        if r.get("platform") == "miniapp":
+                            return f"🔹 ميني ويب {int(r['telegram_id'])}"
+                        return f"تيليجرام {int(r['telegram_id'])}"
+                    for k in ("web_name", "web_email"):
+                        v = _cln(r.get(k))
+                        if v:
+                            return v
+                    return None
+
+                for _, _fr in _fw.iterrows():
+                    _id = _fav_ident(_fr)
+                    if _id is None or pd.isna(_fr.get("store_id")):
+                        continue
+                    _fav_lookup[(_id, _fr["store_id"])] = _plat_ar.get(
+                        _fr.get("platform"), _fr.get("platform"))
+
+            def _who_fav(r):
+                _sid = r["store_id"] if sel == _ALL_STORES else sel
+                p = _fav_lookup.get((r["identity"], _sid))
+                return f"❤️ {p}" if p else "—"
+
+            who["❤️ المفضلة"] = who.apply(_who_fav, axis=1)
+
             who = who.rename(columns={"identity": "المستخدم", "store_id": "المتجر",
                                       "copy_coupon": "نسخ", "click_link": "نقر",
                                       "search": "بحث",
@@ -3141,10 +3188,10 @@ elif page == "تحليل المتاجر":
             who["أول نسخ"] = pd.to_datetime(who["أول نسخ"]).dt.strftime("%Y-%m-%d %H:%M")
             who["آخر نسخ"] = pd.to_datetime(who["آخر نسخ"]).dt.strftime("%Y-%m-%d %H:%M")
             _cols = (["المستخدم", "المتجر", "المصدر", "نسخ", "نقر", "بحث",
-                      "المدينة", "أول نسخ", "آخر نسخ"]
+                      "❤️ المفضلة", "المدينة", "أول نسخ", "آخر نسخ"]
                      if sel == _ALL_STORES else
                      ["المستخدم", "المصدر", "نسخ", "نقر", "بحث",
-                      "المدينة", "أول نسخ", "آخر نسخ"])
+                      "❤️ المفضلة", "المدينة", "أول نسخ", "آخر نسخ"])
             st.dataframe(who[_cols], hide_index=True, use_container_width=True)
             _fname = "all" if sel == _ALL_STORES else sel
             st.download_button("📥 تحميل قائمة الناسخين (CSV)",
