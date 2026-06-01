@@ -52,10 +52,16 @@ jobs:
     steps:
       - name: 📦 Install pg_dump 18
         run: |
+          set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-common
           sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
           sudo apt-get install -y -qq postgresql-client-18
+
+          # نُجبر استخدام PG 18 binaries (Ubuntu 24.04 يجي مع PG 16 افتراضياً)
+          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/18/bin/pg_dump --version
+          /usr/lib/postgresql/18/bin/psql --version
 
       # نستخدم GitHub API للحصول على آخر artifact من workflow الـ backup
       - name: 🔎 Find latest backup artifact

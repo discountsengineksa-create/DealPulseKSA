@@ -50,7 +50,16 @@ jobs:
           sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
           sudo apt-get install -y -qq postgresql-client-18
           echo "::endgroup::"
-          pg_dump --version
+
+          # ─── تثبيت PG 18 binaries في بداية الـ PATH ─────────────────
+          # Ubuntu 24.04 يجي مع postgresql-client-16 مسبقاً، والـ wrapper
+          # عند /usr/bin/pg_dump يستخدم الإصدار الافتراضي (16). pg_dump
+          # يتطلّب client.version >= server.version، فلازم نُجبر استخدام 18.
+          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+
+          # تأكيد الإصدار الصحيح بالـ full path
+          /usr/lib/postgresql/18/bin/pg_dump --version
+          /usr/lib/postgresql/18/bin/psql --version
 
       # ─── 2. التحقق من الاتصال بقاعدة البيانات قبل البدء ────────────────
       - name: 🔌 Test database connection
@@ -73,11 +82,14 @@ jobs:
           BACKUP_FILE="dealpulseksa_${TIMESTAMP}.sql.gz"
 
           echo "::group::Running pg_dump"
+          # tee يخلّي stderr يطلع في الـ console AND يُحفظ في dump.log.
+          # فيد للـ debugging — أي خطأ pg_dump يبان مباشرة بدل ما تحمّل log.
           pg_dump "$DATABASE_URL" \
             --format=plain \
             --no-owner \
             --no-acl \
-            --verbose 2>dump.log \
+            --verbose \
+            2> >(tee dump.log >&2) \
             | gzip -9 > "$BACKUP_FILE"
           echo "::endgroup::"
 
