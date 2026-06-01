@@ -3150,13 +3150,9 @@ elif page == "تحليل المتاجر":
             _fav_set = set()   # {(identity, store_id)} لمن فضّل متجراً (kind='store')
             if not _fw.empty and "kind" in _fw.columns:
                 _fw = _fw[_fw["kind"] == "store"]
-                # نَنسِب المفضلة لمنصة إضافتها: في فلتر «ميني ويب» لا تظهر مفضلة
-                # أُضيفت من البوت (نفس telegram_id لكن منصّة مختلفة) — لا تكرار.
-                _PLAT_F = {"📱 تيليجرام": ["bot"], "🌐 ويب": ["web"],
-                           "🔹 ميني ويب": ["miniapp"]}
-                if src_choice in _PLAT_F:
-                    _fw = _fw[_fw["platform"].isin(_PLAT_F[src_choice])]
-
+                # المفضلة مِلك الشخص لا منصّة الإضافة: البوت والميني-ويب نفس حساب
+                # تيليجرام (نفس telegram_id)، فلا نفصل بينهما — نعرضها بصدق أينما
+                # ظهر الشخص. (الويب حساب منفصل بهوية مختلفة، يتمايز تلقائياً.)
                 def _fav_ident(r):
                     if pd.notna(r.get("telegram_id")):
                         u = _cln(r.get("bu_username"))
