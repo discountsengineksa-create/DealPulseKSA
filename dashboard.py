@@ -2943,6 +2943,27 @@ elif page == "تحليل المتاجر":
         if c not in agg.columns:
             agg[c] = 0
         agg[c] = agg[c].fillna(0).astype(int)
+
+    # ── أعداد المفضّلين لكل متجر (kind='store') — التفضيل كإشارة قرار مباشرة في
+    #    لوحة القرار، تناظراً مع عمود «مفضّلون» في صفحة «تحليل الأقسام». ──
+    try:
+        _favs_all = _sa_load_favorites()
+    except Exception:
+        _favs_all = pd.DataFrame()
+    if not _favs_all.empty and "kind" in _favs_all.columns:
+        _favs_store = _favs_all[_favs_all["kind"] == "store"].copy()
+        # احترام فلتر المصدر (platform) المختار أعلى الصفحة
+        _PLAT_F = {"📱 تيليجرام": ["bot"], "🌐 ويب": ["web"], "🔹 ميني ويب": ["miniapp"]}
+        if src_choice in _PLAT_F:
+            _favs_store = _favs_store[_favs_store["platform"].isin(_PLAT_F[src_choice])]
+        if not _favs_store.empty:
+            _fav_cnt = _favs_store.groupby("store_id").size().rename("مفضّلون")
+            agg = agg.merge(_fav_cnt, left_on="store_id", right_index=True, how="left")
+    if "مفضّلون" not in agg.columns:
+        agg["مفضّلون"] = 0
+    agg["مفضّلون"] = agg["مفضّلون"].fillna(0).astype(int)
+
+    # الإجمالي = أحداث التفاعل فقط (نقر/نسخ/بحث). التفضيل إشارة منفصلة لا تُجمع هنا.
     agg["الإجمالي"] = agg["نقرات"] + agg["نسخ"] + agg["بحث"]
     agg["is_trending"] = agg["is_trending"].fillna("عادي")
     agg["logo_url"] = agg["logo_url"].fillna("")
@@ -3012,6 +3033,7 @@ elif page == "تحليل المتاجر":
             "نسخ": board["نسخ"].values,
             "نقرات": board["نقرات"].values,
             "بحث": board["بحث"].values,
+            "❤️": board["مفضّلون"].values,
             "الإجمالي": board["الإجمالي"].values,
             "التوصية": board["التوصية"].values,
         })
@@ -3020,6 +3042,7 @@ elif page == "تحليل المتاجر":
             view, hide_index=True, use_container_width=True,
             column_config={
                 "الشعار": st.column_config.ImageColumn("🏪", width="small"),
+                "❤️": st.column_config.NumberColumn("❤️ مفضّلون", help="عدد الأشخاص الذين أضافوا المتجر لمفضّلتهم"),
                 "الإجمالي": st.column_config.ProgressColumn(
                     "الإجمالي", format="%d", min_value=0, max_value=_maxtot),
             },
