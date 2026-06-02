@@ -675,8 +675,8 @@ function storeCardHTML(s) {
     <div class="card glass" style="position:relative" onclick="showStoreView(${s.id})">
         ${trendBadge}
         ${favHeartHTML(s)}
-        <div class="c-ava"><img src="${logoSrc}" alt="${s.store_id}" onerror="this.onerror=null;this.src='logo.png'"></div>
-        <div class="c-name">${s.store_id}</div>
+        <div class="c-ava"><img src="${logoSrc}" alt="${s.name}" onerror="this.onerror=null;this.src='logo.png'"></div>
+        <div class="c-name">${s.name}</div>
         <div class="disc-badge">${s.disc}</div>
         <div class="c-foot"><span class="go-lbl">${ST.detailsLabel}</span></div>
     </div>`;
@@ -700,8 +700,8 @@ function renderStoreView(storeId) {
 
     document.getElementById('storeBody').innerHTML = `
     <div class="store-hero">
-        <img src="${logoSrc}" alt="${s.store_id}" onerror="this.onerror=null;this.src='logo.png'">
-        <h2>${s.store_id}${s.trending ? ' 🔥' : ''}</h2>
+        <img src="${logoSrc}" alt="${s.name}" onerror="this.onerror=null;this.src='logo.png'">
+        <h2>${s.name}${s.trending ? ' 🔥' : ''}</h2>
         ${s.bio ? `<p>${s.bio}</p>` : ''}
         ${tagsHtml}
     </div>
@@ -770,7 +770,12 @@ async function loadData() {
 
         ALL = items.map(item => ({
             id: item.id,
+            // store_id = المفتاح الأساسي (عربي دائماً) — للمفضلة/التتبّع. ثابت عبر اللغتين.
             store_id: item.store_id || (LANG_CURRENT === 'en' ? 'Store' : 'متجر'),
+            // name = الاسم المعروض (إنجليزي في وضع EN، عربي وإلا) — للعرض فقط.
+            name: (LANG_CURRENT === 'en' && item.name_en)
+                  ? item.name_en
+                  : (item.store_id || (LANG_CURRENT === 'en' ? 'Store' : 'متجر')),
             disc: item.discount_value || (LANG_CURRENT === 'en' ? 'Special offer' : 'خصم خاص'),
             coupon: item.public_coupon || '',
             link: buildLink(item),
@@ -976,7 +981,7 @@ function renderStores() {
     let list;
     if (activeSearch) {
         list = ALL.filter(s => {
-            const hay = (s.store_id + ' ' + (s.bio || '') + ' ' + (s.tags || []).join(' ')).toLowerCase();
+            const hay = (s.store_id + ' ' + (s.name || '') + ' ' + (s.bio || '') + ' ' + (s.tags || []).join(' ')).toLowerCase();
             return hay.includes(activeSearch);
         });
         if (titleEl) titleEl.textContent = LANG_CURRENT === 'en' ? 'Search results' : 'نتائج البحث';
@@ -1144,7 +1149,7 @@ function renderStoryRow() {
         const logo = (s.logo || 'logo.png').replace(/"/g, '&quot;');
         return `<button class="story-item" onclick="openStory(${i})">
             <span class="story-ring"><span class="inner"><img src="${logo}" onerror="this.onerror=null;this.src='logo.png'"></span></span>
-            <span class="story-name">${s.store_id}</span></button>`;
+            <span class="story-name">${s.name}</span></button>`;
     }).join('');
 }
 
@@ -1174,7 +1179,7 @@ function renderStorySlide() {
         STORY.map((_, i) => `<span class="seg"><i id="seg${i}" style="width:${i < storyIdx ? '100%' : '0'}"></i></span>`).join('');
     document.getElementById('storyContent').innerHTML = `
         <div class="s-logo"><img src="${logo}" onerror="this.onerror=null;this.src='logo.png'"></div>
-        <h3>${s.store_id}${s.trending ? ' 🔥' : ''}</h3>
+        <h3>${s.name}${s.trending ? ' 🔥' : ''}</h3>
         ${s.disc ? `<div class="s-offer">Exclusive · ${s.disc}</div>` : ''}
         ${s.coupon ? `<div class="s-code-lbl">${LANG_CURRENT === 'en' ? 'Coupon code' : 'كود الخصم'}</div><div class="s-code">${s.coupon}</div>` : ''}
         <button class="s-visit" onclick="storyVisit(${s.id})">${ST.goToStore}</button>`;

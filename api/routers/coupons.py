@@ -37,8 +37,11 @@ def _select_lang_clause(lang: str) -> str:
     if lang == "en":
         return """
             id,
-            COALESCE(NULLIF(name_en, ''),         store_id)     AS store_id,
-            name_en,
+            store_id,
+            -- name_en للعرض بالإنجليزية. لا نُبدّل store_id بالاسم الإنجليزي:
+            -- store_id هو المفتاح الأساسي (للمفضلة/التتبّع/الربط) ويجب أن يبقى
+            -- ثابتاً عبر اللغتين. الواجهة تعرض name_en وتستخدم store_id للعمليات.
+            COALESCE(NULLIF(name_en, ''), store_id) AS name_en,
             affiliate_link, public_coupon,
             COALESCE(NULLIF(extra_offer_en, ''), extra_offer)   AS extra_offer,
             extra_offer_en,
