@@ -2075,8 +2075,8 @@ if page == "📦 أرشيف المنتهية":
                 if who.empty:
                     st.info("لا يوجد تفاعل مسجّل لهذا المتجر.")
                 else:
-                    _smap = {"bot": "📱 تيليجرام", "web": "🌐 ويب",
-                             "telegram_miniapp": "🔹 ميني ويب", "miniapp": "🔹 ميني ويب"}
+                    _smap = {"bot": "📱 بوت", "web": "🌐 ويب",
+                             "telegram_miniapp": "🔹 بوت - ميني", "miniapp": "🔹 بوت - ميني"}
                     who["src"] = who["src"].map(_smap).fillna(who["src"])
                     ac1, ac2, ac3 = st.columns(3)
                     with ac1: kpi_card("🎟️", "إجمالي النسخ", int(who["copies"].sum()), "danger")
@@ -2316,10 +2316,10 @@ if page == "تحليل الأقسام":
     page_title("📂", "تحليل الأقسام",
                "لوحة قرار: أي قسم يأخذ نقرات/نسخ/بحث · مين يدخله · مين فضّله — كل قسم بالأرقام الفعلية")
 
-    CHAN_MAP = {"bot": "📱 تيليجرام", "web": "🌐 ويب",
-                "telegram_miniapp": "🔹 ميني ويب", "miniapp": "🔹 ميني ويب"}
-    SRC_FILTER = {"📱 تيليجرام": ["bot"], "🌐 ويب": ["web"],
-                  "🔹 ميني ويب": ["telegram_miniapp", "miniapp"]}
+    CHAN_MAP = {"bot": "📱 بوت", "web": "🌐 ويب",
+                "telegram_miniapp": "🔹 بوت - ميني", "miniapp": "🔹 بوت - ميني"}
+    SRC_FILTER = {"📱 بوت": ["bot"], "🌐 ويب": ["web"],
+                  "🔹 بوت - ميني": ["telegram_miniapp", "miniapp"]}
 
     # ── شريط التحكم ──────────────────────────────────────────────────────────
     c_ref, c_src, c_hint = st.columns([1, 2.4, 2.6])
@@ -2330,7 +2330,7 @@ if page == "تحليل الأقسام":
             _ca_store_tags.clear()
             st.rerun()
     with c_src:
-        src_choice = st.radio("المصدر:", ["الكل", "📱 تيليجرام", "🌐 ويب", "🔹 ميني ويب"],
+        src_choice = st.radio("المصدر:", ["الكل", "📱 بوت", "🌐 ويب", "🔹 بوت - ميني"],
                               horizontal=True, key="ca_src")
     with c_hint:
         st.caption("أرقام فعلية من action_logs + direct_search + user_favorites · مخزّنة 3 دقائق.")
@@ -2408,11 +2408,11 @@ if page == "تحليل الأقسام":
         if ds is None or ds.empty:
             return ds
         p = ds["platform"].astype(str).str.lower()
-        if src_choice == "📱 تيليجرام":
+        if src_choice == "📱 بوت":
             return ds[p.str.contains("telegram") | p.str.contains("bot")]
         if src_choice == "🌐 ويب":
             return ds[p == "web"]
-        if src_choice == "🔹 ميني ويب":
+        if src_choice == "🔹 بوت - ميني":
             return ds[p.str.contains("mini")]
         return ds
     df_search_scope = _search_scope_ca(df_search)
@@ -2773,10 +2773,10 @@ elif page == "تحليل المتاجر":
     page_title("📊", "تحليل المتاجر",
                "لوحة قرار: مين تركّز عليه · مين تطيّره · مين تعطيه ترند — كل المتاجر بالأرقام الفعلية")
 
-    CHAN_MAP = {"bot": "📱 تيليجرام", "web": "🌐 ويب",
-                "telegram_miniapp": "🔹 ميني ويب", "miniapp": "🔹 ميني ويب"}
-    SRC_FILTER = {"📱 تيليجرام": ["bot"], "🌐 ويب": ["web"],
-                  "🔹 ميني ويب": ["telegram_miniapp", "miniapp"]}
+    CHAN_MAP = {"bot": "📱 بوت", "web": "🌐 ويب",
+                "telegram_miniapp": "🔹 بوت - ميني", "miniapp": "🔹 بوت - ميني"}
+    SRC_FILTER = {"📱 بوت": ["bot"], "🌐 ويب": ["web"],
+                  "🔹 بوت - ميني": ["telegram_miniapp", "miniapp"]}
 
     # ── شريط التحكم ──────────────────────────────────────────────────────────
     c_ref, c_src, c_hint = st.columns([1, 2.4, 2.6])
@@ -2785,7 +2785,7 @@ elif page == "تحليل المتاجر":
             _sa_load_actions.clear(); _sa_load_master.clear(); _sa_load_searches.clear()
             st.rerun()
     with c_src:
-        src_choice = st.radio("المصدر:", ["الكل", "📱 تيليجرام", "🌐 ويب", "🔹 ميني ويب"],
+        src_choice = st.radio("المصدر:", ["الكل", "📱 بوت", "🌐 ويب", "🔹 بوت - ميني"],
                               horizontal=True, key="sm_src")
     with c_hint:
         st.caption("أرقام فعلية من action_logs و direct_search · مخزّنة 3 دقائق.")
@@ -2847,11 +2847,11 @@ elif page == "تحليل المتاجر":
                     return "@" + u.lstrip("@")
                 uid = r.get("user_id")
                 if pd.notna(uid):
-                    return f"🔹 ميني ويب {int(uid)}"
+                    return f"🔹 بوت - ميني {int(uid)}"
                 h = _clean(r.get("ip_hex"))
                 if h:
-                    return f"🔹 ميني ويب #{h[:6]}"
-                return "🔹 ميني ويب (غير مسجّل)"
+                    return f"🔹 بوت - ميني #{h[:6]}"
+                return "🔹 بوت - ميني (غير مسجّل)"
             # ويب عادي: زائر مجهول → name/email/phone لو مسجّل، وإلا ip_hex
             if src == "web":
                 for k in ("web_name", "web_email", "web_phone"):
@@ -2908,11 +2908,11 @@ elif page == "تحليل المتاجر":
         if ds is None or ds.empty:
             return ds
         p = ds["platform"].astype(str).str.lower()
-        if src_choice == "📱 تيليجرام":
+        if src_choice == "📱 بوت":
             return ds[p.str.contains("telegram") | p.str.contains("bot")]
         if src_choice == "🌐 ويب":
             return ds[p == "web"]
-        if src_choice == "🔹 ميني ويب":
+        if src_choice == "🔹 بوت - ميني":
             return ds[p.str.contains("mini")]
         return ds
     df_search_scope = _search_scope(df_search)
@@ -2953,7 +2953,7 @@ elif page == "تحليل المتاجر":
     if not _favs_all.empty and "kind" in _favs_all.columns:
         _favs_store = _favs_all[_favs_all["kind"] == "store"].copy()
         # احترام فلتر المصدر (platform) المختار أعلى الصفحة
-        _PLAT_F = {"📱 تيليجرام": ["bot"], "🌐 ويب": ["web"], "🔹 ميني ويب": ["miniapp"]}
+        _PLAT_F = {"📱 بوت": ["bot"], "🌐 ويب": ["web"], "🔹 بوت - ميني": ["miniapp"]}
         if src_choice in _PLAT_F:
             _favs_store = _favs_store[_favs_store["platform"].isin(_PLAT_F[src_choice])]
         if not _favs_store.empty:
@@ -3159,7 +3159,7 @@ elif page == "تحليل المتاجر":
                         if u:
                             return "@" + u.lstrip("@")
                         if r.get("platform") == "miniapp":
-                            return f"🔹 ميني ويب {int(r['telegram_id'])}"
+                            return f"🔹 بوت - ميني {int(r['telegram_id'])}"
                         return f"تيليجرام {int(r['telegram_id'])}"
                     for k in ("web_name", "web_email"):
                         v = _cln(r.get(k))
@@ -3288,14 +3288,14 @@ elif page == "تحليل المتاجر":
             df_fav = df_fav[df_fav["kind"] == "store"].copy()
 
         # فلتر المصدر (platform) — يحترم نفس اختيار شريط التحكم أعلى الصفحة
-        PLAT_FILTER = {"📱 تيليجرام": ["bot"], "🌐 ويب": ["web"], "🔹 ميني ويب": ["miniapp"]}
+        PLAT_FILTER = {"📱 بوت": ["bot"], "🌐 ويب": ["web"], "🔹 بوت - ميني": ["miniapp"]}
         if src_choice in PLAT_FILTER and not df_fav.empty:
             df_fav = df_fav[df_fav["platform"].isin(PLAT_FILTER[src_choice])].copy()
 
         if df_fav.empty:
             st.info("📭 لا توجد مفضلات بعد. بمجرد ما يبدأ المستخدمون بإضافة متاجرهم المفضلة ستظهر هنا.")
         else:
-            _plat_ar = {"bot": "📱 تيليجرام", "web": "🌐 ويب", "miniapp": "🔹 ميني ويب"}
+            _plat_ar = {"bot": "📱 بوت", "web": "🌐 ويب", "miniapp": "🔹 بوت - ميني"}
 
             # مفتاح هوية الشخص (ويب أو تيليجرام) لعدّ الأشخاص الفعليين
             def _person_key(r):
@@ -4844,7 +4844,7 @@ elif page == "تحليل المستخدمين":
                             if web_user and web_user.get("consent_at"):
                                 badges.append("✅ PDPL")
                             if bot_user:
-                                badges.append("📱 تيليجرام")
+                                badges.append("📱 بوت")
                             st.caption(" · ".join(badges) if badges else "—")
                         with ic2:
                             details = []
@@ -4929,9 +4929,9 @@ elif page == "تحليل المستخدمين":
                                                  "click_link":  "نقر",
                                                  "search":      "بحث",
                                              }))
-                                src_map = {"web": "🌐 ويب", "bot": "📱 تيليجرام",
-                                           "telegram_miniapp": "🔹 ميني ويب",
-                                           "miniapp": "🔹 ميني ويب"}
+                                src_map = {"web": "🌐 ويب", "bot": "📱 بوت",
+                                           "telegram_miniapp": "🔹 بوت - ميني",
+                                           "miniapp": "🔹 بوت - ميني"}
                                 pivot_src.index = pivot_src.index.map(lambda s: src_map.get(s, s))
                                 st.caption("التفصيل حسب المصدر:")
                                 st.dataframe(pivot_src.astype(int), use_container_width=True)
@@ -4968,8 +4968,8 @@ elif page == "تحليل المستخدمين":
                         st.caption("مفضلة كل حساب تُعرض منفصلة (الموقع ≠ تيليجرام) · "
                                    "المتاجر منفصلة عن الأقسام · من جدول `user_favorites` الموحّد.")
 
-                        _fav_plat = {"bot": "📱 تيليجرام", "web": "🌐 ويب",
-                                     "miniapp": "🔹 ميني ويب"}
+                        _fav_plat = {"bot": "📱 بوت", "web": "🌐 ويب",
+                                     "miniapp": "🔹 بوت - ميني"}
 
                         def _render_favs_block(owner_col, owner_val, label):
                             """يعرض مفضلة حساب واحد: متاجر + أقسام منفصلتين."""
