@@ -36,6 +36,7 @@ _logging.basicConfig(
 import asyncio
 import os
 import pathlib
+import queue
 import threading
 
 from fastapi import FastAPI, Request, HTTPException, Header
@@ -77,6 +78,34 @@ class _WebhookExceptionHandler(ExceptionHandler):
 
 bot.threaded = False
 bot.exception_handler = _WebhookExceptionHandler()
+
+# ─── Background update workers (بركة دائمة بدل asyncio.to_thread) ────────────
+# لماذا: telebot يحفظ requests.Session في thread-local. مع asyncio.to_thread
+# تتبدّل الخيوط فتُنشأ جلسة جديدة كل مرة (اتصال TLS بارد لتيليجرام) → بطء، وأي
+# تعلّق يصطدم بـ apihelper.READ_TIMEOUT=30s فيعلّق الـ webhook 30 ثانية كاملة
+# (هذا سبب «بطء ٣٠ث»). الحل: خيوط عاملة **دائمة** (جلسة مستقرّة + إعادة استخدام
+# اتصال) تستهلك من طابور؛ والـ webhook يضع التحديث ويرجّع 200 فوراً (لا انتظار،
+# لا إعادة إرسال من تيليجرام، ولا تجمّد — لكل عامل حلقة تلتقط الاستثناءات).
+_BOT_UPDATE_QUEUE: "queue.Queue" = queue.Queue(maxsize=2000)
+_NUM_BOT_WORKERS = 4
+_bot_log = _logging.getLogger("dp.bot")
+
+
+def _bot_update_worker():
+    while True:
+        update = _BOT_UPDATE_QUEUE.get()
+        try:
+            bot.process_new_updates([update])
+        except Exception as exc:  # حلقة العامل لا تموت أبداً
+            _bot_log.error("update worker error: %s", exc, exc_info=exc)
+        finally:
+            _BOT_UPDATE_QUEUE.task_done()
+
+
+for _wi in range(_NUM_BOT_WORKERS):
+    threading.Thread(
+        target=_bot_update_worker, name=f"dp-bot-worker-{_wi}", daemon=True
+    ).start()
 
 # ─── التحقق من المتغيرات الحرجة ───────────────────────────────────────────────
 TOKEN_ENV = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
@@ -227,9 +256,14 @@ async def telegram_webhook(
 
     payload = await request.body()
     update = Update.de_json(payload.decode("utf-8"))
-    # نُشغّل المعالجة الـ sync في thread pool حتى لا تحجب event loop
-    # هذا حلّ جوهري مع pyTelegramBotAPI (sync) داخل FastAPI (async)
-    await asyncio.to_thread(bot.process_new_updates, [update])
+    # نضع التحديث في طابور العمّال الدائمين ونرجّع 200 فوراً — لا ننتظر اكتمال
+    # المعالجة (التي قد تستغرق ثوانٍ لنداءات تيليجرام). هذا يمنع تعليق الـ webhook
+    # وإعادة إرسال تيليجرام، ويحافظ على جلسات اتصال مستقرّة في خيوط العمّال.
+    if update is not None:
+        try:
+            _BOT_UPDATE_QUEUE.put_nowait(update)
+        except queue.Full:
+            _bot_log.warning("update queue full — dropping update %s", update.update_id)
     return {"ok": True}
 
 
