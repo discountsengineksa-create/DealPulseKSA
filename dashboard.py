@@ -2,6 +2,13 @@ import os
 import base64
 import smtplib
 import socket
+import warnings as _warnings
+# pandas يحذّر عند تمرير اتصال psycopg2 خام لـ read_sql (يقترح SQLAlchemy).
+# الكود يعمل صحيحاً عبر الـ pool المخصّص (_PooledConn)؛ نكتم التحذير لتنظيف السجلّات.
+_warnings.filterwarnings(
+    "ignore",
+    message="pandas only supports SQLAlchemy connectable.*",
+)
 import streamlit as st
 import streamlit_authenticator as stauth
 import pandas as pd
@@ -1228,7 +1235,7 @@ def _sa_render_category(df_cat: pd.DataFrame, empty_msg: str) -> None:
         "الإجمالي": df_cat.apply(lambda r: _sa_prevnow(r["p7"], r["t7"]), axis=1).values,
         "التغير الأسبوعي": df_cat["wow"].apply(_sa_fmt_growth).values,
     })
-    st.dataframe(table, hide_index=True, use_container_width=True)
+    st.dataframe(table, hide_index=True, width='stretch')
     st.markdown("**🔎 تفسير سريع لكل متجر — وش بالضبط اللي تغيّر:**")
     for r in df_cat.itertuples():
         changed = []
@@ -1920,7 +1927,7 @@ if page == "الاستعلام والتعديل":
                 return [color] * len(row)
 
             st.subheader("📊 عرض سجل المتاجر (بيانات معربة)")
-            st.dataframe(df.style.apply(highlight_by_date, axis=1), use_container_width=True, height=600)
+            st.dataframe(df.style.apply(highlight_by_date, axis=1), width='stretch', height=600)
         
     except Exception as e:
         st.error(f"خطأ في عرض الجدول: {e}")
@@ -2001,17 +2008,17 @@ if page == "📦 أرشيف المنتهية":
                 f"🪦 من زمان (+٣٠ يوم) ({old_expired})",
             ])
             with tab_all_arc:
-                st.dataframe(display_df, use_container_width=True, height=420)
+                st.dataframe(display_df, width='stretch', height=420)
             with tab_recent_arc:
                 if recent_expired == 0:
                     st.info("ما فيه متاجر انتهت خلال آخر 7 أيام.")
                 else:
-                    st.dataframe(display_df.loc[_mask_recent], use_container_width=True, height=420)
+                    st.dataframe(display_df.loc[_mask_recent], width='stretch', height=420)
             with tab_old_arc:
                 if old_expired == 0:
                     st.success("👌 ما فيه متاجر منتهية من أكثر من 30 يوم.")
                 else:
-                    st.dataframe(display_df.loc[_mask_old], use_container_width=True, height=420)
+                    st.dataframe(display_df.loc[_mask_old], width='stretch', height=420)
 
             # ─────────────── 📊 تحليل المتاجر المنتهية (تحليلها الخاص) ───────────────
             st.divider()
@@ -2037,8 +2044,8 @@ if page == "📦 أرشيف المنتهية":
                                    color="نسخ", color_continuous_scale="Reds")
                     fig_r.update_layout(yaxis=dict(autorange="reversed"),
                                         xaxis_title="عدد النسخ", yaxis_title="")
-                    st.plotly_chart(apply_brand_theme(fig_r), use_container_width=True)
-                st.dataframe(rank, hide_index=True, use_container_width=True)
+                    st.plotly_chart(apply_brand_theme(fig_r), width='stretch')
+                st.dataframe(rank, hide_index=True, width='stretch')
 
             with an_drill:
                 _opts = df_arch.sort_values("total_coupon_copies",
@@ -2087,7 +2094,7 @@ if page == "📦 أرشيف المنتهية":
                                               "first_seen": "أول تفاعل", "last_seen": "آخر تفاعل"})
                     st.dataframe(who[["المستخدم", "المصدر", "نسخ", "نقرات", "المدينة",
                                       "أول تفاعل", "آخر تفاعل"]],
-                                 hide_index=True, use_container_width=True)
+                                 hide_index=True, width='stretch')
 
             st.divider()
             st.subheader("⚙️ إجراءات على متجر")
@@ -2235,7 +2242,7 @@ if page == "جدول الكوبونات":
             ])
 
             with tab_all:
-                st.dataframe(df_display, use_container_width=True, height=520, hide_index=True)
+                st.dataframe(df_display, width='stretch', height=520, hide_index=True)
 
             with tab_active:
                 if active_count == 0:
@@ -2243,7 +2250,7 @@ if page == "جدول الكوبونات":
                 else:
                     st.dataframe(
                         df_display.loc[active_mask.values],
-                        use_container_width=True, height=520, hide_index=True,
+                        width='stretch', height=520, hide_index=True,
                     )
 
             with tab_near:
@@ -2267,7 +2274,7 @@ if page == "جدول الكوبونات":
                         'last_time':       'تاريخ الانتهاء',
                     })
                     df_near = df_near.sort_values('أيام متبقية')
-                    st.dataframe(df_near, use_container_width=True, hide_index=True)
+                    st.dataframe(df_near, width='stretch', hide_index=True)
 
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -2324,7 +2331,7 @@ if page == "تحليل الأقسام":
     # ── شريط التحكم ──────────────────────────────────────────────────────────
     c_ref, c_src, c_hint = st.columns([1, 2.4, 2.6])
     with c_ref:
-        if st.button("🔄 تحديث", use_container_width=True, key="ca_refresh"):
+        if st.button("🔄 تحديث", width='stretch', key="ca_refresh"):
             _sa_load_actions.clear(); _sa_load_master.clear()
             _sa_load_searches.clear(); _sa_load_favorites.clear()
             _ca_store_tags.clear()
@@ -2528,7 +2535,7 @@ if page == "تحليل الأقسام":
             df_cat_agg[["tag", "نقرات", "نسخ", "بحث", "مفضّلون",
                         "مستخدمون فريدون", "متاجر", "إجمالي"]]
                 .rename(columns={"tag": "القسم"}),
-            use_container_width=True, hide_index=True,
+            width='stretch', hide_index=True,
         )
 
         st.divider()
@@ -2541,7 +2548,7 @@ if page == "تحليل الأقسام":
                              color="إجمالي", color_continuous_scale="Blues")
                 fig.update_layout(yaxis=dict(autorange="reversed"), xaxis_title="إجمالي الأحداث",
                                   yaxis_title="")
-                st.plotly_chart(apply_brand_theme(fig), use_container_width=True)
+                st.plotly_chart(apply_brand_theme(fig), width='stretch')
             else:
                 st.info("لا نشاط بعد ضمن النطاق.")
         with cBot:
@@ -2552,7 +2559,7 @@ if page == "تحليل الأقسام":
                              color="إجمالي", color_continuous_scale="Reds_r")
                 fig.update_layout(yaxis=dict(autorange="reversed"), xaxis_title="إجمالي الأحداث",
                                   yaxis_title="")
-                st.plotly_chart(apply_brand_theme(fig), use_container_width=True)
+                st.plotly_chart(apply_brand_theme(fig), width='stretch')
             else:
                 st.info("لا توجد أقسام كافية.")
 
@@ -2600,7 +2607,7 @@ if page == "تحليل الأقسام":
                                 .rename(columns={"identity": "المستخدم",
                                                  "src_ar":  "المصدر"})
                                 .sort_values("آخر_تفاعل", ascending=False))
-                    st.dataframe(per_user, use_container_width=True, hide_index=True)
+                    st.dataframe(per_user, width='stretch', hide_index=True)
 
             # مين فضّل القسم: من user_favorites
             st.divider()
@@ -2624,7 +2631,7 @@ if page == "تحليل الأقسام":
                     w[["المستخدم", "المصدر", "created_at"]]
                        .rename(columns={"created_at": "تاريخ التفضيل"})
                        .sort_values("تاريخ التفضيل", ascending=False),
-                    use_container_width=True, hide_index=True,
+                    width='stretch', hide_index=True,
                 )
 
     # ── 3) التوزيع الجغرافي ──────────────────────────────────────────────────
@@ -2645,7 +2652,7 @@ if page == "تحليل الأقسام":
                              orientation="h", title="أعلى 10 مدن × أقسام")
                 fig.update_layout(yaxis=dict(autorange="reversed"),
                                   yaxis_title="المدينة", xaxis_title="عدد الأحداث")
-                st.plotly_chart(apply_brand_theme(fig), use_container_width=True)
+                st.plotly_chart(apply_brand_theme(fig), width='stretch')
 
     # ── 4) ❤️ الأكثر تفضيلاً ────────────────────────────────────────────────
     with tab_favs:
@@ -2664,12 +2671,12 @@ if page == "تحليل الأقسام":
                              color_continuous_scale="Reds")
                 fig.update_layout(yaxis=dict(autorange="reversed"),
                                   xaxis_title="عدد المفضّلين", yaxis_title="")
-                st.plotly_chart(apply_brand_theme(fig), use_container_width=True)
+                st.plotly_chart(apply_brand_theme(fig), width='stretch')
             with cR:
                 st.dataframe(
                     ranked[["tag", "مفضّلون", "متاجر", "إجمالي"]]
                         .rename(columns={"tag": "القسم", "إجمالي": "نشاط"}),
-                    use_container_width=True, hide_index=True,
+                    width='stretch', hide_index=True,
                 )
 
             st.divider()
@@ -2680,7 +2687,7 @@ if page == "تحليل الأقسام":
                 by_platform["platform"] = by_platform["platform"].map(CHAN_MAP).fillna(by_platform["platform"])
                 fig_p = px.pie(by_platform, values="القلوب", names="platform",
                                title="توزيع التفضيلات على المنصات")
-                st.plotly_chart(apply_brand_theme(fig_p), use_container_width=True)
+                st.plotly_chart(apply_brand_theme(fig_p), width='stretch')
 
     # ── 5) التحليل الزمني ────────────────────────────────────────────────────
     with tab_time:
@@ -2697,7 +2704,7 @@ if page == "تحليل الأقسام":
                 st.plotly_chart(
                     _sa_hourly_fig(d_one, title=f"نشاط «{pick_tag2}» على مدار اليوم",
                                    include_search=False),
-                    use_container_width=True,
+                    width='stretch',
                 )
 
     # ── 6) الأولويات (يبقى كما كان — إدارة يدوية) ───────────────────────────
@@ -2739,7 +2746,7 @@ if page == "تحليل الأقسام":
                     "النقرات":        st.column_config.NumberColumn(disabled=True),
                     "الزيارات":       st.column_config.NumberColumn(disabled=True),
                 },
-                use_container_width=True,
+                width='stretch',
                 hide_index=True,
                 key="priority_editor_1",
             )
@@ -2781,7 +2788,7 @@ elif page == "تحليل المتاجر":
     # ── شريط التحكم ──────────────────────────────────────────────────────────
     c_ref, c_src, c_hint = st.columns([1, 2.4, 2.6])
     with c_ref:
-        if st.button("🔄 تحديث", use_container_width=True):
+        if st.button("🔄 تحديث", width='stretch'):
             _sa_load_actions.clear(); _sa_load_master.clear(); _sa_load_searches.clear()
             st.rerun()
     with c_src:
@@ -3039,7 +3046,7 @@ elif page == "تحليل المتاجر":
         })
         _maxtot = int(max(1, agg["الإجمالي"].max()))
         st.dataframe(
-            view, hide_index=True, use_container_width=True,
+            view, hide_index=True, width='stretch',
             column_config={
                 "الشعار": st.column_config.ImageColumn("🏪", width="small"),
                 "❤️": st.column_config.NumberColumn("❤️ مفضّلون", help="عدد الأشخاص الذين أضافوا المتجر لمفضّلتهم"),
@@ -3064,7 +3071,7 @@ elif page == "تحليل المتاجر":
                                          values="ع", fill_value=0)
                     pb.columns = [f"{a} {b}" for a, b in pb.columns]
                     pb = pb.reset_index().rename(columns={"store_id": "المتجر"})
-                    st.dataframe(pb, hide_index=True, use_container_width=True)
+                    st.dataframe(pb, hide_index=True, width='stretch')
                     st.caption("النسخ والنقر مفصولة لكل مصدر (بوت/ويب/ميني-ويب). "
                                "تظهر أرقام الميني-ويب بعد نشره واستخدامه فعلياً.")
 
@@ -3242,7 +3249,7 @@ elif page == "تحليل المتاجر":
                      if sel == _ALL_STORES else
                      ["المستخدم", "المصدر", "نسخ", "نقر", "بحث",
                       "❤️ المفضلة", "المدينة", "أول تفاعل", "آخر تفاعل"])
-            st.dataframe(who[_cols], hide_index=True, use_container_width=True)
+            st.dataframe(who[_cols], hide_index=True, width='stretch')
             _fname = "all" if sel == _ALL_STORES else sel
             st.download_button("📥 تحميل القائمة (CSV)",
                                who.to_csv(index=False).encode("utf-8-sig"),
@@ -3260,7 +3267,7 @@ elif page == "تحليل المتاجر":
             fig1 = px.bar(topn, x="نسخ", y="store_id", orientation="h",
                           color="نسخ", color_continuous_scale="Greens")
             fig1.update_layout(yaxis=dict(autorange="reversed"), xaxis_title="عدد النسخ", yaxis_title="")
-            st.plotly_chart(apply_brand_theme(fig1), use_container_width=True)
+            st.plotly_chart(apply_brand_theme(fig1), width='stretch')
 
         st.markdown("**🔍 أعلى المتاجر بحثاً (أعلى 20)**")
         tops = agg[agg["بحث"] > 0].sort_values("بحث", ascending=False).head(20)
@@ -3270,7 +3277,7 @@ elif page == "تحليل المتاجر":
             fig_s = px.bar(tops, x="بحث", y="store_id", orientation="h",
                            color="بحث", color_continuous_scale="Blues")
             fig_s.update_layout(yaxis=dict(autorange="reversed"), xaxis_title="عدد عمليات البحث", yaxis_title="")
-            st.plotly_chart(apply_brand_theme(fig_s), use_container_width=True)
+            st.plotly_chart(apply_brand_theme(fig_s), width='stretch')
 
         st.markdown("**📱🌐🔹 النسخ والنقرات حسب المصدر**")
         if not df_scope.empty:
@@ -3280,7 +3287,7 @@ elif page == "تحليل المتاجر":
             if not bys.empty:
                 fig2 = px.bar(bys, x="نوع", y="العدد", color="src_ar", barmode="group")
                 fig2.update_layout(xaxis_title="", yaxis_title="العدد", legend_title_text="المصدر")
-                st.plotly_chart(apply_brand_theme(fig2), use_container_width=True)
+                st.plotly_chart(apply_brand_theme(fig2), width='stretch')
             else:
                 st.info("لا توجد نسخ/نقر ضمن الفلتر.")
         else:
@@ -3320,7 +3327,7 @@ elif page == "تحليل المتاجر":
             figts = px.line(ev_ts, x="action_time", y="العدد", color="نوع", markers=(gran != "دقيقة"))
             figts.update_layout(xaxis_title=f"الزمن ({gran} · توقيت الرياض)",
                                 yaxis_title="العدد", legend_title_text="")
-            st.plotly_chart(apply_brand_theme(figts), use_container_width=True)
+            st.plotly_chart(apply_brand_theme(figts), width='stretch')
             st.caption("«دقيقة» لرصد دفعات النشاط اللحظية · «يوم» لرؤية الاتجاه العام.")
 
     # ─────────────────────────── ❤️ المفضلة ───────────────────────────
@@ -3377,7 +3384,7 @@ elif page == "تحليل المتاجر":
             })
             _maxp = int(max(1, board_f["عدد الأشخاص"].max()))
             st.dataframe(
-                view_f, hide_index=True, use_container_width=True,
+                view_f, hide_index=True, width='stretch',
                 column_config={
                     "الشعار": st.column_config.ImageColumn("🏪", width="small"),
                     "عدد الأشخاص": st.column_config.ProgressColumn(
@@ -3393,7 +3400,7 @@ elif page == "تحليل المتاجر":
                 dist_f = (df_fav.assign(منصة=lambda d: d["platform"].map(_plat_ar).fillna(d["platform"]))
                           .groupby("منصة").size().reset_index(name="العدد"))
                 fig_fp = px.pie(dist_f, names="منصة", values="العدد", hole=0.45)
-                st.plotly_chart(apply_brand_theme(fig_fp), use_container_width=True)
+                st.plotly_chart(apply_brand_theme(fig_fp), width='stretch')
 
             # ── من فضّل متجراً معيّناً؟ (الأساس لإرسال التنبيهات) ──
             st.divider()
@@ -3428,7 +3435,7 @@ elif page == "تحليل المتاجر":
                 "المنصة": sub_f["platform"].map(_plat_ar).fillna(sub_f["platform"]).values,
                 "تاريخ الإضافة": _ca.dt.strftime("%Y-%m-%d %H:%M").values,
             })
-            st.dataframe(out_f, hide_index=True, use_container_width=True)
+            st.dataframe(out_f, hide_index=True, width='stretch')
             st.caption(f"👥 {len(out_f)} شخص فضّلوا «{store_sel}» — هؤلاء جمهور التنبيه المستقبلي "
                        "عند نزول كوبون/خصم جديد لهذا المتجر.")
 
@@ -3496,9 +3503,9 @@ elif page == "جدول الأقسام":
                 "⚙️ إدارة الأقسام",
             ])
             with tab_ar:
-                st.dataframe(sum_ar, use_container_width=True, hide_index=True)
+                st.dataframe(sum_ar, width='stretch', hide_index=True)
             with tab_en:
-                st.dataframe(sum_en, use_container_width=True, hide_index=True)
+                st.dataframe(sum_en, width='stretch', hide_index=True)
 
             with tab_manage:
                 st.caption("⚠️ التعديل والحذف يطبّق على **كل المتاجر** التي تحتوي على القسم. لا يمكن التراجع.")
@@ -3792,7 +3799,7 @@ elif page == "البحث عن كود":
                 ])
 
                 with t_all:
-                    st.dataframe(pivot, use_container_width=True, hide_index=True, height=380)
+                    st.dataframe(pivot, width='stretch', hide_index=True, height=380)
 
                 with t_bot:
                     if from_bot == 0:
@@ -3807,7 +3814,7 @@ elif page == "البحث عن كود":
                             'who':            'اسم المستخدم (Telegram)',
                             'search_date':    'وقت البحث',
                         })
-                        st.dataframe(df_b_view, use_container_width=True, hide_index=True, height=380)
+                        st.dataframe(df_b_view, width='stretch', hide_index=True, height=380)
 
                 with t_web:
                     if from_web == 0:
@@ -3822,7 +3829,7 @@ elif page == "البحث عن كود":
                             'who':            'إيميل الموقع',
                             'search_date':    'وقت البحث',
                         })
-                        st.dataframe(df_w_view, use_container_width=True, hide_index=True, height=380)
+                        st.dataframe(df_w_view, width='stretch', hide_index=True, height=380)
 
                 _xl = BytesIO()
                 with pd.ExcelWriter(_xl, engine='xlsxwriter') as _w:
@@ -3904,7 +3911,7 @@ elif page == "تحليل بحث الأكواد":
                 def color_missed(row):
                     return [f'background-color: {BRAND["danger_soft"]}; color: #991B1B;'] * len(row) if not row['user_found'] else [''] * len(row)
                 
-                st.dataframe(df_log.style.apply(color_missed, axis=1), use_container_width=True)
+                st.dataframe(df_log.style.apply(color_missed, axis=1), width='stretch')
                 
                 # --- زر تحميل الملفات ---
                 csv = df_log.to_csv(index=False).encode('utf-8-sig')
@@ -3916,7 +3923,7 @@ elif page == "تحليل بحث الأكواد":
                 # الرسم البياني للنشاط الزمني
                 df_trend = df_log.resample('h', on='search_date').size().reset_index(name='count')
                 fig_gen = px.area(df_trend, x='search_date', y='count', title="معدل نشاط البحث (بالساعة)")
-                st.plotly_chart(apply_brand_theme(fig_gen), use_container_width=True)
+                st.plotly_chart(apply_brand_theme(fig_gen), width='stretch')
                 
                 st.divider()
                 # ترند الكلمات
@@ -3927,7 +3934,7 @@ elif page == "تحليل بحث الأكواد":
                                  color_continuous_scale=[[0, BRAND["emerald_pastel"]],
                                                          [0.5, BRAND["emerald"]],
                                                          [1, BRAND["emerald_dark"]]])
-                st.plotly_chart(apply_brand_theme(fig_bar), use_container_width=True)
+                st.plotly_chart(apply_brand_theme(fig_bar), width='stretch')
 
             # 3. تبويب الأداء الفردي (تحليل المتاجر)
             with t_individual:
@@ -3942,7 +3949,7 @@ elif page == "تحليل بحث الأكواد":
                     hourly.columns = ['hour', 'c']
                     fig_store = px.line(hourly, x='hour', y='c',
                                         title=f"سلوك طلب {store} خلال اليوم", markers=True)
-                    st.plotly_chart(apply_brand_theme(fig_store), use_container_width=True)
+                    st.plotly_chart(apply_brand_theme(fig_store), width='stretch')
 
             # 4. تبويب الإدارة
             with t_admin:
@@ -4085,7 +4092,7 @@ elif page == "طلبات الأكواد":
 
                 # ═══════ تاب 1: الكل ═══════
                 with tab_all:
-                    st.dataframe(req_filtered[cols_display], use_container_width=True, hide_index=True, height=420)
+                    st.dataframe(req_filtered[cols_display], width='stretch', hide_index=True, height=420)
                     xl1 = BytesIO()
                     with pd.ExcelWriter(xl1, engine='xlsxwriter') as w:
                         req_filtered.drop(columns=['is_pending']).to_excel(w, index=False, sheet_name='All')
@@ -4102,7 +4109,7 @@ elif page == "طلبات الأكواد":
                     if df_pending.empty:
                         st.success("👌 ما فيه طلبات معلّقة في الفترة المختارة.")
                     else:
-                        st.dataframe(df_pending[cols_display], use_container_width=True, hide_index=True, height=380)
+                        st.dataframe(df_pending[cols_display], width='stretch', hide_index=True, height=380)
 
                         st.markdown("##### ✅ أوفرت الكود؟ احذف طلبات معينة")
                         pc1, pc2, pc3 = st.columns([3, 2, 1])
@@ -4146,7 +4153,7 @@ elif page == "طلبات الأكواد":
                     if df_fulfilled.empty:
                         st.info("📭 ما فيه طلبات متوفّرة بعد في هذه الفترة.")
                     else:
-                        st.dataframe(df_fulfilled[cols_display], use_container_width=True, hide_index=True, height=420)
+                        st.dataframe(df_fulfilled[cols_display], width='stretch', hide_index=True, height=420)
 
                 # ═══════ تاب 4: الأكثر طلباً ═══════
                 with tab_top:
@@ -4424,7 +4431,7 @@ elif page == "بيانات المستخدمين":
                 # ── الجدول الكامل بأسماء عربية ──
                 st.write("### 📋 السجل الكامل")
                 display_df = users_df.rename(columns=_COL_AR)
-                st.dataframe(display_df, use_container_width=True, hide_index=True, height=500)
+                st.dataframe(display_df, width='stretch', hide_index=True, height=500)
 
                 # ── تحميل Excel ──
                 _xlu = BytesIO()
@@ -4535,7 +4542,7 @@ elif page == "مستخدمو الموقع":
             })
 
             st.caption(f"عدد النتائج: {len(users_df):,}")
-            st.dataframe(users_df, use_container_width=True, hide_index=True)
+            st.dataframe(users_df, width='stretch', hide_index=True)
 
             # تصدير
             csv = users_df.to_csv(index=False).encode('utf-8-sig')
@@ -4778,7 +4785,7 @@ elif page == "تحليل المستخدمين":
                     'total_actions': 'إجمالي الحركات',
                     'last_seen': 'آخر ظهور'
                 })
-                st.dataframe(top_users, use_container_width=True, hide_index=True)
+                st.dataframe(top_users, width='stretch', hide_index=True)
 
                 # رسم: إجمالي حركات أفضل 10 مستخدمين
                 st.write("### 🏆 أفضل 10 مستخدمين")
@@ -4985,7 +4992,7 @@ elif page == "تحليل المستخدمين":
                                            "miniapp": "🔹 بوت - ميني"}
                                 pivot_src.index = pivot_src.index.map(lambda s: src_map.get(s, s))
                                 st.caption("التفصيل حسب المصدر:")
-                                st.dataframe(pivot_src.astype(int), use_container_width=True)
+                                st.dataframe(pivot_src.astype(int), width='stretch')
                         else:
                             st.info("لا توجد user_ids مرتبطة بأي جدول events.")
 
@@ -5009,7 +5016,7 @@ elif page == "تحليل المستخدمين":
                             if df_stores.empty:
                                 st.info("لم يتفاعل مع أي متجر بعد.")
                             else:
-                                st.dataframe(df_stores, use_container_width=True, hide_index=True)
+                                st.dataframe(df_stores, width='stretch', hide_index=True)
 
                         # ── ❤️ المفضلة (منفصلة لكل حساب — لا دمج للحسابات) ──
                         # كل حساب (الموقع / تيليجرام) يُعرض مستقلاً، وداخله المتاجر
@@ -5052,7 +5059,7 @@ elif page == "تحليل المستخدمين":
                                                           "platform": "المنصة",
                                                           "added_at": "أُضيف"}))
                                     v["المنصة"] = v["المنصة"].map(_fav_plat).fillna(v["المنصة"])
-                                    st.dataframe(v, use_container_width=True, hide_index=True)
+                                    st.dataframe(v, width='stretch', hide_index=True)
                             with fc2:
                                 st.markdown(f"🏷️ أقسام مفضّلة ({len(cats_df)})")
                                 if cats_df.empty:
@@ -5063,7 +5070,7 @@ elif page == "تحليل المستخدمين":
                                                           "platform": "المنصة",
                                                           "added_at": "أُضيف"}))
                                     v["المنصة"] = v["المنصة"].map(_fav_plat).fillna(v["المنصة"])
-                                    st.dataframe(v, use_container_width=True, hide_index=True)
+                                    st.dataframe(v, width='stretch', hide_index=True)
 
                         if web_user:
                             _render_favs_block("web_user_id", int(web_user["id"]),
@@ -5092,7 +5099,7 @@ elif page == "تحليل المستخدمين":
                             if df_recent.empty:
                                 st.info("لا توجد حركات بعد.")
                             else:
-                                st.dataframe(df_recent, use_container_width=True, hide_index=True)
+                                st.dataframe(df_recent, width='stretch', hide_index=True)
 
                                 # تصدير سريع للبطاقة كاملة (CSV واحد)
                                 _csv = df_recent.to_csv(index=False).encode("utf-8-sig")
@@ -5152,7 +5159,7 @@ elif page == "تحليل المستخدمين":
                         st.caption("لا توجد بيانات جنس بعد.")
                     else:
                         fig_g = px.pie(df_gender, names="الجنس", values="العدد", hole=0.4)
-                        st.plotly_chart(apply_brand_theme(fig_g), use_container_width=True)
+                        st.plotly_chart(apply_brand_theme(fig_g), width='stretch')
 
                 # ── توزيع الأعمار ────────────────────────────────────────
                 with col_a:
@@ -5178,7 +5185,7 @@ elif page == "تحليل المستخدمين":
                         st.caption("لا توجد بيانات تاريخ ميلاد بعد.")
                     else:
                         fig_a = px.bar(df_age, x="الفئة", y="العدد", text="العدد")
-                        st.plotly_chart(apply_brand_theme(fig_a), use_container_width=True)
+                        st.plotly_chart(apply_brand_theme(fig_a), width='stretch')
 
                 st.divider()
 
@@ -5205,7 +5212,7 @@ elif page == "تحليل المستخدمين":
                     st.caption("يحتاج بيانات جنس + ميلاد معاً.")
                 else:
                     pivot = df_cross.pivot(index="الفئة العمرية", columns="الجنس", values="العدد").fillna(0).astype(int)
-                    st.dataframe(pivot, use_container_width=True)
+                    st.dataframe(pivot, width='stretch')
 
                 st.divider()
 
@@ -5267,14 +5274,14 @@ elif page == "تحليل المستخدمين":
 
                     cR1, cR2 = st.columns([2, 3])
                     with cR1:
-                        st.dataframe(df_ret_show, use_container_width=True, hide_index=True)
+                        st.dataframe(df_ret_show, width='stretch', hide_index=True)
                     with cR2:
                         fig_ret = px.line(
                             df_ret, x='الفترة', y='نسبة البقاء %',
                             markers=True, range_y=[0, 100],
                             title='Retention Curve',
                         )
-                        st.plotly_chart(apply_brand_theme(fig_ret), use_container_width=True)
+                        st.plotly_chart(apply_brand_theme(fig_ret), width='stretch')
 
                 st.divider()
 
@@ -5293,7 +5300,7 @@ elif page == "تحليل المستخدمين":
                     st.caption("لا توجد تسجيلات في آخر 60 يوماً.")
                 else:
                     fig_s = px.bar(df_signups, x="اليوم", y="تسجيلات")
-                    st.plotly_chart(apply_brand_theme(fig_s), use_container_width=True)
+                    st.plotly_chart(apply_brand_theme(fig_s), width='stretch')
 
         # ─── تبويب 5: ديموغرافيا الميني-ويب (bot_users) ────────────────────
         # البيانات تُجمع من موديال إلزامي يطلب gender+birth_date عند أول فتح
@@ -5349,7 +5356,7 @@ elif page == "تحليل المستخدمين":
                         st.caption("لا توجد بيانات جنس بعد.")
                     else:
                         fig_bg = px.pie(df_bg, names="الجنس", values="العدد", hole=0.4)
-                        st.plotly_chart(apply_brand_theme(fig_bg), use_container_width=True)
+                        st.plotly_chart(apply_brand_theme(fig_bg), width='stretch')
 
                 with col_a:
                     st.write("### 🎂 الفئات العمرية")
@@ -5374,7 +5381,7 @@ elif page == "تحليل المستخدمين":
                         st.caption("لا توجد بيانات تاريخ ميلاد بعد.")
                     else:
                         fig_ba = px.bar(df_ba, x="الفئة", y="العدد", text="العدد")
-                        st.plotly_chart(apply_brand_theme(fig_ba), use_container_width=True)
+                        st.plotly_chart(apply_brand_theme(fig_ba), width='stretch')
 
                 st.divider()
                 st.write("### 🎯 الشريحة المستهدفة (جنس × عمر) — مستخدمو البوت")
@@ -5400,7 +5407,7 @@ elif page == "تحليل المستخدمين":
                 else:
                     pivot_b = df_bcross.pivot(index="الفئة العمرية", columns="الجنس",
                                               values="العدد").fillna(0).astype(int)
-                    st.dataframe(pivot_b, use_container_width=True)
+                    st.dataframe(pivot_b, width='stretch')
 
     except Exception as e:
         st.error(f"حدث خطأ في صفحة التحليلات: {e}")
@@ -5499,7 +5506,7 @@ elif page == "مركز الإشعارات":
                              else active_normal_df if audience == "نشط (اعتيادي)"
                              else inactive_week_df)
                 st.divider()
-                if st.button("🚀 إرسال الرسالة الآن", use_container_width=True, key="tg_send"):
+                if st.button("🚀 إرسال الرسالة الآن", width='stretch', key="tg_send"):
                     if not msg_text:
                         st.error("يا برنس، ما يصير نرسل رسالة فاضية! اكتب شي.")
                     elif len(target_df) == 0:
@@ -5518,7 +5525,7 @@ elif page == "مركز الإشعارات":
                 st.subheader("📱 معاينة في جوال العميل")
                 with st.container(border=True):
                     if msg_image:
-                        st.image(msg_image, use_container_width=True)
+                        st.image(msg_image, width='stretch')
                     if msg_text:
                         st.markdown("**المصدر:** [Tawfeer Intelligence Engine]")
                         st.write(msg_text)
@@ -5543,7 +5550,7 @@ elif page == "مركز الإشعارات":
                     FROM broadcast_logs ORDER BY sent_at DESC LIMIT 10
                 """, conn)
                 if not history_df.empty:
-                    st.dataframe(history_df, use_container_width=True)
+                    st.dataframe(history_df, width='stretch')
                 else:
                     st.info("لا توجد حملات إرسال سابقة موثقة.")
 
@@ -5632,7 +5639,7 @@ elif page == "مركز الإشعارات":
                 st.divider()
 
                 if st.button("🚀 إطلاق الحملة الآن",
-                             use_container_width=True, key="em_send", type="primary"):
+                             width='stretch', key="em_send", type="primary"):
                     if not em_subject:
                         st.error("⚠️ أدخل عنوان الإيميل أولاً.")
                     elif not em_body_html:
@@ -5782,7 +5789,7 @@ body{{background:#ECEAE4;font-family:Arial,sans-serif;padding:12px;}}
                         FROM email_logs ORDER BY sent_at DESC LIMIT 10
                     """, conn)
                     if not em_hist.empty:
-                        st.dataframe(em_hist, use_container_width=True, hide_index=True)
+                        st.dataframe(em_hist, width='stretch', hide_index=True)
                     else:
                         st.info("لا توجد حملات بريدية سابقة.")
                 except Exception:
@@ -5857,7 +5864,7 @@ elif page == "لوحة القيادة":
                 ORDER BY a.action_time DESC LIMIT 20
             """, conn)
             if not df_logs.empty:
-                st.dataframe(df_logs, use_container_width=True, hide_index=True, height=420)
+                st.dataframe(df_logs, width='stretch', hide_index=True, height=420)
             else:
                 st.info("📭 لا توجد حركات مسجّلة بعد.")
         except Exception as e:
@@ -5894,7 +5901,7 @@ elif page == "مركز الدعم":
                 # تعريب الأعمدة هنا
                 df_display = df_open.copy()
                 df_display.columns = ['المعرف', 'التاريخ', 'المستخدم', 'الرسالة']
-                st.dataframe(df_display.drop(columns=['المعرف']), use_container_width=True)
+                st.dataframe(df_display.drop(columns=['المعرف']), width='stretch')
                 
                 st.divider()
                 st.subheader("💬 الرد وإغلاق التذكرة")
@@ -5907,7 +5914,7 @@ elif page == "مركز الدعم":
                 
                 with col_btn:
                     st.write("##") # موازنة المسافة
-                    if st.button("📧 إرسال الرد وإغلاق الطلب", use_container_width=True):
+                    if st.button("📧 إرسال الرد وإغلاق الطلب", width='stretch'):
                         if reply_text:
                             # تحديث حالة الرسالة في القاعدة
                             cur.execute("UPDATE support_tickets SET status = 'resolved' WHERE username = %s AND status = 'open'", (ticket_to_solve,))
@@ -5967,7 +5974,7 @@ elif page == "مختبر النمو":
             if not df_seo.empty:
                 # تعريب الأعمدة داخل الباندا (Pandas) فقط للعرض
                 df_seo.columns = ['الكلمة', 'عدد البحث']
-                st.dataframe(df_seo, use_container_width=True)
+                st.dataframe(df_seo, width='stretch')
             else:
                 st.write("لا توجد بيانات بحث كافية حالياً.")
 
@@ -6444,7 +6451,7 @@ elif page == "التخصيص الفائق":
                     st.divider()
                     st.subheader("💎 أعلى 5 عملاء توفيراً (VIP)")
                     df_vip = pd.read_sql("SELECT user_id, loyalty_rank, total_savings FROM user_hyper_profiles ORDER BY total_savings DESC LIMIT 5", conn)
-                    st.dataframe(df_vip, use_container_width=True, hide_index=True)
+                    st.dataframe(df_vip, width='stretch', hide_index=True)
                 else:
                     st.warning("⚠️ بانتظار تفاعل المستخدمين لتعبئة جداول SQL.")
         except Exception as e:
@@ -6565,7 +6572,7 @@ elif page == "رادار المناسبات":
             
             if not df_ev.empty:
                 # عرض الجدول بشكل احترافي
-                st.dataframe(df_ev, use_container_width=True)
+                st.dataframe(df_ev, width='stretch')
                 
                 st.divider()
                 # قسم الحذف
@@ -6588,7 +6595,7 @@ elif page == "رادار المناسبات":
             try:
                 query_mkt = "SELECT username, marketing_segment, loyalty_rank, visited_clicks FROM bot_users"
                 df_mkt = pd.read_sql(query_mkt, conn)
-                st.dataframe(df_mkt, use_container_width=True)
+                st.dataframe(df_mkt, width='stretch')
                 st.info("💡 يتم تحديث الفئات التسويقية آلياً بناءً على عدد النقرات (visited_clicks).")
             except Exception as e:
                 st.error(f"خطأ في المحرك التسويقي: {e}")
@@ -6659,7 +6666,7 @@ elif page == "مركز التوسع":
             df_agents = pd.read_sql('SELECT agent_id, agent_name, region, profit_share FROM franchise_agents', conn)
             
             if not df_agents.empty:
-                st.dataframe(df_agents, use_container_width=True, hide_index=True)
+                st.dataframe(df_agents, width='stretch', hide_index=True)
                 agent_to_del = st.selectbox("اختر وكيل لإلغاء تعاقده:", df_agents['agent_name'])
                 if st.button("❌ حذف الوكيل المختارة"):
                     cur = conn.cursor()
@@ -6731,7 +6738,7 @@ elif page == "درع الحماية":
             
             if not df_threats.empty:
                 st.warning(f"⚠️ تم رصد {len(df_threats)} تهديد محتمل")
-                st.dataframe(df_threats, use_container_width=True)
+                st.dataframe(df_threats, width='stretch')
             else:
                 st.success("✅ الرادار نظيف، لا توجد تهديدات مسجلة.")
 
@@ -6899,7 +6906,7 @@ elif page == "مركز الصيانة":
                 SELECT created_at AS "الوقت", log_type AS "النوع", action_details AS "التفاصيل"
                 FROM app_monitor ORDER BY created_at DESC LIMIT 15
             """, conn)
-            st.dataframe(df_app_logs, use_container_width=True, hide_index=True)
+            st.dataframe(df_app_logs, width='stretch', hide_index=True)
         except Exception:
             st.info("سيظهر سجل الأحداث هنا فور توليد النظام تسجيلات.")
 
@@ -6908,7 +6915,7 @@ elif page == "مركز الصيانة":
         # --- 5. النسخ الاحتياطي الشامل ---
         st.subheader("💾 النسخ الاحتياطي")
         st.info("تحميل نسخة كاملة من قاعدة البيانات بصيغة Excel (ورقة لكل جدول رئيسي).")
-        if st.button("📥 توليد نسخة احتياطية الآن", use_container_width=True):
+        if st.button("📥 توليد نسخة احتياطية الآن", width='stretch'):
             try:
                 backup_buf = BytesIO()
                 backup_tables = {
@@ -6934,7 +6941,7 @@ elif page == "مركز الصيانة":
                     data=backup_buf.getvalue(),
                     file_name=f"DealPulse_Backup_{backup_ts}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
+                    width='stretch',
                 )
                 st.success(f"✅ النسخة الاحتياطية جاهزة — {backup_ts}")
             except Exception as e:
@@ -7025,7 +7032,7 @@ elif page == "مدير القناة":
             df_q = pd.read_sql(query_view, conn)
             
             if not df_q.empty:
-                st.dataframe(df_q[["العرض", "القناة", "الحالة"]], use_container_width=True)
+                st.dataframe(df_q[["العرض", "القناة", "الحالة"]], width='stretch')
                 
                 if st.button("🔥 تفعيل النشر لجميع القنوات"):
                     # توثيق التفعيل في سجلات النظام الحقيقية
@@ -7113,7 +7120,7 @@ elif page == "المحفز الفوري":
             query = "SELECT offer_id as ID, offer_title as العنوان, reward_points as النقاط, duration_minutes as المدة FROM flash_offers_queue ORDER BY offer_id DESC"
             df_history = pd.read_sql(query, conn)
             if not df_history.empty:
-                st.dataframe(df_history, use_container_width=True)
+                st.dataframe(df_history, width='stretch')
             else:
                 st.info("لا يوجد سجلات حالياً. ابدأ بإضافة أول محفز!")
 
@@ -7176,11 +7183,11 @@ elif page == "تحليل الموقع":
                 GROUP BY source ORDER BY COUNT(*) DESC
             """, conn)
             if not compare_df.empty:
-                st.dataframe(compare_df, use_container_width=True, hide_index=True)
+                st.dataframe(compare_df, width='stretch', hide_index=True)
                 fig_cmp = px.bar(compare_df, x="المصدر", y="الأحداث",
                                  title="توزيع الأحداث بحسب المصدر", color="المصدر",
                                  color_discrete_sequence=px.colors.qualitative.Set2)
-                st.plotly_chart(fig_cmp, use_container_width=True)
+                st.plotly_chart(fig_cmp, width='stretch')
         except Exception as e:
             st.error(f"⚠️ خطأ في نظرة عامة: {e}")
         finally:
@@ -7206,12 +7213,12 @@ elif page == "تحليل الموقع":
                     st.plotly_chart(px.bar(growth_df, x="التاريخ", y="مسجّلون جدد",
                                            title="التسجيلات اليومية",
                                            color_discrete_sequence=["#10B981"]),
-                                    use_container_width=True)
+                                    width='stretch')
                 with col_g2:
                     st.plotly_chart(px.line(growth_df, x="التاريخ", y="الإجمالي التراكمي",
                                             title="النمو التراكمي",
                                             color_discrete_sequence=["#6366F1"]),
-                                    use_container_width=True)
+                                    width='stretch')
             else:
                 st.info("لا يوجد مستخدمون مسجّلون بعد.")
             st.write("### 📊 تصنيف نشاط المستخدمين")
@@ -7230,7 +7237,7 @@ elif page == "تحليل الموقع":
                 st.plotly_chart(px.pie(activity_df, names="الفئة", values="العدد",
                                        title="تصنيف نشاط المستخدمين",
                                        color_discrete_sequence=px.colors.qualitative.Pastel),
-                                use_container_width=True)
+                                width='stretch')
         except Exception as e:
             st.error(f"⚠️ خطأ في نمو المستخدمين: {e}")
         finally:
@@ -7252,8 +7259,8 @@ elif page == "تحليل الموقع":
                 st.plotly_chart(px.pie(events_df, names="نوع الحدث", values="العدد",
                                        title="توزيع أنواع الأحداث من الموقع",
                                        color_discrete_sequence=["#10B981","#6366F1","#F59E0B","#EF4444"]),
-                                use_container_width=True)
-                st.dataframe(events_df, use_container_width=True, hide_index=True)
+                                width='stretch')
+                st.dataframe(events_df, width='stretch', hide_index=True)
             else:
                 st.info("لا توجد أحداث من الموقع بعد.")
             st.write("### 🏆 أفضل المتاجر من الموقع")
@@ -7268,8 +7275,8 @@ elif page == "تحليل الموقع":
                 st.plotly_chart(px.bar(top_web.head(10), x="المتجر", y="الأحداث",
                                        title="أكثر 10 متاجر تفاعلاً من الموقع",
                                        color_discrete_sequence=["#10B981"]),
-                                use_container_width=True)
-                st.dataframe(top_web, use_container_width=True, hide_index=True)
+                                width='stretch')
+                st.dataframe(top_web, width='stretch', hide_index=True)
             st.write("### ⏰ الأحداث اليومية (آخر 30 يوم)")
             time_ev = pd.read_sql("""
                 SELECT DATE(action_time) AS "التاريخ",
@@ -7282,7 +7289,7 @@ elif page == "تحليل الموقع":
                 st.plotly_chart(px.line(time_ev, x="التاريخ", y=["نسخ","نقرات"],
                                         title="الأحداث اليومية — آخر 30 يوم",
                                         color_discrete_sequence=["#10B981","#6366F1"]),
-                                use_container_width=True)
+                                width='stretch')
         except Exception as e:
             st.error(f"⚠️ خطأ في الأحداث: {e}")
         finally:
@@ -7319,8 +7326,8 @@ elif page == "تحليل الموقع":
                 st.plotly_chart(px.bar(top_kw.head(15), x="الكلمة", y="عدد البحث",
                                        title="أكثر 15 كلمة مطلوبة من الموقع",
                                        color="نسبة الإيجاد %", color_continuous_scale="RdYlGn"),
-                                use_container_width=True)
-                st.dataframe(top_kw, use_container_width=True, hide_index=True)
+                                width='stretch')
+                st.dataframe(top_kw, width='stretch', hide_index=True)
             st.write("### 🚨 فجوات المحتوى (بحث بلا نتائج)")
             gaps_df = pd.read_sql("""
                 SELECT search_keyword AS "الكلمة", COUNT(*) AS "مرات البحث",
@@ -7330,7 +7337,7 @@ elif page == "تحليل الموقع":
             """, conn)
             if not gaps_df.empty:
                 gaps_df["آخر بحث"] = pd.to_datetime(gaps_df["آخر بحث"], errors="coerce").dt.strftime("%Y-%m-%d")
-                st.dataframe(gaps_df, use_container_width=True, hide_index=True)
+                st.dataframe(gaps_df, width='stretch', hide_index=True)
             else:
                 st.success("✅ لا توجد فجوات — كل البحث يجد نتائج!")
         except Exception as e:
@@ -7359,7 +7366,7 @@ elif page == "تحليل الموقع":
                     st.plotly_chart(px.bar(city_df, x="المدينة", y="العدد",
                                            title="توزيع المستخدمين بالمدن",
                                            color_discrete_sequence=["#10B981"]),
-                                    use_container_width=True)
+                                    width='stretch')
                 else:
                     st.info("لا توجد بيانات مدن بعد.")
             with col_c2:
@@ -7367,7 +7374,7 @@ elif page == "تحليل الموقع":
                     st.plotly_chart(px.pie(country_df, names="الدولة", values="العدد",
                                            title="توزيع الدول",
                                            color_discrete_sequence=px.colors.qualitative.Set2),
-                                    use_container_width=True)
+                                    width='stretch')
                 else:
                     st.info("لا توجد بيانات دول بعد.")
             st.write("### 📱 أنواع الأجهزة")
@@ -7380,7 +7387,7 @@ elif page == "تحليل الموقع":
                 st.plotly_chart(px.pie(device_df, names="الجهاز", values="العدد",
                                        title="توزيع أنواع الأجهزة",
                                        color_discrete_sequence=px.colors.qualitative.Pastel),
-                                use_container_width=True)
+                                width='stretch')
         except Exception as e:
             st.error(f"⚠️ خطأ في الجغرافيا: {e}")
         finally:
@@ -7419,7 +7426,7 @@ elif page == "محرّك SEO":
         with col_btn:
             st.write("")
             st.write("")
-            submit_topic = st.form_submit_button("📥 جدولة الوظائف", use_container_width=True)
+            submit_topic = st.form_submit_button("📥 جدولة الوظائف", width='stretch')
 
         if submit_topic:
             if not topic_input.strip():
@@ -7452,7 +7459,7 @@ elif page == "محرّك SEO":
                                       value=3, step=1, key="seo_batch_size",
                                       help="عدد المتاجر التي تُولَّد دفعة (كل متجر = صفحتان: عربي+إنجليزي)")
     with cta2:
-        if st.button("⚙️ توليد الآن", use_container_width=True, type="primary"):
+        if st.button("⚙️ توليد الآن", width='stretch', type="primary"):
             with st.spinner(f"جارٍ توليد {batch_size} متجر عبر الـ LLM... (~{batch_size * 30} ثانية)"):
                 data, err = _admin_post("/admin/seo-run", params={"batch": int(batch_size)})
             if err:
@@ -7487,7 +7494,7 @@ elif page == "محرّك SEO":
     with fc2:
         lang_filter = st.selectbox("اللغة", ["الكل", "عربي", "إنجليزي"], key="seo_lang_filter")
     with fc3:
-        if st.button("🔄 تحديث القائمة", use_container_width=True):
+        if st.button("🔄 تحديث القائمة", width='stretch'):
             st.rerun()
 
     drafts, err = _admin_get("/admin/seo-drafts", params={"limit": 200})
@@ -7551,7 +7558,7 @@ elif page == "محرّك SEO":
                 with btn_publish:
                     if st.button("🚀 نشر",
                                  key=f"seo_pub_{page_id}",
-                                 use_container_width=True, type="primary"):
+                                 width='stretch', type="primary"):
                         with st.spinner("نشر + IndexNow + Next.js revalidate..."):
                             res, perr = _admin_post(f"/admin/seo-publish/{page_id}")
                         if perr:
@@ -7562,7 +7569,7 @@ elif page == "محرّك SEO":
                 with btn_delete:
                     if st.button("🗑️ حذف",
                                  key=f"seo_del_{page_id}",
-                                 use_container_width=True):
+                                 width='stretch'):
                         # نطلب تأكيداً عبر session_state
                         confirm_key = f"seo_del_confirm_{page_id}"
                         st.session_state[confirm_key] = True
@@ -7573,7 +7580,7 @@ elif page == "محرّك SEO":
                     cf1, cf2, _ = st.columns([1, 1, 3])
                     with cf1:
                         if st.button("نعم احذف", key=f"seo_del_yes_{page_id}",
-                                     use_container_width=True, type="primary"):
+                                     width='stretch', type="primary"):
                             res, derr = _admin_delete(f"/admin/seo-draft/{page_id}")
                             if derr:
                                 st.error(derr)
@@ -7583,7 +7590,7 @@ elif page == "محرّك SEO":
                                 st.rerun()
                     with cf2:
                         if st.button("إلغاء", key=f"seo_del_no_{page_id}",
-                                     use_container_width=True):
+                                     width='stretch'):
                             st.session_state.pop(f"seo_del_confirm_{page_id}", None)
                             st.rerun()
 
@@ -7626,7 +7633,7 @@ elif page == "محرّك SEO":
                                     save_col, cancel_col, _ = st.columns([1, 1, 3])
                                     with save_col:
                                         if st.form_submit_button("💾 حفظ", type="primary",
-                                                                  use_container_width=True):
+                                                                  width='stretch'):
                                             update_body = {}
                                             if new_title != full.get('title_meta', ''):
                                                 update_body["title_meta"] = new_title
@@ -7648,7 +7655,7 @@ elif page == "محرّك SEO":
                                                     st.rerun()
                                     with cancel_col:
                                         st.form_submit_button("إلغاء",
-                                                               use_container_width=True)
+                                                               width='stretch')
 
     # ═════════════════════════════════════════════════════════════════════════
     # القسم 4 — تشخيص الفشل (مطوي)
@@ -7665,7 +7672,7 @@ elif page == "محرّك SEO":
 
             ret_col, _ = st.columns([1, 4])
             with ret_col:
-                if st.button("🔁 إعادة جدولة الكل", use_container_width=True):
+                if st.button("🔁 إعادة جدولة الكل", width='stretch'):
                     _r, rerr = _admin_post("/admin/seo-retry-failed",
                                             params={"limit": 100})
                     if rerr:
@@ -7692,7 +7699,7 @@ elif page == "📤 الصفحات المنشورة":
 
     top1, top2, top3 = st.columns([1, 1, 2])
     with top1:
-        if st.button("🔄 تحديث", use_container_width=True):
+        if st.button("🔄 تحديث", width='stretch'):
             st.rerun()
     with top2:
         lang_pub_filter = st.selectbox("اللغة", ["الكل", "عربي", "إنجليزي"], key="pub_lang")
@@ -7740,7 +7747,7 @@ elif page == "📤 الصفحات المنشورة":
                 # شريط الإجراءات
                 a1, a2 = st.columns(2)
                 with a1:
-                    st.link_button("🌐 افتح الصفحة", live_url, use_container_width=True)
+                    st.link_button("🌐 افتح الصفحة", live_url, width='stretch')
                 with a2:
                     import html as _html
                     url_attr = _html.escape(live_url, quote=True)
@@ -7837,7 +7844,7 @@ elif page == "🎯 محرك الفرص":
         )
     with top_r:
         only_active = st.toggle("النشطة فقط", value=False, key="opp_active_only")
-        if st.button("🔄 تحديث Trends لكل الكلمات", use_container_width=True,
+        if st.button("🔄 تحديث Trends لكل الكلمات", width='stretch',
                      key="opp_refresh_all",
                      help="يستغرق ~5 ثوانٍ × عدد الكلمات (لتفادي rate-limit)"):
             with st.spinner("جلب Google Trends لكل الكلمات النشطة..."):
@@ -7952,7 +7959,7 @@ elif page == "🎯 محرك الفرص":
                         st.caption("الكلمة موقوفة")
                     else:
                         if st.button("🚀 ولّد صفحة الآن", key=f"gen_{kw['id']}",
-                                     type="primary", use_container_width=True):
+                                     type="primary", width='stretch'):
                             with st.spinner("جاري التوليد (قد يستغرق 30 ثانية للـ LLM)..."):
                                 res, err = _admin_post(
                                     f"/admin/seo-opportunities/{kw['id']}/generate-page"
@@ -7967,7 +7974,7 @@ elif page == "🎯 محرك الفرص":
 
                 with a2:
                     if st.button("🔄 جلب Trend", key=f"rf_{kw['id']}",
-                                 use_container_width=True,
+                                 width='stretch',
                                  help="جلب فوري لدرجة Google Trends لهذه الكلمة"):
                         with st.spinner("جلب من Google..."):
                             res, err = _admin_post(
@@ -7986,7 +7993,7 @@ elif page == "🎯 محرك الفرص":
                 with a3:
                     toggle_label = "▶️ تفعيل" if inactive else "⏸️ إيقاف"
                     if st.button(toggle_label, key=f"tg_{kw['id']}",
-                                 use_container_width=True):
+                                 width='stretch'):
                         res, err = _admin_put(
                             f"/admin/seo-opportunities/{kw['id']}",
                             json_body={"active": inactive},  # عكس الحالة الحالية
@@ -7997,7 +8004,7 @@ elif page == "🎯 محرك الفرص":
                             st.rerun()
 
                 with a4:
-                    with st.popover("✏️ تعديل", use_container_width=True):
+                    with st.popover("✏️ تعديل", width='stretch'):
                         with st.form(f"edit_form_{kw['id']}"):
                             e_kw = st.text_input("الكلمة", value=kw["keyword"],
                                                   max_chars=200)
@@ -8026,7 +8033,7 @@ elif page == "🎯 محرك الفرص":
                     confirm_key = f"del_confirm_{kw['id']}"
                     if st.session_state.get(confirm_key):
                         if st.button("⚠️ أكّد الحذف", key=f"del_yes_{kw['id']}",
-                                     type="primary", use_container_width=True):
+                                     type="primary", width='stretch'):
                             res, err = _admin_delete(f"/admin/seo-opportunities/{kw['id']}")
                             if err:
                                 st.error(err)
@@ -8036,7 +8043,7 @@ elif page == "🎯 محرك الفرص":
                                 st.rerun()
                     else:
                         if st.button("🗑️ حذف", key=f"del_{kw['id']}",
-                                     use_container_width=True):
+                                     width='stretch'):
                             st.session_state[confirm_key] = True
                             st.rerun()
 
@@ -8073,7 +8080,7 @@ elif page == "🎯 محرك الفرص":
                                 with rcol2:
                                     btn_key = f"tt_{kw['id']}_t_{i}"
                                     if st.button("+ تتبّع", key=btn_key,
-                                                 use_container_width=True):
+                                                 width='stretch'):
                                         body = {"keyword": q_text,
                                                 "store_id": kw.get("store_id")}
                                         res, err = _admin_post(
@@ -8123,7 +8130,7 @@ elif page == "🎯 محرك الفرص":
                                 with rcol2:
                                     btn_key = f"tt_{kw['id']}_r_{i}"
                                     if st.button("+ تتبّع", key=btn_key,
-                                                 use_container_width=True):
+                                                 width='stretch'):
                                         body = {"keyword": q_text,
                                                 "store_id": kw.get("store_id")}
                                         res, err = _admin_post(
@@ -8149,7 +8156,7 @@ elif page == "الرصد الاجتماعي":
 
     top1, top2 = st.columns([1, 2])
     with top1:
-        if st.button("🔄 معالجة الإشارات الآن", use_container_width=True, type="primary"):
+        if st.button("🔄 معالجة الإشارات الآن", width='stretch', type="primary"):
             with st.spinner("scoring + matching + توليد الردود…"):
                 data, err = _admin_post("/admin/social-run", params={"batch": 20})
             if err:
@@ -8205,7 +8212,7 @@ elif page == "الرصد الاجتماعي":
                 st.code(r.get("rendered_text") or "", language=None)
                 act1, act2, _sp = st.columns([1, 1, 3])
                 with act1:
-                    if st.button("✅ اعتماد ونشر", key=f"soc_appr_{r['id']}", use_container_width=True, type="primary"):
+                    if st.button("✅ اعتماد ونشر", key=f"soc_appr_{r['id']}", width='stretch', type="primary"):
                         res, e2 = _admin_post(f"/admin/social-approve/{r['id']}")
                         if e2:
                             st.error(e2)
@@ -8213,7 +8220,7 @@ elif page == "الرصد الاجتماعي":
                             st.success("تم الاعتماد ✅" + (" (نُشر)" if res and res.get("via") == "webhook" and res.get("ok") else ""))
                             st.rerun()
                 with act2:
-                    if st.button("🗑️ رفض", key=f"soc_rej_{r['id']}", use_container_width=True):
+                    if st.button("🗑️ رفض", key=f"soc_rej_{r['id']}", width='stretch'):
                         res, e2 = _admin_post(f"/admin/social-reject/{r['id']}")
                         if e2:
                             st.error(e2)
@@ -8252,7 +8259,7 @@ elif page == "🎯 رادار الصفقات الفوري":
             key="leads_status",
         )
     with _r2:
-        if st.button("🔄 تحديث الآن", use_container_width=True, key="leads_refresh"):
+        if st.button("🔄 تحديث الآن", width='stretch', key="leads_refresh"):
             st.rerun()
     with _r3:
         st.caption(
@@ -8350,20 +8357,20 @@ elif page == "🎯 رادار الصفقات الفوري":
                         st.link_button(
                             "↗ افتح المنشور للرد",
                             url=post_url,
-                            use_container_width=True,
+                            width='stretch',
                             type="primary",
                         )
                     else:
                         st.button(
                             "🚫 لا يوجد رابط",
                             disabled=True,
-                            use_container_width=True,
+                            width='stretch',
                             key=f"nourl_{lead['lead_id']}",
                         )
                 with act_c2:
                     if lead.get("status") in ("matched", "responded", "lead_pending"):
                         if st.button("✅ تم الرد", key=f"replied_{lead['lead_id']}",
-                                     use_container_width=True):
+                                     width='stretch'):
                             _r, e2 = _admin_post(f"/admin/social-leads/{lead['lead_id']}/mark-replied")
                             if e2:
                                 st.error(e2)
@@ -8373,7 +8380,7 @@ elif page == "🎯 رادار الصفقات الفوري":
                 with act_c3:
                     if lead.get("status") in ("matched", "responded", "lead_pending"):
                         if st.button("🗑️ تجاهل", key=f"dismiss_{lead['lead_id']}",
-                                     use_container_width=True):
+                                     width='stretch'):
                             _r, e2 = _admin_post(f"/admin/social-leads/{lead['lead_id']}/dismiss")
                             if e2:
                                 st.error(e2)
@@ -8405,7 +8412,7 @@ elif page == "التدقيق والتجارب":
             df = _pd.DataFrame(data["entries"])
             df = df.rename(columns={"at": "الوقت", "action": "العملية", "target": "الهدف",
                                     "actor": "المنفّذ", "status": "الحالة", "id": "#"})
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            st.dataframe(df, width='stretch', hide_index=True)
 
     # ── ساعات الهدوء ──
     with tab_quiet:
@@ -8426,7 +8433,7 @@ elif page == "التدقيق والتجارب":
                         st.caption(f"القنوات: {chans} · الحالة: {'مفعّلة ✅' if w.get('active') else 'متوقّفة'}")
                     with cc2:
                         lbl = "إيقاف" if w.get("active") else "تفعيل"
-                        if st.button(lbl, key=f"qh_{w['id']}", use_container_width=True):
+                        if st.button(lbl, key=f"qh_{w['id']}", width='stretch'):
                             _r, e2 = _admin_post(f"/admin/quiet-hours/{w['id']}/toggle")
                             if e2:
                                 st.error(e2)
@@ -8446,7 +8453,7 @@ elif page == "التدقيق والتجارب":
             df = df.rename(columns={"experiment": "التجربة", "surface": "السطح", "arm": "النسخة",
                                     "impressions": "ظهور", "clicks": "نقرات",
                                     "conversions": "تحويلات", "total_value": "القيمة"})
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            st.dataframe(df, width='stretch', hide_index=True)
             st.caption("الظهور يُسجَّل عند توليد كل رد. النقرات/التحويلات تتفعّل مع ربط الإحالة لاحقاً.")
 
 
@@ -8665,14 +8672,14 @@ elif page == "📊 تقرير الشركاء":
         df_melt["نوع الحدث"] = df_melt["نوع الحدث"].map(type_map)
         fig_d = px.area(df_melt, x="day", y="عدد", color="نوع الحدث",
                         title="حركة المستخدمين عبر الأيام", height=380)
-        st.plotly_chart(apply_brand_theme(fig_d), use_container_width=True)
+        st.plotly_chart(apply_brand_theme(fig_d), width='stretch')
 
     # ─── أعلى المتاجر أداءً ─────────────────────────────────────────────────
     if not data["top_stores"].empty:
         st.markdown("### 🏆 أعلى 20 متجر أداءً")
         df_t = data["top_stores"].copy()
         df_t.columns = ["المتجر", "النقرات", "النسخ", "المستخدمون", "نسبة التحويل %"]
-        st.dataframe(df_t, use_container_width=True, hide_index=True,
+        st.dataframe(df_t, width='stretch', hide_index=True,
                      column_config={
                          "النقرات":        st.column_config.NumberColumn(format="%d"),
                          "النسخ":          st.column_config.NumberColumn(format="%d"),
@@ -8687,7 +8694,7 @@ elif page == "📊 تقرير الشركاء":
         if not data["geo"].empty:
             df_g = data["geo"].copy()
             df_g.columns = ["المدينة", "أحداث", "مستخدمون"]
-            st.dataframe(df_g, use_container_width=True, hide_index=True, height=320)
+            st.dataframe(df_g, width='stretch', hide_index=True, height=320)
         else:
             st.info("لا توجد بيانات جغرافية بعد.")
     with col_dev:
@@ -8696,14 +8703,14 @@ elif page == "📊 تقرير الشركاء":
             df_dv = data["devices"].copy()
             fig_dv = px.pie(df_dv, names="device", values="events",
                             title="", hole=0.4, height=260)
-            st.plotly_chart(apply_brand_theme(fig_dv), use_container_width=True)
+            st.plotly_chart(apply_brand_theme(fig_dv), width='stretch')
     with col_src:
         st.markdown("#### 🚪 المصدر")
         if not data["sources"].empty:
             df_s = data["sources"].copy()
             fig_s = px.pie(df_s, names="source", values="events",
                            title="", hole=0.4, height=260)
-            st.plotly_chart(apply_brand_theme(fig_s), use_container_width=True)
+            st.plotly_chart(apply_brand_theme(fig_s), width='stretch')
 
     # ─── قمع التحويل ────────────────────────────────────────────────────────
     st.markdown("### 🎯 قمع التحويل (Funnel)")
@@ -8715,7 +8722,7 @@ elif page == "📊 تقرير الشركاء":
         "العدد":   [fn_searches, fn_clicks, fn_copies],
     })
     fig_fn = px.funnel(fn_df, x="العدد", y="المرحلة", height=300)
-    st.plotly_chart(apply_brand_theme(fig_fn), use_container_width=True)
+    st.plotly_chart(apply_brand_theme(fig_fn), width='stretch')
 
     # ─── تصدير ──────────────────────────────────────────────────────────────
     st.divider()
@@ -8730,7 +8737,7 @@ elif page == "📊 تقرير الشركاء":
                 data=csv_bytes,
                 file_name=f"partner_top_stores_{period_days}d.csv",
                 mime="text/csv",
-                use_container_width=True,
+                width='stretch',
             )
     with exp_c2:
         # CSV: التطور اليومي
@@ -8741,7 +8748,7 @@ elif page == "📊 تقرير الشركاء":
                 data=csv_bytes,
                 file_name=f"partner_daily_{period_days}d.csv",
                 mime="text/csv",
-                use_container_width=True,
+                width='stretch',
             )
 
     st.info(
@@ -8858,7 +8865,7 @@ if page == "🩺 تشخيص النشر":
                         "error_message": "الخطأ",
                         "attempted_at": "وقت المحاولة",
                     })
-                    st.dataframe(_logs, hide_index=True, use_container_width=True)
+                    st.dataframe(_logs, hide_index=True, width='stretch')
                     _counts = _logs["الحالة"].value_counts().to_dict()
                     st.caption(
                         "📊 " + " · ".join(f"{k}: {v}" for k, v in _counts.items())

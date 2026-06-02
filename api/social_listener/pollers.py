@@ -74,8 +74,10 @@ def poll_reddit(*, keywords: Iterable[str] | None = None, limit_per_sub: int = 2
     kws = list(keywords) if keywords else ALL_DEFAULT_KEYWORDS
     kws_lower = [k.lower() for k in kws]
     stats = {"scanned": 0, "ingested": 0, "duplicate": 0, "errors": 0}
+    _subs = [s.strip() for s in REDDIT_SUBREDDITS if s.strip()]
+    _blocked = 0   # 403 = Reddit يحظر IP مركز البيانات (Railway) — متوقّع، لا نضجّ
 
-    for sub in [s.strip() for s in REDDIT_SUBREDDITS if s.strip()]:
+    for sub in _subs:
         try:
             r = requests.get(
                 f"https://www.reddit.com/r/{sub}/new.json",
@@ -84,8 +86,11 @@ def poll_reddit(*, keywords: Iterable[str] | None = None, limit_per_sub: int = 2
                 timeout=10,
             )
             if r.status_code != 200:
-                _log.warning("Reddit r/%s returned %s", sub, r.status_code)
                 stats["errors"] += 1
+                if r.status_code in (403, 429):
+                    _blocked += 1                       # معروف (حظر IP) — صامت
+                else:
+                    _log.warning("Reddit r/%s returned %s", sub, r.status_code)
                 continue
 
             posts = (r.json() or {}).get("data", {}).get("children", [])
@@ -116,7 +121,14 @@ def poll_reddit(*, keywords: Iterable[str] | None = None, limit_per_sub: int = 2
             _log.error("poll_reddit r/%s failed: %s", sub, str(exc)[:200])
             stats["errors"] += 1
 
-    _log.info("Reddit poll: %s", stats)
+    # سطر ملخّص واحد بدل تحذير لكل subreddit. لو كل الـ subs محظورة (403) نوضّح
+    # السبب مرّة واحدة بمستوى info (لا warning أحمر): Reddit يحظر IPs مراكز
+    # البيانات؛ لتفعيله فعلياً يلزم Reddit OAuth API (client_id/secret).
+    if _blocked and _blocked == len(_subs):
+        _log.info("Reddit poll: skipped — all %d subs blocked (403, datacenter IP). "
+                  "Needs Reddit OAuth to enable. %s", _blocked, stats)
+    else:
+        _log.info("Reddit poll: %s (blocked=%d)", stats, _blocked)
     return stats
 
 
