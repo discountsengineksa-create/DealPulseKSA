@@ -1016,7 +1016,9 @@ def _sa_load_actions() -> pd.DataFrame:
                    bu.username     AS bu_username,              -- هوية تيليجرام
                    wu.display_name AS web_name,                 -- هوية الويب المسجّل
                    wu.email        AS web_email,
-                   wu.phone_number AS web_phone
+                   wu.phone_number AS web_phone,
+                   wu.city         AS web_city,                 -- مدينة التسجيل (الويب)
+                   wu.telegram_username AS web_tg               -- تيليجرام مربوط بحساب الويب
             FROM   action_logs a
             LEFT JOIN bot_users bu ON bu.telegram_id = a.user_id
             LEFT JOIN web_users wu ON wu.id = a.user_id AND a.source = 'web'
@@ -1102,7 +1104,9 @@ def _sa_load_favorites() -> pd.DataFrame:
                    bu.city         AS bu_city,
                    wu.display_name AS web_name,       -- هوية ويب مسجّل
                    wu.email        AS web_email,
-                   wu.city         AS web_city
+                   wu.phone_number AS web_phone,
+                   wu.city         AS web_city,
+                   wu.telegram_username AS web_tg
             FROM   user_favorites uf
             LEFT JOIN bot_users bu ON bu.telegram_id = uf.telegram_id
             LEFT JOIN web_users wu ON wu.id          = uf.web_user_id
@@ -3220,14 +3224,63 @@ elif page == "تحليل المتاجر":
                         _addcols["store_id"] = _miss["store_id"].values
                     who = pd.concat([who, pd.DataFrame(_addcols)], ignore_index=True)
 
-            # المدينة من كل أحداث المستخدم في الفترة
+            # ── ملف تعريف الشخص: إيميل/جوال/تيليجرام/مدينة التسجيل لكل identity ──
+            def _first_ne(series):
+                if series is None:
+                    return ""
+                for v in series:
+                    s = _cln(v)
+                    if s:
+                        return s
+                return ""
+
+            _profile = {}   # identity -> {email, phone, tg, city}
+            if not df_logs.empty and "identity" in df_logs.columns:
+                for _ident, _grp in df_logs.groupby("identity"):
+                    _tg = _first_ne(_grp.get("web_tg")) or _first_ne(_grp.get("bu_username"))
+                    _profile[_ident] = {
+                        "email": _first_ne(_grp.get("web_email")),
+                        "phone": _first_ne(_grp.get("web_phone")),
+                        "tg":    _tg,
+                        "city":  _first_ne(_grp.get("web_city")) or _first_ne(_grp.get("bu_city")),
+                    }
+            if not _fw.empty:
+                for _, _fr in _fw.iterrows():
+                    _ident = _fav_ident(_fr)
+                    if _ident is None or _ident in _profile:
+                        continue
+                    _tg = _cln(_fr.get("web_tg")) or _cln(_fr.get("bu_username"))
+                    _profile[_ident] = {
+                        "email": _cln(_fr.get("web_email")),
+                        "phone": _cln(_fr.get("web_phone")),
+                        "tg":    _tg,
+                        "city":  _cln(_fr.get("web_city")) or _cln(_fr.get("bu_city")),
+                    }
+
+            # المدينة: من IP (نقر /go) إن توفّر، وإلا من مدينة التسجيل
             _geo = df_logs[df_logs["city_c"] != "غير معروف"]
-            if not _geo.empty:
-                cmap = _geo.groupby("identity")["city_c"].agg(
-                    lambda s: s.mode().iat[0] if not s.mode().empty else "غير معروف")
-                who["المدينة"] = who["identity"].map(cmap).fillna("غير معروف")
+            _cmap = ({} if _geo.empty else
+                     _geo.groupby("identity")["city_c"].agg(
+                         lambda s: s.mode().iat[0] if not s.mode().empty else "غير معروف").to_dict())
+
+            def _city_of(ident):
+                c = _cmap.get(ident)
+                if c and c != "غير معروف":
+                    return c
+                return _profile.get(ident, {}).get("city") or "غير معروف"
+
+            def _tg_of(ident):
+                t = _profile.get(ident, {}).get("tg")
+                return ("@" + t.lstrip("@")) if t else "—"
+
+            if not who.empty:
+                who["المدينة"] = who["identity"].map(_city_of)
+                who["الإيميل"] = who["identity"].map(lambda i: _profile.get(i, {}).get("email") or "—")
+                who["الجوال"] = who["identity"].map(lambda i: _profile.get(i, {}).get("phone") or "—")
+                who["تيليجرام"] = who["identity"].map(_tg_of)
             else:
-                who["المدينة"] = "غير معروف"
+                for _c in ("المدينة", "الإيميل", "الجوال", "تيليجرام"):
+                    who[_c] = pd.Series(dtype="object")
 
             def _who_fav(r):
                 _sid = r["store_id"] if sel == _ALL_STORES else sel
@@ -3244,11 +3297,13 @@ elif page == "تحليل المتاجر":
             who["آخر تفاعل"] = pd.to_datetime(who["آخر تفاعل"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
             who[["أول تفاعل", "آخر تفاعل"]] = who[["أول تفاعل", "آخر تفاعل"]].fillna("—")
             who["المصدر"] = who["المصدر"].fillna("—")
-            _cols = (["المستخدم", "المتجر", "المصدر", "نسخ", "نقر", "بحث",
-                      "❤️ المفضلة", "المدينة", "أول تفاعل", "آخر تفاعل"]
+            _cols = (["المستخدم", "الإيميل", "الجوال", "تيليجرام", "المدينة",
+                      "المتجر", "المصدر", "نسخ", "نقر", "بحث",
+                      "❤️ المفضلة", "أول تفاعل", "آخر تفاعل"]
                      if sel == _ALL_STORES else
-                     ["المستخدم", "المصدر", "نسخ", "نقر", "بحث",
-                      "❤️ المفضلة", "المدينة", "أول تفاعل", "آخر تفاعل"])
+                     ["المستخدم", "الإيميل", "الجوال", "تيليجرام", "المدينة",
+                      "المصدر", "نسخ", "نقر", "بحث",
+                      "❤️ المفضلة", "أول تفاعل", "آخر تفاعل"])
             st.dataframe(who[_cols], hide_index=True, width='stretch')
             _fname = "all" if sel == _ALL_STORES else sel
             st.download_button("📥 تحميل القائمة (CSV)",
