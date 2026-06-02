@@ -53,9 +53,30 @@ from deal_pulse_bot import (
     backfill_user_behavior,
     IDLE_KICK_MINUTES,
 )
+from telebot import ExceptionHandler
+
 from api.routers import admin, auth, coupons, go, seo, social, track, users
 from api.utils.rate_limit import limiter
 from api.workers.scheduler import start_workers
+
+# ─── Webhook mode: synchronous + crash-resilient update processing ──────────
+# سبب جذري (شُخّص 2026-06-02): telebot الافتراضي threaded=True يستخدم بركة خيوط،
+# وفي util.WorkerThread.run عند رمي أي معالج لاستثناء يتجمّد الخيط على
+# continue_event.wait() للأبد. في polling يحرّره bot.polling()؛ لكن في WEBHOOK
+# لا شيء يحرّره → بعد استثناءين (عامِلان فقط) يتجمّد كل العمّال → كل الأزرار
+# تتوقّف عن الاستجابة (الخدمة ترد 200 لكن لا معالج يشتغل).
+# الإصلاح: معالجة متزامنة (threaded=False) — لا بركة خيوط تتجمّد — + معالِج
+# استثناءات يسجّل ويعتبره مُعالَجاً حتى لا يُسقط معالجٌ واحد الـ webhook بـ 500
+# (فيدخل تيليجرام في حلقة إعادة إرسال).
+class _WebhookExceptionHandler(ExceptionHandler):
+    def handle(self, exception):  # noqa: D401
+        _logging.getLogger("dp.bot").error(
+            "bot handler exception: %s", exception, exc_info=exception
+        )
+        return True  # handled → لا إعادة رفع → webhook يرجّع 200
+
+bot.threaded = False
+bot.exception_handler = _WebhookExceptionHandler()
 
 # ─── التحقق من المتغيرات الحرجة ───────────────────────────────────────────────
 TOKEN_ENV = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
