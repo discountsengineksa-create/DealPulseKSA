@@ -3023,15 +3023,19 @@ elif page == "تحليل المتاجر":
     with r2b: kpi_card("📉", "الأقل بحثاً", f"{ls['store_id']}", "neutral", note=f"{int(ls['بحث'])} بحث")
     with r2c: kpi_card("🔻", "الأقل نقراً", f"{lc['store_id']}", "neutral", note=f"{int(lc['نقرات'])} نقرة")
 
-    tab_board, tab_who, tab_charts, tab_fav = st.tabs([
+    _SM_TABS = [
         "🏆 لوحة القرار (كل المتاجر)",
         "👤 مين نسخ من متجر",
         "📈 الرسوم والمعدلات",
         "❤️ المفضلة",
-    ])
+    ]
+    # radio بدل st.tabs: يثبّت التبويب المختار عبر إعادة التشغيل. st.tabs يرجع
+    # للتبويب الأول مع أي rerun (تغيير الفلتر أو زر «تحديث») — هذا يبقيك مكانك.
+    _sm_tab = st.radio("العرض:", _SM_TABS, horizontal=True,
+                       key="sm_active_tab", label_visibility="collapsed")
 
     # ─────────────────────────── لوحة القرار ───────────────────────────
-    with tab_board:
+    if _sm_tab == _SM_TABS[0]:
         st.caption("كل متاجر الماستر تظهر (حتى الخاملة بصفر) · مرتّبة بالنسخ · «التوصية» قاعدة آلية. "
                    "اضغط رأس أي عمود للفرز.")
         q = st.text_input("🔎 ابحث عن متجر:", key="sm_board_q")
@@ -3093,7 +3097,7 @@ elif page == "تحليل المتاجر":
             st.write("، ".join(drop["store_id"].tolist()) or "—")
 
     # ─────────────────────────── مين نسخ ───────────────────────────
-    with tab_who:
+    elif _sm_tab == _SM_TABS[1]:
         st.caption("الافتراضي: كل المتاجر دفعة وحدة. اختر متجراً محدداً لو تبي تركّز عليه.")
         _ALL_STORES = "— الكل (جميع المتاجر) —"
         store_opts = [_ALL_STORES] + agg.sort_values("نسخ", ascending=False)["store_id"].tolist()
@@ -3315,7 +3319,7 @@ elif page == "تحليل المتاجر":
                        "(نقر/بحث/نسخ). مفضّل بلا أي تفاعل آخر = «—» في التاريخ. «المدينة» من IP نقر /go.")
 
     # ─────────────────────────── الرسوم والمعدلات ───────────────────────────
-    with tab_charts:
+    elif _sm_tab == _SM_TABS[2]:
         st.markdown("**🎟️ النسخ لكل متجر (أعلى 20)**")
         topn = agg[agg["نسخ"] > 0].sort_values("نسخ", ascending=False).head(20)
         if topn.empty:
@@ -3388,7 +3392,7 @@ elif page == "تحليل المتاجر":
             st.caption("«دقيقة» لرصد دفعات النشاط اللحظية · «يوم» لرؤية الاتجاه العام.")
 
     # ─────────────────────────── ❤️ المفضلة ───────────────────────────
-    with tab_fav:
+    elif _sm_tab == _SM_TABS[3]:
         st.caption("من جدول `user_favorites` الموحّد (بوت + ميني-ويب + ويب). كل شخص يُحتسب "
                    "مرة واحدة لكل متجر · أساس للتنبيهات المستقبلية (حقل last_notified_at جاهز).")
         try:
