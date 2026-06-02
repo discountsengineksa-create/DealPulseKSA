@@ -2508,17 +2508,20 @@ if page == "تحليل الأقسام":
     df_cat_agg["مفضّلون"] = df_cat_agg["مفضّلون"].fillna(0).astype(int)
 
     # ── التبويبات ────────────────────────────────────────────────────────────
-    tab_overview, tab_individual, tab_geo, tab_favs, tab_time, tab_priority = st.tabs([
+    _CA_TABS = [
         "📊 الأداء العام",
         "🏷️ الفحص الفردي",
         "🏙️ التوزيع الجغرافي",
         "❤️ الأكثر تفضيلاً",
         "⏰ التحليل الزمني",
         "🏅 الأولويات",
-    ])
+    ]
+    # radio محفوظ بدل st.tabs — يثبّت التبويب عبر إعادة التشغيل (تغيير الفلتر).
+    _ca_tab = st.radio("العرض:", _CA_TABS, horizontal=True,
+                       key="ca_active_tab", label_visibility="collapsed")
 
     # ── 1) الأداء العام ──────────────────────────────────────────────────────
-    with tab_overview:
+    if _ca_tab == _CA_TABS[0]:
         total_clicks  = int(df_cat_agg["نقرات"].sum())
         total_copies  = int(df_cat_agg["نسخ"].sum())
         total_search  = int(df_cat_agg["بحث"].sum())
@@ -2568,7 +2571,7 @@ if page == "تحليل الأقسام":
                 st.info("لا توجد أقسام كافية.")
 
     # ── 2) الفحص الفردي ──────────────────────────────────────────────────────
-    with tab_individual:
+    elif _ca_tab == _CA_TABS[1]:
         st.subheader("🏷️ بطاقة القسم الكاملة")
         st.caption("اختر قسماً → كل ما يخصّه: مين دخل (بهوية كاملة) · ماذا فعل · متى · من أي مصدر.")
 
@@ -2639,7 +2642,7 @@ if page == "تحليل الأقسام":
                 )
 
     # ── 3) التوزيع الجغرافي ──────────────────────────────────────────────────
-    with tab_geo:
+    elif _ca_tab == _CA_TABS[2]:
         st.subheader("🏙️ من أين يأتي نشاط كل قسم؟")
         if scoped_with_tag.empty:
             st.info("لا أحداث ضمن النطاق.")
@@ -2659,7 +2662,7 @@ if page == "تحليل الأقسام":
                 st.plotly_chart(apply_brand_theme(fig), width='stretch')
 
     # ── 4) ❤️ الأكثر تفضيلاً ────────────────────────────────────────────────
-    with tab_favs:
+    elif _ca_tab == _CA_TABS[3]:
         st.subheader("❤️ لوحة الأقسام الأكثر تفضيلاً")
         st.caption("هذه قاعدة الـ push المستقبلي: لو نزل كوبون قسم «أحذية رياضية» → نُنبّه كل من فضّله.")
 
@@ -2694,7 +2697,7 @@ if page == "تحليل الأقسام":
                 st.plotly_chart(apply_brand_theme(fig_p), width='stretch')
 
     # ── 5) التحليل الزمني ────────────────────────────────────────────────────
-    with tab_time:
+    elif _ca_tab == _CA_TABS[4]:
         st.subheader("⏰ متى تنشط الأقسام؟")
         if scoped_with_tag.empty:
             st.info("لا أحداث ضمن النطاق.")
@@ -2712,7 +2715,7 @@ if page == "تحليل الأقسام":
                 )
 
     # ── 6) الأولويات (يبقى كما كان — إدارة يدوية) ───────────────────────────
-    with tab_priority:
+    elif _ca_tab == _CA_TABS[5]:
         st.subheader("🏅 إدارة ترتيب الأقسام يدوياً")
         st.caption("الرقم 1 = يظهر أولاً في البوت والموقع · الرقم 5 = الافتراضي")
         try:
@@ -4775,14 +4778,16 @@ elif page == "تحليل المستخدمين":
     page_title("📊", "مركز تحليل سلوك المستخدمين")
     st.info("تحليل معمق لقاعدة البيانات لفهم تفاعل العملاء وتصنيفهم بناءً على الـ 17 عموداً الأساسية.")
 
-    # إنشاء التبويبات
-    tab_kpi, tab_gen_u, tab_ind_u, tab_web, tab_bot_demo = st.tabs([
+    # إنشاء التبويبات — radio محفوظ بدل st.tabs (يثبّت التبويب عبر إعادة التشغيل)
+    _UA_TABS = [
         "🎯 مؤشرات الأداء (KPIs)",
         "📈 الأداء العام للعملاء",
         "🔍 الفحص الفردي (ID)",
         "🌐 الموقع — ديموغرافيا + بقاء",
         "📱 الميني-ويب — ديموغرافيا",
-    ])
+    ]
+    _ua_tab = st.radio("العرض:", _UA_TABS, horizontal=True,
+                       key="ua_active_tab", label_visibility="collapsed")
 
     try:
         conn = get_conn()
@@ -4810,7 +4815,7 @@ elif page == "تحليل المستخدمين":
             df_users['last_seen'] = pd.to_datetime(df_users['last_seen'])
 
             # --- تبويب 1: KPIs ---
-            with tab_kpi:
+            if _ua_tab == _UA_TABS[0]:
                 st.subheader("🎯 ملخص جودة قاعدة المستخدمين")
                 now = pd.Timestamp.now()
                 active_24h = (df_users['last_seen'] >= (now - pd.Timedelta(hours=24))).sum()
@@ -4830,7 +4835,7 @@ elif page == "تحليل المستخدمين":
                 cc4.metric("🎁 المستفيدون", int(beneficiaries))
 
             # --- تبويب 2: الأداء العام (جدول حركة المستخدمين) ---
-            with tab_gen_u:
+            elif _ua_tab == _UA_TABS[1]:
                 st.subheader("📈 لوحة أعلى المستخدمين تفاعلاً")
 
                 top_users = df_users.head(20)[
@@ -4864,7 +4869,7 @@ elif page == "تحليل المستخدمين":
                                    u_anal_excel.getvalue(), "total_users_analytics.xlsx")
 
             # --- تبويب 3: الفحص الفردي (بحث ذكي + بطاقة موحّدة) ---
-            with tab_ind_u:
+            elif _ua_tab == _UA_TABS[2]:
                 st.subheader("🔍 بطاقة المستخدم الكاملة")
                 st.caption("ابحث بـ: إيميل · جوال (5XXXXXXXX أو +966...) · @اسم_تيليجرام · ID رقمي · أو جزء من الاسم")
 
@@ -5171,11 +5176,12 @@ elif page == "تحليل المستخدمين":
                                     "text/csv",
                                 )
         else:
-            st.warning("⚠️ قاعدة البيانات فارغة. انتظر دخول مستخدمين لبدء التحليل.")
+            if _ua_tab in (_UA_TABS[0], _UA_TABS[1], _UA_TABS[2]):
+                st.warning("⚠️ قاعدة بيانات مستخدمي البوت فارغة. انتظر دخول مستخدمين لبدء التحليل.")
 
         # ─── تبويب 4: ديموغرافيا الموقع (web_users) + منحنى البقاء ──────────
         # مستقل عن bot_users؛ يعمل ولو قاعدة البوت فارغة.
-        with tab_web:
+        if _ua_tab == _UA_TABS[3]:
             st.subheader("🌐 المسجّلون عبر الموقع — توزيع ديموغرافي + بقاء")
             st.caption("البيانات من جدول `web_users` (تسجيل بحساب). فارغ = لم يسجّل أحد بعد عبر الموقع.")
 
@@ -5366,7 +5372,7 @@ elif page == "تحليل المستخدمين":
         # ─── تبويب 5: ديموغرافيا الميني-ويب (bot_users) ────────────────────
         # البيانات تُجمع من موديال إلزامي يطلب gender+birth_date عند أول فتح
         # للميني-ويب (telegram WebApp). يُحفظ في bot_users بعد التحقق من initData.
-        with tab_bot_demo:
+        elif _ua_tab == _UA_TABS[4]:
             st.subheader("📱 مستخدمو الميني-ويب — توزيع ديموغرافي")
             st.caption("البيانات من `bot_users` — تُجمَع عبر موديال إلزامي في الميني-ويب (migration_025).")
 
