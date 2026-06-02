@@ -2919,12 +2919,14 @@ elif page == "تحليل المتاجر":
         if ds is None or ds.empty:
             return ds
         p = ds["platform"].astype(str).str.lower()
+        is_mini = p.str.contains("mini")          # Miniapp / telegram_miniapp / TelegramMiniApp
         if src_choice == "📱 بوت":
-            return ds[p.str.contains("telegram") | p.str.contains("bot")]
+            # البوت فقط — نستبعد الميني صراحةً حتى لو تسميته تحوي «telegram»
+            return ds[(p.str.contains("telegram") | p.str.contains("bot")) & ~is_mini]
         if src_choice == "🌐 ويب":
-            return ds[p == "web"]
+            return ds[p.str.contains("web")]
         if src_choice == "🔹 بوت - ميني":
-            return ds[p.str.contains("mini")]
+            return ds[is_mini]
         return ds
     df_search_scope = _search_scope(df_search)
 
