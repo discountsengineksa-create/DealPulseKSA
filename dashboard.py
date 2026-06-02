@@ -3158,9 +3158,10 @@ elif page == "تحليل المتاجر":
             st.info("لا توجد نسخات ولا مفضّلات ضمن الفترة/المصدر.")
         else:
             _group_keys = ["identity", "store_id"] if sel == _ALL_STORES else ["identity"]
-            # عدّاد نسخ/نقر/بحث لكل (مستخدم[+متجر])
-            if not sdf.empty:
-                events = sdf[sdf["action_type"].isin(["copy_coupon", "click_link", "search"])]
+            # عدّاد نسخ/نقر/بحث + كل أحداث التفاعل لكل (مستخدم[+متجر])
+            events = (sdf[sdf["action_type"].isin(["copy_coupon", "click_link", "search"])]
+                      if not sdf.empty else sdf)
+            if not events.empty:
                 counts = (events.groupby(_group_keys + ["action_type"])
                                 .size().unstack(fill_value=0).reset_index())
             else:
@@ -3168,9 +3169,10 @@ elif page == "تحليل المتاجر":
             for c in ("copy_coupon", "click_link", "search"):
                 if c not in counts.columns:
                     counts[c] = 0
-            # ميتاداتا النسخ (المصدر/أول/آخر) — على من نسخ فعلاً
-            if not scopy.empty:
-                meta = (scopy.groupby(_group_keys).agg(
+            # المصدر + أول/آخر تفاعل من **كل** أحداث الشخص على المتجر (نقر/بحث/نسخ)
+            # — لا النسخ فقط — حتى لا يطلع «None»/«—» لمن نقر أو بحث بلا نسخ.
+            if not events.empty:
+                meta = (events.groupby(_group_keys).agg(
                             src=("src_ar", lambda s: "، ".join(sorted(set(s)))),
                             first=("action_time", "min"),
                             last=("action_time", "max"),
@@ -3178,7 +3180,7 @@ elif page == "تحليل المتاجر":
                 who = counts.merge(meta, on=_group_keys, how="left")
             else:
                 who = counts.copy()
-                who["src"] = ""
+                who["src"] = pd.NA
                 who["first"] = pd.NaT
                 who["last"] = pd.NaT
 
@@ -3229,23 +3231,24 @@ elif page == "تحليل المتاجر":
             who = who.rename(columns={"identity": "المستخدم", "store_id": "المتجر",
                                       "copy_coupon": "نسخ", "click_link": "نقر",
                                       "search": "بحث",
-                                      "src": "المصدر", "first": "أول نسخ", "last": "آخر نسخ"})
+                                      "src": "المصدر", "first": "أول تفاعل", "last": "آخر تفاعل"})
             who = who.sort_values("نسخ", ascending=False)
-            who["أول نسخ"] = pd.to_datetime(who["أول نسخ"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
-            who["آخر نسخ"] = pd.to_datetime(who["آخر نسخ"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
-            who[["أول نسخ", "آخر نسخ"]] = who[["أول نسخ", "آخر نسخ"]].fillna("—")
+            who["أول تفاعل"] = pd.to_datetime(who["أول تفاعل"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+            who["آخر تفاعل"] = pd.to_datetime(who["آخر تفاعل"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+            who[["أول تفاعل", "آخر تفاعل"]] = who[["أول تفاعل", "آخر تفاعل"]].fillna("—")
+            who["المصدر"] = who["المصدر"].fillna("—")
             _cols = (["المستخدم", "المتجر", "المصدر", "نسخ", "نقر", "بحث",
-                      "❤️ المفضلة", "المدينة", "أول نسخ", "آخر نسخ"]
+                      "❤️ المفضلة", "المدينة", "أول تفاعل", "آخر تفاعل"]
                      if sel == _ALL_STORES else
                      ["المستخدم", "المصدر", "نسخ", "نقر", "بحث",
-                      "❤️ المفضلة", "المدينة", "أول نسخ", "آخر نسخ"])
+                      "❤️ المفضلة", "المدينة", "أول تفاعل", "آخر تفاعل"])
             st.dataframe(who[_cols], hide_index=True, use_container_width=True)
             _fname = "all" if sel == _ALL_STORES else sel
             st.download_button("📥 تحميل القائمة (CSV)",
                                who.to_csv(index=False).encode("utf-8-sig"),
                                f"interactions_{_fname}_{d_start}_{d_end}.csv", "text/csv")
-            st.caption("يشمل **من نسخ** و**من فضّل** المتجر (حتى لو لم ينسخ — يظهر بنسخ=0 و«—» في التواريخ، "
-                       "وعمود ❤️ يبيّن المتجر المفضّل). «المدينة» من الـ IP وقت نقر /go. «#رمز» = بصمة جهاز غير مسجّل.")
+            st.caption("يشمل **من نسخ** و**من فضّل** المتجر · «المصدر» و«التفاعل» من كل أحداث الشخص "
+                       "(نقر/بحث/نسخ). مفضّل بلا أي تفاعل آخر = «—» في التاريخ. «المدينة» من IP نقر /go.")
 
     # ─────────────────────────── الرسوم والمعدلات ───────────────────────────
     with tab_charts:
