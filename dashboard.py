@@ -3103,29 +3103,115 @@ elif page == "تحليل المتاجر":
         else:
             with m3: kpi_card("🖱️", "النقرات", f"{len(sclick):,}", "warning")
 
-        if scopy.empty:
-            st.info("لا توجد نسخات ضمن الفترة/المصدر.")
+        # ── المفضِّلون لهذا النطاق (kind='store') — يظهرون حتى لو لم ينسخوا ──
+        def _cln(v):
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return ""
+            s = str(v).strip()
+            return "" if s.lower() == "nan" else s
+
+        try:
+            _fw = _sa_load_favorites()
+        except Exception:
+            _fw = pd.DataFrame()
+        if not _fw.empty and "kind" in _fw.columns:
+            _fw = _fw[_fw["kind"] == "store"].copy()
+            # فلتر المصدر: «📱 بوت» يعرض مفضّلي البوت فقط، إلخ (الكل = الجميع)
+            _PLAT_F = {"📱 بوت": ["bot"], "🌐 ويب": ["web"], "🔹 بوت - ميني": ["miniapp"]}
+            if src_choice in _PLAT_F:
+                _fw = _fw[_fw["platform"].isin(_PLAT_F[src_choice])]
+            if sel != _ALL_STORES:
+                _fw = _fw[_fw["store_id"] == sel]
+        else:
+            _fw = pd.DataFrame()
+
+        _CHAN_FAV = {"bot": "📱 بوت", "web": "🌐 ويب",
+                     "miniapp": "🔹 بوت - ميني", "telegram_miniapp": "🔹 بوت - ميني"}
+
+        def _fav_ident(r):
+            if pd.notna(r.get("telegram_id")):
+                u = _cln(r.get("bu_username"))
+                if u:
+                    return "@" + u.lstrip("@")
+                if r.get("platform") in ("miniapp", "telegram_miniapp"):
+                    return f"🔹 بوت - ميني {int(r['telegram_id'])}"
+                return f"تيليجرام {int(r['telegram_id'])}"
+            for k in ("web_name", "web_email"):
+                v = _cln(r.get(k))
+                if v:
+                    return v
+            return None
+
+        _fav_rows = []
+        if not _fw.empty:
+            for _, _fr in _fw.iterrows():
+                _id = _fav_ident(_fr)
+                if _id is None or pd.isna(_fr.get("store_id")):
+                    continue
+                _fav_rows.append({"identity": _id, "store_id": _fr["store_id"],
+                                  "fav_src": _CHAN_FAV.get(_fr.get("platform"), _fr.get("platform"))})
+        _fav_df = pd.DataFrame(_fav_rows)
+        _fav_set = (set(zip(_fav_df["identity"], _fav_df["store_id"]))
+                    if not _fav_df.empty else set())
+
+        if scopy.empty and _fav_df.empty:
+            st.info("لا توجد نسخات ولا مفضّلات ضمن الفترة/المصدر.")
         else:
             _group_keys = ["identity", "store_id"] if sel == _ALL_STORES else ["identity"]
-            # pivot لكل (مستخدم[+متجر]) × نوع الحدث → عدّاد نسخ/نقر/بحث
-            events = sdf[sdf["action_type"].isin(["copy_coupon", "click_link", "search"])]
-            counts = (events.groupby(_group_keys + ["action_type"])
-                            .size().unstack(fill_value=0).reset_index())
+            # عدّاد نسخ/نقر/بحث لكل (مستخدم[+متجر])
+            if not sdf.empty:
+                events = sdf[sdf["action_type"].isin(["copy_coupon", "click_link", "search"])]
+                counts = (events.groupby(_group_keys + ["action_type"])
+                                .size().unstack(fill_value=0).reset_index())
+            else:
+                counts = pd.DataFrame(columns=list(_group_keys))
             for c in ("copy_coupon", "click_link", "search"):
                 if c not in counts.columns:
                     counts[c] = 0
-            # نُبقي فقط من نسخ (الـ tab مخصّص للناسخين)
-            counts = counts[counts["copy_coupon"] > 0].copy()
-            # ميتاداتا (المصدر/أول/آخر نسخ) من scopy لتظل الأزمنة محسوبة على النسخ
-            meta = (scopy.groupby(_group_keys).agg(
-                        src=("src_ar", lambda s: "، ".join(sorted(set(s)))),
-                        first=("action_time", "min"),
-                        last=("action_time", "max"),
-                    ).reset_index())
-            who = counts.merge(meta, on=_group_keys, how="left")
-            # المدينة من **كل أحداث المستخدم** في الفترة (لا تنحصر بالمتجر/المصدر
-            # المُختار). السبب: المدينة خاصية للمستخدم، فإذا التقطها /go على
-            # متجر آخر، يجب أن تظهر هنا حتى لو هذا المتجر بعينه لم يلتقطها.
+            # ميتاداتا النسخ (المصدر/أول/آخر) — على من نسخ فعلاً
+            if not scopy.empty:
+                meta = (scopy.groupby(_group_keys).agg(
+                            src=("src_ar", lambda s: "، ".join(sorted(set(s)))),
+                            first=("action_time", "min"),
+                            last=("action_time", "max"),
+                        ).reset_index())
+                who = counts.merge(meta, on=_group_keys, how="left")
+            else:
+                who = counts.copy()
+                who["src"] = ""
+                who["first"] = pd.NaT
+                who["last"] = pd.NaT
+
+            # نُبقي: من نسخ (copy>0) أو من فضّل المتجر — نُقصي بقية الزوّار
+            if not who.empty:
+                def _keep(r):
+                    _sid = r["store_id"] if sel == _ALL_STORES else sel
+                    return (r["copy_coupon"] > 0) or ((r["identity"], _sid) in _fav_set)
+                who = who[who.apply(_keep, axis=1)].copy()
+
+            # أضف صفوف المفضِّلين الذين لا حدث (نسخ/نقر/بحث) لهم إطلاقاً (مفضّل فقط)
+            if not _fav_df.empty:
+                if sel == _ALL_STORES:
+                    _present = (set(zip(who["identity"], who["store_id"]))
+                                if not who.empty else set())
+                    _mask = [((i, s) not in _present)
+                             for i, s in zip(_fav_df["identity"], _fav_df["store_id"])]
+                else:
+                    _present = set(who["identity"]) if not who.empty else set()
+                    _mask = [(i not in _present) for i in _fav_df["identity"]]
+                _miss = _fav_df[_mask]
+                if not _miss.empty:
+                    _addcols = {
+                        "identity": _miss["identity"].values,
+                        "copy_coupon": 0, "click_link": 0, "search": 0,
+                        "src": _miss["fav_src"].values,
+                        "first": pd.NaT, "last": pd.NaT,
+                    }
+                    if sel == _ALL_STORES:
+                        _addcols["store_id"] = _miss["store_id"].values
+                    who = pd.concat([who, pd.DataFrame(_addcols)], ignore_index=True)
+
+            # المدينة من كل أحداث المستخدم في الفترة
             _geo = df_logs[df_logs["city_c"] != "غير معروف"]
             if not _geo.empty:
                 cmap = _geo.groupby("identity")["city_c"].agg(
@@ -3134,58 +3220,20 @@ elif page == "تحليل المتاجر":
             else:
                 who["المدينة"] = "غير معروف"
 
-            # ── ❤️ المفضلة: هل أضاف هذا الناسخ هذا المتجر لمفضلته؟ ──
-            # نطابق المفضلة بنفس منطق identity (@username للتيليجرام، الاسم/الإيميل
-            # للويب). لو فضّله نكتب **اسم المتجر** (لا المنصة — المصدر يبيّنها أصلاً).
-            def _cln(v):
-                if v is None or (isinstance(v, float) and pd.isna(v)):
-                    return ""
-                s = str(v).strip()
-                return "" if s.lower() == "nan" else s
-
-            try:
-                _fw = _sa_load_favorites()
-            except Exception:
-                _fw = pd.DataFrame()
-            _fav_set = set()   # {(identity, store_id)} لمن فضّل متجراً (kind='store')
-            if not _fw.empty and "kind" in _fw.columns:
-                _fw = _fw[_fw["kind"] == "store"]
-                # المفضلة مِلك الشخص لا منصّة الإضافة: البوت والميني-ويب نفس حساب
-                # تيليجرام (نفس telegram_id)، فلا نفصل بينهما — نعرضها بصدق أينما
-                # ظهر الشخص. (الويب حساب منفصل بهوية مختلفة، يتمايز تلقائياً.)
-                def _fav_ident(r):
-                    if pd.notna(r.get("telegram_id")):
-                        u = _cln(r.get("bu_username"))
-                        if u:
-                            return "@" + u.lstrip("@")
-                        if r.get("platform") == "miniapp":
-                            return f"🔹 بوت - ميني {int(r['telegram_id'])}"
-                        return f"تيليجرام {int(r['telegram_id'])}"
-                    for k in ("web_name", "web_email"):
-                        v = _cln(r.get(k))
-                        if v:
-                            return v
-                    return None
-
-                for _, _fr in _fw.iterrows():
-                    _id = _fav_ident(_fr)
-                    if _id is None or pd.isna(_fr.get("store_id")):
-                        continue
-                    _fav_set.add((_id, _fr["store_id"]))
-
             def _who_fav(r):
                 _sid = r["store_id"] if sel == _ALL_STORES else sel
                 return f"❤️ {_sid}" if (r["identity"], _sid) in _fav_set else "—"
-
-            who["❤️ المفضلة"] = who.apply(_who_fav, axis=1)
+            who["❤️ المفضلة"] = (who.apply(_who_fav, axis=1)
+                                 if not who.empty else pd.Series(dtype="object"))
 
             who = who.rename(columns={"identity": "المستخدم", "store_id": "المتجر",
                                       "copy_coupon": "نسخ", "click_link": "نقر",
                                       "search": "بحث",
                                       "src": "المصدر", "first": "أول نسخ", "last": "آخر نسخ"})
             who = who.sort_values("نسخ", ascending=False)
-            who["أول نسخ"] = pd.to_datetime(who["أول نسخ"]).dt.strftime("%Y-%m-%d %H:%M")
-            who["آخر نسخ"] = pd.to_datetime(who["آخر نسخ"]).dt.strftime("%Y-%m-%d %H:%M")
+            who["أول نسخ"] = pd.to_datetime(who["أول نسخ"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+            who["آخر نسخ"] = pd.to_datetime(who["آخر نسخ"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+            who[["أول نسخ", "آخر نسخ"]] = who[["أول نسخ", "آخر نسخ"]].fillna("—")
             _cols = (["المستخدم", "المتجر", "المصدر", "نسخ", "نقر", "بحث",
                       "❤️ المفضلة", "المدينة", "أول نسخ", "آخر نسخ"]
                      if sel == _ALL_STORES else
@@ -3193,11 +3241,11 @@ elif page == "تحليل المتاجر":
                       "❤️ المفضلة", "المدينة", "أول نسخ", "آخر نسخ"])
             st.dataframe(who[_cols], hide_index=True, use_container_width=True)
             _fname = "all" if sel == _ALL_STORES else sel
-            st.download_button("📥 تحميل قائمة الناسخين (CSV)",
+            st.download_button("📥 تحميل القائمة (CSV)",
                                who.to_csv(index=False).encode("utf-8-sig"),
-                               f"copiers_{_fname}_{d_start}_{d_end}.csv", "text/csv")
-            st.caption("«المدينة» من الـ IP وقت نقر الرابط (تحويل /go) — حقيقية بعد تفعيل الإثراء (Worker). "
-                       "تظهر «غير معروف» لمن نسخ بلا نقر رابط بعد. الزائر «#رمز» = بصمة جهاز غير مسجّل.")
+                               f"interactions_{_fname}_{d_start}_{d_end}.csv", "text/csv")
+            st.caption("يشمل **من نسخ** و**من فضّل** المتجر (حتى لو لم ينسخ — يظهر بنسخ=0 و«—» في التواريخ، "
+                       "وعمود ❤️ يبيّن المتجر المفضّل). «المدينة» من الـ IP وقت نقر /go. «#رمز» = بصمة جهاز غير مسجّل.")
 
     # ─────────────────────────── الرسوم والمعدلات ───────────────────────────
     with tab_charts:
