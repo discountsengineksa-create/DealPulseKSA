@@ -624,6 +624,32 @@ function showStoreView(storeId) {
     switchView('store');
 }
 
+// ── Trend helpers (لقب موقعي بحسب اللغة + padding اليومي من الأسبوعي) ──
+const _ORDINAL_AR = {1:'الأول',2:'الثاني',3:'الثالث',4:'الرابع',5:'الخامس',6:'السادس',7:'السابع'};
+const _ORDINAL_EN = {1:'1st',2:'2nd',3:'3rd',4:'4th',5:'5th',6:'6th',7:'7th'};
+
+function localizedRankTitle(rank) {
+    const lang = LANG_CURRENT;
+    if (rank === 1) return lang === 'en' ? 'Highest Demand'  : 'الأعلى طلباً';
+    if (rank === 2) return lang === 'en' ? 'Most Popular'    : 'الأكثر شعبية';
+    if (rank === 3) return lang === 'en' ? 'Widest Reach'    : 'الأوسع انتشاراً';
+    const ord = (lang === 'en' ? _ORDINAL_EN[rank] : _ORDINAL_AR[rank]) || String(rank);
+    return lang === 'en' ? `${ord} Place` : `المركز ${ord}`;
+}
+
+// يضمن دائماً targetCount متجر في اليومي: إن نقص نُكمل من الأسبوعي بلا تكرار.
+function padDailyWithWeekly(daily, weekly, targetCount) {
+    targetCount = targetCount || 3;
+    if (daily.length >= targetCount) {
+        return daily.slice(0, targetCount).map((it, i) => Object.assign({}, it, { rank: i + 1 }));
+    }
+    const existing = new Set(daily.map(it => it.store_id));
+    const fill = weekly.filter(it => !existing.has(it.store_id))
+                       .slice(0, targetCount - daily.length);
+    return daily.concat(fill).slice(0, targetCount)
+                .map((it, i) => Object.assign({}, it, { rank: i + 1 }));
+}
+
 // ── Trend view (يومي + أسبوعي) ──────────────────────────────────────────
 // مصدر: GET /api/v1/trend/daily و /weekly مع source=mini (تجزئة الميني-ويب).
 // كل كرت = لوقو + اسم؛ النقر يفتح صفحة المتجر داخل الميني-ويب نفسه.
@@ -663,10 +689,11 @@ function renderTrendSections(daily, weekly) {
     const escAttr = (v) => String(v || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
     const escHtml = (v) => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+    // اللقب يُحسب من item.rank بحسب اللغة المختارة (لا نعتمد على API rank_title).
     const cardHTML = (item, small) => {
         const sid = escAttr(item.store_id);
         const name = escHtml(item.store_name);
-        const title = escHtml(item.rank_title);
+        const title = escHtml(localizedRankTitle(item.rank));
         const logo = escAttr(item.logo_url || 'logo.png');
         return `
         <div class="trend-card${small ? ' small' : ''}" onclick="showStoreByStoreId('${sid}')">
@@ -676,7 +703,8 @@ function renderTrendSections(daily, weekly) {
         </div>`;
     };
 
-    const dailyTop3 = daily.slice(0, 3);
+    // اليومي مع padding من الأسبوعي عشان يكون دائماً 3 كروت.
+    const dailyTop3 = padDailyWithWeekly(daily, weekly, 3);
     const weeklyTop3 = weekly.slice(0, 3);
     const weeklyRest = weekly.slice(3, 7);
 
@@ -722,7 +750,8 @@ function renderTrendOnHome(daily, weekly) {
     const host = document.getElementById('trendOnHome');
     if (!host) return;
     const ST = STRINGS[LANG_CURRENT];
-    const dailyTop3 = daily.slice(0, 3);
+    // اليومي مع padding عشان يكون 3 كروت دائماً (يتجنّب الفراغ في الأيام البطيئة).
+    const dailyTop3 = padDailyWithWeekly(daily, weekly, 3);
     const weeklyTop3 = weekly.slice(0, 3);
     if (dailyTop3.length === 0 && weeklyTop3.length === 0) {
         host.innerHTML = '';   // لا داتا بعد → ما نُظهر القسم
@@ -734,7 +763,7 @@ function renderTrendOnHome(daily, weekly) {
     const cardHTML = (it) => {
         const sid = escAttr(it.store_id);
         const name = escHtml(it.store_name);
-        const title = escHtml(it.rank_title);
+        const title = escHtml(localizedRankTitle(it.rank));
         const logo = escAttr(it.logo_url || 'logo.png');
         return `
         <div class="trend-card" onclick="showStoreByStoreId('${sid}')">
