@@ -47,14 +47,16 @@ def _reporter_snapshot(conn, *, web_user_id: Optional[int], tg_user_id: Optional
                 info["phone"]             = row.get("phone_number")
                 info["telegram_username"] = row.get("telegram_username")
         if tg_user_id and not info["telegram_username"]:
+            # bot_users يحفظ: username = user.username or user.first_name or "Anonymous"
+            # name_en = الاسم بالإنجليزي (اختياري). لا يوجد عمود first_name منفصل.
             cur.execute(
-                """SELECT first_name, username FROM bot_users WHERE telegram_id = %s""",
+                """SELECT username, name_en FROM bot_users WHERE telegram_id = %s""",
                 (tg_user_id,),
             )
             row = cur.fetchone()
             if row:
                 if not info["name"]:
-                    info["name"] = row.get("first_name")
+                    info["name"] = row.get("name_en") or row.get("username")
                 info["telegram_username"] = row.get("username")
     return info
 
