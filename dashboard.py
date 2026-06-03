@@ -993,12 +993,13 @@ RIYADH_TZ_OFFSET_HOURS = 3
 _SA_ARABIC_DAYS = ["الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد"]
 
 
-@st.cache_data(ttl=180, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def _sa_load_actions() -> pd.DataFrame:
     """
     كل أحداث التفاعل + بيانات الجهاز/الموقع للمستخدم (LEFT JOIN على bot_users).
-    مخزّنة 3 دقائق. ⚠️ ملاحظة أداء: لو تجاوزت action_logs ~100 ألف صف، حوّل
-    التجميع إلى SQL (FILTER / GROUP BY) بدل سحب الخام كاملاً إلى pandas.
+    مخزّنة 60 ثانية — توازن بين حداثة الترند وحماية الـ DB من الضغط.
+    ⚠️ ملاحظة أداء: لو تجاوزت action_logs ~100 ألف صف، حوّل التجميع إلى SQL
+    (FILTER / GROUP BY) بدل سحب الخام كاملاً إلى pandas.
     """
     conn = get_conn()
     try:
@@ -1082,12 +1083,12 @@ def _sa_load_searches() -> pd.DataFrame:
         conn.close()
 
 
-@st.cache_data(ttl=180, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def _sa_load_favorites() -> pd.DataFrame:
     """
     مفضلة المستخدمين الموحّدة (user_favorites) + هوية المالك.
     كل صف = (شخص واحد × متجر واحد) — UNIQUE في الجدول يمنع التكرار، فعدّ
-    الصفوف لكل متجر = عدد الأشخاص الذين فضّلوه. مخزّنة 3 دقائق.
+    الصفوف لكل متجر = عدد الأشخاص الذين فضّلوه. مخزّنة 60 ثانية للترند.
     """
     conn = get_conn()
     try:
@@ -3650,19 +3651,33 @@ elif page == "تحليل المتاجر":
     #    ⚠️ يتجاوز فلتر التاريخ في أعلى الصفحة — الترند له نوافذه الخاصة.
     # ════════════════════════════════════════════════════════════════════════
     elif _sm_tab == _SM_TABS[4]:
+        # ── شريط الحداثة + إعادة التحميل اليدوي ─────────────────────
+        _now_ts = pd.Timestamp.utcnow().tz_localize(None) + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS)
+        c_info, c_btn = st.columns([4, 1])
+        with c_info:
+            st.caption(f"⏱️ آخر تحديث: **{_now_ts.strftime('%H:%M:%S')}** · "
+                       f"الكاش يُجدَّد تلقائياً كل 60 ثانية · للتحديث الفوري اضغط زرّ التحديث.")
+        with c_btn:
+            if st.button("🔄 تحديث الآن", width='stretch', key="trend_refresh"):
+                _sa_load_actions.clear()
+                _sa_load_favorites.clear()
+                _sa_load_master.clear()
+                st.rerun()
         st.caption("نقاط موزونة: نقر=1 · بحث=2 · نسخ=3 · مفضلة=4 — مع قاعدة anti-spam "
                    "تمنع تضخيم الترند بالتكرار. الشرح الكامل أسفل الصفحة.")
 
-        tr_tab_all, tr_tab_web, tr_tab_mini = st.tabs([
-            "📡 الكل", "🌐 الموقع", "🔹 الميني-ويب",
+        tr_tab_all, tr_tab_bot, tr_tab_web, tr_tab_mini = st.tabs([
+            "📡 الكل", "📱 البوت", "🌐 الموقع", "🔹 الميني-ويب",
         ])
 
         _TREND_SRC_MAP = {
             "all": None,
+            "bot": ["bot"],
             "web": ["web"],
             "mini": ["telegram_miniapp", "miniapp"],
         }
-        _TREND_FAV_PLAT_MAP = {"all": None, "web": ["web"], "mini": ["miniapp"]}
+        _TREND_FAV_PLAT_MAP = {"all": None, "bot": ["bot"],
+                                "web": ["web"], "mini": ["miniapp"]}
 
         _LOGO_MAP = df_master.set_index("store_id")["logo_url"].fillna("").to_dict()
 
@@ -3971,6 +3986,8 @@ elif page == "تحليل المتاجر":
 
         with tr_tab_all:
             _render_trend_for_source("all")
+        with tr_tab_bot:
+            _render_trend_for_source("bot")
         with tr_tab_web:
             _render_trend_for_source("web")
         with tr_tab_mini:
