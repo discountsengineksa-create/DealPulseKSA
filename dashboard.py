@@ -1371,6 +1371,7 @@ _ANALYSIS_PAGES = [
 "👥 الحضور الحي",
 ]
 _OTHER_PAGES = [
+"📣 بلاغات الأكواد",  # ← Migration 029: بلاغات لا يعمل + إدارة المتاجر المسحوبة
 "📊 تقرير الشركاء",   # ← Demo Pack للشركات المتعاقدة (KPI نظيف + تصدير)
 "مركز الإشعارات", "لوحة القيادة", "مركز الدعم",
 "مختبر النمو", "رادار المنافسين", "استوديو المحتوى",
@@ -3503,6 +3504,192 @@ elif page == "تحليل المتاجر":
             st.caption(f"👥 {len(out_f)} شخص فضّلوا «{store_sel}» — هؤلاء جمهور التنبيه المستقبلي "
                        "عند نزول كوبون/خصم جديد لهذا المتجر.")
 
+    # ════════════════════════════════════════════════════════════════════════
+    # 🎬 تحليلات الستوري (Migration 029)
+    #    تبويب مستقل أسفل صفحة «تحليل المتاجر» — يقيس قيمة الستوري المدفوع.
+    #    مصدر البيانات: story_views + action_logs.story_view_id
+    #    تابز: الكل / 🌐 الموقع / 🔹 الميني-ويب
+    # ════════════════════════════════════════════════════════════════════════
+    st.divider()
+    st.header("🎬 تحليلات الستوري")
+    st.caption("كل فتحة، مين فتح، كم مرّة، ومين نسخ/زار من داخل الستوري — لاتخاذ قرار: هذا الستوري يستحق الدفع؟")
+
+    sv_tab_all, sv_tab_web, sv_tab_mini = st.tabs(["📡 الكل", "🌐 الموقع", "🔹 الميني-ويب"])
+
+    def _render_story_analytics(source_filter: str | None, key_prefix: str):
+        """source_filter=None → كل المصادر، 'web' → الموقع فقط، 'telegram_miniapp' → الميني-ويب."""
+        try:
+            conn_st = get_conn()
+            conn_st.rollback()
+            src_where = ""
+            params: list = []
+            if source_filter:
+                src_where = "WHERE source = %s"
+                params = [source_filter]
+
+            # KPIs
+            kpi = pd.read_sql(f"""
+                SELECT
+                  COUNT(*)                                          AS total_views,
+                  COUNT(DISTINCT view_id)                           AS unique_opens,
+                  COUNT(DISTINCT store_id)                          AS stores_seen,
+                  COUNT(DISTINCT COALESCE(web_user_id::text,
+                                          'tg:' || tg_user_id::text)) AS unique_viewers
+                FROM story_views {src_where}
+            """, conn_st, params=params)
+
+            # engagement من action_logs
+            eng_filter = ""
+            if source_filter:
+                eng_filter = f" AND al.source = '{source_filter}' "
+            eng = pd.read_sql(f"""
+                SELECT
+                  SUM(CASE WHEN al.action_type='copy_coupon' THEN 1 ELSE 0 END) AS copies,
+                  SUM(CASE WHEN al.action_type='click_link'  THEN 1 ELSE 0 END) AS clicks
+                FROM action_logs al
+                WHERE al.story_view_id IS NOT NULL {eng_filter}
+            """, conn_st)
+
+            total_views    = int(kpi["total_views"].iloc[0]    or 0)
+            unique_viewers = int(kpi["unique_viewers"].iloc[0] or 0)
+            stores_seen    = int(kpi["stores_seen"].iloc[0]    or 0)
+            copies = int(eng["copies"].iloc[0] or 0)
+            clicks = int(eng["clicks"].iloc[0] or 0)
+            ctr = (clicks * 100.0 / total_views) if total_views else 0.0
+            cvr = (copies * 100.0 / total_views) if total_views else 0.0
+
+            c1, c2, c3, c4, c5 = st.columns(5)
+            with c1: kpi_card("👀", "إجمالي الفتحات",  total_views,    "info")
+            with c2: kpi_card("👥", "مشاهدون فريدون", unique_viewers, "emerald")
+            with c3: kpi_card("🏬", "متاجر شُوهدت",    stores_seen,    "info")
+            with c4: kpi_card("📋", f"نسخ ({cvr:.1f}%)", copies,       "warning")
+            with c5: kpi_card("🚪", f"زيارات ({ctr:.1f}%)", clicks,    "emerald")
+
+            st.markdown("---")
+
+            # جدول لكل متجر
+            st.subheader("📊 تفصيل لكل متجر")
+            per_store = pd.read_sql(f"""
+                WITH v AS (
+                  SELECT store_id,
+                         COUNT(*)                              AS views,
+                         COUNT(DISTINCT COALESCE(web_user_id::text,
+                                                 'tg:' || tg_user_id::text)) AS uniq_viewers
+                  FROM story_views {src_where}
+                  GROUP BY store_id
+                ),
+                e AS (
+                  SELECT store_id,
+                         SUM(CASE WHEN action_type='copy_coupon' THEN 1 ELSE 0 END) AS copies,
+                         SUM(CASE WHEN action_type='click_link'  THEN 1 ELSE 0 END) AS clicks
+                  FROM action_logs
+                  WHERE story_view_id IS NOT NULL {eng_filter}
+                  GROUP BY store_id
+                )
+                SELECT v.store_id,
+                       v.views,
+                       v.uniq_viewers,
+                       COALESCE(e.copies, 0) AS copies,
+                       COALESCE(e.clicks, 0) AS clicks,
+                       CASE WHEN v.views > 0
+                            THEN ROUND((COALESCE(e.clicks,0)*100.0 / v.views)::numeric, 1)
+                            ELSE 0 END AS ctr_pct,
+                       CASE WHEN v.views > 0
+                            THEN ROUND((COALESCE(e.copies,0)*100.0 / v.views)::numeric, 1)
+                            ELSE 0 END AS cvr_pct
+                FROM v LEFT JOIN e USING (store_id)
+                ORDER BY v.views DESC
+            """, conn_st, params=params)
+
+            if per_store.empty:
+                st.info("📭 لا توجد بيانات ستوري بعد لهذا المصدر.")
+            else:
+                per_store.rename(columns={
+                    "store_id":     "المتجر",
+                    "views":        "الفتحات",
+                    "uniq_viewers": "مشاهدون فريدون",
+                    "copies":       "نُسخ من الستوري",
+                    "clicks":       "زيارات من الستوري",
+                    "ctr_pct":      "% زيارة",
+                    "cvr_pct":      "% نسخ",
+                }, inplace=True)
+                st.dataframe(per_store, use_container_width=True, hide_index=True)
+
+            # تفصيل المشاهدين لمتجر معيّن
+            st.markdown("---")
+            st.subheader("🔍 مين شاهد ستوري متجر معيّن؟")
+            stores_with_views = pd.read_sql(
+                f"SELECT DISTINCT store_id FROM story_views {src_where} ORDER BY store_id",
+                conn_st, params=params,
+            )
+            if stores_with_views.empty:
+                st.caption("لا متاجر بعد.")
+            else:
+                pick_store = st.selectbox("اختر المتجر:", options=stores_with_views["store_id"].tolist(),
+                                          key=f"sv_drill_{key_prefix}")
+                viewer_filter_src = ""
+                viewer_params = [pick_store]
+                if source_filter:
+                    viewer_filter_src = " AND sv.source = %s "
+                    viewer_params.append(source_filter)
+
+                viewers = pd.read_sql(f"""
+                    SELECT
+                      sv.source,
+                      COALESCE(wu.display_name, bu.first_name, '—')          AS الاسم,
+                      COALESCE(wu.email, '—')                                AS الإيميل,
+                      COALESCE(wu.phone_number, '—')                         AS الجوال,
+                      COALESCE('@' || NULLIF(wu.telegram_username, ''),
+                               '@' || NULLIF(bu.username, ''), '—')          AS تيليجرام,
+                      COUNT(*)                                               AS مرات_المشاهدة,
+                      MAX(sv.viewed_at)                                      AS آخر_مشاهدة,
+                      (SELECT COUNT(*) FROM action_logs al
+                         WHERE al.story_view_id IN (
+                              SELECT view_id FROM story_views sv2
+                               WHERE sv2.store_id = sv.store_id
+                                 AND (sv2.web_user_id = sv.web_user_id OR sv2.tg_user_id = sv.tg_user_id)
+                         ) AND al.action_type='copy_coupon')                 AS نُسخ,
+                      (SELECT COUNT(*) FROM action_logs al
+                         WHERE al.story_view_id IN (
+                              SELECT view_id FROM story_views sv2
+                               WHERE sv2.store_id = sv.store_id
+                                 AND (sv2.web_user_id = sv.web_user_id OR sv2.tg_user_id = sv.tg_user_id)
+                         ) AND al.action_type='click_link')                  AS زيارات
+                    FROM story_views sv
+                    LEFT JOIN web_users wu ON wu.id          = sv.web_user_id
+                    LEFT JOIN bot_users bu ON bu.telegram_id = sv.tg_user_id
+                    WHERE sv.store_id = %s {viewer_filter_src}
+                    GROUP BY sv.source, sv.store_id, sv.web_user_id, sv.tg_user_id,
+                             wu.display_name, wu.email, wu.phone_number, wu.telegram_username,
+                             bu.first_name, bu.username
+                    ORDER BY مرات_المشاهدة DESC
+                """, conn_st, params=viewer_params)
+
+                if viewers.empty:
+                    st.caption("لا مشاهدين بعد لهذا المتجر.")
+                else:
+                    viewers["المصدر"] = viewers["source"].map(
+                        {"web": "🌐 الموقع", "telegram_miniapp": "🔹 الميني ويب"}).fillna(viewers["source"])
+                    viewers["آخر_مشاهدة"] = pd.to_datetime(viewers["آخر_مشاهدة"], errors="coerce") \
+                                                  .dt.strftime("%Y-%m-%d %H:%M")
+                    viewers.drop(columns=["source"], inplace=True)
+                    st.dataframe(viewers, use_container_width=True, hide_index=True)
+                    st.caption(f"👥 {len(viewers)} شخص شاهدوا ستوري «{pick_store}». «نُسخ» و«زيارات» مقترنة بفتحاتهم.")
+
+        except Exception as e:
+            st.error(f"⚠️ تعذّر تحميل تحليلات الستوري: {e}")
+        finally:
+            if 'conn_st' in locals():
+                try: conn_st.close()
+                except Exception: pass
+
+    with sv_tab_all:
+        _render_story_analytics(None, "all")
+    with sv_tab_web:
+        _render_story_analytics("web", "web")
+    with sv_tab_mini:
+        _render_story_analytics("telegram_miniapp", "mini")
+
 
 # ---  الصفحة الخامسة : مركز قيادة الأقسام والتاقات (إدارة الـ 10 أعمدة) ---
 # --- الصفحة الخامسة: مركز قيادة الأقسام والتاقات (نظام رصد نقرات الأقسام) ---
@@ -4315,6 +4502,236 @@ elif page == "طلبات الأكواد":
         st.error(f"⚠️ خطأ: {e}")
     finally:
         if 'conn' in locals(): conn.close()
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 📣 بلاغات الأكواد (Migration 029)
+#    - عرض كل البلاغات مع بيانات المُبلّغين
+#    - إدارة حالة البلاغ: new → seen → fixed/rejected
+#    - عرض المتاجر المسحوبة (auto/manual) + إزالة السحب
+#    - سحب يدوي لمتجر معيّن
+# ════════════════════════════════════════════════════════════════════════════
+elif page == "📣 بلاغات الأكواد":
+    page_title("📣", "بلاغات الأكواد",
+               "بلاغات «الكود لا يعمل» من العملاء (الموقع/الميني-ويب/البوت)، وإدارة المتاجر المسحوبة.")
+
+    SRC_AR = {"web": "🌐 الموقع", "telegram_miniapp": "🔹 الميني ويب", "bot": "📱 البوت"}
+    STATUS_AR = {"new": "🆕 جديد", "seen": "👀 شُوهد", "fixed": "✅ أُصلح", "rejected": "🚫 مرفوض"}
+
+    try:
+        conn = get_conn()
+        conn.rollback()  # نمط الـ dashboard — يحمي من حالة معاملة معطّلة سابقة
+
+        # ── 1) KPIs ────────────────────────────────────────────────────────
+        kpi_df = pd.read_sql("""
+            SELECT
+              COUNT(*)                                                          AS total,
+              SUM(CASE WHEN status='new'  THEN 1 ELSE 0 END)                    AS new_cnt,
+              SUM(CASE WHEN created_at >= NOW() - interval '1 hour' THEN 1 ELSE 0 END) AS last_hour,
+              SUM(CASE WHEN triggered_auto_suspend THEN 1 ELSE 0 END)           AS triggered_susp
+            FROM code_reports
+        """, conn)
+        susp_df = pd.read_sql(
+            "SELECT COUNT(*) AS n FROM master WHERE is_suspended", conn)
+        susp_cnt = int(susp_df["n"].iloc[0])
+
+        k1, k2, k3, k4 = st.columns(4)
+        with k1: kpi_card("📦", "إجمالي البلاغات",   int(kpi_df["total"].iloc[0] or 0),       "info")
+        with k2: kpi_card("🆕", "جديدة",              int(kpi_df["new_cnt"].iloc[0] or 0),     "warning")
+        with k3: kpi_card("⏱", "آخر ساعة",           int(kpi_df["last_hour"].iloc[0] or 0),   "danger")
+        with k4: kpi_card("🚫", "متاجر مسحوبة الآن", susp_cnt,                                "danger" if susp_cnt else "info")
+
+        st.divider()
+
+        # ── 2) قائمة المتاجر المسحوبة (يدوي / تلقائي) ─────────────────────
+        with st.expander(f"🚫 المتاجر المسحوبة حالياً ({susp_cnt})", expanded=susp_cnt > 0):
+            if susp_cnt == 0:
+                st.success("لا توجد متاجر مسحوبة. كل المتاجر تظهر للعملاء طبيعياً.")
+            else:
+                susp = pd.read_sql("""
+                    SELECT store_id, public_coupon,
+                           suspended_at, suspended_reason,
+                           (SELECT COUNT(*) FROM code_reports cr
+                              WHERE cr.store_id = m.store_id
+                                AND cr.created_at >= NOW() - interval '24 hours') AS reports_24h
+                    FROM master m
+                    WHERE is_suspended
+                    ORDER BY suspended_at DESC NULLS LAST
+                """, conn)
+                susp["suspended_at"] = pd.to_datetime(susp["suspended_at"], errors="coerce") \
+                                            .dt.strftime('%Y-%m-%d %H:%M')
+                susp.rename(columns={
+                    "store_id":          "المتجر",
+                    "public_coupon":     "الكود الحالي",
+                    "suspended_at":      "تاريخ السحب",
+                    "suspended_reason":  "سبب السحب",
+                    "reports_24h":       "بلاغات آخر 24 سا",
+                }, inplace=True)
+                st.dataframe(susp, use_container_width=True, hide_index=True)
+
+                # إزالة سحب بمتجر محدّد
+                pick = st.selectbox("اختر متجراً لإزالة السحب:", options=susp["المتجر"].tolist(), key="unsusp_pick")
+                if st.button("✅ إزالة السحب وإعادة العرض للعملاء", type="primary", key="unsusp_btn"):
+                    try:
+                        with conn.cursor() as cur:
+                            cur.execute("""
+                                UPDATE master
+                                SET is_suspended = FALSE,
+                                    suspended_at = NULL,
+                                    suspended_reason = NULL
+                                WHERE store_id = %s
+                            """, (pick,))
+                            # علّم أي بلاغات «جديدة» على هذا المتجر كـ fixed
+                            cur.execute("""
+                                UPDATE code_reports
+                                SET status = 'fixed', resolved_at = NOW(),
+                                    resolved_note = 'إزالة السحب + اعتماد الكود الجديد'
+                                WHERE store_id = %s AND status IN ('new','seen')
+                            """, (pick,))
+                        conn.commit()
+                        st.success(f"تم إزالة السحب عن «{pick}» ✓")
+                        st.rerun()
+                    except Exception as e:
+                        conn.rollback()
+                        st.error(f"⚠️ فشل: {e}")
+
+        st.divider()
+
+        # ── 3) سحب يدوي لمتجر ───────────────────────────────────────────────
+        with st.expander("🛠️ سحب يدوي لمتجر (بدون انتظار 10 بلاغات)", expanded=False):
+            active = pd.read_sql("""
+                SELECT store_id FROM master
+                WHERE NOT COALESCE(is_suspended, FALSE)
+                  AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+                ORDER BY store_id
+            """, conn)
+            if active.empty:
+                st.info("لا توجد متاجر نشطة قابلة للسحب.")
+            else:
+                m_pick   = st.selectbox("اختر المتجر:", options=active["store_id"].tolist(), key="m_susp_pick")
+                m_reason = st.text_input("سبب السحب (اختياري):", "مراجعة يدوية للكود",   key="m_susp_reason")
+                if st.button("🚫 اسحب الآن", type="primary", key="m_susp_btn"):
+                    try:
+                        with conn.cursor() as cur:
+                            cur.execute("""
+                                UPDATE master
+                                SET is_suspended = TRUE,
+                                    suspended_at = NOW(),
+                                    suspended_reason = %s
+                                WHERE store_id = %s
+                            """, (f"manual: {m_reason}", m_pick))
+                        conn.commit()
+                        st.success(f"تم سحب «{m_pick}» ✓")
+                        st.rerun()
+                    except Exception as e:
+                        conn.rollback()
+                        st.error(f"⚠️ فشل: {e}")
+
+        st.divider()
+
+        # ── 4) جدول البلاغات الكامل + فلترة بحالة ─────────────────────────
+        st.subheader("📋 سجلّ البلاغات")
+        flt_col1, flt_col2 = st.columns([1, 2])
+        with flt_col1:
+            status_pick = st.selectbox(
+                "الحالة:",
+                ["كل الحالات", "🆕 جديد", "👀 شُوهد", "✅ أُصلح", "🚫 مرفوض"],
+                key="rprt_status_filter",
+            )
+
+        status_filter_sql = ""
+        if status_pick == "🆕 جديد":     status_filter_sql = "WHERE cr.status='new'"
+        elif status_pick == "👀 شُوهد":  status_filter_sql = "WHERE cr.status='seen'"
+        elif status_pick == "✅ أُصلح":  status_filter_sql = "WHERE cr.status='fixed'"
+        elif status_pick == "🚫 مرفوض": status_filter_sql = "WHERE cr.status='rejected'"
+
+        reports = pd.read_sql(f"""
+            SELECT
+              cr.id, cr.store_id, cr.source, cr.status,
+              cr.reporter_name, cr.reporter_email, cr.reporter_phone,
+              cr.reporter_telegram_username,
+              cr.reported_code, cr.issue_note,
+              cr.triggered_auto_suspend, cr.created_at,
+              m.is_suspended AS store_suspended_now
+            FROM code_reports cr
+            LEFT JOIN master m ON m.store_id = cr.store_id
+            {status_filter_sql}
+            ORDER BY cr.created_at DESC
+            LIMIT 500
+        """, conn)
+
+        if reports.empty:
+            st.info("📭 لا بلاغات في هذا الفلتر.")
+        else:
+            disp = reports.copy()
+            disp["source"]     = disp["source"].map(SRC_AR).fillna(disp["source"])
+            disp["status"]     = disp["status"].map(STATUS_AR).fillna(disp["status"])
+            disp["created_at"] = pd.to_datetime(disp["created_at"], errors="coerce") \
+                                       .dt.strftime('%Y-%m-%d %H:%M')
+            disp["تيليجرام"] = disp["reporter_telegram_username"].apply(
+                lambda v: f"@{v}" if v else "—")
+            disp["الكود لحظة البلاغ"] = disp["reported_code"].fillna("—")
+            disp["سحب تلقائي؟"]       = disp["triggered_auto_suspend"].map({True: "✅", False: ""})
+            disp["متجر مسحوب الآن؟"] = disp["store_suspended_now"].map({True: "🚫", False: ""})
+            disp.rename(columns={
+                "id":              "ID",
+                "store_id":        "المتجر",
+                "source":          "المصدر",
+                "status":          "الحالة",
+                "reporter_name":   "اسم المُبلِّغ",
+                "reporter_email":  "إيميل",
+                "reporter_phone":  "جوال",
+                "issue_note":      "ملاحظة العميل",
+                "created_at":      "وقت البلاغ",
+            }, inplace=True)
+            shown_cols = ["ID","المتجر","المصدر","الحالة","سحب تلقائي؟","متجر مسحوب الآن؟",
+                          "اسم المُبلِّغ","إيميل","جوال","تيليجرام",
+                          "الكود لحظة البلاغ","ملاحظة العميل","وقت البلاغ"]
+            st.dataframe(disp[shown_cols], use_container_width=True, hide_index=True)
+
+            # تحديث حالة بلاغ
+            st.markdown("##### ✏️ تغيير حالة بلاغ")
+            uc1, uc2, uc3 = st.columns([1, 1.4, 1])
+            with uc1:
+                rpt_id = st.number_input("ID البلاغ:", min_value=1, step=1, key="rpt_upd_id")
+            with uc2:
+                new_status = st.selectbox(
+                    "الحالة الجديدة:",
+                    ["new", "seen", "fixed", "rejected"],
+                    format_func=lambda x: STATUS_AR.get(x, x), key="rpt_upd_status",
+                )
+            with uc3:
+                if st.button("💾 تحديث", key="rpt_upd_btn", use_container_width=True):
+                    try:
+                        with conn.cursor() as cur:
+                            cur.execute("""
+                                UPDATE code_reports
+                                SET status = %s,
+                                    resolved_at = CASE WHEN %s IN ('fixed','rejected')
+                                                       THEN NOW() ELSE NULL END
+                                WHERE id = %s
+                            """, (new_status, new_status, int(rpt_id)))
+                        conn.commit()
+                        st.success("تم التحديث ✓")
+                        st.rerun()
+                    except Exception as e:
+                        conn.rollback()
+                        st.error(f"⚠️ {e}")
+
+            # تصدير CSV
+            st.download_button(
+                "📥 تنزيل CSV",
+                disp[shown_cols].to_csv(index=False).encode("utf-8-sig"),
+                file_name="code_reports.csv",
+                mime="text/csv",
+            )
+
+    except Exception as e:
+        st.error(f"⚠️ تعذّر تحميل البيانات: {e}")
+    finally:
+        if 'conn' in locals():
+            try: conn.close()
+            except Exception: pass
 
 
         # --- الصفحة العاشرة: تحليل طلبات الأكواد (Unavailable Codes Analytics) ---

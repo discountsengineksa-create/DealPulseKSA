@@ -8,16 +8,25 @@ from api.schemas.track import (
     TrackRequest, TrackResponse,
     SearchLogRequest, SearchLogResponse,
     CodeRequestRequest, CodeRequestResponse,
+    ReportCodeRequest, ReportCodeResponse,
+    StoryViewRequest, StoryViewResponse,
 )
 from api.utils.geo_extractor import extract as extract_geo
 from api.utils.fraud_scoring import compute_quality_score
 from api.utils.event_publisher import publish_event
+from api.utils.code_reports import record_code_report
 from api.utils.rate_limit import LIMIT_TRACK, limiter
 
 # حدود مخصّصة لقنوات تسجيل خفيفة (search/request-code) — أقل من /track العام
 # لمنع إغراق direct_search و unavailable_codes_requests من سكربتات.
 LIMIT_TRACK_SEARCH       = "30/minute"
 LIMIT_TRACK_REQUEST_CODE = "5/minute"
+# بلاغ الكود لا يعمل: 3 بلاغات/دقيقة لكل IP — كافٍ للاستخدام الطبيعي،
+# يقطع spam بدون تعطيل العميل الجاد. السحب التلقائي يحتاج 10 مبلّغين فريدين
+# فلا يمكن لمستخدم واحد إجبار السحب.
+LIMIT_TRACK_REPORT       = "3/minute"
+# فتح ستوري: 60/دقيقة — طبيعي لجلسة تصفّح نشطة (يفتح/يغلق بسرعة).
+LIMIT_TRACK_STORY_VIEW   = "60/minute"
 
 _log = logging.getLogger("dp.track")
 router = APIRouter(prefix="/track", tags=["tracking"])
@@ -88,7 +97,7 @@ def track_action(payload: TrackRequest, request: Request, conn=Depends(get_db)):
                 country_code, region_code, city, postal_code,
                 lat, lng, isp, asn,
                 is_datacenter, is_proxy, device_class,
-                cf_bot_score, quality_score
+                cf_bot_score, quality_score, story_view_id
             )
             VALUES (
                 %s, %s, %s, %s, %s,
@@ -96,7 +105,7 @@ def track_action(payload: TrackRequest, request: Request, conn=Depends(get_db)):
                 %s, %s, %s, %s,
                 %s, %s, %s, %s,
                 %s, %s, %s,
-                %s, %s
+                %s, %s, %s::uuid
             )
             ON CONFLICT (event_id) DO NOTHING
             """,
@@ -106,7 +115,7 @@ def track_action(payload: TrackRequest, request: Request, conn=Depends(get_db)):
                 geo.country_code, geo.region_code, geo.city, geo.postal_code,
                 geo.lat, geo.lng, geo.isp, geo.asn,
                 is_dc, is_proxy, geo.device_class,
-                geo.cf_bot_score, quality,
+                geo.cf_bot_score, quality, payload.story_view_id,
             ),
         )
 
@@ -275,3 +284,78 @@ def request_code(payload: CodeRequestRequest, request: Request, conn=Depends(get
         new_id = cur.fetchone()[0]
 
     return CodeRequestResponse(ok=True, request_id=new_id, brand_name=brand)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# بلاغ «الكود لا يعمل» — يستدعي helper مشترك (api/utils/code_reports.py)
+# ════════════════════════════════════════════════════════════════════════════
+@router.post("/report-code-issue", response_model=ReportCodeResponse, status_code=201)
+@limiter.limit(LIMIT_TRACK_REPORT)
+def report_code_issue(payload: ReportCodeRequest, request: Request, conn=Depends(get_db)):
+    """بلاغ من عميل مسجّل بأن كود متجر لا يعمل.
+
+    التطبيق الفعلي (insert + auto-suspend + alerts) في
+    api/utils/code_reports.py — يستدعيه البوت أيضاً مباشرة بدون HTTP.
+    """
+    if payload.source == "web" and not payload.web_user_id:
+        raise HTTPException(400, "web_user_id is required for source='web'")
+    if payload.source in ("telegram_miniapp", "bot") and not payload.tg_user_id:
+        raise HTTPException(400, f"tg_user_id is required for source='{payload.source}'")
+
+    geo = extract_geo(request)
+    try:
+        result = record_code_report(
+            conn,
+            store_id=payload.store_id, source=payload.source,
+            web_user_id=payload.web_user_id, tg_user_id=payload.tg_user_id,
+            issue_note=payload.issue_note,
+            ip_hash=geo.ip_hash, ua_hash=geo.ua_hash,
+        )
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+
+    return ReportCodeResponse(
+        ok=True, report_id=result["report_id"], auto_suspended=result["auto_suspended"],
+    )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# تسجيل فتحة ستوري (Migration 029)
+# ════════════════════════════════════════════════════════════════════════════
+@router.post("/story-view", response_model=StoryViewResponse, status_code=201)
+@limiter.limit(LIMIT_TRACK_STORY_VIEW)
+def log_story_view(payload: StoryViewRequest, request: Request, conn=Depends(get_db)):
+    """تسجيل فتحة ستوري لمسجّل فقط. لا يُسجَّل الزوار.
+
+    العميل يولّد view_id (UUID v4) ثم يُمرّره مع كل نسخ/زيارة لاحقاً عبر
+    /track.story_view_id لربط الـ engagement بنفس الفتحة.
+    """
+    if payload.source == "web" and not payload.web_user_id:
+        raise HTTPException(400, "web_user_id is required for source='web'")
+    if payload.source == "telegram_miniapp" and not payload.tg_user_id:
+        raise HTTPException(400, "tg_user_id is required for source='telegram_miniapp'")
+
+    geo = extract_geo(request)
+    with conn.cursor() as cur:
+        cur.execute("SELECT 1 FROM master WHERE store_id = %s", (payload.store_id,))
+        if cur.fetchone() is None:
+            raise HTTPException(404, f"store '{payload.store_id}' not found")
+
+        cur.execute(
+            """
+            INSERT INTO story_views (
+                view_id, store_id, source,
+                web_user_id, tg_user_id,
+                ip_hash, user_agent_hash
+            )
+            VALUES (%s::uuid, %s, %s, %s, %s, decode(%s, 'hex'), decode(%s, 'hex'))
+            ON CONFLICT (view_id) DO NOTHING
+            """,
+            (
+                payload.view_id, payload.store_id, payload.source,
+                payload.web_user_id, payload.tg_user_id,
+                geo.ip_hash, geo.ua_hash,
+            ),
+        )
+
+    return StoryViewResponse(ok=True, view_id=payload.view_id)

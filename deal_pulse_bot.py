@@ -352,6 +352,11 @@ TEXTS = {
                           'en': '🤍 Removed *{sid}* from favorites'},
     'btn_add_fav':       {'ar': '🤍 أضف للمفضلة',       'en': '🤍 Add to favorites'},
     'btn_remove_fav':    {'ar': '❤️ إزالة من المفضلة',  'en': '❤️ Remove from favorites'},
+    'btn_report_code':   {'ar': '🚫 إبلاغ كود لا يعمل',  'en': '🚫 Report broken code'},
+    'report_code_ok':    {'ar': '✅ تم الإبلاغ بنجاح — سنراجع الكود فوراً',
+                          'en': '✅ Reported — we will review the code right away'},
+    'report_code_err':   {'ar': '❌ تعذّر إرسال البلاغ، حاول لاحقاً',
+                          'en': '❌ Could not send the report, try again later'},
     'favs_title':        {'ar': '❤️ متاجرك المفضلة',    'en': '❤️ Your favorite stores'},
     'favs_empty':        {'ar': 'ما أضفت أي متجر لمفضلتك بعد.\nاضغط ❤️ تحت أي كوبون لإضافته.',
                           'en': "You haven't added any store yet.\nTap ❤️ under any coupon to add it."},
@@ -744,6 +749,10 @@ def _kb_card(lang, store, page, total, source, is_fav=False):
     )
     fav_key = 'btn_remove_fav' if is_fav else 'btn_add_fav'
     kb.add(types.InlineKeyboardButton(TEXTS[fav_key][lang], callback_data=f"fav:{sid}"))
+    # زر إبلاغ — يظهر فقط للمتاجر التي لها كوبون عام
+    if store.get('public_coupon'):
+        kb.add(types.InlineKeyboardButton(
+            TEXTS['btn_report_code'][lang], callback_data=f"rprt:{sid}"))
     dot       = " "
     prev_btn  = (types.InlineKeyboardButton("◀", callback_data='nav:prev')
                  if page > 0 else types.InlineKeyboardButton(dot, callback_data='nav:noop'))
@@ -970,7 +979,8 @@ def _load_and_show_codes(user_id, lang):
         cur  = conn.cursor(cursor_factory=extras.DictCursor)
         cur.execute("""
             SELECT * FROM master
-            WHERE last_time IS NULL OR last_time >= CURRENT_DATE
+            WHERE (last_time IS NULL OR last_time >= CURRENT_DATE)
+              AND NOT COALESCE(is_suspended, FALSE)
             ORDER BY
                 CASE WHEN is_trending = 'ترند 🔥' THEN 1 ELSE 2 END,
                 priority_score DESC
@@ -1003,6 +1013,7 @@ def _fetch_cats_from_db(lang: str) -> list:
                      )) AS tg
                 WHERE trim(tg) <> ''
                   AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+              AND NOT COALESCE(is_suspended, FALSE)
             )
             SELECT t.tag
             FROM tags_raw t
@@ -1056,6 +1067,7 @@ def _load_tag_stores(user_id, lang, tag):
                 FROM unnest(string_to_array(trim(both '{{}}' from COALESCE({tags_expr}, '')), ',')) AS tg
             )
             AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+              AND NOT COALESCE(is_suspended, FALSE)
             ORDER BY
                 CASE WHEN is_trending = 'ترند 🔥' THEN 1 ELSE 2 END,
                 priority_score DESC
@@ -1126,6 +1138,7 @@ def _db_search(search_term: str) -> list:
         cur.execute("""
             SELECT * FROM master
             WHERE (last_time IS NULL OR last_time >= CURRENT_DATE)
+              AND NOT COALESCE(is_suspended, FALSE)
               AND (   store_id                              ILIKE %s
                    OR COALESCE(name_en,        '')          ILIKE %s
                    OR COALESCE(store_tags,     '')          ILIKE %s
@@ -1600,6 +1613,7 @@ def handle_link_click(call):
             SELECT affiliate_link, cloaked_slug FROM master
             WHERE store_id = %s
               AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+              AND NOT COALESCE(is_suspended, FALSE)
             LIMIT 1
         """, (store_id,))
         row  = cur.fetchone()
@@ -1649,6 +1663,7 @@ def handle_coupon_copy(call):
             SELECT public_coupon FROM master
             WHERE store_id = %s
               AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+              AND NOT COALESCE(is_suspended, FALSE)
             LIMIT 1
         """, (store_id,))
         row    = cur.fetchone()
@@ -1672,6 +1687,54 @@ def handle_coupon_copy(call):
         _edit_nav(user_id, t(user_id, 'coupon_for', sid=store_id, c=coupon), kb_copy)
     else:
         bot.answer_callback_query(call.id, t(user_id, 'coupon_unavailable'))
+
+
+# ============================================================
+#  Report code — «🚫 إبلاغ كود لا يعمل» (Migration 029)
+#  السحب التلقائي + إيميل + Telegram → كله في api.utils.code_reports
+# ============================================================
+@bot.callback_query_handler(func=lambda call: call.data.startswith("rprt:"))
+def handle_report_code(call):
+    """العميل ضغط زر الإبلاغ — لا نسأل، نسجّل ونرد «تم الإبلاغ»."""
+    store_id = call.data.split(":", 1)[1]
+    user_id  = call.from_user.id
+    lang     = get_lang(user_id)
+
+    try:
+        from api.utils.code_reports import record_code_report
+    except Exception as e:
+        print(f"⚠️ import code_reports failed: {e}")
+        bot.answer_callback_query(call.id, TEXTS['report_code_err'][lang], show_alert=True)
+        return
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        conn.autocommit = False
+        record_code_report(
+            conn,
+            store_id=store_id, source='bot',
+            tg_user_id=user_id,
+        )
+        conn.commit()
+        bot.answer_callback_query(call.id, TEXTS['report_code_ok'][lang], show_alert=True)
+    except ValueError as e:
+        # المتجر غير موجود (أو محذوف بعد عرض البطاقة)
+        print(f"⚠️ report: store missing — {e}")
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+        bot.answer_callback_query(call.id, TEXTS['report_code_err'][lang], show_alert=True)
+    except Exception as e:
+        print(f"⚠️ report callback: {e}")
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+        bot.answer_callback_query(call.id, TEXTS['report_code_err'][lang], show_alert=True)
+    finally:
+        if conn:
+            try: release_conn(conn)
+            except Exception: pass
 
 
 # ============================================================
@@ -1849,6 +1912,7 @@ def _load_favorites(user_id, lang):
                 SELECT store_id FROM user_favorites WHERE telegram_id = %s
             )
               AND (m.last_time IS NULL OR m.last_time >= CURRENT_DATE)
+              AND NOT COALESCE(m.is_suspended, FALSE)
             ORDER BY (
                 SELECT MAX(uf.created_at) FROM user_favorites uf
                 WHERE uf.telegram_id = %s AND uf.store_id = m.store_id

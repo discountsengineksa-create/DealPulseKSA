@@ -5,11 +5,13 @@ from pydantic import BaseModel, Field
 class TrackRequest(BaseModel):
     """طلب تسجيل حدث.
 
-    user_id  : اختياري — مستخدم معروف (telegram_id للبوت / web_users.id للموقع / null للزوار).
-    source   : 'bot' | 'web' | 'dashboard' — مصدر الحدث (لتقارير منفصلة).
-    event_id : اختياري — يُسمح للعميل بتمرير UUID للحماية من تكرار الحدث
-               عند إعادة المحاولة. لو لم يُمرَّر، الـ Cloudflare Worker
-               (أو السيرفر) يولّد واحد.
+    user_id       : اختياري — مستخدم معروف (telegram_id للبوت / web_users.id للموقع / null للزوار).
+    source        : 'bot' | 'web' | 'dashboard' — مصدر الحدث (لتقارير منفصلة).
+    event_id      : اختياري — يُسمح للعميل بتمرير UUID للحماية من تكرار الحدث
+                    عند إعادة المحاولة. لو لم يُمرَّر، الـ Cloudflare Worker
+                    (أو السيرفر) يولّد واحد.
+    story_view_id : اختياري — UUID من story_views.view_id لو الحدث نشأ من
+                    داخل ستوري (نسخ/زيارة من فيوور الستوري).
     """
     user_id: Optional[int] = Field(None, ge=0, description="ID المستخدم (telegram_id أو web_users.id)")
     store_id: str = Field(..., min_length=1, max_length=200)
@@ -17,6 +19,7 @@ class TrackRequest(BaseModel):
     details: Optional[str] = Field(None, max_length=500)
     source: Literal["bot", "web", "dashboard", "telegram_miniapp"] = "web"
     event_id: Optional[str] = Field(None, max_length=64, description="UUID اختياري لحماية الـ idempotency")
+    story_view_id: Optional[str] = Field(None, max_length=64, description="UUID story_views.view_id لو الحدث من داخل ستوري")
 
 
 class TrackResponse(BaseModel):
@@ -53,3 +56,47 @@ class CodeRequestResponse(BaseModel):
     ok: bool
     request_id: int
     brand_name: str
+
+
+# ─── بلاغات «الكود لا يعمل» (Migration 029) ────────────────────────────────
+class ReportCodeRequest(BaseModel):
+    """بلاغ من عميل مسجّل بأن كود متجر معيّن لا يعمل.
+
+    شروط:
+      - web              : web_user_id ملزم.
+      - telegram_miniapp : tg_user_id ملزم (telegram_id).
+      - bot              : tg_user_id ملزم.
+    لا بلاغات مجهولة. التحقّق يتم في الـ endpoint.
+    """
+    store_id:     str  = Field(..., min_length=1, max_length=200)
+    source:       Literal["web", "telegram_miniapp", "bot"]
+    web_user_id:  Optional[int] = Field(None, ge=1, description="web_users.id للموقع")
+    tg_user_id:   Optional[int] = Field(None, ge=1, description="telegram_id للبوت/الميني-ويب")
+    issue_note:   Optional[str] = Field(None, max_length=500, description="ملاحظة اختيارية من العميل")
+
+
+class ReportCodeResponse(BaseModel):
+    ok: bool
+    report_id: int
+    auto_suspended: bool = Field(
+        ..., description="هل سحب هذا البلاغ المتجرَ تلقائياً (10/60min)"
+    )
+
+
+# ─── فتح ستوري (Migration 029) ─────────────────────────────────────────────
+class StoryViewRequest(BaseModel):
+    """تسجيل فتحة ستوري لمسجّل فقط.
+
+    العميل يولّد view_id (UUID v4) ويُمرّره مع كل نسخ/زيارة لاحقاً في نفس
+    الفتحة عبر /track.story_view_id حتى نربط الـ engagement بالستوري.
+    """
+    view_id:     str  = Field(..., min_length=36, max_length=36, description="UUID v4 يولّده العميل")
+    store_id:    str  = Field(..., min_length=1, max_length=200)
+    source:      Literal["web", "telegram_miniapp"]
+    web_user_id: Optional[int] = Field(None, ge=1)
+    tg_user_id:  Optional[int] = Field(None, ge=1)
+
+
+class StoryViewResponse(BaseModel):
+    ok: bool
+    view_id: str

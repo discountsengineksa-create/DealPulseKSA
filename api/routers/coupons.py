@@ -83,6 +83,7 @@ def get_categories(conn=Depends(get_db)):
                  )) AS tg
             WHERE trim(tg) <> ''
               AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+              AND NOT COALESCE(is_suspended, FALSE)
         )
         SELECT
             t.tag                                  AS tag_name,
@@ -114,6 +115,7 @@ def get_all_coupons(
             0 AS score_pct
         FROM master
         WHERE (last_time IS NULL OR last_time >= CURRENT_DATE)
+              AND NOT COALESCE(is_suspended, FALSE)
         ORDER BY
             CASE WHEN COALESCE(is_promoted, FALSE) THEN 0 ELSE 1 END,
             CASE WHEN is_trending = 'ترند 🔥'      THEN 0 ELSE 1 END,
@@ -163,6 +165,7 @@ def search_coupons(
             FROM master
             WHERE
                 (last_time IS NULL OR last_time >= CURRENT_DATE)
+              AND NOT COALESCE(is_suspended, FALSE)
                 AND (
                     store_id                       ILIKE %(like)s
                     OR COALESCE(name_en,       '') ILIKE %(like)s
