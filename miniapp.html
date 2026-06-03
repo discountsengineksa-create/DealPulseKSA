@@ -183,9 +183,7 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
   <div id="storyRow" class="story-row"></div>
 
   <div class="stats">
-    <div class="stat glass" onclick="showTrendView()" style="cursor:pointer">
-      <div class="stat-v" id="sTrend">0</div><div class="stat-l" id="lblTrend">ترند</div>
-    </div>
+    <!-- خانة «ترند» أُزيلت لصالح قسم الترند الكامل المعروض تحت الإحصائيات -->
     <div class="stat glass" onclick="showCategoriesView()" style="cursor:pointer">
       <div class="stat-v" id="sCats">0</div><div class="stat-l" id="lblCats">قسم</div>
     </div>
@@ -196,6 +194,11 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
       <div class="stat-v" id="sFavs">0</div><div class="stat-l" id="lblFavs">❤️</div>
     </div>
   </div>
+
+  <!-- ── قسم الترند مباشرة على الصفحة الرئيسية (يومي + أسبوعي) ─────────
+       يُملأ تلقائياً من /api/v1/trend/daily و /weekly عند تحميل التطبيق.
+       لا يَظهر إذا لا توجد بيانات بعد (يحمي شكل الصفحة من قسم فارغ). -->
+  <div id="trendOnHome" style="padding:0 14px;margin-top:6px"></div>
   <style>
   /* Sub-view (List / Categories / Category / Store) — يستبدل home بالكامل */
   .subview{display:none;padding:18px;animation:slideIn 0.25s ease-out}
@@ -322,6 +325,15 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
     .trend-card.small .tc-name{font-size:11px}
     .trend-empty{color:var(--t3);font-size:12px;padding:24px 12px;text-align:center}
     .trend-loading{color:var(--t3);font-size:13px;padding:40px 12px;text-align:center}
+
+    /* ── قسم الترند على الصفحة الرئيسية (أصغر هامشاً من الـ view المنفصل) ── */
+    .trend-home-section{margin-bottom:18px}
+    .trend-home-head{display:flex;align-items:flex-end;justify-content:space-between;
+      padding:0 4px 10px;margin-bottom:10px;border-bottom:1px solid var(--border)}
+    .trend-home-title{font-size:14px;font-weight:800;color:var(--t1)}
+    .trend-home-more{font-size:11px;font-weight:700;color:var(--em);background:none;
+      border:none;cursor:pointer;font-family:var(--font);padding:4px 6px}
+    .trend-home-more:active{opacity:0.7}
   </style>
   <div id="trendBody"></div>
 </main>
@@ -522,7 +534,7 @@ function applyLang() {
   _setPlaceholder('srchInput', ST.searchHolder);
   _setText('lblStores', ST.stores);
   _setText('lblCats', ST.cats);
-  _setText('lblTrend', ST.trending);
+  // lblTrend أُزيلت — قسم الترند صار قسماً كاملاً تحت الإحصائيات.
   // الزر يعرض اللغة المقابلة (لو AR نعرض EN للتبديل)
   _setText('langBtn', (L === 'ar') ? 'EN' : 'ع');
   // ملاحظة: navHome/navStores/navCats/navTrend أُزيلت مع bottom nav — لا مراجع بعد الآن.
@@ -687,6 +699,76 @@ function renderTrendSections(daily, weekly) {
         </section>`;
 
     body.innerHTML = dailySection + weeklySection;
+}
+
+// ── قسم الترند على الـ home (compact، يظهر مباشرة تحت الإحصائيات) ──────
+// يستدعى بعد loadData. fire-and-forget: لا يعطّل بقية الصفحة لو فشل.
+async function loadTrendOnHome() {
+    const host = document.getElementById('trendOnHome');
+    if (!host) return;
+    try {
+        const [d, w] = await Promise.all([
+            fetch(`${API_BASE}/trend/daily?source=mini`,  { cache: 'no-store' }).then(r => r.json()),
+            fetch(`${API_BASE}/trend/weekly?source=mini`, { cache: 'no-store' }).then(r => r.json()),
+        ]);
+        renderTrendOnHome(d.items || [], w.items || []);
+    } catch (err) {
+        console.warn('[loadTrendOnHome] skipped:', err);
+        host.innerHTML = '';   // فشل صامت — لا نُفسد الصفحة
+    }
+}
+
+function renderTrendOnHome(daily, weekly) {
+    const host = document.getElementById('trendOnHome');
+    if (!host) return;
+    const ST = STRINGS[LANG_CURRENT];
+    const dailyTop3 = daily.slice(0, 3);
+    const weeklyTop3 = weekly.slice(0, 3);
+    if (dailyTop3.length === 0 && weeklyTop3.length === 0) {
+        host.innerHTML = '';   // لا داتا بعد → ما نُظهر القسم
+        return;
+    }
+
+    const escAttr = (v) => String(v || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    const escHtml = (v) => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const cardHTML = (it) => {
+        const sid = escAttr(it.store_id);
+        const name = escHtml(it.store_name);
+        const title = escHtml(it.rank_title);
+        const logo = escAttr(it.logo_url || 'logo.png');
+        return `
+        <div class="trend-card" onclick="showStoreByStoreId('${sid}')">
+            <div class="tc-title">${title}</div>
+            <div class="tc-logo"><img src="${logo}" alt="${name}" onerror="this.onerror=null;this.src='logo.png'"></div>
+            <div class="tc-name">${name}</div>
+        </div>`;
+    };
+
+    const moreLabel = LANG_CURRENT === 'en' ? 'View all' : 'الصفحة الكاملة';
+    let html = '';
+
+    if (dailyTop3.length) {
+        html += `
+        <section class="trend-home-section">
+            <div class="trend-home-head">
+                <span class="trend-home-title">${ST.trendDaily}</span>
+            </div>
+            <div class="trend-grid-3">${dailyTop3.map(cardHTML).join('')}</div>
+        </section>`;
+    }
+
+    if (weeklyTop3.length) {
+        html += `
+        <section class="trend-home-section">
+            <div class="trend-home-head">
+                <span class="trend-home-title">${ST.trendWeekly}</span>
+                <button class="trend-home-more" onclick="showTrendView()">${moreLabel} ←</button>
+            </div>
+            <div class="trend-grid-3">${weeklyTop3.map(cardHTML).join('')}</div>
+        </section>`;
+    }
+
+    host.innerHTML = html;
 }
 
 // يحوّل store_id (مفتاح عربي من API الترند) إلى numeric id داخلي ثم يفتح المتجر.
@@ -949,6 +1031,7 @@ async function loadData() {
         renderStores();
         updateStats();
         renderStoryRow();
+        loadTrendOnHome();   // قسم الترند على الصفحة الرئيسية — fire-and-forget
     } catch (err) {
         console.error('[loadData] failed:', err);
         showToast(STRINGS[LANG_CURRENT].fetchErr);
@@ -1172,8 +1255,7 @@ function showFavoritesView() {
 }
 
 function updateStats() {
-    // 3 ستات بنفس ترتيب الموقع: ترند / قسم / متجر
-    document.getElementById('sTrend').textContent  = ALL.filter(x => x.trending).length;
+    // 3 ستات (بعد إزالة «ترند» — صار قسم كامل تحت الإحصائيات): قسم / متجر / ❤️
     document.getElementById('sCats').textContent   = CATS.length;
     document.getElementById('sStores').textContent = ALL.length;
     const favEl = document.getElementById('sFavs');
