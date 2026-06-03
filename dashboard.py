@@ -1342,6 +1342,144 @@ def _sa_build_excel(summary_df: pd.DataFrame, daily_df: "pd.DataFrame | None",
     return buf.getvalue()
 
 
+# ════════════════════════════════════════════════════════════════════════════
+#  🔥 محرّك «الترند» — نقاط موزونة + قاعدة Anti-Spam (2 لكل ساعة، تبريد 5 ساعات)
+# ════════════════════════════════════════════════════════════════════════════
+# نقاط: نقر=1، بحث=2، نسخ=3، مفضلة=4 (تختفي تلقائياً لو ألغى المستخدم المفضلة
+# لأن الجدول hard-delete على الإزالة — لا حاجة لجدول إزالة منفصل).
+_TREND_POINTS = {"click_link": 1, "search": 2, "copy_coupon": 3}
+_TREND_FAV_POINTS = 4
+
+
+def _sa_person_key(source: str, user_id, ip_hex) -> str:
+    """
+    هوية موحّدة للشخص لأغراض Anti-Spam — منفصلة لكل مصدر (web/miniapp/bot) حتى
+    لا تنخلط فترات التبريد بين المنصات. النسخة المسجَّلة (user_id) تتفوّق دائماً
+    على البصمة المجهولة (ip_hex). nan-safe.
+    """
+    src = (source or "bot").strip().lower()
+    prefix = ("web" if src == "web"
+              else "mini" if src in ("telegram_miniapp", "miniapp")
+              else "bot")
+    if user_id is not None and not (isinstance(user_id, float) and pd.isna(user_id)):
+        try:
+            return f"{prefix}:u{int(user_id)}"
+        except Exception:
+            return f"{prefix}:u{user_id}"
+    if ip_hex and isinstance(ip_hex, str):
+        return f"{prefix}:ip{ip_hex[:12]}"
+    return f"{prefix}:anon"
+
+
+def _sa_apply_anti_spam(df: pd.DataFrame, time_col: str = "action_time") -> pd.DataFrame:
+    """
+    يطبّق قاعدة anti-spam على كل (شخص × متجر × نوع الفعل) بشكل مستقل:
+      * أول 2 فعل خلال أول ساعة من بداية النافذة → counted=True
+      * من ساعة 1 إلى ساعة 5 → counted=False (لا تتحول لنقاط، رغم تنفيذها)
+      * بعد 5 ساعات من بداية النافذة → نافذة جديدة تفتح بهذا الفعل
+    يفترض وجود الأعمدة: person_key, store_id, action_type, time_col.
+    يُرجع نسخة بعمود جديد 'counted' bool.
+    """
+    if df.empty:
+        out = df.copy()
+        out["counted"] = pd.Series([], dtype=bool)
+        return out
+    d = df.sort_values(["person_key", "store_id", "action_type", time_col]).reset_index(drop=True).copy()
+    counted = [False] * len(d)
+    last_key = (None, None, None)
+    win_open: pd.Timestamp | None = None
+    count_in_win = 0
+    times = d[time_col].to_list()
+    keys = list(zip(d["person_key"], d["store_id"], d["action_type"]))
+    one_hour = pd.Timedelta(hours=1)
+    five_hours = pd.Timedelta(hours=5)
+    for i in range(len(d)):
+        k = keys[i]
+        t = times[i]
+        if k != last_key:
+            last_key = k
+            win_open = t
+            count_in_win = 1
+            counted[i] = True
+            continue
+        delta = t - win_open
+        if delta >= five_hours:
+            win_open = t
+            count_in_win = 1
+            counted[i] = True
+        elif delta < one_hour and count_in_win < 2:
+            count_in_win += 1
+            counted[i] = True
+        else:
+            counted[i] = False
+    d["counted"] = counted
+    return d
+
+
+def _sa_compute_trend(df_logs: pd.DataFrame, df_fav: pd.DataFrame,
+                       window_start: pd.Timestamp, window_end: pd.Timestamp,
+                       active_ids: set) -> pd.DataFrame:
+    """
+    يحسب نقاط الترند لكل متجر داخل نافذة زمنية (يومي/أسبوعي).
+    منطق صحيح: Anti-spam يُطبَّق على *كامل* تاريخ الأفعال (حتى لا تُعدّ نسخة فجر اليوم
+    استمراراً لجلسة الأمس وتُمنع خطأً)، ثم نختار counted=True داخل النافذة فقط.
+    يُرجع DataFrame مرتّباً بالنقاط تنازلياً مع تفصيل لكل مؤشّر.
+    """
+    # ── 1. الأفعال (نقر/بحث/نسخ) ───────────────────────────────────────────
+    if df_logs is not None and not df_logs.empty:
+        d = df_logs.copy()
+        d = d[d["store_id"].notna() & (d["store_id"].astype(str).str.strip() != "")]
+        d = d[d["store_id"].isin(active_ids)]
+        d["person_key"] = d.apply(
+            lambda r: _sa_person_key(r.get("source"), r.get("user_id"), r.get("ip_hex")),
+            axis=1,
+        )
+        d = _sa_apply_anti_spam(d, time_col="action_time")
+        win_mask = (d["action_time"] >= window_start) & (d["action_time"] <= window_end)
+        d_win = d[win_mask & d["counted"]].copy()
+        clicks = d_win[d_win["action_type"] == "click_link"].groupby("store_id").size()
+        searches = d_win[d_win["action_type"] == "search"].groupby("store_id").size()
+        copies = d_win[d_win["action_type"] == "copy_coupon"].groupby("store_id").size()
+        users_uniq = d_win.groupby("store_id")["person_key"].nunique()
+    else:
+        clicks = searches = copies = users_uniq = pd.Series(dtype="int64")
+        d_win = pd.DataFrame(columns=["store_id", "action_type", "person_key", "action_time", "counted"])
+
+    # ── 2. المفضلة (تنخصم تلقائياً عند الإزالة — DELETE في الجدول) ─────────
+    if df_fav is not None and not df_fav.empty:
+        f = df_fav.copy()
+        if "kind" in f.columns:
+            f = f[f["kind"].fillna("store") == "store"]
+        if not f.empty:
+            f = f[f["store_id"].isin(active_ids)]
+            f_win = f[(f["created_at"] >= window_start) & (f["created_at"] <= window_end)]
+            favs = f_win.groupby("store_id").size()
+        else:
+            favs = pd.Series(dtype="int64")
+    else:
+        favs = pd.Series(dtype="int64")
+
+    # ── 3. تجميع النتيجة ───────────────────────────────────────────────────
+    all_ids = sorted(active_ids)
+    out = pd.DataFrame({"store_id": all_ids})
+    out["clicks_counted"] = out["store_id"].map(clicks).fillna(0).astype(int)
+    out["searches_counted"] = out["store_id"].map(searches).fillna(0).astype(int)
+    out["copies_counted"] = out["store_id"].map(copies).fillna(0).astype(int)
+    out["favs_added"] = out["store_id"].map(favs).fillna(0).astype(int)
+    out["unique_users"] = out["store_id"].map(users_uniq).fillna(0).astype(int)
+    out["score_clicks"] = out["clicks_counted"] * _TREND_POINTS["click_link"]
+    out["score_searches"] = out["searches_counted"] * _TREND_POINTS["search"]
+    out["score_copies"] = out["copies_counted"] * _TREND_POINTS["copy_coupon"]
+    out["score_favs"] = out["favs_added"] * _TREND_FAV_POINTS
+    out["total_score"] = (out["score_clicks"] + out["score_searches"]
+                          + out["score_copies"] + out["score_favs"])
+    out = (out[out["total_score"] > 0]
+           .sort_values(["total_score", "unique_users"], ascending=[False, False])
+           .reset_index(drop=True))
+    out.insert(0, "rank", out.index + 1)
+    return out
+
+
 # --- القائمة الجانبية ---
 if _logo_b64:
     st.sidebar.markdown(f"""
@@ -3032,6 +3170,7 @@ elif page == "تحليل المتاجر":
         "👤 مين نسخ من متجر",
         "📈 الرسوم والمعدلات",
         "❤️ المفضلة",
+        "🔥 الترند",
     ]
     # radio بدل st.tabs: يثبّت التبويب المختار عبر إعادة التشغيل. st.tabs يرجع
     # للتبويب الأول مع أي rerun (تغيير الفلتر أو زر «تحديث») — هذا يبقيك مكانك.
@@ -3503,6 +3642,339 @@ elif page == "تحليل المتاجر":
             st.dataframe(out_f, hide_index=True, width='stretch')
             st.caption(f"👥 {len(out_f)} شخص فضّلوا «{store_sel}» — هؤلاء جمهور التنبيه المستقبلي "
                        "عند نزول كوبون/خصم جديد لهذا المتجر.")
+
+    # ════════════════════════════════════════════════════════════════════════
+    # 🔥 الترند — نقاط موزونة + قاعدة Anti-Spam + تبويبات داخلية للمصدر
+    #    اليومي = من 12 ليلاً → الآن (يبدأ من صفر كل ليلة)
+    #    الأسبوعي = آخر 7 أيام rolling (يتحرّك ثانية بثانية)
+    #    ⚠️ يتجاوز فلتر التاريخ في أعلى الصفحة — الترند له نوافذه الخاصة.
+    # ════════════════════════════════════════════════════════════════════════
+    elif _sm_tab == _SM_TABS[4]:
+        st.caption("نقاط موزونة: نقر=1 · بحث=2 · نسخ=3 · مفضلة=4 — مع قاعدة anti-spam "
+                   "تمنع تضخيم الترند بالتكرار. الشرح الكامل أسفل الصفحة.")
+
+        tr_tab_all, tr_tab_web, tr_tab_mini = st.tabs([
+            "📡 الكل", "🌐 الموقع", "🔹 الميني-ويب",
+        ])
+
+        _TREND_SRC_MAP = {
+            "all": None,
+            "web": ["web"],
+            "mini": ["telegram_miniapp", "miniapp"],
+        }
+        _TREND_FAV_PLAT_MAP = {"all": None, "web": ["web"], "mini": ["miniapp"]}
+
+        _LOGO_MAP = df_master.set_index("store_id")["logo_url"].fillna("").to_dict()
+
+        # توقيت الرياض كـ naive (للتطابق مع action_time المُزاح في الصفحة)
+        _NOW_R = pd.Timestamp.utcnow().tz_localize(None) + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS)
+        _TODAY_START = _NOW_R.normalize()
+        _WEEK_START = _NOW_R - pd.Timedelta(days=7)
+
+        # ── HTML card renderer ────────────────────────────────────────
+        def _trend_card_html(title: str, row, big: bool = True) -> str:
+            logo = (row.get("logo_url") or "").strip()
+            store = row.get("store_id", "—")
+            score = int(row.get("total_score", 0))
+            cl = int(row.get("clicks_counted", 0))
+            se = int(row.get("searches_counted", 0))
+            co = int(row.get("copies_counted", 0))
+            fv = int(row.get("favs_added", 0))
+            uu = int(row.get("unique_users", 0))
+            sz = 72 if big else 52
+            fs_score = "30px" if big else "20px"
+            fs_name = "17px" if big else "14px"
+            min_h = "230px" if big else "190px"
+            if logo:
+                logo_html = (f'<img src="{logo}" style="width:{sz}px;height:{sz}px;'
+                             f'object-fit:contain;border-radius:10px;background:{BRAND["surface"]};'
+                             f'padding:4px;border:1px solid {BRAND["border"]};'
+                             f'margin:6px auto;display:block">')
+            else:
+                logo_html = (f'<div style="width:{sz}px;height:{sz}px;border-radius:10px;'
+                             f'background:{BRAND["bg_alt"]};margin:6px auto;display:flex;'
+                             f'align-items:center;justify-content:center;font-size:24px;'
+                             f'border:1px solid {BRAND["border"]}">🏪</div>')
+            return f"""
+<div style="border:1px solid {BRAND["border"]};border-radius:14px;padding:14px;
+            text-align:center;background:{BRAND["surface"]};
+            box-shadow:0 1px 3px rgba(0,0,0,0.05);min-height:{min_h}">
+  <div style="font-size:13px;color:{BRAND["emerald_deep"]};font-weight:700;margin-bottom:2px">
+    {title}
+  </div>
+  {logo_html}
+  <div style="font-size:{fs_name};font-weight:700;color:{BRAND["text"]};margin:4px 0">
+    {store}
+  </div>
+  <div style="font-size:{fs_score};color:{BRAND["emerald_deep"]};font-weight:800;line-height:1.1">
+    {score}
+  </div>
+  <div style="font-size:10px;color:{BRAND["text_muted"]};margin-bottom:6px">نقطة</div>
+  <div style="font-size:11px;color:{BRAND["text_soft"]};line-height:1.6">
+    🔗 {cl} · 🔍 {se} · 📋 {co}<br>❤️ {fv} · 👤 {uu}
+  </div>
+</div>
+"""
+
+        def _empty_card_html(title: str) -> str:
+            return f"""
+<div style="border:1px dashed {BRAND["border"]};border-radius:14px;padding:20px;
+            text-align:center;background:{BRAND["bg_alt"]};min-height:230px;
+            display:flex;flex-direction:column;justify-content:center">
+  <div style="font-size:13px;color:{BRAND["text_muted"]};font-weight:700;margin-bottom:8px">
+    {title}
+  </div>
+  <div style="font-size:32px;opacity:0.4">—</div>
+  <div style="font-size:11px;color:{BRAND["text_muted"]};margin-top:8px">
+    لا توجد بيانات كافية
+  </div>
+</div>
+"""
+
+        def _render_detail_table(df_sec: pd.DataFrame, key_prefix: str, top_n: int) -> None:
+            v = df_sec.head(top_n).copy()
+            view = pd.DataFrame({
+                "#": v["rank"].values,
+                "الشعار": v["store_id"].map(_LOGO_MAP).fillna("").values,
+                "المتجر": v["store_id"].values,
+                "🔗 نقر": v["clicks_counted"].values,
+                "🔍 بحث": v["searches_counted"].values,
+                "📋 نسخ": v["copies_counted"].values,
+                "❤️ مفضلة": v["favs_added"].values,
+                "👤 أشخاص": v["unique_users"].values,
+                "النقاط": v["total_score"].values,
+            })
+            max_score = int(max(1, view["النقاط"].max())) if len(view) else 1
+            st.dataframe(
+                view, hide_index=True, width='stretch',
+                column_config={
+                    "الشعار": st.column_config.ImageColumn("🏪", width="small"),
+                    "النقاط": st.column_config.ProgressColumn(
+                        "النقاط", format="%d", min_value=0, max_value=max_score),
+                },
+                key=f"{key_prefix}_table",
+            )
+            st.download_button(
+                "📥 تحميل CSV",
+                view.to_csv(index=False).encode("utf-8-sig"),
+                f"trend_{key_prefix}.csv", "text/csv", key=f"{key_prefix}_csv",
+            )
+
+        # ── Drilldown: مين دفع متجراً معيّناً في الترند؟ ─────────────
+        def _render_drilldown(d_full_marked: pd.DataFrame,
+                              daily_df: pd.DataFrame, weekly_df: pd.DataFrame,
+                              key_prefix: str) -> None:
+            st.markdown("**🔍 مين دفع متجراً معيّناً في الترند؟**")
+            stores_pool = []
+            if not daily_df.empty: stores_pool.extend(daily_df["store_id"].tolist())
+            if not weekly_df.empty: stores_pool.extend(weekly_df["store_id"].tolist())
+            stores_pool = list(dict.fromkeys(stores_pool))  # uniq preserving order
+            if not stores_pool:
+                st.info("لا يوجد متجر في الترند حالياً.")
+                return
+            cdd1, cdd2 = st.columns([2, 3])
+            with cdd1:
+                store_sel = st.selectbox("اختر متجراً:", stores_pool,
+                                          key=f"{key_prefix}_dd_store")
+            with cdd2:
+                scope = st.radio("النطاق:",
+                                  ["📅 الأسبوعي (آخر 7 أيام)", "🌞 اليومي (منذ 12 ليلاً)"],
+                                  horizontal=True, key=f"{key_prefix}_dd_scope")
+            wstart = _WEEK_START if "أسبوعي" in scope else _TODAY_START
+
+            d = d_full_marked[
+                (d_full_marked["store_id"] == store_sel)
+                & (d_full_marked["action_time"] >= wstart)
+                & (d_full_marked["action_time"] <= _NOW_R)
+                & (d_full_marked["counted"])
+            ].copy()
+            if d.empty:
+                st.info("لا أحداث محسوبة (counted=True) لهذا المتجر في النطاق المحدد. "
+                        "ربما كل أحداثه ضمن فترة التبريد 5 ساعات.")
+                return
+
+            CHAN_AR = {"bot": "📱 بوت", "web": "🌐 ويب",
+                       "telegram_miniapp": "🔹 ميني-ويب", "miniapp": "🔹 ميني-ويب"}
+            POINTS_MAP = {"click_link": 1, "search": 2, "copy_coupon": 3}
+
+            def _ident(r):
+                src = r["source"]
+                if src in ("telegram_miniapp", "miniapp"):
+                    u = (r.get("bu_username") or "")
+                    if isinstance(u, str) and u.strip():
+                        return "@" + u.strip().lstrip("@")
+                    if pd.notna(r.get("user_id")):
+                        return f"🔹 ميني #{int(r['user_id'])}"
+                    return f"🔹 ميني #{(r.get('ip_hex') or '')[:6]}"
+                if src == "web":
+                    for k in ("web_name", "web_email"):
+                        v = r.get(k)
+                        if v is not None and not (isinstance(v, float) and pd.isna(v)):
+                            s = str(v).strip()
+                            if s: return s
+                    return f"🌐 زائر #{(r.get('ip_hex') or '')[:6]}"
+                u = (r.get("bu_username") or "")
+                if isinstance(u, str) and u.strip():
+                    return "@" + u.strip().lstrip("@")
+                if pd.notna(r.get("user_id")):
+                    return f"📱 بوت #{int(r['user_id'])}"
+                return "📱 بوت (غير مسجّل)"
+
+            d["الشخص"] = d.apply(_ident, axis=1)
+            d["القناة"] = d["source"].map(CHAN_AR).fillna(d["source"])
+            d["النقاط"] = d["action_type"].map(POINTS_MAP).fillna(0).astype(int)
+
+            piv = d.pivot_table(index=["الشخص", "القناة"], columns="action_type",
+                                 values="النقاط", aggfunc="count", fill_value=0)
+            for c in ["click_link", "search", "copy_coupon"]:
+                if c not in piv.columns: piv[c] = 0
+            piv = piv.rename(columns={"click_link": "🔗 نقر",
+                                      "search": "🔍 بحث",
+                                      "copy_coupon": "📋 نسخ"})
+            piv["النقاط"] = (piv["🔗 نقر"] * 1 + piv["🔍 بحث"] * 2 + piv["📋 نسخ"] * 3)
+            piv = piv.reset_index().sort_values("النقاط", ascending=False).head(20)
+            st.dataframe(piv, hide_index=True, width='stretch',
+                          key=f"{key_prefix}_dd_table")
+            st.caption(f"أعلى 20 شخصاً ساهموا في ترند «{store_sel}» (counted فقط). "
+                        f"ملاحظة: المفضلة تُحسب من جدول `user_favorites` ولا تظهر هنا.")
+
+        # ── Main per-source render ───────────────────────────────────
+        def _render_trend_for_source(src_key: str) -> None:
+            src_filter = _TREND_SRC_MAP[src_key]
+            fav_filter = _TREND_FAV_PLAT_MAP[src_key]
+
+            # Fresh load — يتجاوز فلتر التاريخ في أعلى الصفحة
+            df_logs_full = _sa_load_actions()
+            df_fav_full = _sa_load_favorites()
+
+            if not df_logs_full.empty:
+                df_logs_full = df_logs_full[df_logs_full["store_id"].isin(active_ids)].copy()
+                df_logs_full["action_time"] = (pd.to_datetime(df_logs_full["action_time"])
+                                                + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
+                if src_filter:
+                    df_logs_full = df_logs_full[df_logs_full["source"].isin(src_filter)]
+
+            if not df_fav_full.empty:
+                df_fav_full = df_fav_full.copy()
+                df_fav_full["created_at"] = (
+                    pd.to_datetime(df_fav_full["created_at"], utc=True)
+                    .dt.tz_localize(None)
+                    + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS)
+                )
+                if fav_filter:
+                    df_fav_full = df_fav_full[df_fav_full["platform"].isin(fav_filter)]
+
+            daily = _sa_compute_trend(df_logs_full, df_fav_full,
+                                       _TODAY_START, _NOW_R, active_ids)
+            weekly = _sa_compute_trend(df_logs_full, df_fav_full,
+                                        _WEEK_START, _NOW_R, active_ids)
+            for df_ in (daily, weekly):
+                if not df_.empty:
+                    df_["logo_url"] = df_["store_id"].map(_LOGO_MAP).fillna("")
+
+            # ── 🌞 اليومي ──────────────────────────────────────────
+            hours_in = max(1, int((_NOW_R - _TODAY_START).total_seconds() / 3600))
+            st.markdown("### 🌞 الترند اليومي")
+            st.caption(f"من 12:00 ص ← الآن · {hours_in} ساعة منقضية · "
+                        f"إجمالي متاجر داخل الترند: **{len(daily)}**")
+
+            DAILY_TITLES = ["🥇 الأعلى طلباً", "🥈 الأكثر شعبية", "🥉 الأوسع انتشاراً"]
+            cols = st.columns(3)
+            for i, (col, ttl) in enumerate(zip(cols, DAILY_TITLES)):
+                with col:
+                    if i < len(daily):
+                        st.markdown(_trend_card_html(ttl, daily.iloc[i], big=True),
+                                     unsafe_allow_html=True)
+                    else:
+                        st.markdown(_empty_card_html(ttl), unsafe_allow_html=True)
+
+            if not daily.empty:
+                with st.expander("📊 تفصيل النقاط اليومية (أعلى 15)", expanded=False):
+                    _render_detail_table(daily, f"{src_key}_daily", top_n=15)
+
+            st.divider()
+
+            # ── 📅 الأسبوعي ─────────────────────────────────────────
+            st.markdown("### 📅 الترند الأسبوعي")
+            st.caption(f"آخر 7 أيام (rolling) · من {_WEEK_START.strftime('%Y-%m-%d %H:%M')} "
+                        f"← الآن · إجمالي متاجر داخل الترند: **{len(weekly)}**")
+
+            cols = st.columns(3)
+            for i, (col, ttl) in enumerate(zip(cols, DAILY_TITLES)):
+                with col:
+                    if i < len(weekly):
+                        st.markdown(_trend_card_html(ttl, weekly.iloc[i], big=True),
+                                     unsafe_allow_html=True)
+                    else:
+                        st.markdown(_empty_card_html(ttl), unsafe_allow_html=True)
+
+            if len(weekly) > 3 or True:  # نُظهر الصف دائماً حتى لو فاضي (تنسيق ثابت)
+                st.markdown("**🏅 المراكز التالية:**")
+                cols2 = st.columns(4)
+                for i in range(4):
+                    pos_idx = 3 + i
+                    with cols2[i]:
+                        ttl = f"المركز {pos_idx + 1}"
+                        if pos_idx < len(weekly):
+                            st.markdown(_trend_card_html(ttl, weekly.iloc[pos_idx], big=False),
+                                         unsafe_allow_html=True)
+                        else:
+                            st.markdown(_empty_card_html(ttl), unsafe_allow_html=True)
+
+            if not weekly.empty:
+                with st.expander("📊 تفصيل النقاط الأسبوعية (أعلى 20)", expanded=False):
+                    _render_detail_table(weekly, f"{src_key}_weekly", top_n=20)
+
+            st.divider()
+
+            # ── 🔍 Drilldown (يحتاج counted على كامل الـ logs) ────
+            if df_logs_full is not None and not df_logs_full.empty:
+                d_full = df_logs_full.copy()
+                d_full = d_full[d_full["store_id"].notna()
+                                & (d_full["store_id"].astype(str).str.strip() != "")]
+                d_full["person_key"] = d_full.apply(
+                    lambda r: _sa_person_key(r.get("source"), r.get("user_id"), r.get("ip_hex")),
+                    axis=1,
+                )
+                d_full = _sa_apply_anti_spam(d_full, time_col="action_time")
+                _render_drilldown(d_full, daily, weekly, src_key)
+            else:
+                st.info("لا توجد أحداث في هذا النطاق.")
+
+            # ── ℹ️ شارح القاعدة ───────────────────────────────────
+            with st.expander("ℹ️ كيف يُحسب الترند؟ (شرح القاعدة)", expanded=False):
+                st.markdown("""
+**نظام النقاط الموزون:**
+
+| الفعل | النقاط لكل حدث |
+|---|---|
+| 🔗 نقر على رابط متجر | **1** |
+| 🔍 بحث باسم المتجر | **2** |
+| 📋 نسخ كوبون | **3** |
+| ❤️ إضافة للمفضلة | **4** *(تنخصم تلقائياً لو أزال المستخدم المفضلة — لأن الصف يُحذف فعلياً من الجدول)* |
+
+**قاعدة Anti-Spam (لكل نوع فعل × مستخدم × متجر بشكل مستقل):**
+
+- ✅ **أول ساعة:** أول فعلَين تُحسب نقاطهما.
+- ❌ **من ساعة 1 إلى ساعة 5:** أي فعل إضافي يُسجَّل في النظام بدون نقاط — يعني المستخدم يقدر ينسخ ويفتح وينقر زي ما يبي، بس ما يُضخّم الترند.
+- 🔄 **بعد 5 ساعات** من بداية النافذة: نافذة جديدة تفتح بأول فعل قادم.
+
+**النوافذ الزمنية:**
+
+- 🌞 **اليومي:** من 12:00 ص (توقيت الرياض) إلى الآن. يبدأ من صفر كل ليلة.
+- 📅 **الأسبوعي:** آخر 7 أيام (rolling) — يتحرك ثانية بثانية مع الوقت.
+
+**ضمانات الفوترة:**
+
+كل الأحداث الخام محفوظة في `action_logs` للأبد بختم زمني. لو طلبت شركة معلنة تقريراً «متى كان متجري في الترند هذا الشهر؟» نقدر نرجع لأي تاريخ ونعيد بناء الترند منه. **ما في تصفير أبداً** — الترند هو فقط *سؤال* نسأله للداتا الخام.
+                """)
+
+        with tr_tab_all:
+            _render_trend_for_source("all")
+        with tr_tab_web:
+            _render_trend_for_source("web")
+        with tr_tab_mini:
+            _render_trend_for_source("mini")
 
     # ════════════════════════════════════════════════════════════════════════
     # 🎬 تحليلات الستوري (Migration 029)
