@@ -707,7 +707,10 @@ function renderStoreView(storeId) {
     window._activeStore = s;
 
     // زر إبلاغ — يظهر فقط لو في كوبون + مستخدم تيليجرام معروف.
-    const sidJs = JSON.stringify(s.store_id || '');
+    // JSON.stringify يخرج نص بـ double quotes — ندفعه داخل onclick="..."
+    // فيكسر الـ HTML attribute. نـ HTML-encode الـ " إلى &quot; حتى يفك
+    // الـ parser الترميز قبل ما يقرأ الـ JS — فيرى JSON صحيح.
+    const sidJs = JSON.stringify(s.store_id || '').replace(/"/g, '&quot;');
     const reportRow = (s.coupon && tgUserId)
         ? `<div style="text-align:center;margin-top:10px">
              <button type="button"
@@ -1265,7 +1268,10 @@ function renderStorySlide() {
     if (!s) return;
     const ST = STRINGS[LANG_CURRENT];
     const logo = (s.logo || 'logo.png').replace(/"/g, '&quot;');
-    const sidJs = JSON.stringify(s.store_id || '');
+    // JSON.stringify يخرج نص بـ double quotes — ندفعه داخل onclick="..."
+    // فيكسر الـ HTML attribute. نـ HTML-encode الـ " إلى &quot; حتى يفك
+    // الـ parser الترميز قبل ما يقرأ الـ JS — فيرى JSON صحيح.
+    const sidJs = JSON.stringify(s.store_id || '').replace(/"/g, '&quot;');
     document.getElementById('storyProgress').innerHTML =
         STORY.map((_, i) => `<span class="seg"><i id="seg${i}" style="width:${i < storyIdx ? '100%' : '0'}"></i></span>`).join('');
     // الكود الآن قابل للنسخ من داخل الستوري (مع تتبّع story_view_id).
