@@ -1506,7 +1506,7 @@ _MAIN_PAGES = [
 ]
 _ANALYSIS_PAGES = [
 "🎬 تحليلات الستوري",
-"تحليل المتاجر", "تحليل الأقسام", "تحليل بحث الأكواد",
+"تحليل المتاجر", "تحليل الأقسام",
 "تحليل طلبات الأكواد", "تحليل المستخدمين", "تحليل الموقع",
 "👥 الحضور الحي",
 ]
@@ -4635,6 +4635,7 @@ elif page == "🎬 تحليلات الستوري":
                          COUNT(*)                                 AS views,
                          COUNT(DISTINCT store_id)                 AS stores_count,
                          STRING_AGG(DISTINCT store_id, '، ' ORDER BY store_id) AS stores_list,
+                         MIN(viewed_at)                           AS first_view,
                          MAX(viewed_at)                           AS last_view,
                          ARRAY_AGG(view_id)                       AS view_ids
                   FROM base
@@ -4671,6 +4672,7 @@ elif page == "🎬 تحليلات الستوري":
                                                                                  AS نسخ_كود_من_الستوري,
                   COALESCE(acts.visited_stores, '—')                             AS دخل_على,
                   COALESCE(acts.copied_stores,  '—')                             AS نسخ_من,
+                  agg.first_view                                                 AS أول_مشاهدة,
                   agg.last_view                                                  AS آخر_مشاهدة
                 FROM agg
                 LEFT JOIN acts       USING (web_user_id, tg_user_id)
@@ -4684,13 +4686,15 @@ elif page == "🎬 تحليلات الستوري":
             else:
                 all_viewers["المصدر"] = all_viewers["source"].map(
                     {"web": "🌐 الموقع", "telegram_miniapp": "🔹 الميني ويب"}).fillna(all_viewers["source"])
+                all_viewers["أول_مشاهدة"] = pd.to_datetime(all_viewers["أول_مشاهدة"], errors="coerce") \
+                                                  .dt.strftime("%Y-%m-%d %H:%M")
                 all_viewers["آخر_مشاهدة"] = pd.to_datetime(all_viewers["آخر_مشاهدة"], errors="coerce") \
                                                   .dt.strftime("%Y-%m-%d %H:%M")
                 all_viewers.drop(columns=["source"], inplace=True)
                 cols_order = ["المصدر", "الاسم", "الإيميل", "الجوال", "تيليجرام",
                               "مرات_المشاهدة", "عدد_المتاجر", "متاجر_شاهدها",
                               "زيارات_من_الستوري", "نسخ_من_الستوري", "نسخ_كود_من_الستوري",
-                              "دخل_على", "نسخ_من", "آخر_مشاهدة"]
+                              "دخل_على", "نسخ_من", "أول_مشاهدة", "آخر_مشاهدة"]
                 all_viewers = all_viewers[cols_order]
                 st.dataframe(all_viewers, use_container_width=True, hide_index=True)
                 st.caption(f"👥 {len(all_viewers)} شخص شاهدوا الستوري لهذا المصدر.")
@@ -4722,6 +4726,7 @@ elif page == "🎬 تحليلات الستوري":
                       COALESCE('@' || NULLIF(wu.telegram_username, ''),
                                '@' || NULLIF(bu.username, ''), '—')          AS تيليجرام,
                       COUNT(*)                                               AS مرات_المشاهدة,
+                      MIN(sv.viewed_at)                                      AS أول_مشاهدة,
                       MAX(sv.viewed_at)                                      AS آخر_مشاهدة,
                       (SELECT COUNT(*) FROM action_logs al
                          WHERE al.story_view_id IN (
@@ -4750,6 +4755,8 @@ elif page == "🎬 تحليلات الستوري":
                 else:
                     viewers["المصدر"] = viewers["source"].map(
                         {"web": "🌐 الموقع", "telegram_miniapp": "🔹 الميني ويب"}).fillna(viewers["source"])
+                    viewers["أول_مشاهدة"] = pd.to_datetime(viewers["أول_مشاهدة"], errors="coerce") \
+                                                  .dt.strftime("%Y-%m-%d %H:%M")
                     viewers["آخر_مشاهدة"] = pd.to_datetime(viewers["آخر_مشاهدة"], errors="coerce") \
                                                   .dt.strftime("%Y-%m-%d %H:%M")
                     viewers.drop(columns=["source"], inplace=True)
@@ -5189,136 +5196,6 @@ elif page == "البحث عن كود":
 
     except Exception as e:
         st.error(f"⚠️ خطأ في تحميل البيانات: {e}")
-
-
-elif page == "تحليل بحث الأكواد":
-    page_title("📊", "لوحة تحكم ذكاء البحث",
-               "عينك على السوق: اكتشف ما يبحث عنه العملاء وحدد الفرص الضائعة.")
-    st.divider()
-
-    # ─── نافذة زمنية + سقف صفوف (يحمي من timeout بعد تراكم الإحصائيات) ─────
-    days_window = st.slider("📅 نافذة تحليل البحث (أيام)", 7, 365, 180, key="search_days_window")
-
-    try:
-        conn = get_conn()
-        query = """
-            SELECT * FROM direct_search
-            WHERE search_date >= NOW() - (%s || ' days')::interval
-            ORDER BY search_date DESC
-            LIMIT 100000
-        """
-        df_log = pd.read_sql(query, conn, params=(days_window,))
-        
-        if not df_log.empty:
-            # التحقق من نوع البيانات وتأمينها
-            df_log['search_date'] = pd.to_datetime(df_log['search_date'])
-
-            # --- التبويبات الرئيسية ---
-            t_kpi, t_general, t_individual, t_admin = st.tabs([
-                "📊 مؤشرات KPIs", "🌍 الأداء العام", "🔍 الأداء الفردي", "⚙️ إدارة السجلات"
-            ])
-
-            # 1. تبويب الـ KPIs (التصميم الملكي المعتمد بكروته الملونة)
-            with t_kpi:
-                st.write("### 🔑 مؤشرات الأداء الرئيسية")
-                total_searches = len(df_log)
-                found_count = df_log['user_found'].sum()
-                missed_count = total_searches - found_count
-                success_rate = (found_count / total_searches) * 100 if total_searches > 0 else 0
-
-                # كروت الأداء الموحَّدة بهوية الشعار
-                col_a, col_b, col_c = st.columns(3)
-                with col_a:
-                    kpi_card("🔎", "إجمالي عمليات البحث", total_searches, "info")
-                with col_b:
-                    kpi_card("✅", "عمليات بحث ناجحة", found_count, "emerald",
-                             f"نسبة النجاح: {success_rate:.1f}%")
-                with col_c:
-                    kpi_card("❌", "فرص ضائعة", missed_count, "danger")
-                
-                st.divider()
-                st.write("### 📋 سجل البحث التفصيلي")
-                # تلوين الفرص الضائعة بالأحمر الخفيف
-                def color_missed(row):
-                    return [f'background-color: {BRAND["danger_soft"]}; color: #991B1B;'] * len(row) if not row['user_found'] else [''] * len(row)
-                
-                st.dataframe(df_log.style.apply(color_missed, axis=1), width='stretch')
-                
-                # --- زر تحميل الملفات ---
-                csv = df_log.to_csv(index=False).encode('utf-8-sig')
-                st.download_button(label="📥 تحميل سجل البحث كامل (CSV)", data=csv, file_name='search_analytics.csv', mime='text/csv')
-
-            # 2. تبويب الأداء العام (تحليل الترندات والكلمات)
-            with t_general:
-                st.write("### 🌍 تحليل نشاط البحث العام")
-                # الرسم البياني للنشاط الزمني
-                df_trend = df_log.resample('h', on='search_date').size().reset_index(name='count')
-                fig_gen = px.area(df_trend, x='search_date', y='count', title="معدل نشاط البحث (بالساعة)")
-                st.plotly_chart(apply_brand_theme(fig_gen), width='stretch')
-                
-                st.divider()
-                # ترند الكلمات
-                st.write("### 🔥 الكلمات الأكثر طلباً")
-                top_k = df_log['search_keyword'].value_counts().head(10).reset_index()
-                top_k.columns = ['الكلمة', 'التكرار']
-                fig_bar = px.bar(top_k, x='الكلمة', y='التكرار', color='التكرار',
-                                 color_continuous_scale=[[0, BRAND["emerald_pastel"]],
-                                                         [0.5, BRAND["emerald"]],
-                                                         [1, BRAND["emerald_dark"]]])
-                st.plotly_chart(apply_brand_theme(fig_bar), width='stretch')
-
-            # 3. تبويب الأداء الفردي (تحليل المتاجر)
-            with t_individual:
-                st.write("### 🔍 تحليل أداء المتاجر")
-                store = st.selectbox("اختر المتجر للمراقبة:", [""] + list(df_log['search_keyword'].unique()))
-                if store:
-                    df_store = df_log[df_log['search_keyword'] == store]
-                    st.success(f"تم العثور على {len(df_store)} عملية بحث لـ '{store}'")
-                    
-                    # رسم بياني خاص بالمتجر
-                    hourly = df_store.groupby(df_store['search_date'].dt.hour).size().reset_index(name='c')
-                    hourly.columns = ['hour', 'c']
-                    fig_store = px.line(hourly, x='hour', y='c',
-                                        title=f"سلوك طلب {store} خلال اليوم", markers=True)
-                    st.plotly_chart(apply_brand_theme(fig_store), width='stretch')
-
-            # 4. تبويب الإدارة
-            with t_admin:
-                st.write("### ⚙️ أدوات تنظيف البيانات")
-                # بدلاً من الكود القديم المباشر، ضع هذا:
-            if "confirm_truncate_search" not in st.session_state:
-                st.session_state.confirm_truncate_search = False
-
-            if st.button("🗑️ تصفير السجل بالكامل"):
-                st.session_state.confirm_truncate_search = True
-
-            if st.session_state.confirm_truncate_search:
-                st.warning("⚠️ هل أنت متأكد؟ هذا الإجراء سيمسح سجل البحث نهائياً ولا يمكن التراجع عنه!")
-                col1, col2 = st.columns(2)
-            if col1.button("نعم، احذف نهائياً"):
-                 cur = conn.cursor()
-                 cur.execute("TRUNCATE TABLE direct_search RESTART IDENTITY;")
-            conn.commit()
-            st.success("تم تصفير البيانات بنجاح")
-            st.session_state.confirm_truncate_search = False
-            st.rerun()
-            if col2.button("إلغاء"):
-                st.session_state.confirm_truncate_search = False
-            st.rerun()
-
-        else:
-            st.warning("لا توجد بيانات حالياً.")
-
-    except Exception as e:
-        st.error(f"⚠️ حدث خطأ في النظام: {e}")
-    finally:
-        if 'conn' in locals(): conn.close()
-
-
-
-
-        
-
 
 
 # --- الصفحة التاسعة: سجل طلبات الأكواد (unavailable_codes_requests) ---
