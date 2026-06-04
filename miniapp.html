@@ -691,6 +691,7 @@ function goBack() {
 }
 
 function showCategoryView(name) {
+    trackCategoryView(name);   // إشارة 2: اختيار قسم من صفحة الأقسام
     viewStack.push({ view: currentView, context: { ...viewContext } });
     viewContext = { category: name };
     renderCategoryView(name);
@@ -937,7 +938,7 @@ function _discNum(s) { const m = String(s.disc || '').match(/(\d+(?:\.\d+)?)/); 
 function _pop(s) { return s.pop || ((s.copies || 0) + (s.clicks || 0)); }
 
 function setListSort(mode) { LIST_SORT = mode; renderListView('all'); }
-function setListCat(idx)  { const i = Number(idx); LIST_CAT = (i < 0 || !CATS[i]) ? null : String(CATS[i].tag_name); renderListView('all'); }
+function setListCat(idx)  { const i = Number(idx); LIST_CAT = (i < 0 || !CATS[i]) ? null : String(CATS[i].tag_name); if (LIST_CAT) trackCategoryView(LIST_CAT); /* إشارة 3: فلتر قسم في كل المتاجر */ renderListView('all'); }
 
 // شريط الفرز (pills) + فلتر الأقسام (قائمة منسدلة) — يظهر فقط في وضع «كل المتاجر»
 function renderListControls(mode) {
@@ -1107,9 +1108,15 @@ function renderStoreView(storeId) {
     const ST = STRINGS[LANG_CURRENT];
     document.getElementById('storeBackLbl').textContent = ST.home;
     const logoSrc = (s.logo || 'logo.png').replace(/"/g, '&quot;');
+    // تاقات قابلة للنقر → تفتح القسم (وتُسجّل view_tag) — إشارة 4
     const tagsHtml = (s.tags || []).length
         ? `<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:10px">${
-              s.tags.map(t=>`<span style="font-size:10px;padding:4px 10px;border-radius:10px;background:rgba(16,185,129,0.1);color:var(--em);border:1px solid rgba(16,185,129,0.25)">#${t}</span>`).join('')
+              s.tags.map(t=>{
+                  const tg = String(t).trim();
+                  const safe = tg.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                  const html = tg.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                  return `<span onclick="showCategoryView('${safe}')" style="cursor:pointer;font-size:10px;padding:4px 10px;border-radius:10px;background:rgba(16,185,129,0.1);color:var(--em);border:1px solid rgba(16,185,129,0.25)">#${html}</span>`;
+              }).join('')
           }</div>`
         : '';
     window._activeStore = s;
@@ -1272,6 +1279,19 @@ async function trackEvent(store_id, action, storyViewId) {
                 story_view_id: storyViewId || null
             }),
             keepalive: true                    // يُكمل الطلب حتى لو أُغلقت الواجهة
+        }).catch(() => {});
+    } catch (e) { /* silent */ }
+}
+
+// اهتمام صريح بقسم (view_tag) — تايل القسم / فلتر / تاق متجر. fire-and-forget.
+function trackCategoryView(tag) {
+    if (!tag) return;
+    try {
+        fetch(`${API_BASE}/track/category-view`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tag: String(tag), source: 'telegram_miniapp', user_id: tgUserId }),
+            keepalive: true
         }).catch(() => {});
     } catch (e) { /* silent */ }
 }

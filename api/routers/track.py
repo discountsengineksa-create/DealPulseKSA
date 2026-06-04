@@ -6,6 +6,7 @@ from psycopg2.extras import RealDictCursor
 from api.db import get_db
 from api.schemas.track import (
     TrackRequest, TrackResponse,
+    CategoryViewRequest, CategoryViewResponse,
     SearchLogRequest, SearchLogResponse,
     CodeRequestRequest, CodeRequestResponse,
     ReportCodeRequest, ReportCodeResponse,
@@ -174,6 +175,54 @@ def track_action(payload: TrackRequest, request: Request, conn=Depends(get_db)):
         ok=True, action=payload.action,
         store_id=payload.store_id, source=payload.source,
     )
+
+
+@router.post("/category-view", response_model=CategoryViewResponse, status_code=201)
+@limiter.limit("60/minute")
+def log_category_view(payload: CategoryViewRequest, request: Request, conn=Depends(get_db)):
+    """تسجيل اهتمام صريح بقسم (view_tag) — بلا متجر.
+
+    يوحّد عُرف البوت: action_logs(action_type='view_tag', details='tag:<اسم>',
+    store_id=NULL). هذا هو مصدر «نقاط القسم» الحقيقي في لوحة تحليل الأقسام
+    (نية صريحة، بدل وراثة كل تفاعل متجر موسوم بالقسم). لا تحديث لعدّادات master.
+    """
+    tag = payload.tag.strip()
+    if not tag:
+        raise HTTPException(status_code=400, detail="tag cannot be empty")
+
+    geo = extract_geo(request)
+    quality, is_dc, is_proxy = compute_quality_score(geo)
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO action_logs (
+                user_id, store_id, action_type, details, source,
+                event_id, ip_hash, user_agent_hash,
+                country_code, region_code, city, postal_code,
+                lat, lng, isp, asn,
+                is_datacenter, is_proxy, device_class,
+                cf_bot_score, quality_score
+            )
+            VALUES (
+                %s, NULL, 'view_tag', %s, %s,
+                %s::uuid, decode(%s, 'hex'), decode(%s, 'hex'),
+                %s, %s, %s, %s,
+                %s, %s, %s, %s,
+                %s, %s, %s,
+                %s, %s
+            )
+            ON CONFLICT (event_id) DO NOTHING
+            """,
+            (
+                payload.user_id, f"tag:{tag}", payload.source,
+                geo.event_id, geo.ip_hash, geo.ua_hash,
+                geo.country_code, geo.region_code, geo.city, geo.postal_code,
+                geo.lat, geo.lng, geo.isp, geo.asn,
+                is_dc, is_proxy, geo.device_class,
+                geo.cf_bot_score, quality,
+            ),
+        )
+    return CategoryViewResponse(ok=True, tag=tag)
 
 
 _PLATFORM_TO_SOURCE = {

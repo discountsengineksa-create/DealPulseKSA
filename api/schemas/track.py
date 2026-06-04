@@ -29,6 +29,23 @@ class TrackResponse(BaseModel):
     source: str
 
 
+class CategoryViewRequest(BaseModel):
+    """تسجيل اهتمام صريح بقسم (view_tag) — بلا متجر.
+
+    يُطلَق عند: نقر تايل القسم في صفحة الأقسام · اختيار قسم في فلتر المتاجر ·
+    نقر تاق قسم داخل صفحة متجر. يوحّد عُرف البوت (action_type='view_tag',
+    details='tag:<اسم>', store_id=NULL) عبر كل المنصات.
+    """
+    tag:     str = Field(..., min_length=1, max_length=120, description="اسم القسم")
+    source:  Literal["web", "telegram_miniapp", "bot", "dashboard"] = "web"
+    user_id: Optional[int] = Field(None, ge=0, description="telegram_id أو web_users.id لو معروف")
+
+
+class CategoryViewResponse(BaseModel):
+    ok: bool
+    tag: str
+
+
 class SearchLogRequest(BaseModel):
     """تسجيل بحث في direct_search (للتحليلات وكشف فجوات المحتوى)."""
     keyword: str = Field(..., min_length=1, max_length=200)
