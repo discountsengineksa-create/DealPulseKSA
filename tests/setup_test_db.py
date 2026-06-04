@@ -114,8 +114,16 @@ def _ensure_base_tables(conn) -> None:
         manual_favorites TEXT[],
         fav_store_inferred TEXT,
         device_type     TEXT,
-        deleted_at      TIMESTAMPTZ NULL    -- PDPL (migration_017)
+        deleted_at      TIMESTAMPTZ NULL    -- PDPL soft-delete (migration_031)
     );
+
+    -- partial indexes للـ deleted_at (يطابقان ما يصنعه migration_031 في الإنتاج)
+    CREATE INDEX IF NOT EXISTS idx_bot_users_active
+        ON bot_users (telegram_id)
+        WHERE deleted_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_bot_users_pending_purge
+        ON bot_users (deleted_at)
+        WHERE deleted_at IS NOT NULL;
 
     -- direct_search: سجل كلمات البحث
     CREATE TABLE IF NOT EXISTS direct_search (
