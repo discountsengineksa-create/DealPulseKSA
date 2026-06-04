@@ -265,6 +265,15 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
   .lc-pill:active{transform:scale(0.95)}
   .lc-pill.on{background:linear-gradient(to left,#10B981,#059669);border-color:transparent;color:#fff;
     box-shadow:0 2px 8px rgba(16,185,129,0.25)}
+  /* قائمة الأقسام المنسدلة — بديل الـ chips (تتحمّل 100+ قسم بلا تشوّه) */
+  .lc-select{width:100%;padding:12px 14px;border-radius:14px;font-size:13px;font-weight:700;
+    font-family:var(--font);cursor:pointer;color:var(--t1);
+    background:rgba(255,255,255,0.04);border:1px solid var(--border);
+    -webkit-appearance:none;appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2310B981' stroke-width='3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:left 14px center;background-size:12px}
+  html[dir="ltr"] .lc-select{background-position:right 14px center}
+  .lc-select option{background:var(--bg2);color:var(--t1)}
 
   /* ── CATEGORIES PAGE ── */
   .cats-page-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
@@ -335,6 +344,13 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
       font-size:11px;font-weight:800;padding:5px 11px;border-radius:14px;
       margin-bottom:10px;box-shadow:0 2px 6px rgba(239,68,68,0.25)}
     .store-trend-badge::before{content:"🔥";font-size:11px}
+    /* وسام الترند على كروت المتاجر (أبرز المتاجر/الأقسام/كل المتاجر) — أعلى الكرت */
+    .card-trend-badge{position:absolute;top:8px;z-index:6;
+      background:linear-gradient(to left,#F97316,#EF4444);color:#fff;
+      font-size:9px;font-weight:800;padding:3px 8px;border-radius:9px;white-space:nowrap;
+      box-shadow:0 1px 4px rgba(239,68,68,0.3)}
+    /* حلقة برتقالية للستوري لو المتجر ترند */
+    .story-ring.trend{background:conic-gradient(from 0deg,#F97316,#EF4444,#F97316)}
     .trend-card:active{transform:scale(0.96)}
     .trend-card:hover{box-shadow:0 2px 10px rgba(16,185,129,0.08)}
     .trend-card .tc-title{font-size:10px;color:var(--em);font-weight:800;
@@ -608,6 +624,30 @@ let FAVS = new Set();          // store_id strings — مفضلة المستخد
 let FAV_CATS = new Set();      // category names — مفضلة الأقسام (سيرفرية kind='category')
 let DAILY_TREND_IDS  = new Set();  // store_id حالياً في الترند اليومي
 let WEEKLY_TREND_IDS = new Set();  // store_id حالياً في الترند الأسبوعي (يشمل اليومي)
+
+// وسام الترند — مصدر واحد لكل الواجهات (كروت/استوري/صفحة متجر).
+// اليومي يطغى على الأسبوعي إذا المتجر في الاثنين. يُرجِع مفتاح STRINGS أو null.
+function trendBadgeKeyFor(s) {
+    const sid = s && s.store_id;
+    if (!sid) return null;
+    return DAILY_TREND_IDS.has(sid)  ? 'trendBadgeToday'
+         : WEEKLY_TREND_IDS.has(sid) ? 'trendBadgeWeek'
+         : null;
+}
+function isTrendNow(s) { return !!trendBadgeKeyFor(s); }
+// وسام صغير جاهز للكروت/الاستوري (تدرّج برتقالي-أحمر مطابق لصفحة المتجر).
+function trendBadgeHTMLFor(s) {
+    const key = trendBadgeKeyFor(s);
+    if (!key) return '';
+    const side = LANG_CURRENT === 'en' ? 'right' : 'left';
+    return `<span class="card-trend-badge" style="${side}:8px">🔥 ${STRINGS[LANG_CURRENT][key]}</span>`;
+}
+// يعيد رسم أي واجهة ظاهرة بعد تحديث Sets الترند (حتى تظهر الأوسمة فوراً).
+function refreshTrendBadges() {
+    if (currentView === 'home') { renderStores(); renderStoryRow(); }
+    else if (currentView === 'list' && viewContext.listMode) renderListView(viewContext.listMode);
+    else if (currentView === 'category' && viewContext.category) renderCategoryView(viewContext.category);
+}
 let currentView = 'home';      // 'home' | 'list' | 'categories' | 'category' | 'store' | 'favorites'
 let viewStack = [];            // stack للرجوع (آخر view → الرجوع له)
 let viewContext = {};          // {category: 'عطور'} | {storeId: 17}
@@ -723,6 +763,7 @@ async function loadAndRenderTrend() {
         DAILY_TREND_IDS  = new Set(dailyDisplayed.map(it => it.store_id));
         WEEKLY_TREND_IDS = new Set(weeklyItems.map(it => it.store_id));
         renderTrendSections(dailyItems, weeklyItems);
+        refreshTrendBadges();   // حدّث أوسمة الكروت/الاستوري في أي واجهة ظاهرة
     } catch (err) {
         console.error('[loadAndRenderTrend] failed:', err);
         body.innerHTML = `<div class="trend-empty">${ST.fetchErr}</div>`;
@@ -802,6 +843,7 @@ async function loadTrendOnHome() {
         DAILY_TREND_IDS  = new Set(dailyDisplayed.map(it => it.store_id));
         WEEKLY_TREND_IDS = new Set(weeklyItems.map(it => it.store_id));
         renderTrendOnHome(dailyItems, weeklyItems);
+        refreshTrendBadges();   // حدّث أوسمة الكروت/الاستوري في أي واجهة ظاهرة
     } catch (err) {
         console.warn('[loadTrendOnHome] skipped:', err);
         host.innerHTML = '';   // فشل صامت — لا نُفسد الصفحة
@@ -895,14 +937,15 @@ function _discNum(s) { const m = String(s.disc || '').match(/(\d+(?:\.\d+)?)/); 
 function _pop(s) { return (s.copies || 0) + (s.clicks || 0); }
 
 function setListSort(mode) { LIST_SORT = mode; renderListView('all'); }
-function setListCat(idx)  { LIST_CAT = (idx < 0 || !CATS[idx]) ? null : String(CATS[idx].tag_name); renderListView('all'); }
+function setListCat(idx)  { const i = Number(idx); LIST_CAT = (i < 0 || !CATS[i]) ? null : String(CATS[i].tag_name); renderListView('all'); }
 
-// شريط الفرز + فلتر الأقسام — يظهر فقط في وضع «كل المتاجر»
+// شريط الفرز (pills) + فلتر الأقسام (قائمة منسدلة) — يظهر فقط في وضع «كل المتاجر»
 function renderListControls(mode) {
     const host = document.getElementById('listControls');
     if (!host) return;
     if (mode !== 'all') { host.innerHTML = ''; return; }
     const ST = STRINGS[LANG_CURRENT];
+    const escHtml = (v) => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const sorts = [
         ['popular',  ST.sortPopular],
         ['discount', ST.sortDiscount],
@@ -912,14 +955,15 @@ function renderListControls(mode) {
     const sortPills = sorts.map(([k, lbl]) =>
         `<button class="lc-pill${LIST_SORT === k ? ' on' : ''}" onclick="setListSort('${k}')">${lbl}</button>`
     ).join('');
-    const allPill = `<button class="lc-pill${LIST_CAT === null ? ' on' : ''}" onclick="setListCat(-1)">${ST.filterAll}</button>`;
-    const catPills = (CATS || []).map((c, i) => {
-        const name = String(c.tag_name);
-        return `<button class="lc-pill${LIST_CAT === name ? ' on' : ''}" onclick="setListCat(${i})"># ${name}</button>`;
-    }).join('');
+    // قائمة منسدلة للأقسام — تتحمّل عدداً كبيراً (حتى 100+) بلا تشوّه بصري
+    const opts = [`<option value="-1"${LIST_CAT === null ? ' selected' : ''}>${ST.filterAll}</option>`]
+        .concat((CATS || []).map((c, i) => {
+            const name = String(c.tag_name);
+            return `<option value="${i}"${LIST_CAT === name ? ' selected' : ''}># ${escHtml(name)}</option>`;
+        })).join('');
     host.innerHTML = `<div class="list-controls">
         <div class="lc-row">${sortPills}</div>
-        <div class="lc-row">${allPill}${catPills}</div>
+        <select class="lc-select" onchange="setListCat(this.value)">${opts}</select>
     </div>`;
 }
 
@@ -1037,11 +1081,10 @@ function renderCategoryView(catName) {
     grid.innerHTML = matched.map(s => storeCardHTML(s)).join('');
 }
 
-// HTML لبطاقة متجر — مشتركة بين home grid و category grid
+// HTML لبطاقة متجر — مشتركة بين home grid و category grid و list grid
 function storeCardHTML(s) {
-    const trendBadge = s.trending
-        ? `<span style="position:absolute;top:8px;${LANG_CURRENT==='en'?'right':'left'}:8px;background:rgba(239,68,68,0.18);color:#FCA5A5;font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px;border:1px solid rgba(239,68,68,0.3)">🔥</span>`
-        : '';
+    // الوسام من نظام الترند الجديد (يومي/أسبوعي) — يظهر في كل الواجهات وباللغتين.
+    const trendBadge = trendBadgeHTMLFor(s);
     const logoSrc = (s.logo || 'logo.png').replace(/"/g, '&quot;');
     const ST = STRINGS[LANG_CURRENT];
     return `
@@ -1443,8 +1486,8 @@ function renderStores() {
         });
         if (titleEl) titleEl.textContent = LANG_CURRENT === 'en' ? 'Search results' : 'نتائج البحث';
     } else {
-        // أبرز المتاجر: الترند أولاً، بحد 8 — والباقي عبر بطاقة «متجر»
-        list = [...ALL].sort((a, b) => (b.trending ? 1 : 0) - (a.trending ? 1 : 0)).slice(0, 8);
+        // أبرز المتاجر: الترند (يومي/أسبوعي) أولاً، بحد 8
+        list = [...ALL].sort((a, b) => (isTrendNow(b) ? 1 : 0) - (isTrendNow(a) ? 1 : 0)).slice(0, 8);
         if (titleEl) titleEl.textContent = ST.sectionAll;
     }
     if (!list.length) {
@@ -1600,12 +1643,18 @@ function renderStoryRow() {
     const row = document.getElementById('storyRow');
     if (!row) return;
     STORY = ALL.filter(s => s.promoted);
-    if (!STORY.length) STORY = ALL.filter(s => s.trending);   // fallback: الترند لو ما في promoted
+    if (!STORY.length) STORY = ALL.filter(s => isTrendNow(s));   // fallback: الترند لو ما في promoted
     STORY = STORY.slice(0, 12);
     row.innerHTML = STORY.map((s, i) => {
         const logo = (s.logo || 'logo.png').replace(/"/g, '&quot;');
+        // حلقة برتقالية + شارة 🔥 صغيرة لو المتجر ترند — الوسام يظهر حتى في الاستوري
+        const isTrend = isTrendNow(s);
+        const ringCls = isTrend ? 'story-ring trend' : 'story-ring';
+        const flame = isTrend
+            ? `<span style="position:absolute;top:-2px;${LANG_CURRENT==='en'?'left':'right'}:-2px;font-size:12px;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4))">🔥</span>`
+            : '';
         return `<button class="story-item" onclick="openStory(${i})">
-            <span class="story-ring"><span class="inner"><img src="${logo}" onerror="this.onerror=null;this.src='logo.png'"></span></span>
+            <span class="${ringCls}" style="position:relative">${flame}<span class="inner"><img src="${logo}" onerror="this.onerror=null;this.src='logo.png'"></span></span>
             <span class="story-name">${s.name}</span></button>`;
     }).join('');
 }
