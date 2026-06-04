@@ -5691,70 +5691,235 @@ elif page == "📣 بلاغات الأكواد":
             except Exception: pass
 
 
-        # --- الصفحة العاشرة: تحليل طلبات الأكواد (Unavailable Codes Analytics) ---
+# --- الصفحة العاشرة: تحليل طلبات الأكواد ---
+#   هدف الصفحة: مين طلب وش، كم مرة انطلب لكل متجر، ومعلومات تواصل كاملة
+#   لإشعار الطالبين لما توفّر الكود.
 elif page == "تحليل طلبات الأكواد":
-    st.header("📊 مركز تحليل طلبات الأكواد")
-    st.info("هنا نكتشف المتاجر التي يطلبها العملاء بكثرة لتوفير أكوادها.")
-
-    # تقسيم الصفحة إلى تبييبات (Tabs)
-    tab_gen_req, tab_ind_req = st.tabs(["📈 الأداء العام للطلبات", "🔍 تحليل متجر معين"])
+    page_title("📊", "تحليل طلبات الأكواد",
+               "كل من طلب كود — بياناته الكاملة ووقته. اعرف وش تنزل، وراسل الطالبين لما توفّره.")
+    st.divider()
 
     try:
         conn = get_conn()
+        conn.rollback()
 
-        # --- التبويب الأول: الأداء العام ---
-        with tab_gen_req:
-            st.subheader("📊 إحصائيات الطلبات الحية")
-            
-            # جلب البيانات للتحليل العام
-            query_all_req = "SELECT brand_name, requested_at FROM unavailable_codes_requests"
-            df_all_req = pd.read_sql(query_all_req, conn)
+        # ─── جلب الطلبات + ربط هوية الطالبين (web_users / bot_users) ─────────
+        # brand_norm = TRIM(LOWER(brand_name)) لتجميع التهجئات المختلفة كأنها متجر واحد.
+        df_req = pd.read_sql("""
+            SELECT
+              r.id,
+              r.brand_name                                                  AS raw_brand,
+              TRIM(LOWER(r.brand_name))                                     AS brand_norm,
+              r.requested_at,
+              r.master_id,
+              CASE
+                WHEN r.user_id IS NOT NULL AND r.user_id > 0          THEN 'bot'
+                WHEN r.user_email IS NOT NULL AND TRIM(r.user_email)<>'' THEN 'web'
+                ELSE 'unknown'
+              END                                                           AS source,
+              r.user_id                                                     AS tg_id,
+              r.user_email                                                  AS web_email,
+              COALESCE(wu.display_name, '')                                 AS web_name,
+              COALESCE(wu.phone_number, '')                                 AS web_phone,
+              COALESCE(bu.username, '')                                     AS tg_username,
+              COALESCE(m.store_id, '')                                      AS matched_store_ar,
+              COALESCE(NULLIF(m.name_en, ''), '')                           AS matched_store_en
+            FROM unavailable_codes_requests r
+            LEFT JOIN web_users  wu ON r.user_email = wu.email
+            LEFT JOIN bot_users  bu ON r.user_id    = bu.telegram_id
+            LEFT JOIN master     m  ON r.master_id  = m.id
+            ORDER BY r.requested_at DESC
+        """, conn)
 
-            if not df_all_req.empty:
-                # 1. داشبورد سريع
-                c1, c2, c3 = st.columns(3)
-                total_req = len(df_all_req)
-                unique_brands = df_all_req['brand_name'].nunique()
-                c1.metric("إجمالي الطلبات", total_req)
-                c2.metric("متاجر فريدة مطلوبة", unique_brands)
-                
-                # 2. رسم بياني لأكثر 10 متاجر مطلوبة
-                st.write("### 🔥 أكثر 10 متاجر مطلوبة")
-                top_10_req = df_all_req['brand_name'].value_counts().head(10)
-                st.bar_chart(top_10_req)
+        if df_req.empty:
+            st.info("📭 ما فيه طلبات مسجّلة حتى الآن.")
+            st.stop()
 
-                # 3. زر تحميل البيانات الخام للتحليل
-                req_excel = BytesIO()
-                with pd.ExcelWriter(req_excel, engine='xlsxwriter') as writer:
-                    df_all_req.to_excel(writer, index=False, sheet_name='All_Requests')
-                st.download_button("📥 تحميل سجل الطلبات (Excel)", req_excel.getvalue(), "all_requests_analytics.xlsx")
-            else:
-                st.warning("لا توجد بيانات كافية لإجراء تحليل عام حالياً.")
+        df_req["requested_at"] = pd.to_datetime(df_req["requested_at"], errors="coerce")
+        df_req["is_pending"]   = df_req["master_id"].isna()
 
-        # --- التبويب الثاني: تحليل متجر معين ---
-        with tab_ind_req:
-            st.subheader("🔍 تتبع طلبات متجر محدد")
-            if not df_all_req.empty:
-                selected_brand = st.selectbox("اختر المتجر أو الرابط لتحليله:", df_all_req['brand_name'].unique())
-                
-                if selected_brand:
-                    # تصفية البيانات للمتجر المختار
-                    brand_data = df_all_req[df_all_req['brand_name'] == selected_brand]
-                    
-                    st.write(f"### تحليل الطلبات لـ: {selected_brand}")
-                    st.success(f"تم طلب هذا المتجر {len(brand_data)} مرة.")
+        # ─── فلتر التاريخ + المصدر ──────────────────────────────────────────
+        _min_d = df_req["requested_at"].min().date() if df_req["requested_at"].notna().any() else date.today()
+        _max_d = df_req["requested_at"].max().date() if df_req["requested_at"].notna().any() else date.today()
+        fc1, fc2, fc3 = st.columns([2, 2, 3])
+        with fc1:
+            d_from = st.date_input("📅 من تاريخ:", value=_min_d, key="req_an_from")
+        with fc2:
+            d_to   = st.date_input("📅 إلى تاريخ:", value=_max_d, key="req_an_to")
+        with fc3:
+            src_choice = st.radio("المصدر:", ["الكل", "🤖 البوت", "🌐 الموقع"],
+                                  horizontal=True, key="req_an_src")
 
-                    # رسم بياني للتدفق الزمني لطلبات هذا المتجر
-                    brand_data['date'] = pd.to_datetime(brand_data['requested_at']).dt.date
-                    timeline = brand_data.groupby('date').size()
-                    st.line_chart(timeline)
-            else:
-                st.warning("لا توجد طلبات متاحة للتحليل الفردي.")
+        m_date = (df_req["requested_at"].dt.date >= d_from) & (df_req["requested_at"].dt.date <= d_to)
+        m_src  = (
+            (df_req["source"] == "bot") if src_choice == "🤖 البوت"
+            else (df_req["source"] == "web") if src_choice == "🌐 الموقع"
+            else pd.Series(True, index=df_req.index)
+        )
+        df = df_req[m_date & m_src].copy()
+
+        if df.empty:
+            st.warning("⚠️ لا توجد طلبات في النطاق المختار.")
+            st.stop()
+
+        # ─── KPIs ───────────────────────────────────────────────────────────
+        total_req       = len(df)
+        unique_brands   = df["brand_norm"].nunique()
+        pending_count   = int(df["is_pending"].sum())
+        fulfilled_count = total_req - pending_count
+        # طالبون فريدون = نشخّصهم بهوية: tg_id أو web_email
+        df["person_key"] = df.apply(
+            lambda r: f"tg:{int(r['tg_id'])}" if pd.notna(r["tg_id"]) and r["tg_id"] > 0
+                      else (f"web:{r['web_email']}" if r["web_email"] else None),
+            axis=1,
+        )
+        unique_people = df["person_key"].dropna().nunique()
+
+        k1, k2, k3, k4, k5 = st.columns(5)
+        with k1: kpi_card("📥", "إجمالي الطلبات", total_req,       "info")
+        with k2: kpi_card("🏪", "متاجر فريدة",    unique_brands,   "info")
+        with k3: kpi_card("👥", "طالبون فريدون",  unique_people,   "emerald")
+        with k4: kpi_card("⏳", "معلّقة",          pending_count,   "warning")
+        with k5: kpi_card("✅", "موفّرة",          fulfilled_count, "emerald")
+
+        st.divider()
+
+        # ─── التبويبات ──────────────────────────────────────────────────────
+        tab_store, tab_people, tab_drill = st.tabs([
+            f"🏪 كل متجر وكم مرة انطلب ({unique_brands})",
+            f"👥 كل الطالبين — بياناتهم الكاملة ({total_req})",
+            "🔍 درل-داون متجر معيّن",
+        ])
+
+        # ═══════ 1. كل متجر وكم مرة انطلب ═══════
+        with tab_store:
+            st.caption("التجميع بعد تطبيع اسم المتجر (إزالة المسافات + الحروف الصغيرة) لجمع التهجئات المختلفة.")
+            per_brand = (
+                df.groupby("brand_norm")
+                  .agg(
+                      اسم_المتجر = ("raw_brand", lambda s: s.value_counts().idxmax()),
+                      إجمالي_الطلبات = ("id", "count"),
+                      طالبون_فريدون = ("person_key", lambda s: s.dropna().nunique()),
+                      معلّقة = ("is_pending", "sum"),
+                      موفّرة = ("is_pending", lambda s: (~s).sum()),
+                      أول_طلب = ("requested_at", "min"),
+                      آخر_طلب = ("requested_at", "max"),
+                  )
+                  .reset_index(drop=True)
+                  .sort_values(["إجمالي_الطلبات", "طالبون_فريدون"], ascending=[False, False])
+                  .reset_index(drop=True)
+            )
+            per_brand["معلّقة"] = per_brand["معلّقة"].astype(int)
+            per_brand["موفّرة"] = per_brand["موفّرة"].astype(int)
+            per_brand["أول_طلب"] = pd.to_datetime(per_brand["أول_طلب"]).dt.strftime("%Y-%m-%d %H:%M")
+            per_brand["آخر_طلب"] = pd.to_datetime(per_brand["آخر_طلب"]).dt.strftime("%Y-%m-%d %H:%M")
+            per_brand.insert(0, "#", per_brand.index + 1)
+
+            st.dataframe(per_brand, width="stretch", hide_index=True, height=460)
+
+            xl1 = BytesIO()
+            with pd.ExcelWriter(xl1, engine="xlsxwriter") as w:
+                per_brand.to_excel(w, index=False, sheet_name="Per_Brand")
+            st.download_button(
+                "📥 تحميل ملخص المتاجر (Excel)",
+                xl1.getvalue(),
+                f"requests_per_brand_{date.today()}.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_req_per_brand",
+            )
+
+        # ═══════ 2. كل الطالبين — بياناتهم الكاملة ═══════
+        with tab_people:
+            st.caption("صف لكل طلب — مع بيانات تواصل كاملة لإشعار الطالب لما توفّر الكود.")
+            view = df.copy()
+            view["المصدر"] = view["source"].map(
+                {"bot": "🤖 البوت", "web": "🌐 الموقع"}).fillna("غير محدد")
+            view["الاسم"] = view.apply(
+                lambda r: r["web_name"] if r["web_name"]
+                          else (f"@{r['tg_username']}" if r["tg_username"] else "—"),
+                axis=1,
+            )
+            view["الإيميل"]    = view["web_email"].fillna("").replace("", "—")
+            view["الجوال"]     = view["web_phone"].fillna("").replace("", "—")
+            view["تيليجرام"]   = view.apply(
+                lambda r: f"@{r['tg_username']}" if r["tg_username"]
+                          else (str(int(r["tg_id"])) if pd.notna(r["tg_id"]) and r["tg_id"] > 0 else "—"),
+                axis=1,
+            )
+            view["تاريخ الطلب"] = view["requested_at"].dt.strftime("%Y-%m-%d %H:%M")
+            view["الحالة"]      = view["is_pending"].map({True: "⏳ معلّقة", False: "✅ موفّرة"})
+            view["المتجر المطلوب"] = view["raw_brand"]
+            view["تطابق ماستر"] = view.apply(
+                lambda r: r["matched_store_ar"] if r["matched_store_ar"] else "—",
+                axis=1,
+            )
+
+            cols_people = ["id", "المصدر", "المتجر المطلوب", "الاسم",
+                           "الإيميل", "الجوال", "تيليجرام",
+                           "تاريخ الطلب", "الحالة", "تطابق ماستر"]
+            people_view = view[cols_people].rename(columns={"id": "ID"})
+            st.dataframe(people_view, width="stretch", hide_index=True, height=460)
+
+            xl2 = BytesIO()
+            with pd.ExcelWriter(xl2, engine="xlsxwriter") as w:
+                people_view.to_excel(w, index=False, sheet_name="Requesters")
+            st.download_button(
+                "📥 تحميل قائمة الطالبين (Excel)",
+                xl2.getvalue(),
+                f"requesters_{date.today()}.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_req_people",
+            )
+
+        # ═══════ 3. درل-داون متجر معيّن ═══════
+        with tab_drill:
+            st.caption("اختر متجر — يعرض لك كل من طلبه بمعلومات تواصل كاملة، جاهز للنسخ والمراسلة.")
+            brand_opts = (df.groupby("brand_norm")["raw_brand"]
+                            .agg(lambda s: s.value_counts().idxmax()).tolist())
+            pick = st.selectbox("اختر المتجر المطلوب:", brand_opts, key="req_drill_pick")
+            if pick:
+                pick_norm = pick.strip().lower()
+                d = df[df["brand_norm"] == pick_norm].copy()
+                st.markdown(f"### 🏪 «{pick}» — {len(d)} طلب من {d['person_key'].dropna().nunique()} شخص فريد")
+
+                drill = d.copy()
+                drill["المصدر"] = drill["source"].map({"bot": "🤖 البوت", "web": "🌐 الموقع"}).fillna("—")
+                drill["الاسم"] = drill.apply(
+                    lambda r: r["web_name"] if r["web_name"]
+                              else (f"@{r['tg_username']}" if r["tg_username"] else "—"),
+                    axis=1,
+                )
+                drill["الإيميل"]   = drill["web_email"].fillna("").replace("", "—")
+                drill["الجوال"]    = drill["web_phone"].fillna("").replace("", "—")
+                drill["تيليجرام"]  = drill.apply(
+                    lambda r: f"@{r['tg_username']}" if r["tg_username"]
+                              else (str(int(r["tg_id"])) if pd.notna(r["tg_id"]) and r["tg_id"] > 0 else "—"),
+                    axis=1,
+                )
+                drill["تاريخ الطلب"] = drill["requested_at"].dt.strftime("%Y-%m-%d %H:%M")
+                drill["الحالة"]      = drill["is_pending"].map({True: "⏳ معلّقة", False: "✅ موفّرة"})
+                cols_drill = ["id", "المصدر", "الاسم", "الإيميل", "الجوال",
+                              "تيليجرام", "تاريخ الطلب", "الحالة"]
+                drill_view = drill[cols_drill].rename(columns={"id": "ID"})
+                st.dataframe(drill_view, width="stretch", hide_index=True, height=420)
+
+                xl3 = BytesIO()
+                with pd.ExcelWriter(xl3, engine="xlsxwriter") as w:
+                    drill_view.to_excel(w, index=False, sheet_name="Requesters_of_Brand")
+                st.download_button(
+                    f"📥 تحميل طالبي «{pick}» (Excel)",
+                    xl3.getvalue(),
+                    f"requesters_of_{pick}_{date.today()}.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="dl_req_drill",
+                )
 
     except Exception as e:
-        st.error(f"خطأ في معالجة التحليلات: {e}")
+        st.error(f"⚠️ خطأ في معالجة التحليلات: {e}")
     finally:
-        if 'conn' in locals(): conn.close()
+        if 'conn' in locals():
+            try: conn.close()
+            except Exception: pass
 
 
 
