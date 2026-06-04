@@ -125,6 +125,13 @@ def run_directive_cycle() -> None:
     subject = f"🧠 توجيهات AI — {summary[:80]}"
     body_html = _render_email_html(result)
 
+    # لقطة صحّة المنصة — تُلحَق بكل إيميل (بيانات حقيقية، مستقلّة عن الـ LLM)
+    try:
+        from api.utils.platform_health import build_health_report, render_health_html
+        body_html += render_health_html(build_health_report())
+    except Exception as exc:
+        _log.warning("health report skipped: %s", exc)
+
     try:
         send_ops_alert(subject=subject, body_html=body_html, severity=severity, to=recipient)
         _log.info("Directive %s emailed (cache_hit=%s, cost=$%.5f)",

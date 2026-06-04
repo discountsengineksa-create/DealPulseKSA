@@ -10947,6 +10947,17 @@ if page == "🛰️ متابعة المنصة":
                 "اليدوي (يحتاج `ADMIN_SHARED_SECRET` + `INTERNAL_API_URL` مضبوطين على الداشبورد)."
             )
 
+        with st.expander("👁️ معاينة لقطة صحّة المنصة (نفس ما يُلحق بكل إيميل)"):
+            st.caption("المستخدمون · أعلى المتاجر نسخاً/نقراً · أداء الموقع · الأمان · "
+                       "القفزات الحقيقية · المتاجر البرتقالية · فجوات البحث.")
+            if st.button("🔄 احسب اللقطة الآن"):
+                try:
+                    from api.utils.platform_health import build_health_report, render_health_html
+                    _rep = build_health_report()
+                    st.markdown(render_health_html(_rep), unsafe_allow_html=True)
+                except Exception as _he:
+                    st.error(f"تعذّرت المعاينة هنا: {_he}")
+
         st.divider()
         _df_dir = _safe_df("""
             SELECT id, generated_at, model, summary_ar, directive_ar,
