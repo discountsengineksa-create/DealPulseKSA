@@ -2793,76 +2793,216 @@ if page == "تحليل الأقسام":
             weak = agg[agg["التوصية"].str.contains("ضعيف|خامل|احذف")]
             st.write("، ".join(weak["tag"].tolist()) or "—")
 
-    # ── 2) الفحص الفردي ──────────────────────────────────────────────────────
+    # ── 2) مين تفاعل مع قسم (نقل كامل من «مين نسخ» في صفحة المتاجر) ──────────
     elif _ca_tab == _CA_TABS[1]:
-        st.subheader("🏷️ بطاقة القسم الكاملة")
-        st.caption("اختر قسماً → كل ما يخصّه: مين دخل (بهوية كاملة) · ماذا فعل · متى · من أي مصدر.")
+        st.caption("الافتراضي: كل الأقسام دفعة وحدة. اختر قسماً محدداً لو تبي تركّز عليه · "
+                   "يشمل **من نسخ** و**من فضّل** القسم بهوية كاملة (إيميل/جوال/تيليجرام/مدينة).")
+        _ALL_CATS = "— الكل (جميع الأقسام) —"
+        cat_opts = [_ALL_CATS] + agg["tag"].tolist()
+        selc = st.selectbox("القسم:", cat_opts, key="ca_who_cat")
+        _is_all = (selc == _ALL_CATS)
 
-        all_tags_sorted = df_cat_agg["tag"].tolist()
-        if not all_tags_sorted:
-            st.info("لا أقسام للفحص.")
+        sdf = scoped_with_tag if _is_all else (
+            scoped_with_tag[scoped_with_tag["tag"] == selc]
+            if not scoped_with_tag.empty else scoped_with_tag)
+        scopy  = sdf[sdf["action_type"] == "copy_coupon"] if not sdf.empty else sdf
+        sclick = sdf[sdf["action_type"] == "click_link"]  if not sdf.empty else sdf
+
+        # KPIs: في وضع «الكل» نَعُدّ من df_scope (أحداث فعلية بلا تكرار الأقسام).
+        if _is_all:
+            _dcopy  = df_scope[df_scope["action_type"] == "copy_coupon"] if not df_scope.empty else df_scope
+            n_copy  = len(_dcopy)
+            n_users = _dcopy["identity"].nunique() if not _dcopy.empty else 0
+            n_cats  = scopy["tag"].nunique() if not scopy.empty else 0
         else:
-            picked_tag = st.selectbox("القسم:", all_tags_sorted, key="ca_picked")
-            row = df_cat_agg[df_cat_agg["tag"] == picked_tag].iloc[0]
+            n_copy  = len(scopy)
+            n_users = scopy["identity"].nunique() if not scopy.empty else 0
 
-            mc1, mc2, mc3, mc4, mc5 = st.columns(5)
-            mc1.metric("🖱️ نقرات",  int(row["نقرات"]))
-            mc2.metric("📋 نسخ",    int(row["نسخ"]))
-            mc3.metric("🔍 بحث",    int(row["بحث"]))
-            mc4.metric("👥 مستخدمون", int(row["مستخدمون فريدون"]))
-            mc5.metric("❤️ مفضّلون", int(row["مفضّلون"]))
+        m1, m2, m3 = st.columns(3)
+        with m1: kpi_card("🎟️", "إجمالي النسخ", f"{n_copy:,}", "emerald")
+        with m2: kpi_card("👤", "ناسخون مختلفون", f"{n_users:,}", "info")
+        if _is_all:
+            with m3: kpi_card("🏷️", "أقسام منسوخ منها", f"{n_cats:,}", "warning")
+        else:
+            with m3: kpi_card("🖱️", "النقرات", f"{len(sclick):,}", "warning")
 
-            st.divider()
-            # المتاجر داخل هذا القسم — قاعدة قرار "كم متجر يعيش تحت هذا القسم"
-            stores_in_tag = df_tags[df_tags["tag"] == picked_tag]["store_id"].unique().tolist()
-            st.markdown(f"**🏪 المتاجر في «{picked_tag}» ({len(stores_in_tag)}):**")
-            st.code(" · ".join(stores_in_tag) if stores_in_tag else "—",
-                    language=None)
+        # ── المفضِّلون لهذا النطاق (kind='category') — يظهرون حتى لو لم ينسخوا ──
+        def _cln(v):
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return ""
+            s = str(v).strip()
+            return "" if s.lower() == "nan" else s
 
-            # مين دخل: قائمة المستخدمين بهوية واضحة
-            st.divider()
-            st.markdown("### 👤 مين دخل هذا القسم")
-            if scoped_with_tag.empty or "identity" not in scoped_with_tag.columns:
-                st.info("لا أحداث ضمن النطاق.")
+        _fwc = fav_cats_only.copy() if not fav_cats_only.empty else pd.DataFrame()
+        if not _fwc.empty and not _is_all:
+            _fwc = _fwc[_fwc["category_name"] == selc]
+
+        def _fav_ident(r):
+            if pd.notna(r.get("telegram_id")):
+                u = _cln(r.get("bu_username"))
+                if u:
+                    return "@" + u.lstrip("@")
+                if r.get("platform") in ("miniapp", "telegram_miniapp"):
+                    return f"🔹 بوت - ميني {int(r['telegram_id'])}"
+                return f"تيليجرام {int(r['telegram_id'])}"
+            for k in ("web_name", "web_email"):
+                v = _cln(r.get(k))
+                if v:
+                    return v
+            return None
+
+        _CHAN_FAV = {"bot": "📱 بوت", "web": "🌐 ويب",
+                     "miniapp": "🔹 بوت - ميني", "telegram_miniapp": "🔹 بوت - ميني"}
+        _fav_rows = []
+        if not _fwc.empty:
+            for _, _fr in _fwc.iterrows():
+                _id = _fav_ident(_fr)
+                if _id is None or pd.isna(_fr.get("category_name")):
+                    continue
+                _fav_rows.append({"identity": _id, "tag": _fr["category_name"],
+                                  "fav_src": _CHAN_FAV.get(_fr.get("platform"), _fr.get("platform"))})
+        _fav_df = pd.DataFrame(_fav_rows)
+        _fav_set = (set(zip(_fav_df["identity"], _fav_df["tag"]))
+                    if not _fav_df.empty else set())
+
+        if (scopy is None or scopy.empty) and _fav_df.empty:
+            st.info("لا توجد نسخات ولا مفضّلات ضمن الفترة/المصدر.")
+        else:
+            _gk = ["identity", "tag"] if _is_all else ["identity"]
+            events = (sdf[sdf["action_type"].isin(["copy_coupon", "click_link", "search"])]
+                      if not sdf.empty else sdf)
+            if events is not None and not events.empty:
+                counts = (events.groupby(_gk + ["action_type"])
+                                .size().unstack(fill_value=0).reset_index())
             else:
-                in_tag = scoped_with_tag[scoped_with_tag["tag"] == picked_tag]
-                if in_tag.empty:
-                    st.info("لا أحداث بعد لهذا القسم ضمن النطاق.")
+                counts = pd.DataFrame(columns=list(_gk))
+            for c in ("copy_coupon", "click_link", "search"):
+                if c not in counts.columns:
+                    counts[c] = 0
+            if events is not None and not events.empty:
+                meta = (events.groupby(_gk).agg(
+                            src=("src_ar", lambda s: "، ".join(sorted(set(s)))),
+                            first=("action_time", "min"),
+                            last=("action_time", "max")).reset_index())
+                who = counts.merge(meta, on=_gk, how="left")
+            else:
+                who = counts.copy()
+                who["src"] = pd.NA; who["first"] = pd.NaT; who["last"] = pd.NaT
+
+            # نُبقي: من نسخ (copy>0) أو من فضّل القسم
+            if not who.empty:
+                def _keep(r):
+                    _t = r["tag"] if _is_all else selc
+                    return (r["copy_coupon"] > 0) or ((r["identity"], _t) in _fav_set)
+                who = who[who.apply(_keep, axis=1)].copy()
+
+            # أضف المفضِّلين بلا أي حدث (نسخ/نقر/بحث)
+            if not _fav_df.empty:
+                if _is_all:
+                    _present = (set(zip(who["identity"], who["tag"])) if not who.empty else set())
+                    _mask = [((i, t) not in _present) for i, t in zip(_fav_df["identity"], _fav_df["tag"])]
                 else:
-                    per_user = (in_tag.groupby(["identity", "src_ar"])
-                                .agg(نقرات=("action_type", lambda s: (s == "click_link").sum()),
-                                     نسخ  =("action_type", lambda s: (s == "copy_coupon").sum()),
-                                     آخر_تفاعل=("action_time", "max"))
-                                .reset_index()
-                                .rename(columns={"identity": "المستخدم",
-                                                 "src_ar":  "المصدر"})
-                                .sort_values("آخر_تفاعل", ascending=False))
-                    st.dataframe(per_user, width='stretch', hide_index=True)
+                    _present = set(who["identity"]) if not who.empty else set()
+                    _mask = [(i not in _present) for i in _fav_df["identity"]]
+                _miss = _fav_df[_mask]
+                if not _miss.empty:
+                    _add = {"identity": _miss["identity"].values,
+                            "copy_coupon": 0, "click_link": 0, "search": 0,
+                            "src": _miss["fav_src"].values, "first": pd.NaT, "last": pd.NaT}
+                    if _is_all:
+                        _add["tag"] = _miss["tag"].values
+                    who = pd.concat([who, pd.DataFrame(_add)], ignore_index=True)
 
-            # مين فضّل القسم: من user_favorites
-            st.divider()
-            st.markdown("### ❤️ مين فضّل هذا القسم")
-            who_fav = fav_cats_only[fav_cats_only["category_name"] == picked_tag] \
-                if not fav_cats_only.empty else pd.DataFrame()
-            if who_fav.empty:
-                st.info("لا أحد فضّل هذا القسم بعد.")
+            # ── ملف تعريف الشخص: إيميل/جوال/تيليجرام/مدينة لكل identity ──
+            def _first_ne(series):
+                if series is None:
+                    return ""
+                for v in series:
+                    s = _cln(v)
+                    if s:
+                        return s
+                return ""
+            _profile = {}
+            if not df_logs.empty and "identity" in df_logs.columns:
+                for _ident, _grp in df_logs.groupby("identity"):
+                    _tg = _first_ne(_grp.get("web_tg")) or _first_ne(_grp.get("bu_username"))
+                    _profile[_ident] = {
+                        "email": _first_ne(_grp.get("web_email")),
+                        "phone": _first_ne(_grp.get("web_phone")),
+                        "tg":    _tg,
+                        "city":  _first_ne(_grp.get("web_city")) or _first_ne(_grp.get("bu_city")),
+                    }
+            if not _fwc.empty:
+                for _, _fr in _fwc.iterrows():
+                    _ident = _fav_ident(_fr)
+                    if _ident is None or _ident in _profile:
+                        continue
+                    _tg = _cln(_fr.get("web_tg")) or _cln(_fr.get("bu_username"))
+                    _profile[_ident] = {
+                        "email": _cln(_fr.get("web_email")),
+                        "phone": _cln(_fr.get("web_phone")),
+                        "tg":    _tg,
+                        "city":  _cln(_fr.get("web_city")) or _cln(_fr.get("bu_city")),
+                    }
+
+            _geo = df_logs[df_logs["city_c"] != "غير معروف"] if not df_logs.empty else df_logs
+            _cmap = ({} if (_geo is None or _geo.empty) else
+                     _geo.groupby("identity")["city_c"].agg(
+                         lambda s: s.mode().iat[0] if not s.mode().empty else "غير معروف").to_dict())
+
+            def _city_of(ident):
+                c = _cmap.get(ident)
+                if c and c != "غير معروف":
+                    return c
+                return _profile.get(ident, {}).get("city") or "غير معروف"
+            def _tg_of(ident):
+                t = _profile.get(ident, {}).get("tg")
+                return ("@" + t.lstrip("@")) if t else "—"
+
+            if not who.empty:
+                who["المدينة"]  = who["identity"].map(_city_of)
+                who["الإيميل"]  = who["identity"].map(lambda i: _profile.get(i, {}).get("email") or "—")
+                who["الجوال"]   = who["identity"].map(lambda i: _profile.get(i, {}).get("phone") or "—")
+                who["تيليجرام"] = who["identity"].map(_tg_of)
             else:
-                def _fav_identity(r):
-                    if pd.notna(r.get("telegram_id")):
-                        u = (r.get("bu_username") or "").strip()
-                        return ("@" + u.lstrip("@")) if u else f"تيليجرام {int(r['telegram_id'])}"
-                    n = (r.get("web_name") or "").strip()
-                    e = (r.get("web_email") or "").strip()
-                    return n or e or f"ويب #{int(r['web_user_id']) if pd.notna(r.get('web_user_id')) else '?'}"
-                w = who_fav.copy()
-                w["المستخدم"] = w.apply(_fav_identity, axis=1)
-                w["المصدر"]   = w["platform"].map(CHAN_MAP).fillna(w["platform"])
-                st.dataframe(
-                    w[["المستخدم", "المصدر", "created_at"]]
-                       .rename(columns={"created_at": "تاريخ التفضيل"})
-                       .sort_values("تاريخ التفضيل", ascending=False),
-                    width='stretch', hide_index=True,
-                )
+                for _c in ("المدينة", "الإيميل", "الجوال", "تيليجرام"):
+                    who[_c] = pd.Series(dtype="object")
+
+            def _who_fav(r):
+                _t = r["tag"] if _is_all else selc
+                return f"❤️ {_t}" if (r["identity"], _t) in _fav_set else "—"
+            who["❤️ المفضلة"] = (who.apply(_who_fav, axis=1)
+                                 if not who.empty else pd.Series(dtype="object"))
+
+            who = who.rename(columns={"identity": "المستخدم", "tag": "القسم",
+                                      "copy_coupon": "نسخ", "click_link": "نقر", "search": "بحث",
+                                      "src": "المصدر", "first": "أول تفاعل", "last": "آخر تفاعل"})
+            who = who.sort_values("نسخ", ascending=False)
+            who["أول تفاعل"] = pd.to_datetime(who["أول تفاعل"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+            who["آخر تفاعل"] = pd.to_datetime(who["آخر تفاعل"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+            who[["أول تفاعل", "آخر تفاعل"]] = who[["أول تفاعل", "آخر تفاعل"]].fillna("—")
+            who["المصدر"] = who["المصدر"].fillna("—")
+            _cols = (["المستخدم", "الإيميل", "الجوال", "تيليجرام", "المدينة",
+                      "القسم", "المصدر", "نسخ", "نقر", "بحث",
+                      "❤️ المفضلة", "أول تفاعل", "آخر تفاعل"]
+                     if _is_all else
+                     ["المستخدم", "الإيميل", "الجوال", "تيليجرام", "المدينة",
+                      "المصدر", "نسخ", "نقر", "بحث",
+                      "❤️ المفضلة", "أول تفاعل", "آخر تفاعل"])
+            st.dataframe(who[_cols], hide_index=True, width='stretch')
+            _fname = "all" if _is_all else selc
+            st.download_button("📥 تحميل القائمة (CSV)",
+                               who.to_csv(index=False).encode("utf-8-sig"),
+                               f"category_interactions_{_fname}_{d_start}_{d_end}.csv", "text/csv",
+                               key="ca_who_csv")
+            st.caption("يشمل **من نسخ** و**من فضّل** القسم · «المصدر» و«التفاعل» من كل أحداث الشخص "
+                       "(نقر/بحث/نسخ). مفضّل بلا تفاعل آخر = «—» في التاريخ. «المدينة» من IP نقر /go.")
+
+            if not _is_all:
+                st.divider()
+                _sit = df_tags[df_tags["tag"] == selc]["store_id"].unique().tolist()
+                st.markdown(f"**🏪 المتاجر في «{selc}» ({len(_sit)}):**")
+                st.code(" · ".join(_sit) if _sit else "—", language=None)
 
     # ── 3) الرسوم والمعدلات ─────────────────────────────────────────────────
     elif _ca_tab == _CA_TABS[2]:
@@ -2960,40 +3100,94 @@ if page == "تحليل الأقسام":
                     width='stretch',
                 )
 
-    # ── 4) ❤️ الأكثر تفضيلاً ────────────────────────────────────────────────
+    # ── 4) ❤️ المفضلة (نقل كامل من صفحة المتاجر — kind='category') ──────────
     elif _ca_tab == _CA_TABS[3]:
-        st.subheader("❤️ لوحة الأقسام الأكثر تفضيلاً")
-        st.caption("هذه قاعدة الـ push المستقبلي: لو نزل كوبون قسم «أحذية رياضية» → نُنبّه كل من فضّله.")
+        st.caption("من جدول `user_favorites` (kind='category') عبر بوت + ميني-ويب + ويب · كل شخص "
+                   "يُحتسب مرة لكل قسم · أساس تنبيه «نزل كوبون في قسمك المفضّل» (last_notified_at جاهز).")
+        df_fav = fav_cats_only.copy() if not fav_cats_only.empty else pd.DataFrame()
+        PLAT_FILTER = {"📱 بوت": ["bot"], "🌐 ويب": ["web"],
+                       "🔹 بوت - ميني": ["miniapp", "telegram_miniapp"]}
+        if src_choice in PLAT_FILTER and not df_fav.empty:
+            df_fav = df_fav[df_fav["platform"].isin(PLAT_FILTER[src_choice])].copy()
 
-        if df_cat_agg["مفضّلون"].sum() == 0:
-            st.info("لا تفضيلات بعد. زر ❤️ في البوت/الميني-ويب/الموقع → كل قلب يظهر هنا فوراً.")
+        if df_fav.empty:
+            st.info("📭 لا توجد تفضيلات أقسام بعد. زر ❤️ على أي قسم في البوت/الميني-ويب/الموقع يظهر هنا فوراً.")
         else:
-            ranked = df_cat_agg[df_cat_agg["مفضّلون"] > 0] \
-                .sort_values("مفضّلون", ascending=False)
-            cL, cR = st.columns([3, 2])
-            with cL:
-                fig = px.bar(ranked.head(20), x="مفضّلون", y="tag",
-                             orientation="h", color="مفضّلون",
-                             color_continuous_scale="Reds")
-                fig.update_layout(yaxis=dict(autorange="reversed"),
-                                  xaxis_title="عدد المفضّلين", yaxis_title="")
-                st.plotly_chart(apply_brand_theme(fig), width='stretch')
-            with cR:
-                st.dataframe(
-                    ranked[["tag", "مفضّلون", "متاجر", "إجمالي"]]
-                        .rename(columns={"tag": "القسم", "إجمالي": "نشاط"}),
-                    width='stretch', hide_index=True,
-                )
+            _plat_ar = {"bot": "📱 بوت", "web": "🌐 ويب",
+                        "miniapp": "🔹 بوت - ميني", "telegram_miniapp": "🔹 بوت - ميني"}
+
+            def _person_key(r):
+                if pd.notna(r.web_user_id):
+                    return f"w{int(r.web_user_id)}"
+                if pd.notna(r.telegram_id):
+                    return f"t{int(r.telegram_id)}"
+                return "?"
+
+            total_fav   = len(df_fav)
+            uniq_cats   = df_fav["category_name"].nunique()
+            uniq_people = df_fav.apply(_person_key, axis=1).nunique()
+            k1, k2, k3 = st.columns(3)
+            k1.metric("❤️ إجمالي الإضافات", f"{total_fav:,}")
+            k2.metric("🏷️ أقسام مفضّلة",    f"{uniq_cats:,}")
+            k3.metric("👤 أشخاص فعّالون",    f"{uniq_people:,}")
+
+            st.markdown("**🏆 أكثر الأقسام تفضيلاً (عدد الأشخاص)**")
+            board_f = (df_fav.groupby("category_name").size()
+                       .reset_index(name="عدد الأشخاص")
+                       .sort_values("عدد الأشخاص", ascending=False)
+                       .rename(columns={"category_name": "القسم"}))
+            _maxp = int(max(1, board_f["عدد الأشخاص"].max()))
+            st.dataframe(
+                board_f, hide_index=True, width='stretch',
+                column_config={
+                    "عدد الأشخاص": st.column_config.ProgressColumn(
+                        "عدد الأشخاص", format="%d", min_value=0, max_value=_maxp),
+                },
+            )
+            st.download_button("📥 تحميل CSV", board_f.to_csv(index=False).encode("utf-8-sig"),
+                               "category_favorites_leaderboard.csv", "text/csv", key="ca_fav_csv")
+
+            if src_choice == "الكل":
+                st.markdown("**📊 التوزيع حسب المنصة**")
+                dist_f = (df_fav.assign(منصة=lambda d: d["platform"].map(_plat_ar).fillna(d["platform"]))
+                          .groupby("منصة").size().reset_index(name="العدد"))
+                fig_fp = px.pie(dist_f, names="منصة", values="العدد", hole=0.45)
+                st.plotly_chart(apply_brand_theme(fig_fp), width='stretch')
 
             st.divider()
-            # توزيع المنصات: من أين تأتي القلوب؟
-            if not fav_cats_only.empty:
-                by_platform = (fav_cats_only.groupby("platform").size()
-                               .reset_index(name="القلوب"))
-                by_platform["platform"] = by_platform["platform"].map(CHAN_MAP).fillna(by_platform["platform"])
-                fig_p = px.pie(by_platform, values="القلوب", names="platform",
-                               title="توزيع التفضيلات على المنصات")
-                st.plotly_chart(apply_brand_theme(fig_p), width='stretch')
+            st.markdown("**🔍 مين فضّل قسماً معيّناً؟** (جمهور التنبيه)")
+            cat_sel = st.selectbox("اختر قسماً:", board_f["القسم"].tolist(), key="ca_fav_cat_sel")
+            sub_f = df_fav[df_fav["category_name"] == cat_sel].copy()
+
+            def _fav_who(r):
+                if pd.notna(r.web_name) and str(r.web_name).strip():
+                    return str(r.web_name)
+                if pd.notna(r.web_email) and str(r.web_email).strip():
+                    return str(r.web_email)
+                if pd.notna(r.bu_username) and str(r.bu_username).strip():
+                    return "@" + str(r.bu_username).lstrip("@")
+                if pd.notna(r.telegram_id):
+                    return f"تيليجرام {int(r.telegram_id)}"
+                if pd.notna(r.web_user_id):
+                    return f"ويب #{int(r.web_user_id)}"
+                return "غير معروف"
+
+            def _fav_city(r):
+                for v in (r.web_city, r.bu_city):
+                    if pd.notna(v) and str(v).strip():
+                        return str(v)
+                return "—"
+
+            _cadt = (pd.to_datetime(sub_f["created_at"], utc=True, errors="coerce")
+                     + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
+            out_f = pd.DataFrame({
+                "الشخص": sub_f.apply(_fav_who, axis=1).values,
+                "المدينة": sub_f.apply(_fav_city, axis=1).values,
+                "المنصة": sub_f["platform"].map(_plat_ar).fillna(sub_f["platform"]).values,
+                "تاريخ الإضافة": _cadt.dt.strftime("%Y-%m-%d %H:%M").values,
+            })
+            st.dataframe(out_f, hide_index=True, width='stretch')
+            st.caption(f"👥 {len(out_f)} شخص فضّلوا «{cat_sel}» — جمهور التنبيه عند نزول كوبون/خصم جديد في هذا القسم.")
 
     # ── 5) الأولويات (إدارة يدوية لترتيب الأقسام) ───────────────────────────
     elif _ca_tab == _CA_TABS[4]:
