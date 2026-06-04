@@ -254,6 +254,18 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
   .story-content .s-visit{pointer-events:all;display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;max-width:300px;
     padding:15px;border-radius:14px;background:#fff;color:#0C1527;font-weight:800;font-size:15px;border:none;cursor:pointer;font-family:var(--font)}
 
+  /* ── LIST CONTROLS (فرز + فلتر الأقسام في «كل المتاجر») ── */
+  .list-controls{margin-bottom:16px}
+  .lc-label{font-size:11px;font-weight:800;color:var(--t3);margin:0 4px 7px}
+  .lc-row{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px;margin-bottom:12px}
+  .lc-row::-webkit-scrollbar{display:none}
+  .lc-pill{flex-shrink:0;padding:8px 16px;border-radius:999px;font-size:12px;font-weight:700;
+    cursor:pointer;white-space:nowrap;font-family:var(--font);transition:0.18s;
+    background:rgba(255,255,255,0.04);border:1px solid var(--border);color:var(--t2)}
+  .lc-pill:active{transform:scale(0.95)}
+  .lc-pill.on{background:linear-gradient(to left,#10B981,#059669);border-color:transparent;color:#fff;
+    box-shadow:0 2px 8px rgba(16,185,129,0.25)}
+
   /* ── CATEGORIES PAGE ── */
   .cats-page-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
   .cat-tile{display:flex;align-items:center;justify-content:space-between;padding:16px;border-radius:16px;
@@ -291,6 +303,7 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
 <main id="viewList" class="subview">
   <button class="sv-back" onclick="goBack()">← <span id="listBackLbl">رجوع</span></button>
   <div class="sv-title" id="listTitle">المتاجر</div>
+  <div id="listControls"></div>
   <div class="grid" id="listGrid"></div>
 </main>
 
@@ -440,6 +453,12 @@ const STRINGS = {
     chipAll:         '✨ الكل',
     sectionAll:      'أبرز المتاجر',
     allStores:       'كل المتاجر',
+    filterAll:       'الكل',
+    sortPopular:     'الأكثر طلباً',
+    sortDiscount:    'الأعلى خصم',
+    sortOffers:      'عروض',
+    sortNewest:      'الأحدث',
+    noMatchFilter:   'لا توجد متاجر مطابقة لهذا الفلتر.',
     sectionTrend:    'الترند',
     trendDaily:      'الترند اليومي',
     trendWeekly:     'الترند الأسبوعي',
@@ -492,6 +511,12 @@ const STRINGS = {
     chipAll:         '✨ All',
     sectionAll:      'Top Stores',
     allStores:       'All Stores',
+    filterAll:       'All',
+    sortPopular:     'Most popular',
+    sortDiscount:    'Highest discount',
+    sortOffers:      'Offers',
+    sortNewest:      'Newest',
+    noMatchFilter:   'No stores match this filter.',
     sectionTrend:    'Trending',
     trendDaily:      'Daily Trend',
     trendWeekly:     'Weekly Trend',
@@ -850,12 +875,52 @@ function showStoreByStoreId(storeId) {
     showToast(LANG_CURRENT === 'en' ? 'Store not found' : 'لم نجد المتجر');
 }
 
-// ── List view (كل المتاجر / الترند) ──
+// ── List view (كل المتاجر / الترند / المفضلة) ──
+// حالة الفرز والفلترة لصفحة «كل المتاجر» فقط.
+let LIST_CAT  = null;        // null = كل الأقسام
+let LIST_SORT = 'popular';   // popular | discount | offers | newest
+
 function showListView(mode) {
     viewStack.push({ view: currentView, context: { ...viewContext } });
     viewContext = { listMode: mode };
+    // إعادة ضبط الفلتر/الفرز عند كل دخول لـ«كل المتاجر» — سلوك متوقّع
+    if (mode === 'all') { LIST_CAT = null; LIST_SORT = 'popular'; }
     renderListView(mode);
     switchView('list');
+}
+
+// أعلى رقم في نص الخصم («خصم 50%» → 50)؛ لا رقم → -1 (يغوص للأسفل)
+function _discNum(s) { const m = String(s.disc || '').match(/(\d+(?:\.\d+)?)/); return m ? parseFloat(m[1]) : -1; }
+// الأكثر طلباً = نسخ الكوبون + نقرات الرابط
+function _pop(s) { return (s.copies || 0) + (s.clicks || 0); }
+
+function setListSort(mode) { LIST_SORT = mode; renderListView('all'); }
+function setListCat(idx)  { LIST_CAT = (idx < 0 || !CATS[idx]) ? null : String(CATS[idx].tag_name); renderListView('all'); }
+
+// شريط الفرز + فلتر الأقسام — يظهر فقط في وضع «كل المتاجر»
+function renderListControls(mode) {
+    const host = document.getElementById('listControls');
+    if (!host) return;
+    if (mode !== 'all') { host.innerHTML = ''; return; }
+    const ST = STRINGS[LANG_CURRENT];
+    const sorts = [
+        ['popular',  ST.sortPopular],
+        ['discount', ST.sortDiscount],
+        ['offers',   ST.sortOffers],
+        ['newest',   ST.sortNewest],
+    ];
+    const sortPills = sorts.map(([k, lbl]) =>
+        `<button class="lc-pill${LIST_SORT === k ? ' on' : ''}" onclick="setListSort('${k}')">${lbl}</button>`
+    ).join('');
+    const allPill = `<button class="lc-pill${LIST_CAT === null ? ' on' : ''}" onclick="setListCat(-1)">${ST.filterAll}</button>`;
+    const catPills = (CATS || []).map((c, i) => {
+        const name = String(c.tag_name);
+        return `<button class="lc-pill${LIST_CAT === name ? ' on' : ''}" onclick="setListCat(${i})"># ${name}</button>`;
+    }).join('');
+    host.innerHTML = `<div class="list-controls">
+        <div class="lc-row">${sortPills}</div>
+        <div class="lc-row">${allPill}${catPills}</div>
+    </div>`;
 }
 
 function renderListView(mode) {
@@ -865,15 +930,32 @@ function renderListView(mode) {
                 : ST.allStores;
     document.getElementById('listTitle').textContent   = title;
     document.getElementById('listBackLbl').textContent = ST.home;
-    const list = (mode === 'trending')  ? ALL.filter(s => s.trending)
-               : (mode === 'favorites') ? ALL.filter(s => FAVS.has(s.store_id))
-               : ALL;
+    renderListControls(mode);
+
+    let list = (mode === 'trending')  ? ALL.filter(s => s.trending)
+             : (mode === 'favorites') ? ALL.filter(s => FAVS.has(s.store_id))
+             : ALL.slice();
+
+    if (mode === 'all') {
+        if (LIST_CAT) {
+            list = list.filter(s => (s.tags || []).map(t => String(t).trim()).includes(LIST_CAT));
+        }
+        list.sort((a, b) => {
+            switch (LIST_SORT) {
+                case 'discount': return _discNum(b) - _discNum(a);
+                case 'offers': { const d = (b.offer ? 1 : 0) - (a.offer ? 1 : 0); return d !== 0 ? d : _pop(b) - _pop(a); }
+                case 'newest':   return b.id - a.id;       // أعلى id = الأحدث إضافةً
+                default:         return _pop(b) - _pop(a);  // popular
+            }
+        });
+    }
+
     const grid = document.getElementById('listGrid');
     if (!list.length) {
         const msg = (mode === 'trending')
             ? (LANG_CURRENT === 'en' ? 'No trending stores right now.' : 'لا توجد متاجر رائجة حالياً.')
-            : (mode === 'favorites')
-            ? ST.favEmpty
+            : (mode === 'favorites') ? ST.favEmpty
+            : (mode === 'all' && LIST_CAT) ? ST.noMatchFilter
             : (LANG_CURRENT === 'en' ? 'No stores yet.' : 'لا توجد متاجر بعد.');
         grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--t3);padding:40px 20px;font-size:13px;white-space:pre-line">${msg}</div>`;
         return;
@@ -921,6 +1003,8 @@ async function loadCategories() {
         CATS = payload.categories || [];
         updateStats();
         if (currentView === 'categories') renderCategoriesPage();
+        // لو المستخدم في «كل المتاجر» وقت وصول الأقسام — أعد بناء شريط الفلتر
+        if (currentView === 'list' && viewContext.listMode === 'all') renderListView('all');
     } catch (err) {
         console.error('[loadCategories] failed:', err);
     }
@@ -1099,6 +1183,10 @@ async function loadData() {
             // store_tags array (يأتي مُسطّحاً من الـ API) — يدعم الفلترة بالقسم
             tags: Array.isArray(item.store_tags) ? item.store_tags
                   : (Array.isArray(item.store_tags_en) ? item.store_tags_en : []),
+            // حقول الفرز في صفحة «كل المتاجر»
+            copies: Number(item.total_coupon_copies) || 0,   // نسخ الكوبون
+            clicks: Number(item.total_link_clicks)   || 0,   // نقرات الرابط
+            offer:  (item.extra_offer || '').trim(),         // عرض إضافي (لفرز «عروض»)
         }));
 
         const dt = Date.now() - t0;
