@@ -187,6 +187,31 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
 )
 
+# ─── مراقبة الأداء: يقيس زمن كل طلب + status (يكتب في الذاكرة فقط، بلا I/O) ──
+import time as _time_perf
+from api.utils.request_metrics import record_request as _record_request
+
+
+@app.middleware("http")
+async def _perf_metrics_mw(request: Request, call_next):
+    _start = _time_perf.perf_counter()
+    _status = 500
+    try:
+        response = await call_next(request)
+        _status = response.status_code
+        return response
+    finally:
+        try:
+            _record_request(
+                request.method,
+                request.url.path,
+                _status,
+                int((_time_perf.perf_counter() - _start) * 1000),
+            )
+        except Exception:
+            pass
+
+
 # ─── دمج Routers الـ API ──────────────────────────────────────────────────────
 app.include_router(coupons.router, prefix="/api/v1")
 app.include_router(track.router,   prefix="/api/v1")
@@ -215,6 +240,13 @@ def on_startup():
     backfill_user_behavior()
     threading.Thread(target=idle_watcher, daemon=True).start()
     print(f"✅ idle_watcher started (timeout={IDLE_KICK_MINUTES}m)")
+
+    # مراقبة الأداء: thread يكبس مقاييس الطلبات للقاعدة (لكل عملية worker)
+    try:
+        from api.utils.request_metrics import start_metrics_flusher
+        start_metrics_flusher()
+    except Exception as e:
+        print(f"⚠️ start_metrics_flusher warning: {e}")
 
     # Week 2 — velocity aggregator + spike detector + email dispatcher
     # (idempotent: only the first worker process boots the scheduler)

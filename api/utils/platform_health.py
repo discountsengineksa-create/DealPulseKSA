@@ -26,6 +26,14 @@ SUSPICIOUS_QUALITY = 50      # أقل من هذا = حركة مشبوهة/بوت
 SPIKE_MULTIPLIER = 2.0       # ضعف المعدّل = قفزة
 SPIKE_MIN_EVENTS = 10        # أقل عدد أحداث في الساعة لاعتبارها قفزة معتدّاً بها
 OUTAGE_MIN_BASELINE = 5      # لو معدّل الموقع/ساعة ≥ هذا والساعة الأخيرة = 0 → احتمال توقّف
+P95_DEGRADED_MS = 1500       # p95 فوق هذا = الموقع بطيء (تدهور أداء)
+ERROR_RATE_WARN = 0.05       # نسبة أخطاء 5xx فوق 5% = مشكلة
+
+_DDL_METRICS = """
+CREATE TABLE IF NOT EXISTS api_request_metrics (
+    id BIGSERIAL PRIMARY KEY, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    method VARCHAR(8), path TEXT, status_code SMALLINT, latency_ms INTEGER)
+"""
 
 
 def _scalar(cur, sql: str, params: tuple = ()) -> Any:
@@ -85,26 +93,81 @@ def build_health_report(window_days: int = 7) -> dict[str, Any]:
                 _log.warning("%s section failed: %s", key, exc)
                 conn.rollback()
 
-        # ── 4) أداء/توقّف الموقع (heuristic) ──
+        # ── 4) أداء الموقع — مقاييس حقيقية من api_request_metrics ──
+        #     (زمن استجابة فعلي + نسبة أخطاء 5xx + أبطأ المسارات).
+        #     fallback لمنطق action_logs التقريبي لو الجدول فارغ/مفقود.
         try:
             with conn.cursor() as cur:
-                web_24h = _scalar(cur, "SELECT COUNT(*) FROM action_logs "
-                                       "WHERE source='web' AND action_time > NOW() - INTERVAL '24 hours'")
-                web_1h = _scalar(cur, "SELECT COUNT(*) FROM action_logs "
-                                      "WHERE source='web' AND action_time > NOW() - INTERVAL '1 hour'")
-                # المعدّل/ساعة عبر آخر 7 أيام
-                web_7d = _scalar(cur, "SELECT COUNT(*) FROM action_logs "
-                                      "WHERE source='web' AND action_time > NOW() - INTERVAL '7 days'")
-                baseline_hr = float(web_7d) / (7 * 24)
-                possible_outage = baseline_hr >= OUTAGE_MIN_BASELINE and int(web_1h) == 0
-                rep["site"] = {
-                    "web_24h": int(web_24h), "web_1h": int(web_1h),
-                    "baseline_hr": round(baseline_hr, 1),
-                    "possible_outage": possible_outage,
-                }
-        except Exception as exc:
-            _log.warning("site section failed: %s", exc)
+                cur.execute(_DDL_METRICS)
+                req_1h = _scalar(cur, "SELECT COUNT(*) FROM api_request_metrics "
+                                      "WHERE created_at > NOW() - INTERVAL '1 hour'")
+                if int(req_1h) > 0 or _scalar(
+                    cur, "SELECT COUNT(*) FROM api_request_metrics "
+                         "WHERE created_at > NOW() - INTERVAL '24 hours'") > 0:
+                    cur.execute(
+                        """
+                        SELECT
+                          COUNT(*)                                                   AS req_24h,
+                          COUNT(*) FILTER (WHERE created_at > NOW()-INTERVAL '1 hour') AS req_1h,
+                          COUNT(*) FILTER (WHERE status_code >= 500)                  AS err_24h,
+                          COUNT(*) FILTER (WHERE status_code >= 500
+                                           AND created_at > NOW()-INTERVAL '1 hour')  AS err_1h,
+                          COALESCE(percentile_disc(0.95) WITHIN GROUP (ORDER BY latency_ms)
+                                   FILTER (WHERE created_at > NOW()-INTERVAL '1 hour'), 0) AS p95_1h,
+                          COALESCE(ROUND(AVG(latency_ms)
+                                   FILTER (WHERE created_at > NOW()-INTERVAL '1 hour')), 0) AS avg_1h
+                        FROM api_request_metrics
+                        WHERE created_at > NOW() - INTERVAL '24 hours'
+                        """
+                    )
+                    row = cur.fetchone()
+                    req24, req1, err24, err1, p95, avg = (int(x or 0) for x in row)
+                    # أبطأ 3 مسارات (آخر 24س، ≥20 طلباً لتجنّب الضجيج)
+                    cur.execute(
+                        """
+                        SELECT path,
+                               percentile_disc(0.95) WITHIN GROUP (ORDER BY latency_ms) AS p95,
+                               COUNT(*) AS n
+                        FROM api_request_metrics
+                        WHERE created_at > NOW() - INTERVAL '24 hours'
+                        GROUP BY path HAVING COUNT(*) >= 20
+                        ORDER BY p95 DESC LIMIT 3
+                        """
+                    )
+                    slowest = [{"path": r[0], "p95": int(r[1]), "n": int(r[2])} for r in cur.fetchall()]
+                    err_rate_1h = (err1 / req1) if req1 else 0.0
+                    rep["site"] = {
+                        "source": "metrics",
+                        "req_24h": req24, "req_1h": req1,
+                        "err_24h": err24, "err_1h": err1,
+                        "err_rate_1h": round(err_rate_1h, 3),
+                        "p95_1h": p95, "avg_1h": avg,
+                        "slowest": slowest,
+                        "degraded": p95 >= P95_DEGRADED_MS or err_rate_1h >= ERROR_RATE_WARN,
+                    }
+                else:
+                    raise RuntimeError("no metrics yet")
+        except Exception:
             conn.rollback()
+            # Fallback: غياب حركة الموقع كمؤشّر توقّف تقريبي
+            try:
+                with conn.cursor() as cur:
+                    web_24h = _scalar(cur, "SELECT COUNT(*) FROM action_logs "
+                                           "WHERE source='web' AND action_time > NOW() - INTERVAL '24 hours'")
+                    web_1h = _scalar(cur, "SELECT COUNT(*) FROM action_logs "
+                                          "WHERE source='web' AND action_time > NOW() - INTERVAL '1 hour'")
+                    web_7d = _scalar(cur, "SELECT COUNT(*) FROM action_logs "
+                                          "WHERE source='web' AND action_time > NOW() - INTERVAL '7 days'")
+                    baseline_hr = float(web_7d) / (7 * 24)
+                    rep["site"] = {
+                        "source": "heuristic",
+                        "web_24h": int(web_24h), "web_1h": int(web_1h),
+                        "baseline_hr": round(baseline_hr, 1),
+                        "possible_outage": baseline_hr >= OUTAGE_MIN_BASELINE and int(web_1h) == 0,
+                    }
+            except Exception as exc:
+                _log.warning("site section failed: %s", exc)
+                conn.rollback()
 
         # ── 5) تهديدات / بوتات / حركة مشبوهة ──
         try:
@@ -253,7 +316,24 @@ def render_health_html(rep: dict[str, Any]) -> str:
 
     # 4) أداء الموقع
     s = rep.get("site")
-    if s:
+    if s and s.get("source") == "metrics":
+        _degraded = s.get("degraded")
+        bg, bc = ("#FEF2F2", "#DC2626") if _degraded else ("#F0FDF4", "#059669")
+        head = "🔴 تدهور أداء" if _degraded else "🟢 الأداء سليم"
+        slow = ""
+        if s.get("slowest"):
+            slow = "<div style='color:#6B7280;font-size:12px;margin-top:6px;'>أبطأ المسارات: " + \
+                " · ".join(f"{x['path']} ({x['p95']}ms)" for x in s["slowest"]) + "</div>"
+        parts.append(
+            f"<div style='background:{bg};border-right:4px solid {bc};border-radius:8px;"
+            f"padding:10px 14px;margin:8px 0;'><b style='color:{bc};'>🌐 أداء الموقع — {head}</b>"
+            f"<div style='color:#374151;font-size:13px;margin-top:4px;'>"
+            f"زمن الاستجابة p95: <b>{s['p95_1h']}ms</b> (متوسط {s['avg_1h']}ms) · "
+            f"الطلبات: {s['req_1h']:,}/ساعة، {s['req_24h']:,}/24س · "
+            f"أخطاء 5xx: <b>{s['err_1h']}</b> ({s['err_rate_1h']:.0%}) آخر ساعة، {s['err_24h']} /24س"
+            f"</div>{slow}</div>"
+        )
+    elif s:  # fallback heuristic
         if s.get("possible_outage"):
             parts.append(
                 f"<div style='background:#FEF2F2;border-right:4px solid #DC2626;border-radius:8px;"
@@ -265,7 +345,7 @@ def render_health_html(rep: dict[str, Any]) -> str:
             parts.append(
                 f"<div style='color:#6B7280;font-size:13px;margin:8px 0;'>"
                 f"🌐 أداء الموقع: {s['web_24h']:,} زيارة/24س · {s['web_1h']:,} في آخر ساعة "
-                f"(المعدّل ~{s['baseline_hr']}/ساعة) — طبيعي.</div>"
+                f"(المعدّل ~{s['baseline_hr']}/ساعة · مقاييس الأداء التفصيلية تبدأ بعد أول طلبات).</div>"
             )
 
     # 5) الأمان
