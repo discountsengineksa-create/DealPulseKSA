@@ -467,7 +467,7 @@ const STRINGS = {
     siteTab:         'الموقع 🌐',
     title:           'نبض الصفقات | Deal Pulse KSA',
     chipAll:         '✨ الكل',
-    sectionAll:      'أبرز المتاجر',
+    sectionAll:      'المتاجر المختارة',
     allStores:       'كل المتاجر',
     filterAll:       'الكل',
     sortPopular:     'الأكثر طلباً',
@@ -525,7 +525,7 @@ const STRINGS = {
     siteTab:         'Website 🌐',
     title:           'Deal Pulse KSA',
     chipAll:         '✨ All',
-    sectionAll:      'Top Stores',
+    sectionAll:      'Featured Stores',
     allStores:       'All Stores',
     filterAll:       'All',
     sortPopular:     'Most popular',
@@ -1486,8 +1486,13 @@ function renderStores() {
         });
         if (titleEl) titleEl.textContent = LANG_CURRENT === 'en' ? 'Search results' : 'نتائج البحث';
     } else {
-        // أبرز المتاجر: الترند (يومي/أسبوعي) أولاً، بحد 8
-        list = [...ALL].sort((a, b) => (isTrendNow(b) ? 1 : 0) - (isTrendNow(a) ? 1 : 0)).slice(0, 8);
+        // المتاجر المختارة: المروّجة (is_promoted) أولاً، ثم الترند، بحد 8 — يطابق
+        // قسم «المتاجر المختارة» في الموقع. الوسام يظهر تلقائياً من storeCardHTML.
+        list = [...ALL].sort((a, b) => {
+            const p = (b.promoted ? 1 : 0) - (a.promoted ? 1 : 0);
+            if (p !== 0) return p;
+            return (isTrendNow(b) ? 1 : 0) - (isTrendNow(a) ? 1 : 0);
+        }).slice(0, 8);
         if (titleEl) titleEl.textContent = ST.sectionAll;
     }
     if (!list.length) {
