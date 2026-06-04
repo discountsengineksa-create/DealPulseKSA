@@ -21,6 +21,8 @@ class StoreResult(BaseModel):
     cloaked_slug: str | None = None   # Week 4 — يبني المستهلك /go/{cloaked_slug}
     total_coupon_copies: int = 0
     total_link_clicks: int = 0
+    # «الأكثر طلباً» = نقرات + نسخ + عدد البحث + عدد المفضّلين (يُحسب في SQL).
+    popularity_score: int = 0
     score_pct: int = 0
 
 

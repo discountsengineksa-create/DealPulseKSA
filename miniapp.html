@@ -933,8 +933,8 @@ function showListView(mode) {
 
 // أعلى رقم في نص الخصم («خصم 50%» → 50)؛ لا رقم → -1 (يغوص للأسفل)
 function _discNum(s) { const m = String(s.disc || '').match(/(\d+(?:\.\d+)?)/); return m ? parseFloat(m[1]) : -1; }
-// الأكثر طلباً = نسخ الكوبون + نقرات الرابط
-function _pop(s) { return (s.copies || 0) + (s.clicks || 0); }
+// الأكثر طلباً = نقرات + نسخ + بحث + مفضّلة (من الـ API)؛ fallback لنسخ+نقرات
+function _pop(s) { return s.pop || ((s.copies || 0) + (s.clicks || 0)); }
 
 function setListSort(mode) { LIST_SORT = mode; renderListView('all'); }
 function setListCat(idx)  { const i = Number(idx); LIST_CAT = (i < 0 || !CATS[i]) ? null : String(CATS[i].tag_name); renderListView('all'); }
@@ -1230,6 +1230,8 @@ async function loadData() {
             copies: Number(item.total_coupon_copies) || 0,   // نسخ الكوبون
             clicks: Number(item.total_link_clicks)   || 0,   // نقرات الرابط
             offer:  (item.extra_offer || '').trim(),         // عرض إضافي (لفرز «عروض»)
+            // «الأكثر طلباً» = نقرات + نسخ + بحث + مفضّلة (محسوب في الـ API)
+            pop:    Number(item.popularity_score)    || 0,
         }));
 
         const dt = Date.now() - t0;

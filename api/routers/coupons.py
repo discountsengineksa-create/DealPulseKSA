@@ -28,6 +28,23 @@ def _parse_tags(raw: str | None) -> list[str]:
     return [t.strip() for t in s.split(",") if t.strip()] if s else []
 
 
+# «الأكثر طلباً» = نقرات الرابط + نسخ الكوبون + عدد مرات البحث عن المتجر +
+# عدد المُفضِّلين له. النقرات/النسخ عدّادات في master؛ البحث من action_logs
+# (action_type='search')؛ المفضّلة من user_favorites (kind='store').
+# subqueries عدديّة مرتبطة — لا تُحدِث التباس أعمدة مع master، ورخيصة (عدد
+# المتاجر صغير + الاستجابة مُخزّنة 60 ثانية على الواجهة).
+_POPULARITY_SQL = """
+    (
+        COALESCE(total_link_clicks, 0)
+      + COALESCE(total_coupon_copies, 0)
+      + (SELECT COUNT(*) FROM action_logs al
+            WHERE al.action_type = 'search' AND al.store_id = master.store_id)
+      + (SELECT COUNT(*) FROM user_favorites uf
+            WHERE uf.kind = 'store' AND uf.store_id = master.store_id)
+    )::int AS popularity_score
+"""
+
+
 def _select_lang_clause(lang: str) -> str:
     """
     يبني SELECT يحقن قيم اللغة المطلوبة في الحقول الأساسية،
@@ -112,6 +129,7 @@ def get_all_coupons(
     sql = f"""
         SELECT
             {_select_lang_clause(lang)},
+            {_POPULARITY_SQL},
             0 AS score_pct
         FROM master
         WHERE (last_time IS NULL OR last_time >= CURRENT_DATE)
@@ -155,6 +173,7 @@ def search_coupons(
         WITH filtered AS (
             SELECT
                 {_select_lang_clause(lang)},
+                {_POPULARITY_SQL},
                 GREATEST(
                     similarity(lower(store_id),                    lower(%(term)s)),
                     similarity(lower(COALESCE(name_en,        '')), lower(%(term)s)),
