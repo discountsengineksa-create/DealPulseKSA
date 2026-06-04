@@ -2524,6 +2524,38 @@ if page == "تحليل الأقسام":
                              .str.strip().replace("", "غير معروف"))
         df_logs["src_ar"] = df_logs["source"].map(CHAN_MAP).fillna("🌐 ويب")
 
+        # ── هوية المتفاعل (نفس منطق صفحة تحليل المتاجر) — تُحيي تبويب «مين تفاعل».
+        def _clean(v):
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return ""
+            s = str(v).strip()
+            return "" if s.lower() == "nan" else s
+
+        def _identity(r):
+            src = r["source"]
+            if src in ("telegram_miniapp", "miniapp"):
+                u = _clean(r.get("bu_username"))
+                if u:
+                    return "@" + u.lstrip("@")
+                uid = r.get("user_id")
+                if pd.notna(uid):
+                    return f"🔹 بوت - ميني {int(uid)}"
+                h = _clean(r.get("ip_hex"))
+                return f"🔹 بوت - ميني #{h[:6]}" if h else "🔹 بوت - ميني (غير مسجّل)"
+            if src == "web":
+                for k in ("web_name", "web_email", "web_phone"):
+                    v = _clean(r.get(k))
+                    if v:
+                        return v
+                h = _clean(r.get("ip_hex"))
+                return f"🌐 زائر ويب #{h[:6]}" if h else "🌐 زائر ويب (غير مسجّل)"
+            u = _clean(r.get("bu_username"))
+            if u:
+                return "@" + u.lstrip("@")
+            uid = r.get("user_id")
+            return f"تيليجرام {int(uid)}" if pd.notna(uid) else "مجهول"
+        df_logs["identity"] = df_logs.apply(_identity, axis=1)
+
     if not df_search.empty:
         df_search = df_search.copy()
         df_search["search_date"] = (pd.to_datetime(df_search["search_date"])
@@ -2559,12 +2591,14 @@ if page == "تحليل الأقسام":
         if ds is None or ds.empty:
             return ds
         p = ds["platform"].astype(str).str.lower()
+        is_mini = p.str.contains("mini")
         if src_choice == "📱 بوت":
-            return ds[p.str.contains("telegram") | p.str.contains("bot")]
+            # البوت فقط — نستبعد الميني صراحةً (تحصين مطابق لصفحة تحليل المتاجر)
+            return ds[(p.str.contains("telegram") | p.str.contains("bot")) & ~is_mini]
         if src_choice == "🌐 ويب":
-            return ds[p == "web"]
+            return ds[p.str.contains("web")]
         if src_choice == "🔹 بوت - ميني":
-            return ds[p.str.contains("mini")]
+            return ds[is_mini]
         return ds
     df_search_scope = _search_scope_ca(df_search)
 
@@ -2647,68 +2681,117 @@ if page == "تحليل الأقسام":
         df_cat_agg["مفضّلون"] = 0
     df_cat_agg["مفضّلون"] = df_cat_agg["مفضّلون"].fillna(0).astype(int)
 
-    # ── التبويبات ────────────────────────────────────────────────────────────
+    # ── محرّك التوصية لكل قسم + بطاقات الأعلى/الأقل ──────────────────────────
+    #   منهجية: ترتيب الأقسام مقارنة صحيحة (كل قسم = مجموع نشاط متاجره). لا نعرض
+    #   «مجموعاً كلياً» عبر الأقسام لأن المتجر متعدد الأقسام يتكرر — العدّاد الفعلي
+    #   للأحداث (بلا تكرار) ظاهر في شريط الفلتر أعلاه عبر len(df_scope).
+    agg = df_cat_agg.copy()
+    _ncat = len(agg)
+    q_hi = agg["نسخ"].quantile(0.75) if _ncat >= 4 else agg["نسخ"].max()
+    q_lo = agg["نسخ"].quantile(0.25) if _ncat >= 4 else 0
+    s_hi = agg["بحث"].quantile(0.75) if _ncat >= 4 else agg["بحث"].max()
+
+    def _reco_cat(r):
+        if r["متاجر"] == 0:
+            return "🚫 بلا متاجر — احذف الوسم"
+        if r["إجمالي"] == 0:
+            return "💤 خامل — لا تفاعل"
+        # أثمن إشارة: طلب بحث مرتفع لكن تحويل (نسخ) ضعيف = فجوة عرض
+        if r["بحث"] >= s_hi and r["بحث"] > 0 and r["نسخ"] <= q_lo:
+            return "⚠️ طلب عالٍ وعرض ضعيف — أضف متاجر/كوبونات"
+        if r["نسخ"] >= q_hi and r["نسخ"] > 0:
+            return "🔥 قسم رابح — وسّع المخزون"
+        if r["نسخ"] <= q_lo:
+            return "🪫 ضعيف — قلّل التركيز"
+        return "✅ مستقر"
+    agg["التوصية"] = agg.apply(_reco_cat, axis=1)
+    agg = agg.sort_values(["نسخ", "إجمالي"], ascending=False).reset_index(drop=True)
+    agg.insert(0, "#", range(1, len(agg) + 1))
+
+    def _hi(col): return agg.sort_values([col, "إجمالي"], ascending=False).iloc[0]
+    def _lo(col): return agg.sort_values([col, "إجمالي"], ascending=True).iloc[0]
+    _hn, _ln = _hi("نسخ"), _lo("نسخ")
+    _hs, _ls = _hi("بحث"), _lo("بحث")
+    _hc, _lc = _hi("نقرات"), _lo("نقرات")
+    r1a, r1b, r1c = st.columns(3)
+    with r1a: kpi_card("🏆", "الأعلى نسخاً (ركّز)", f"{_hn['tag']}", "emerald", note=f"{int(_hn['نسخ'])} نسخة")
+    with r1b: kpi_card("🔍", "الأعلى بحثاً (طلب)", f"{_hs['tag']}", "info", note=f"{int(_hs['بحث'])} بحث")
+    with r1c: kpi_card("🖱️", "الأعلى نقراً", f"{_hc['tag']}", "warning", note=f"{int(_hc['نقرات'])} نقرة")
+    r2a, r2b, r2c = st.columns(3)
+    with r2a: kpi_card("🗑️", "الأقل نسخاً (راجع)", f"{_ln['tag']}", "danger", note=f"{int(_ln['نسخ'])} نسخة")
+    with r2b: kpi_card("📉", "الأقل بحثاً", f"{_ls['tag']}", "neutral", note=f"{int(_ls['بحث'])} بحث")
+    with r2c: kpi_card("🔻", "الأقل نقراً", f"{_lc['tag']}", "neutral", note=f"{int(_lc['نقرات'])} نقرة")
+
+    # ── التبويبات (موازية لصفحة «تحليل المتاجر») ────────────────────────────
     _CA_TABS = [
-        "📊 الأداء العام",
-        "🏷️ الفحص الفردي",
-        "🏙️ التوزيع الجغرافي",
-        "❤️ الأكثر تفضيلاً",
-        "⏰ التحليل الزمني",
+        "🏆 لوحة القرار (كل الأقسام)",
+        "👤 مين تفاعل مع قسم",
+        "📈 الرسوم والمعدلات",
+        "❤️ المفضلة",
         "🏅 الأولويات",
     ]
     # radio محفوظ بدل st.tabs — يثبّت التبويب عبر إعادة التشغيل (تغيير الفلتر).
     _ca_tab = st.radio("العرض:", _CA_TABS, horizontal=True,
                        key="ca_active_tab", label_visibility="collapsed")
 
-    # ── 1) الأداء العام ──────────────────────────────────────────────────────
+    # ── 1) لوحة القرار (كل الأقسام) ─────────────────────────────────────────
     if _ca_tab == _CA_TABS[0]:
-        total_clicks  = int(df_cat_agg["نقرات"].sum())
-        total_copies  = int(df_cat_agg["نسخ"].sum())
-        total_search  = int(df_cat_agg["بحث"].sum())
-        total_users   = int(scoped_with_tag["user_id"].dropna().nunique()) if not scoped_with_tag.empty else 0
-        total_favs    = int(df_cat_agg["مفضّلون"].sum())
-
-        k1, k2, k3, k4, k5 = st.columns(5)
-        k1.metric("🖱️ نقرات", f"{total_clicks:,}")
-        k2.metric("📋 نسخ",   f"{total_copies:,}")
-        k3.metric("🔍 بحث",   f"{total_search:,}")
-        k4.metric("👥 مستخدمون", f"{total_users:,}")
-        k5.metric("❤️ تفضيلات", f"{total_favs:,}")
-
-        st.divider()
-        st.markdown("### 🏆 لوحة الأقسام (مرتّبة بالنشاط الكلي)")
-        st.caption("الإجمالي = نقرات + نسخ + بحث · القسم بصفر نشاط يظهر كذلك ليكون قرار التطيير واضحاً.")
+        st.caption("كل الأقسام تظهر (حتى الخاملة بصفر) · مرتّبة بالنسخ · «التوصية» قاعدة آلية. "
+                   "اضغط رأس أي عمود للفرز. ملاحظة: متجر متعدد الأقسام يُحسب في كل قسم له.")
+        q = st.text_input("🔎 ابحث عن قسم:", key="ca_board_q")
+        board = agg.copy()
+        if q:
+            board = board[board["tag"].str.contains(q, case=False, na=False)]
+        view = pd.DataFrame({
+            "#": board["#"].values,
+            "القسم": board["tag"].values,
+            "نسخ": board["نسخ"].values,
+            "نقرات": board["نقرات"].values,
+            "بحث": board["بحث"].values,
+            "❤️": board["مفضّلون"].values,
+            "متاجر": board["متاجر"].values,
+            "مستخدمون": board["مستخدمون فريدون"].values,
+            "الإجمالي": board["إجمالي"].values,
+            "التوصية": board["التوصية"].values,
+        })
+        _maxtot = int(max(1, agg["إجمالي"].max()))
         st.dataframe(
-            df_cat_agg[["tag", "نقرات", "نسخ", "بحث", "مفضّلون",
-                        "مستخدمون فريدون", "متاجر", "إجمالي"]]
-                .rename(columns={"tag": "القسم"}),
-            width='stretch', hide_index=True,
+            view, hide_index=True, width='stretch',
+            column_config={
+                "❤️": st.column_config.NumberColumn("❤️ مفضّلون", help="عدد الأشخاص الذين فضّلوا القسم"),
+                "الإجمالي": st.column_config.ProgressColumn(
+                    "الإجمالي", format="%d", min_value=0, max_value=_maxtot),
+            },
         )
+        st.download_button("📥 تحميل CSV", view.to_csv(index=False).encode("utf-8-sig"),
+                           f"categories_decision_{d_start}_{d_end}.csv", "text/csv", key="ca_board_csv")
+
+        # تفصيل لكل مصدر (يظهر في وضع «الكل») — نسخ/نقر لكل قسم × مصدر
+        if src_choice == "الكل" and not scoped_with_tag.empty:
+            with st.expander("📱🌐🔹 تفصيل النسخ والنقر لكل قسم حسب المصدر"):
+                brk = (scoped_with_tag[scoped_with_tag["action_type"].isin(["copy_coupon", "click_link"])]
+                       .assign(chan=lambda d: d["source"].map(CHAN_MAP).fillna("أخرى"),
+                               نوع=lambda d: d["action_type"].map({"copy_coupon": "نسخ", "click_link": "نقر"}))
+                       .groupby(["tag", "chan", "نوع"]).size().reset_index(name="ع"))
+                if brk.empty:
+                    st.info("لا توجد نسخ/نقر ضمن الفترة.")
+                else:
+                    pb = brk.pivot_table(index="tag", columns=["chan", "نوع"],
+                                         values="ع", fill_value=0)
+                    pb.columns = [f"{a} {b}" for a, b in pb.columns]
+                    pb = pb.reset_index().rename(columns={"tag": "القسم"})
+                    st.dataframe(pb, hide_index=True, width='stretch')
 
         st.divider()
-        cTop, cBot = st.columns(2)
-        with cTop:
-            st.markdown("**🔝 أعلى 10 أقسام نشاطاً**")
-            top10 = df_cat_agg.head(10)
-            if not top10.empty and top10["إجمالي"].sum() > 0:
-                fig = px.bar(top10, x="إجمالي", y="tag", orientation="h",
-                             color="إجمالي", color_continuous_scale="Blues")
-                fig.update_layout(yaxis=dict(autorange="reversed"), xaxis_title="إجمالي الأحداث",
-                                  yaxis_title="")
-                st.plotly_chart(apply_brand_theme(fig), width='stretch')
-            else:
-                st.info("لا نشاط بعد ضمن النطاق.")
-        with cBot:
-            st.markdown("**🥶 أقل الأقسام نشاطاً (مرشّحة للتطيير)**")
-            bot10 = df_cat_agg.tail(10).iloc[::-1]
-            if not bot10.empty:
-                fig = px.bar(bot10, x="إجمالي", y="tag", orientation="h",
-                             color="إجمالي", color_continuous_scale="Reds_r")
-                fig.update_layout(yaxis=dict(autorange="reversed"), xaxis_title="إجمالي الأحداث",
-                                  yaxis_title="")
-                st.plotly_chart(apply_brand_theme(fig), width='stretch')
-            else:
-                st.info("لا توجد أقسام كافية.")
+        cc1, cc2 = st.columns(2)
+        with cc1:
+            st.markdown("**🔥 وسّعهم (رابح / طلب عالٍ):**")
+            grow = agg[agg["التوصية"].str.contains("رابح|طلب عالٍ")]
+            st.write("، ".join(grow["tag"].tolist()) or "—")
+        with cc2:
+            st.markdown("**⬇️ راجعهم (ضعيف / خامل / بلا متاجر):**")
+            weak = agg[agg["التوصية"].str.contains("ضعيف|خامل|احذف")]
+            st.write("، ".join(weak["tag"].tolist()) or "—")
 
     # ── 2) الفحص الفردي ──────────────────────────────────────────────────────
     elif _ca_tab == _CA_TABS[1]:
@@ -2781,25 +2864,101 @@ if page == "تحليل الأقسام":
                     width='stretch', hide_index=True,
                 )
 
-    # ── 3) التوزيع الجغرافي ──────────────────────────────────────────────────
+    # ── 3) الرسوم والمعدلات ─────────────────────────────────────────────────
     elif _ca_tab == _CA_TABS[2]:
-        st.subheader("🏙️ من أين يأتي نشاط كل قسم؟")
+        st.markdown("**🎟️ النسخ لكل قسم (أعلى 20)**")
+        topn = agg[agg["نسخ"] > 0].sort_values("نسخ", ascending=False).head(20)
+        if topn.empty:
+            st.info("لا توجد نسخ ضمن الفلتر الحالي.")
+        else:
+            fig1 = px.bar(topn, x="نسخ", y="tag", orientation="h",
+                          color="نسخ", color_continuous_scale="Greens")
+            fig1.update_layout(yaxis=dict(autorange="reversed"), xaxis_title="عدد النسخ", yaxis_title="")
+            st.plotly_chart(apply_brand_theme(fig1), width='stretch')
+
+        st.markdown("**🔍 أعلى الأقسام بحثاً (أعلى 20)**")
+        tops = agg[agg["بحث"] > 0].sort_values("بحث", ascending=False).head(20)
+        if tops.empty:
+            st.info("لا توجد عمليات بحث ضمن الفلتر الحالي.")
+        else:
+            fig_s = px.bar(tops, x="بحث", y="tag", orientation="h",
+                           color="بحث", color_continuous_scale="Blues")
+            fig_s.update_layout(yaxis=dict(autorange="reversed"), xaxis_title="عدد عمليات البحث", yaxis_title="")
+            st.plotly_chart(apply_brand_theme(fig_s), width='stretch')
+
+        # ── معدّل التحويل (نسخ ÷ نقرات) مع بوّابة حجم عيّنة ──
+        st.divider()
+        st.markdown("**⚡ معدّل التحويل (نسخ ÷ نقرات) — أعلى الأقسام تحويلاً**")
+        conv = agg[agg["نقرات"] >= 5].copy()
+        if conv.empty:
+            st.info("لا يوجد قسم بنقرات كافية (≥5) لحساب تحويل موثوق بعد.")
+        else:
+            conv["تحويل %"] = (conv["نسخ"] / conv["نقرات"] * 100).round(0)
+            conv = conv.sort_values("تحويل %", ascending=False).head(15)
+            figc = px.bar(conv, x="تحويل %", y="tag", orientation="h",
+                          color="تحويل %", color_continuous_scale="Purples")
+            figc.update_layout(yaxis=dict(autorange="reversed"), xaxis_title="معدل التحويل %", yaxis_title="")
+            st.plotly_chart(apply_brand_theme(figc), width='stretch')
+            st.caption("التحويل = نسبة من نقر الرابط ثم نسخ الكود · بوّابة: أقسام بـ ≥5 نقرات فقط "
+                       "(نتجنّب نِسباً مضلِّلة على عيّنة صغيرة).")
+
+        # ── النسخ والنقرات حسب المصدر ──
+        st.divider()
+        st.markdown("**📱🌐🔹 النسخ والنقرات حسب المصدر**")
+        if not scoped_with_tag.empty:
+            bys = (scoped_with_tag[scoped_with_tag["action_type"].isin(["copy_coupon", "click_link"])]
+                   .assign(نوع=lambda d: d["action_type"].map({"copy_coupon": "نسخ", "click_link": "نقرات"}))
+                   .groupby(["src_ar", "نوع"]).size().reset_index(name="العدد"))
+            if not bys.empty:
+                fig2 = px.bar(bys, x="نوع", y="العدد", color="src_ar", barmode="group")
+                fig2.update_layout(xaxis_title="", yaxis_title="العدد", legend_title_text="المصدر")
+                st.plotly_chart(apply_brand_theme(fig2), width='stretch')
+            else:
+                st.info("لا توجد نسخ/نقر ضمن الفلتر.")
+        else:
+            st.info("لا توجد أحداث ضمن الفلتر.")
+
+        # ── التوزيع الجغرافي (مع شريط تغطية صريح — لا نخفي ضعف البيانات) ──
+        st.divider()
+        st.markdown("**🏙️ التوزيع الجغرافي**")
         if scoped_with_tag.empty:
             st.info("لا أحداث ضمن النطاق.")
         else:
-            geo = (scoped_with_tag.groupby(["tag", "city_c"]).size()
-                   .reset_index(name="الأحداث"))
-            top_cities = (geo.groupby("city_c")["الأحداث"].sum()
-                          .sort_values(ascending=False).head(10).index.tolist())
-            geo = geo[geo["city_c"].isin(top_cities)]
-            if geo.empty:
-                st.info("لا مدن كافية ضمن النطاق.")
+            known = scoped_with_tag[scoped_with_tag["city_c"] != "غير معروف"]
+            _cov = (len(known) / len(scoped_with_tag) * 100) if len(scoped_with_tag) else 0
+            st.caption(f"المدينة متاحة لـ **{_cov:.0f}%** من الأحداث فقط (تُلتقط وقت نقر /go). "
+                       "«غير معروف» مستبعَد من الرسم لتفادي التضليل.")
+            if known.empty:
+                st.info("لا أحداث بمدينة معروفة ضمن النطاق.")
             else:
-                fig = px.bar(geo, x="الأحداث", y="city_c", color="tag",
-                             orientation="h", title="أعلى 10 مدن × أقسام")
-                fig.update_layout(yaxis=dict(autorange="reversed"),
-                                  yaxis_title="المدينة", xaxis_title="عدد الأحداث")
-                st.plotly_chart(apply_brand_theme(fig), width='stretch')
+                geo = known.groupby(["tag", "city_c"]).size().reset_index(name="الأحداث")
+                top_cities = (geo.groupby("city_c")["الأحداث"].sum()
+                              .sort_values(ascending=False).head(10).index.tolist())
+                geo = geo[geo["city_c"].isin(top_cities)]
+                figg = px.bar(geo, x="الأحداث", y="city_c", color="tag",
+                              orientation="h", title="أعلى 10 مدن × أقسام")
+                figg.update_layout(yaxis=dict(autorange="reversed"),
+                                   yaxis_title="المدينة", xaxis_title="عدد الأحداث")
+                st.plotly_chart(apply_brand_theme(figg), width='stretch')
+
+        # ── النشاط عبر الزمن (لكل قسم أو الكل) ──
+        st.divider()
+        st.markdown("**📈 النشاط عبر الزمن** — على مدار اليوم (توقيت الرياض)")
+        if scoped_with_tag.empty:
+            st.info("لا أحداث ضمن النطاق.")
+        else:
+            pick_t = st.selectbox("القسم (الكل = إجمالي):",
+                                  ["— الكل —"] + agg["tag"].tolist(), key="ca_time_pick")
+            d_one = (scoped_with_tag if pick_t == "— الكل —"
+                     else scoped_with_tag[scoped_with_tag["tag"] == pick_t])
+            if d_one.empty:
+                st.info("لا أحداث لهذا القسم ضمن النطاق.")
+            else:
+                st.plotly_chart(
+                    _sa_hourly_fig(d_one, title=f"نشاط «{pick_t}» على مدار اليوم",
+                                   include_search=False),
+                    width='stretch',
+                )
 
     # ── 4) ❤️ الأكثر تفضيلاً ────────────────────────────────────────────────
     elif _ca_tab == _CA_TABS[3]:
@@ -2836,26 +2995,8 @@ if page == "تحليل الأقسام":
                                title="توزيع التفضيلات على المنصات")
                 st.plotly_chart(apply_brand_theme(fig_p), width='stretch')
 
-    # ── 5) التحليل الزمني ────────────────────────────────────────────────────
+    # ── 5) الأولويات (إدارة يدوية لترتيب الأقسام) ───────────────────────────
     elif _ca_tab == _CA_TABS[4]:
-        st.subheader("⏰ متى تنشط الأقسام؟")
-        if scoped_with_tag.empty:
-            st.info("لا أحداث ضمن النطاق.")
-        else:
-            pick_tag2 = st.selectbox("القسم:", df_cat_agg["tag"].tolist(),
-                                     key="ca_time_pick")
-            d_one = scoped_with_tag[scoped_with_tag["tag"] == pick_tag2]
-            if d_one.empty:
-                st.info("لا أحداث لهذا القسم ضمن النطاق.")
-            else:
-                st.plotly_chart(
-                    _sa_hourly_fig(d_one, title=f"نشاط «{pick_tag2}» على مدار اليوم",
-                                   include_search=False),
-                    width='stretch',
-                )
-
-    # ── 6) الأولويات (يبقى كما كان — إدارة يدوية) ───────────────────────────
-    elif _ca_tab == _CA_TABS[5]:
         st.subheader("🏅 إدارة ترتيب الأقسام يدوياً")
         st.caption("الرقم 1 = يظهر أولاً في البوت والموقع · الرقم 5 = الافتراضي")
         try:
