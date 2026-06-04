@@ -6370,14 +6370,17 @@ elif page == "تحليل المستخدمين":
 
         kpis = pd.read_sql(f"""
             SELECT
-              (SELECT COUNT(*) FROM bot_users)                                          AS bot_total,
+              (SELECT COUNT(*) FROM bot_users
+                 WHERE deleted_at IS NULL)                                              AS bot_total,
               (SELECT COUNT(*) FROM web_users)                                          AS web_total,
               (SELECT COUNT(*) FROM bot_users
-                 WHERE last_seen  >= NOW() - INTERVAL '{N} days')                       AS bot_active,
+                 WHERE last_seen  >= NOW() - INTERVAL '{N} days'
+                   AND deleted_at IS NULL)                                              AS bot_active,
               (SELECT COUNT(*) FROM web_users
                  WHERE last_seen  >= NOW() - INTERVAL '{N} days')                       AS web_active,
               (SELECT COUNT(*) FROM bot_users
-                 WHERE joined_at  >= NOW() - INTERVAL '{N} days')                       AS bot_new,
+                 WHERE joined_at  >= NOW() - INTERVAL '{N} days'
+                   AND deleted_at IS NULL)                                              AS bot_new,
               (SELECT COUNT(*) FROM web_users
                  WHERE created_at >= NOW() - INTERVAL '{N} days')                       AS web_new
         """, conn)
@@ -6487,7 +6490,7 @@ elif page == "تحليل المستخدمين":
                    NULL::text AS email, NULL::text AS phone, last_seen
               FROM bot_users
              WHERE last_seen BETWEEN NOW() - INTERVAL '30 days' AND NOW() - INTERVAL '7 days'
-               
+               AND deleted_at IS NULL
             UNION ALL
             SELECT 'web', id, display_name, email, phone_number, last_seen
               FROM web_users
@@ -6501,7 +6504,7 @@ elif page == "تحليل المستخدمين":
                      NULL::text AS email, NULL::text AS phone, b.joined_at AS joined
                 FROM bot_users b
                WHERE b.joined_at >= NOW() - INTERVAL '7 days'
-                 
+                 AND b.deleted_at IS NULL
                  AND NOT EXISTS (
                     SELECT 1 FROM action_logs a
                      WHERE a.user_id = b.telegram_id
@@ -7263,7 +7266,7 @@ elif page == "تحليل المستخدمين":
                        gender, birth_date, city, last_seen, NULL::timestamptz AS consent_at,
                        NULL::timestamptz AS email_verified_at
                   FROM bot_users
-                 WHERE { ' AND '.join(ab_clauses_bot) } 
+                 WHERE { ' AND '.join(ab_clauses_bot) } AND deleted_at IS NULL
             """)
             all_params += ab_pb
 
