@@ -7293,14 +7293,31 @@ elif page == "تحليل المستخدمين":
             # المدن لكل قناة — أعلى 3 أسماء فعلية (لا عدد فقط)
             try: conn.rollback()
             except Exception: pass
+            # المدينة fallback: لو action_logs.city فاضي (الميني-ويب غالباً)
+            # نستخدم مدينة المستخدم من ملفه (bot_users/web_users).
             cities_per_src = pd.read_sql("""
-                WITH cnt AS (
-                  SELECT COALESCE(source,'bot') AS source,
-                         NULLIF(TRIM(city),'') AS city,
-                         COUNT(*)::int AS n
-                  FROM action_logs
-                  WHERE action_time >= %s AND action_time < %s
-                    AND city IS NOT NULL AND TRIM(city) <> ''
+                WITH events AS (
+                  SELECT
+                    COALESCE(al.source,'bot') AS source,
+                    COALESCE(
+                        NULLIF(TRIM(al.city),''),
+                        NULLIF(TRIM(bu.city),''),
+                        NULLIF(TRIM(wu.city),'')
+                    ) AS city
+                  FROM action_logs al
+                  LEFT JOIN bot_users bu
+                         ON bu.telegram_id = al.user_id
+                        AND COALESCE(al.source,'bot') IN ('bot','telegram_miniapp','miniapp')
+                  LEFT JOIN web_users wu
+                         ON wu.id = al.user_id
+                        AND al.source = 'web'
+                  WHERE al.action_time >= %s AND al.action_time < %s
+                    AND al.user_id IS NOT NULL
+                ),
+                cnt AS (
+                  SELECT source, city, COUNT(*)::int AS n
+                  FROM events
+                  WHERE city IS NOT NULL AND TRIM(city) <> ''
                   GROUP BY 1, 2
                 ),
                 ranked AS (
@@ -8430,13 +8447,27 @@ elif page == "تحليل المستخدمين":
             except Exception: pass
 
             geo_clause, geo_params = _ua_src_clause("al")
+            # المدينة: أولاً من action_logs (CF Worker IP enrichment).
+            # لو NULL (الميني-ويب غالباً بسبب IPs تيليجرام) نرجع لمدينة
+            # المستخدم في bot_users/web_users — حسب نوع المصدر.
             df_geo = pd.read_sql(f"""
                 SELECT
-                  COALESCE(NULLIF(TRIM(al.city), ''), 'غير معروف')                AS المدينة,
+                  COALESCE(
+                      NULLIF(TRIM(al.city), ''),
+                      NULLIF(TRIM(bu.city), ''),
+                      NULLIF(TRIM(wu.city), ''),
+                      'غير معروف'
+                  )                                                                AS المدينة,
                   COUNT(DISTINCT al.user_id)                                       AS مستخدمون,
                   COUNT(*) FILTER (WHERE al.action_type='copy_coupon')             AS نسخ,
                   COUNT(*) FILTER (WHERE al.action_type='click_link')              AS نقرات
                 FROM action_logs al
+                LEFT JOIN bot_users bu
+                       ON bu.telegram_id = al.user_id
+                      AND COALESCE(al.source,'bot') IN ('bot','telegram_miniapp','miniapp')
+                LEFT JOIN web_users wu
+                       ON wu.id = al.user_id
+                      AND al.source = 'web'
                 WHERE al.action_time >= %s AND al.action_time < %s
                   AND al.user_id IS NOT NULL
                   { geo_clause }
