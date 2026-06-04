@@ -310,6 +310,18 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
     .trend-card{background:rgba(255,255,255,0.04);border:1px solid var(--border);
       border-radius:16px;padding:14px 8px;text-align:center;cursor:pointer;
       transition:transform 0.15s ease,box-shadow 0.15s ease;font-family:var(--font)}
+    /* شارة الترند (ترند اليوم / ترند هذا الأسبوع) في أعلى الكرت — inline لتفادي تداخل
+       مع لقب المركز. تدرج برتقالي-أحمر مطابق لشارة صفحة المتجر في الموقع. */
+    .trend-card .tc-badge{display:inline-block;
+      background:linear-gradient(to left,#F97316,#EF4444);color:#fff;
+      font-size:9px;font-weight:800;padding:2px 8px;border-radius:9px;
+      box-shadow:0 1px 3px rgba(0,0,0,0.2);white-space:nowrap;margin-bottom:6px}
+    /* شارة في صفحة المتجر — أكبر من شارة الكرت */
+    .store-trend-badge{display:inline-flex;align-items:center;gap:5px;
+      background:linear-gradient(to left,#F97316,#EF4444);color:#fff;
+      font-size:11px;font-weight:800;padding:5px 11px;border-radius:14px;
+      margin-bottom:10px;box-shadow:0 2px 6px rgba(239,68,68,0.25)}
+    .store-trend-badge::before{content:"🔥";font-size:11px}
     .trend-card:active{transform:scale(0.96)}
     .trend-card:hover{box-shadow:0 2px 10px rgba(16,185,129,0.08)}
     .trend-card .tc-title{font-size:10px;color:var(--em);font-weight:800;
@@ -432,6 +444,8 @@ const STRINGS = {
     trendDaily:      'الترند اليومي',
     trendWeekly:     'الترند الأسبوعي',
     trendEmpty:      'ما زلنا نجمع البيانات — عُد بعد قليل.',
+    trendBadgeToday: 'ترند اليوم',
+    trendBadgeWeek:  'ترند هذا الأسبوع',
     sectionCat:      'قسم: ',
     pfTitle:         'أكمل بياناتك بسرعة',
     pfSubtitle:      'معلومة واحدة فقط — حتى نعرض لك أنسب العروض',
@@ -482,6 +496,8 @@ const STRINGS = {
     trendDaily:      'Daily Trend',
     trendWeekly:     'Weekly Trend',
     trendEmpty:      'Not enough data yet — come back later.',
+    trendBadgeToday: 'Trending Today',
+    trendBadgeWeek:  'Trending This Week',
     sectionCat:      'Category: ',
     pfTitle:         'Complete your profile',
     pfSubtitle:      'Just one quick step — so we show you the best deals',
@@ -565,6 +581,8 @@ let CATS = [];
 let activeSearch = '';
 let FAVS = new Set();          // store_id strings — مفضلة المستخدم (سيرفرية)
 let FAV_CATS = new Set();      // category names — مفضلة الأقسام (سيرفرية kind='category')
+let DAILY_TREND_IDS  = new Set();  // store_id حالياً في الترند اليومي
+let WEEKLY_TREND_IDS = new Set();  // store_id حالياً في الترند الأسبوعي (يشمل اليومي)
 let currentView = 'home';      // 'home' | 'list' | 'categories' | 'category' | 'store' | 'favorites'
 let viewStack = [];            // stack للرجوع (آخر view → الرجوع له)
 let viewContext = {};          // {category: 'عطور'} | {storeId: 17}
@@ -669,12 +687,17 @@ async function loadAndRenderTrend() {
     const ST = STRINGS[LANG_CURRENT];
     body.innerHTML = `<div class="trend-loading">${ST.refreshing || '...'}</div>`;
     try {
-        // التوازي يقصّ نصف زمن التحميل (latency-bound).
         const [d, w] = await Promise.all([
             fetch(`${API_BASE}/trend/daily?source=mini`,  { cache: 'no-store' }).then(r => r.json()),
             fetch(`${API_BASE}/trend/weekly?source=mini`, { cache: 'no-store' }).then(r => r.json()),
         ]);
-        renderTrendSections(d.items || [], w.items || []);
+        const dailyItems = d.items || [];
+        const weeklyItems = w.items || [];
+        // نُحدّث Sets الترند (نفس منطق loadTrendOnHome) لشارة renderStoreView.
+        const dailyDisplayed = padDailyWithWeekly(dailyItems, weeklyItems, 3);
+        DAILY_TREND_IDS  = new Set(dailyDisplayed.map(it => it.store_id));
+        WEEKLY_TREND_IDS = new Set(weeklyItems.map(it => it.store_id));
+        renderTrendSections(dailyItems, weeklyItems);
     } catch (err) {
         console.error('[loadAndRenderTrend] failed:', err);
         body.innerHTML = `<div class="trend-empty">${ST.fetchErr}</div>`;
@@ -690,13 +713,19 @@ function renderTrendSections(daily, weekly) {
     const escHtml = (v) => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
     // اللقب يُحسب من item.rank بحسب اللغة المختارة (لا نعتمد على API rank_title).
-    const cardHTML = (item, small) => {
+    // الاسم يُختار بحسب اللغة: name_en في EN لو متوفر، وإلا store_name العربي.
+    const pickName = (item) => (LANG_CURRENT === 'en' && item.name_en) ? item.name_en : item.store_name;
+    const cardHTML = (item, small, badgeKey) => {
         const sid = escAttr(item.store_id);
-        const name = escHtml(item.store_name);
+        const name = escHtml(pickName(item));
         const title = escHtml(localizedRankTitle(item.rank));
         const logo = escAttr(item.logo_url || 'logo.png');
+        const badge = badgeKey
+            ? `<div class="tc-badge">${escHtml(ST[badgeKey])}</div>`
+            : '';
         return `
         <div class="trend-card${small ? ' small' : ''}" onclick="showStoreByStoreId('${sid}')">
+            ${badge}
             <div class="tc-title">${title}</div>
             <div class="tc-logo"><img src="${logo}" alt="${name}" onerror="this.onerror=null;this.src='logo.png'"></div>
             <div class="tc-name">${name}</div>
@@ -712,7 +741,7 @@ function renderTrendSections(daily, weekly) {
         <section class="trend-section">
             <div class="trend-section-title">${ST.trendDaily}</div>
             ${dailyTop3.length
-                ? `<div class="trend-grid-3">${dailyTop3.map(it => cardHTML(it, false)).join('')}</div>`
+                ? `<div class="trend-grid-3">${dailyTop3.map(it => cardHTML(it, false, 'trendBadgeToday')).join('')}</div>`
                 : emptyHtml}
         </section>`;
 
@@ -721,8 +750,8 @@ function renderTrendSections(daily, weekly) {
         <section class="trend-section">
             <div class="trend-section-title">${ST.trendWeekly}</div>
             ${weeklyHasAny
-                ? `${weeklyTop3.length ? `<div class="trend-grid-3">${weeklyTop3.map(it => cardHTML(it, false)).join('')}</div>` : ''}
-                   ${weeklyRest.length ? `<div class="trend-grid-4">${weeklyRest.map(it => cardHTML(it, true)).join('')}</div>` : ''}`
+                ? `${weeklyTop3.length ? `<div class="trend-grid-3">${weeklyTop3.map(it => cardHTML(it, false, 'trendBadgeWeek')).join('')}</div>` : ''}
+                   ${weeklyRest.length ? `<div class="trend-grid-4">${weeklyRest.map(it => cardHTML(it, true, 'trendBadgeWeek')).join('')}</div>` : ''}`
                 : emptyHtml}
         </section>`;
 
@@ -739,7 +768,15 @@ async function loadTrendOnHome() {
             fetch(`${API_BASE}/trend/daily?source=mini`,  { cache: 'no-store' }).then(r => r.json()),
             fetch(`${API_BASE}/trend/weekly?source=mini`, { cache: 'no-store' }).then(r => r.json()),
         ]);
-        renderTrendOnHome(d.items || [], w.items || []);
+        const dailyItems = d.items || [];
+        const weeklyItems = w.items || [];
+        // نُحدّث Sets الترند لاستخدامها في renderStoreView (شارة المتجر).
+        // padding اليومي من الأسبوعي يحدث في renderTrendOnHome، فنعبّئ الـ Set
+        // بالمتاجر اللي *فعلاً* راح تظهر بشارة "ترند اليوم" — وهي 3 الأولى بعد الـ padding.
+        const dailyDisplayed = padDailyWithWeekly(dailyItems, weeklyItems, 3);
+        DAILY_TREND_IDS  = new Set(dailyDisplayed.map(it => it.store_id));
+        WEEKLY_TREND_IDS = new Set(weeklyItems.map(it => it.store_id));
+        renderTrendOnHome(dailyItems, weeklyItems);
     } catch (err) {
         console.warn('[loadTrendOnHome] skipped:', err);
         host.innerHTML = '';   // فشل صامت — لا نُفسد الصفحة
@@ -760,13 +797,18 @@ function renderTrendOnHome(daily, weekly) {
 
     const escAttr = (v) => String(v || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
     const escHtml = (v) => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const cardHTML = (it) => {
+    const pickName = (it) => (LANG_CURRENT === 'en' && it.name_en) ? it.name_en : it.store_name;
+    const cardHTML = (it, badgeKey) => {
         const sid = escAttr(it.store_id);
-        const name = escHtml(it.store_name);
+        const name = escHtml(pickName(it));
         const title = escHtml(localizedRankTitle(it.rank));
         const logo = escAttr(it.logo_url || 'logo.png');
+        const badge = badgeKey
+            ? `<div class="tc-badge">${escHtml(ST[badgeKey])}</div>`
+            : '';
         return `
         <div class="trend-card" onclick="showStoreByStoreId('${sid}')">
+            ${badge}
             <div class="tc-title">${title}</div>
             <div class="tc-logo"><img src="${logo}" alt="${name}" onerror="this.onerror=null;this.src='logo.png'"></div>
             <div class="tc-name">${name}</div>
@@ -782,7 +824,7 @@ function renderTrendOnHome(daily, weekly) {
             <div class="trend-home-head">
                 <span class="trend-home-title">${ST.trendDaily}</span>
             </div>
-            <div class="trend-grid-3">${dailyTop3.map(cardHTML).join('')}</div>
+            <div class="trend-grid-3">${dailyTop3.map(it => cardHTML(it, 'trendBadgeToday')).join('')}</div>
         </section>`;
     }
 
@@ -793,7 +835,7 @@ function renderTrendOnHome(daily, weekly) {
                 <span class="trend-home-title">${ST.trendWeekly}</span>
                 <button class="trend-home-more" onclick="showTrendView()">${moreLabel} ←</button>
             </div>
-            <div class="trend-grid-3">${weeklyTop3.map(cardHTML).join('')}</div>
+            <div class="trend-grid-3">${weeklyTop3.map(it => cardHTML(it, 'trendBadgeWeek')).join('')}</div>
         </section>`;
     }
 
@@ -958,10 +1000,20 @@ function renderStoreView(storeId) {
            </div>`
         : '';
 
+    // شارة الترند الجديدة (يومي يطغى على الأسبوعي إذا في الاثنين).
+    // مصدرها Sets محدّثة بعد كل fetch من /trend/* (loadTrendOnHome / loadAndRenderTrend).
+    const trendBadgeKey = DAILY_TREND_IDS.has(s.store_id)
+        ? 'trendBadgeToday'
+        : (WEEKLY_TREND_IDS.has(s.store_id) ? 'trendBadgeWeek' : null);
+    const trendBadgeHtml = trendBadgeKey
+        ? `<div class="store-trend-badge">${ST[trendBadgeKey]}</div>`
+        : '';
+
     document.getElementById('storeBody').innerHTML = `
     <div class="store-hero">
+        ${trendBadgeHtml}
         <img src="${logoSrc}" alt="${s.name}" onerror="this.onerror=null;this.src='logo.png'">
-        <h2>${s.name}${s.trending ? ' 🔥' : ''}</h2>
+        <h2>${s.name}</h2>
         ${s.bio ? `<p>${s.bio}</p>` : ''}
         ${tagsHtml}
     </div>

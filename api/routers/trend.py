@@ -75,6 +75,7 @@ class TrendItem(BaseModel):
     rank_title: str
     store_id: str
     store_name: str
+    name_en: str | None = None     # للعرض في وضع اللغة الإنجليزية
     logo_url: str | None = None
     cloaked_slug: str | None = None
     score: int
@@ -162,6 +163,7 @@ def _load_master_meta(conn) -> dict[str, dict]:
     sql = """
         SELECT DISTINCT ON (store_id)
                store_id,
+               COALESCE(name_en, '')       AS name_en,
                COALESCE(logo_url, '')      AS logo_url,
                COALESCE(cloaked_slug, '')  AS cloaked_slug
         FROM   master
@@ -173,7 +175,8 @@ def _load_master_meta(conn) -> dict[str, dict]:
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(sql)
         rows = cur.fetchall()
-    return {r["store_id"]: {"logo_url": r["logo_url"],
+    return {r["store_id"]: {"name_en": r["name_en"],
+                              "logo_url": r["logo_url"],
                               "cloaked_slug": r["cloaked_slug"]}
             for r in rows}
 
@@ -210,6 +213,7 @@ def _compute_window(conn, window: str, source: str, top_n: int) -> list[dict]:
         sid = it["store_id"]
         m = meta.get(sid, {})
         it["store_name"] = sid     # store_id = الاسم العربي في هذا الـ codebase
+        it["name_en"] = m.get("name_en") or None   # للعرض في وضع EN
         it["logo_url"] = m.get("logo_url") or None
         it["cloaked_slug"] = m.get("cloaked_slug") or None
         # تنسيق الـ breakdown داخل كائن فرعي (يطابق Pydantic schema)
