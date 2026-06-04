@@ -28,6 +28,7 @@ SPIKE_MIN_EVENTS = 10        # أقل عدد أحداث في الساعة لاع
 OUTAGE_MIN_BASELINE = 5      # لو معدّل الموقع/ساعة ≥ هذا والساعة الأخيرة = 0 → احتمال توقّف
 P95_DEGRADED_MS = 1500       # p95 فوق هذا = الموقع بطيء (تدهور أداء)
 ERROR_RATE_WARN = 0.05       # نسبة أخطاء 5xx فوق 5% = مشكلة
+MIN_SAMPLE_DEGRADE = 50      # أقل عدد طلبات/ساعة قبل إطلاق حكم «تدهور» (p95 بلا معنى على عيّنة أقل)
 
 _DDL_METRICS = """
 CREATE TABLE IF NOT EXISTS api_request_metrics (
@@ -94,18 +95,21 @@ def build_health_report(window_days: int = 7) -> dict[str, Any]:
                 conn.rollback()
 
         # ── 4) أداء الموقع — مقاييس حقيقية من api_request_metrics ──
-        #     (زمن استجابة فعلي + نسبة أخطاء 5xx + أبطأ المسارات).
+        #     نحكم على «أداء الموقع» بمسارات المستخدمين فقط ونستثني /admin
+        #     (استدعاءات الـ LLM فيها بطيئة طبيعياً وليست مؤشّر صحة الموقع).
+        #     ولا نُطلق «تدهور» إلا على عيّنة كافية (MIN_SAMPLE_DEGRADE) حتى لا
+        #     يخدعنا طلب بطيء وحيد ضمن عيّنة صغيرة (p95 بلا معنى على n قليل).
         #     fallback لمنطق action_logs التقريبي لو الجدول فارغ/مفقود.
         try:
             with conn.cursor() as cur:
                 cur.execute(_DDL_METRICS)
-                req_1h = _scalar(cur, "SELECT COUNT(*) FROM api_request_metrics "
-                                      "WHERE created_at > NOW() - INTERVAL '1 hour'")
-                if int(req_1h) > 0 or _scalar(
-                    cur, "SELECT COUNT(*) FROM api_request_metrics "
-                         "WHERE created_at > NOW() - INTERVAL '24 hours'") > 0:
+                _EXCL = "path NOT LIKE '/api/v1/admin%'"
+                any_rows = _scalar(cur,
+                    f"SELECT COUNT(*) FROM api_request_metrics "
+                    f"WHERE created_at > NOW() - INTERVAL '24 hours' AND {_EXCL}")
+                if int(any_rows) > 0:
                     cur.execute(
-                        """
+                        f"""
                         SELECT
                           COUNT(*)                                                   AS req_24h,
                           COUNT(*) FILTER (WHERE created_at > NOW()-INTERVAL '1 hour') AS req_1h,
@@ -117,25 +121,27 @@ def build_health_report(window_days: int = 7) -> dict[str, Any]:
                           COALESCE(ROUND(AVG(latency_ms)
                                    FILTER (WHERE created_at > NOW()-INTERVAL '1 hour')), 0) AS avg_1h
                         FROM api_request_metrics
-                        WHERE created_at > NOW() - INTERVAL '24 hours'
+                        WHERE created_at > NOW() - INTERVAL '24 hours' AND {_EXCL}
                         """
                     )
                     row = cur.fetchone()
                     req24, req1, err24, err1, p95, avg = (int(x or 0) for x in row)
                     # أبطأ 3 مسارات (آخر 24س، ≥20 طلباً لتجنّب الضجيج)
                     cur.execute(
-                        """
+                        f"""
                         SELECT path,
                                percentile_disc(0.95) WITHIN GROUP (ORDER BY latency_ms) AS p95,
                                COUNT(*) AS n
                         FROM api_request_metrics
-                        WHERE created_at > NOW() - INTERVAL '24 hours'
+                        WHERE created_at > NOW() - INTERVAL '24 hours' AND {_EXCL}
                         GROUP BY path HAVING COUNT(*) >= 20
                         ORDER BY p95 DESC LIMIT 3
                         """
                     )
                     slowest = [{"path": r[0], "p95": int(r[1]), "n": int(r[2])} for r in cur.fetchall()]
                     err_rate_1h = (err1 / req1) if req1 else 0.0
+                    low_sample = req1 < MIN_SAMPLE_DEGRADE
+                    degraded = (not low_sample) and (p95 >= P95_DEGRADED_MS or err_rate_1h >= ERROR_RATE_WARN)
                     rep["site"] = {
                         "source": "metrics",
                         "req_24h": req24, "req_1h": req1,
@@ -143,7 +149,8 @@ def build_health_report(window_days: int = 7) -> dict[str, Any]:
                         "err_rate_1h": round(err_rate_1h, 3),
                         "p95_1h": p95, "avg_1h": avg,
                         "slowest": slowest,
-                        "degraded": p95 >= P95_DEGRADED_MS or err_rate_1h >= ERROR_RATE_WARN,
+                        "low_sample": low_sample,
+                        "degraded": degraded,
                     }
                 else:
                     raise RuntimeError("no metrics yet")
@@ -317,13 +324,21 @@ def render_health_html(rep: dict[str, Any]) -> str:
     # 4) أداء الموقع
     s = rep.get("site")
     if s and s.get("source") == "metrics":
-        _degraded = s.get("degraded")
-        bg, bc = ("#FEF2F2", "#DC2626") if _degraded else ("#F0FDF4", "#059669")
-        head = "🔴 تدهور أداء" if _degraded else "🟢 الأداء سليم"
+        if s.get("degraded"):
+            bg, bc, head = "#FEF2F2", "#DC2626", "🔴 تدهور أداء"
+        elif s.get("low_sample"):
+            bg, bc, head = "#F9FAFB", "#6B7280", "⚪ عيّنة صغيرة (غير حاسم)"
+        else:
+            bg, bc, head = "#F0FDF4", "#059669", "🟢 الأداء سليم"
         slow = ""
         if s.get("slowest"):
             slow = "<div style='color:#6B7280;font-size:12px;margin-top:6px;'>أبطأ المسارات: " + \
                 " · ".join(f"{x['path']} ({x['p95']}ms)" for x in s["slowest"]) + "</div>"
+        note = ""
+        if s.get("low_sample"):
+            note = ("<div style='color:#9CA3AF;font-size:12px;margin-top:6px;'>"
+                    "الطلبات قليلة هذه الساعة — p95 غير موثوق على عيّنة صغيرة، "
+                    "فلا يُحتسب «تدهور». المتوسط هو المؤشّر الأدق هنا.</div>")
         parts.append(
             f"<div style='background:{bg};border-right:4px solid {bc};border-radius:8px;"
             f"padding:10px 14px;margin:8px 0;'><b style='color:{bc};'>🌐 أداء الموقع — {head}</b>"
@@ -331,7 +346,7 @@ def render_health_html(rep: dict[str, Any]) -> str:
             f"زمن الاستجابة p95: <b>{s['p95_1h']}ms</b> (متوسط {s['avg_1h']}ms) · "
             f"الطلبات: {s['req_1h']:,}/ساعة، {s['req_24h']:,}/24س · "
             f"أخطاء 5xx: <b>{s['err_1h']}</b> ({s['err_rate_1h']:.0%}) آخر ساعة، {s['err_24h']} /24س"
-            f"</div>{slow}</div>"
+            f"</div>{slow}{note}</div>"
         )
     elif s:  # fallback heuristic
         if s.get("possible_outage"):
