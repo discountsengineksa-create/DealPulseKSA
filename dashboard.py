@@ -6367,6 +6367,36 @@ elif page == "تحليل المستخدمين":
         "miniapp":          "🔹 الميني-ويب",
     }
 
+    # ترجمة شاملة لأنواع الحركات (action_logs.action_type) — تُستخدم في كل
+    # الصفحة (الجداول، الـ pivot، آخر الحركات، السجل التفصيلي).
+    _ACTION_AR = {
+        "copy_coupon":              "🎟️ نسخ كوبون",
+        "click_link":               "🖱️ نقر رابط",
+        "search":                   "🔍 بحث",
+        "view_tag":                 "🏷️ اختيار قسم",
+        "view_story":               "🎬 مشاهدة ستوري",
+        "start":                    "🚀 بدء جلسة",
+        "end_session":              "⏹️ إنهاء جلسة",
+        "back":                     "↩️ رجوع",
+        "favorite_add":             "❤️ مفضّلة متجر +",
+        "favorite_remove":          "🤍 مفضّلة متجر −",
+        "category_favorite_add":    "🏷️❤️ مفضّلة قسم +",
+        "category_favorite_remove": "🏷️🤍 مفضّلة قسم −",
+        "idle_warn":                "⚠️ تحذير خمول",
+        "idle_alert":               "🟠 تنبيه خمول",
+        "idle_kick":                "🚪 طرد خمول",
+        "lang_pick":                "🌐 اختيار لغة",
+        "request_code":             "📩 طلب كود",
+        "report_code":              "🚫 إبلاغ كود لا يعمل",
+        "reaction_heart":           "تفاعل ❤️",
+        "reaction_fire":            "تفاعل 🔥",
+        "reaction_like":            "تفاعل 👍",
+        "view_all":                 "📚 عرض كل المتاجر",
+        "view_favorites":           "💛 عرض المفضلة",
+        "view_trending":            "🔥 عرض الترند",
+        "view_categories":          "📂 عرض الأقسام",
+    }
+
     def _ua_src_clause(alias="al"):
         """يبني WHERE ... AND alias.source IN (...). يرجع (clause, params)."""
         if _src_tuple is None:
@@ -6567,11 +6597,15 @@ elif page == "تحليل المستخدمين":
                     pivot_src = (df_acts
                                  .pivot_table(index="source", columns="action_type",
                                               values="cnt", fill_value=0, aggfunc="sum"))
-                    rename_map = {"copy_coupon":"نسخ","click_link":"نقر","search":"بحث",
-                                  "start":"جلسات","lang_pick":"اختيار لغة",
-                                  "request_code":"طلب كود"}
-                    pivot_src.rename(columns=rename_map, inplace=True)
+                    # نطبّق ترجمة _ACTION_AR + للأعمدة غير المعروفة نضع
+                    # اسماً عربياً صالحاً مكوّناً من نسخة الكود نفسها لتفادي
+                    # تكرار الأسماء (يحدث لو حركة جديدة لم تُترجم بعد).
+                    def _ac_label(c: str) -> str:
+                        return _ACTION_AR.get(c, c)
+                    pivot_src.rename(columns={c: _ac_label(c) for c in pivot_src.columns}, inplace=True)
                     pivot_src.index = pivot_src.index.map(lambda s: _SRC_LABEL.get(s, s))
+                    pivot_src.index.name = "المصدر"
+                    pivot_src.columns.name = "نوع الحركة"
                     st.caption("تفصيل حسب القناة:")
                     st.dataframe(pivot_src.astype(int), use_container_width=True)
 
@@ -6773,6 +6807,8 @@ elif page == "تحليل المستخدمين":
                     st.info("لا حركات بعد.")
                 else:
                     df_recent["المصدر"] = df_recent["source"].map(_SRC_LABEL).fillna(df_recent["source"])
+                    # ترجمة الحركة إلى العربي عبر القاموس الموحّد
+                    df_recent["الحركة"] = df_recent["الحركة"].map(_ACTION_AR).fillna(df_recent["الحركة"])
                     df_recent = df_recent.drop(columns=["source"])
                     df_recent = df_recent[["الوقت","الحركة","المصدر","المتجر","المدينة","التفاصيل"]]
                     st.dataframe(df_recent, use_container_width=True, hide_index=True, height=380)
@@ -6854,8 +6890,7 @@ elif page == "تحليل المستخدمين":
                     if df_si.empty:
                         st.info("لا تفاعلات مع متاجر بعد.")
                     else:
-                        _ACT_AR = {"copy_coupon":"🎟️ نسخ","click_link":"🖱️ نقر","search":"🔍 بحث"}
-                        df_si["الحركة"] = df_si["action_type"].map(_ACT_AR).fillna(df_si["action_type"])
+                        df_si["الحركة"] = df_si["action_type"].map(_ACTION_AR).fillna(df_si["action_type"])
                         df_si["المصدر"] = df_si["source"].map(_SRC_LABEL).fillna(df_si["source"])
                         df_si_show = df_si[["الوقت","الحركة","المصدر","المتجر","المدينة","التفاصيل"]]
                         st.dataframe(df_si_show, use_container_width=True, hide_index=True, height=420)
@@ -6916,9 +6951,7 @@ elif page == "تحليل المستخدمين":
                     if df_tr.empty:
                         st.info("لم يتفاعل مع أي متجر ترند بعد.")
                     else:
-                        _ACT_AR = {"copy_coupon":"🎟️ نسخ","click_link":"🖱️ نقر",
-                                   "search":"🔍 بحث","view_tag":"🏷️ قسم"}
-                        df_tr["الحركة"] = df_tr["action_type"].map(_ACT_AR).fillna(df_tr["action_type"])
+                        df_tr["الحركة"] = df_tr["action_type"].map(_ACTION_AR).fillna(df_tr["action_type"])
                         df_tr["المصدر"] = df_tr["source"].map(_SRC_LABEL).fillna(df_tr["source"])
                         df_tr_show = df_tr[["الوقت","الحركة","المصدر","المتجر","المدينة"]]
                         st.dataframe(df_tr_show, use_container_width=True, hide_index=True, height=400)
