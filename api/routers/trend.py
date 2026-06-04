@@ -214,13 +214,7 @@ def _compute_window(conn, window: str, source: str, top_n: int) -> list[dict]:
     favorites = _load_favorites(conn, fav_filter)
     meta = _load_master_meta(conn)
 
-    # نوافذ زمنية بتوقيت الرياض (naive)
-    now_r = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=3)
-    if window == "daily":
-        wstart = now_r.replace(hour=0, minute=0, second=0, microsecond=0)
-    elif window == "weekly":
-        wstart = now_r - timedelta(days=7)
-    else:
+    if window not in ("daily", "weekly"):
         raise ValueError(f"Unknown window: {window}")
 
     # فلترة المتاجر بالماستر النشط (يستبعد ما خرج)
@@ -228,13 +222,42 @@ def _compute_window(conn, window: str, source: str, top_n: int) -> list[dict]:
     events = [e for e in events if e["store_id"] in active_ids]
     favorites = [f for f in favorites if f["store_id"] in active_ids]
 
-    # نطلب من الخوارزمية عدداً أكبر من top_n لأن التجاوزات قد تُزيح متاجر إلى
-    # داخل القائمة من خلف الحاجز. top_n + 10 احتياط آمن (max overrides = 10).
-    raw = compute_trend(events, favorites, wstart, now_r, top_n + 10)
+    # ── حساب كلا النافذتين داخلياً (مطلوب للتأكد من استقلالهما) ─────────────
+    # نحتاج معرفة ما سيظهر في اليومي قبل أن نختار الأسبوعي، حتى نُقصي متاجر
+    # اليومي من الأسبوعي (الاستقلال المطلوب من المالك).
+    now_r = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=3)
+    daily_start = now_r.replace(hour=0, minute=0, second=0, microsecond=0)
+    weekly_start_dt = now_r - timedelta(days=7)
+    wstart = daily_start if window == "daily" else weekly_start_dt
 
-    # تطبيق التجاوزات اليدوية (admin pins) — تطغى على ترتيب الخوارزمية.
-    overrides = _load_trend_overrides(conn, window)
-    raw = apply_overrides(raw, overrides, top_n)
+    daily_raw    = compute_trend(events, favorites, daily_start,    now_r, 13)   # 3 + 10 buffer
+    weekly_raw   = compute_trend(events, favorites, weekly_start_dt, now_r, 20)  # 7 + 13 buffer
+    daily_overrides  = _load_trend_overrides(conn, "daily")
+    weekly_overrides = _load_trend_overrides(conn, "weekly")
+    pinned_weekly_ids = set(weekly_overrides.values())
+
+    # ── اليومي النهائي (مع overrides + padding من الأسبوعي عند الحاجة) ──────
+    # padding يستبعد المتاجر المثبّتة للأسبوعي (تخصّ الأسبوعي، ما نشيلها لليومي)
+    daily_after_ov = apply_overrides(daily_raw, daily_overrides, 3)
+    if len(daily_after_ov) < 3:
+        existing = {it["store_id"] for it in daily_after_ov}
+        weekly_after_ov_for_pad = apply_overrides(weekly_raw, weekly_overrides, 20)
+        pad = [it for it in weekly_after_ov_for_pad
+               if it["store_id"] not in existing
+               and it["store_id"] not in pinned_weekly_ids]
+        daily_after_ov = (daily_after_ov + pad)[:3]
+    daily_displayed_ids = {it["store_id"] for it in daily_after_ov}
+
+    # ── اختيار النتيجة بحسب النافذة المطلوبة ─────────────────────────────
+    if window == "daily":
+        raw = daily_after_ov[:top_n]
+    else:  # weekly
+        # الأسبوعي يستبعد كل متاجر اليومي المعروضة (ما عدا المثبّتة يدوياً للأسبوعي).
+        # المالك: "الترند الأسبوعي مستقل عن اليومي بالكامل".
+        ids_to_exclude = daily_displayed_ids - pinned_weekly_ids
+        weekly_filtered = [it for it in weekly_raw
+                           if it["store_id"] not in ids_to_exclude]
+        raw = apply_overrides(weekly_filtered, weekly_overrides, top_n)
 
     items = assign_rank_titles(raw)
 
