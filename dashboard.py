@@ -1519,6 +1519,7 @@ _OTHER_PAGES = [
 "رادار المناسبات", "مركز التوسع", "درع الحماية",
 "مركز الصيانة", "مدير القناة", "المحفز الفوري",
 "محرّك SEO", "📤 الصفحات المنشورة", "🎯 محرك الفرص", "الرصد الاجتماعي", "🎯 رادار الصفقات الفوري", "التدقيق والتجارب",
+"🛰️ متابعة المنصة",
 "🩺 تشخيص النشر",
 ]
 
@@ -10818,4 +10819,290 @@ if page == "🩺 تشخيص النشر":
                 _c.close()
             except Exception:
                 pass
+
+
+# ─── صفحة: 🛰️ متابعة المنصة ────────────────────────────────────────────────
+# مركز واحد لكل ما يخص نظام «توجيهات AI» التلقائي: التوجيهات المُنتَجة،
+# استهلاك الذكاء الاصطناعي وتكلفته، التنبيهات والكاش، والضوابط (تشغيل/إيقاف،
+# تقييد التكرار، بريد المستلِم). كل هذا كان مبعثراً في خدمة الـ API بلا واجهة.
+if page == "🛰️ متابعة المنصة":
+    st.header("🛰️ متابعة المنصة")
+    st.caption(
+        "مركز التحكم بنظام «توجيهات AI» التلقائي — المُولّد الذي يرسل لك إيميل "
+        "كل بضع ساعات. من هنا تشوف ما يُنتجه، كم يكلّف، وتضبط متى وكيف يشتغل."
+    )
+
+    # ── ضوابط platform_settings عبر اتصال الداشبورد (نفس قاعدة الـ API) ──
+    _PS_DDL = """
+        CREATE TABLE IF NOT EXISTS platform_settings (
+            key VARCHAR(60) PRIMARY KEY, value TEXT,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_by VARCHAR(80))
+    """
+
+    def _ps_get_all() -> dict:
+        out = {}
+        try:
+            c = get_conn(); c.rollback()
+            cur = c.cursor()
+            cur.execute(_PS_DDL)
+            cur.execute("SELECT key, value FROM platform_settings")
+            out = {k: v for k, v in cur.fetchall()}
+            c.commit(); c.close()
+        except Exception as e:
+            st.warning(f"تعذّر قراءة الإعدادات: {e}")
+        return out
+
+    def _ps_set_many(items: dict) -> bool:
+        try:
+            c = get_conn(); c.rollback()
+            cur = c.cursor()
+            cur.execute(_PS_DDL)
+            for k, v in items.items():
+                cur.execute(
+                    """INSERT INTO platform_settings (key, value, updated_at, updated_by)
+                       VALUES (%s, %s, NOW(), 'dashboard')
+                       ON CONFLICT (key) DO UPDATE
+                       SET value = EXCLUDED.value, updated_at = NOW(), updated_by = 'dashboard'""",
+                    (k, v),
+                )
+            c.commit(); c.close()
+            return True
+        except Exception as e:
+            st.error(f"تعذّر حفظ الإعدادات: {e}")
+            return False
+
+    def _safe_df(sql: str, params=None) -> pd.DataFrame:
+        """read_sql مع تنظيف الـ transaction؛ يرجّع DataFrame فارغاً عند أي خطأ/جدول مفقود."""
+        c = None
+        try:
+            c = get_conn(); c.rollback()
+            return pd.read_sql(sql, c, params=params)
+        except Exception:
+            return pd.DataFrame()
+        finally:
+            if c is not None:
+                try:
+                    c.close()
+                except Exception:
+                    pass
+
+    _ps = _ps_get_all()
+    _enabled = _ps.get("directive_enabled", "1") == "1"
+    _min_hours = _ps.get("directive_min_hours", "0") or "0"
+    _recipient = (_ps.get("directive_recipient", "") or "").strip()
+
+    # ── شريط مؤشرات سريع ──
+    _stat = _safe_df("""
+        SELECT
+            MAX(generated_at)                                              AS last_at,
+            COUNT(*) FILTER (WHERE generated_at > NOW() - INTERVAL '24 hours') AS last_24h,
+            COALESCE(SUM(cost_usd) FILTER (WHERE generated_at > NOW() - INTERVAL '7 days'), 0) AS cost_7d
+        FROM ai_directives
+    """)
+    k1, k2, k3, k4 = st.columns(4)
+    if not _stat.empty and pd.notna(_stat["last_at"].iloc[0]):
+        _last = pd.to_datetime(_stat["last_at"].iloc[0])
+        _ago = (pd.Timestamp.now(tz=_last.tz) - _last)
+        _hrs = _ago.total_seconds() / 3600
+        k1.metric("آخر توجيه", f"قبل {_hrs:.1f} ساعة" if _hrs < 48 else f"قبل {_hrs/24:.0f} يوم")
+        k2.metric("توجيهات (24س)", int(_stat["last_24h"].iloc[0]))
+        k3.metric("تكلفة AI (7 أيام)", f"${float(_stat['cost_7d'].iloc[0]):.4f}")
+    else:
+        k1.metric("آخر توجيه", "لا يوجد بعد")
+        k2.metric("توجيهات (24س)", 0)
+        k3.metric("تكلفة AI (7 أيام)", "$0.0000")
+    k4.metric("حالة المولّد", "🟢 مفعّل" if _enabled else "🔴 موقوف")
+
+    if not _enabled:
+        st.warning("⏸️ المولّد **موقوف** حالياً — لن تصلك إيميلات توجيهات حتى تعيد تفعيله من تبويب «الضوابط».")
+
+    tab_dir, tab_cost, tab_alerts, tab_ctrl = st.tabs(
+        ["🧠 التوجيهات", "💸 استهلاك الذكاء", "📬 التنبيهات والكاش", "⚙️ الضوابط"]
+    )
+
+    # ════════════════ تبويب 1: التوجيهات ════════════════
+    with tab_dir:
+        c_a, c_b = st.columns([1, 3])
+        with c_a:
+            if st.button("⚡ ولّد توجيهاً الآن", type="primary", use_container_width=True,
+                         help="يستدعي الـ API مباشرة لإنتاج توجيه فوري (بدون انتظار الجدولة)."):
+                with st.spinner("جارٍ توليد التوجيه عبر الـ API... (~30 ثانية)"):
+                    data, err = _admin_post("/admin/trigger-directive")
+                if err:
+                    st.error(f"فشل التوليد: {err}")
+                elif data:
+                    if data.get("refused_by_guardian"):
+                        st.warning(f"الحارس المالي رفض الاستدعاء: {data.get('refused_reason')}")
+                    else:
+                        _src = "كاش" if data.get("cache_hit") else ("محاكاة" if data.get("is_mock") else data.get("provider"))
+                        st.success(
+                            f"✅ تم — {data.get('directives_count', 0)} توجيه · "
+                            f"المصدر: {_src} · النموذج: {data.get('model')} · "
+                            f"تكلفة: ${float(data.get('cost_usd') or 0):.5f}"
+                        )
+                        st.rerun()
+        with c_b:
+            st.caption(
+                "التوجيهات تُنتَج تلقائياً عبر مجدول الـ API. الزر هنا للتوليد الفوري "
+                "اليدوي (يحتاج `ADMIN_SHARED_SECRET` + `INTERNAL_API_URL` مضبوطين على الداشبورد)."
+            )
+
+        st.divider()
+        _df_dir = _safe_df("""
+            SELECT id, generated_at, model, summary_ar, directive_ar,
+                   confidence, cost_usd, cache_hit, token_input, token_output,
+                   affected_master_ids, superseded_by
+            FROM ai_directives
+            ORDER BY generated_at DESC
+            LIMIT 30
+        """)
+        if _df_dir.empty:
+            st.info("ما فيه توجيهات بعد — اضغط «ولّد توجيهاً الآن» أو انتظر الجدولة التلقائية.")
+        else:
+            st.markdown(f"**آخر {len(_df_dir)} توجيه:**")
+            for _, r in _df_dir.iterrows():
+                _when = pd.to_datetime(r["generated_at"]).strftime("%Y-%m-%d %H:%M")
+                _badge = "🟢 كاش" if r["cache_hit"] else "🔵 جديد"
+                _sup = " · ⛔ مُستبدَل" if pd.notna(r["superseded_by"]) else ""
+                _title = f"#{int(r['id'])} · {_when} · {r['model']} · {_badge}{_sup} — {r['summary_ar'] or '—'}"
+                with st.expander(_title):
+                    m1, m2, m3 = st.columns(3)
+                    m1.metric("التكلفة", f"${float(r['cost_usd'] or 0):.5f}")
+                    m2.metric("التوكنز", f"{int(r['token_input'] or 0)}→{int(r['token_output'] or 0)}")
+                    m3.metric("الثقة", f"{float(r['confidence']):.0%}" if pd.notna(r["confidence"]) else "—")
+                    # تفكيك directive_ar (JSON) لعرض التوجيهات منظّمة
+                    try:
+                        _parsed = json.loads(r["directive_ar"])
+                        _items = _parsed.get("directives", []) if isinstance(_parsed, dict) else []
+                    except Exception:
+                        _items = []
+                    if _items:
+                        _prio_emoji = {"high": "🔴", "medium": "🟡", "low": "🟢"}
+                        for i, d in enumerate(_items, 1):
+                            _pe = _prio_emoji.get(d.get("priority", "medium"), "⚪")
+                            st.markdown(f"**{_pe} {i}. {d.get('action', '')}**")
+                            if d.get("rationale"):
+                                st.caption(f"السبب: {d['rationale']}")
+                            if d.get("affected_master_ids"):
+                                st.caption(f"متاجر متأثرة: {d['affected_master_ids']}")
+                    else:
+                        st.code(r["directive_ar"], language="json")
+
+    # ════════════════ تبويب 2: استهلاك الذكاء ════════════════
+    with tab_cost:
+        st.subheader("💸 استهلاك LLM وتكلفته")
+        _df_log = _safe_df("""
+            SELECT called_at, purpose, model, cache_hit, tokens_input,
+                   tokens_output, cost_usd, latency_ms, success, error_message
+            FROM llm_call_log
+            WHERE called_at > NOW() - INTERVAL '7 days'
+            ORDER BY called_at DESC
+            LIMIT 500
+        """)
+        if _df_log.empty:
+            st.info("ما فيه استدعاءات LLM مسجّلة في آخر 7 أيام.")
+        else:
+            _total = len(_df_log)
+            _ok = int(_df_log["success"].sum())
+            _cost = float(_df_log["cost_usd"].fillna(0).sum())
+            cc1, cc2, cc3, cc4 = st.columns(4)
+            cc1.metric("استدعاءات (7 أيام)", _total)
+            cc2.metric("نسبة النجاح", f"{(_ok/_total*100):.0f}%")
+            cc3.metric("التكلفة الكلية", f"${_cost:.5f}")
+            cc4.metric("متوسط الزمن", f"{int(_df_log['latency_ms'].fillna(0).mean())} ms")
+
+            st.markdown("**حسب النموذج:**")
+            _by_model = (_df_log.groupby("model")
+                         .agg(عدد=("model", "size"),
+                              التكلفة=("cost_usd", lambda s: round(s.fillna(0).sum(), 5)),
+                              نجاح=("success", "sum"))
+                         .reset_index().rename(columns={"model": "النموذج"})
+                         .sort_values("عدد", ascending=False))
+            st.dataframe(_by_model, hide_index=True, width='stretch')
+
+            _fails = _df_log[~_df_log["success"]]
+            if not _fails.empty:
+                st.markdown(f"**آخر الإخفاقات ({len(_fails)}):**")
+                _fv = _fails[["called_at", "model", "error_message"]].head(15).rename(columns={
+                    "called_at": "الوقت", "model": "النموذج", "error_message": "الخطأ"})
+                st.dataframe(_fv, hide_index=True, width='stretch')
+
+    # ════════════════ تبويب 3: التنبيهات والكاش ════════════════
+    with tab_alerts:
+        st.subheader("📬 طابور التنبيهات (ai_alerts)")
+        _df_al = _safe_df("""
+            SELECT dispatch_status, COUNT(*) AS n
+            FROM ai_alerts GROUP BY dispatch_status
+        """)
+        if _df_al.empty:
+            st.info("ما فيه تنبيهات مسجّلة.")
+        else:
+            _counts = {r["dispatch_status"]: int(r["n"]) for _, r in _df_al.iterrows()}
+            a1, a2, a3 = st.columns(3)
+            a1.metric("⏳ بالانتظار", _counts.get("pending", 0))
+            a2.metric("✅ أُرسلت", _counts.get("sent", 0))
+            a3.metric("❌ فشلت", _counts.get("failed", 0))
+            _recent = _safe_df("""
+                SELECT created_at, severity, title, dispatch_status, dispatch_error
+                FROM ai_alerts ORDER BY created_at DESC LIMIT 20
+            """)
+            if not _recent.empty:
+                _recent = _recent.rename(columns={
+                    "created_at": "الوقت", "severity": "الخطورة", "title": "العنوان",
+                    "dispatch_status": "الحالة", "dispatch_error": "الخطأ"})
+                st.dataframe(_recent, hide_index=True, width='stretch')
+
+        st.divider()
+        st.subheader("🗃️ كاش الذكاء الاصطناعي (llm_semantic_cache)")
+        _df_cache = _safe_df("""
+            SELECT COUNT(*) AS rows,
+                   COALESCE(SUM(hit_count), 0) AS hits,
+                   COALESCE(SUM(tokens_saved), 0) AS saved,
+                   COUNT(*) FILTER (WHERE expires_at > NOW()) AS live
+            FROM llm_semantic_cache WHERE purpose = 'directive'
+        """)
+        if _df_cache.empty or int(_df_cache["rows"].iloc[0]) == 0:
+            st.info("الكاش فارغ حالياً.")
+        else:
+            r = _df_cache.iloc[0]
+            ch1, ch2, ch3 = st.columns(3)
+            ch1.metric("صفوف الكاش", f"{int(r['rows'])} ({int(r['live'])} حيّة)")
+            ch2.metric("مرات الاستفادة", int(r["hits"]))
+            ch3.metric("توكنز موفّرة", f"{int(r['saved']):,}")
+            st.caption("كل cache hit = استدعاء LLM مجاني بدل مدفوع. الكاش يعيش 6 ساعات لكل توجيه.")
+
+    # ════════════════ تبويب 4: الضوابط ════════════════
+    with tab_ctrl:
+        st.subheader("⚙️ ضوابط المولّد")
+        st.caption(
+            "هذه الإعدادات تُحفظ في قاعدة البيانات ويقرأها عامل الـ API في كل دورة — "
+            "تأخذ مفعولها خلال دقائق **بدون إعادة نشر**."
+        )
+        with st.form("directive_settings"):
+            f_enabled = st.toggle(
+                "تفعيل مولّد التوجيهات", value=_enabled,
+                help="إيقافه يوقف الإيميلات التلقائية كلياً (المفتاح الرئيسي).")
+            f_min = st.number_input(
+                "أقل فاصل بين إيميلين (ساعات)", min_value=0.0, max_value=168.0,
+                value=float(_min_hours), step=1.0,
+                help="0 = بلا تقييد (يتبع جدولة الـ API كل 3 ساعات). مثال: 12 = إيميل كل 12 ساعة كحدّ أدنى.")
+            f_to = st.text_input(
+                "بريد المستلِم (اختياري)", value=_recipient,
+                placeholder="اتركه فارغاً للبريد الافتراضي (OPS_ALERT_EMAIL)",
+                help="يتجاوز وجهة الإيميل الافتراضية لهذا التقرير فقط.")
+            if st.form_submit_button("💾 حفظ الضوابط", type="primary"):
+                if _ps_set_many({
+                    "directive_enabled": "1" if f_enabled else "0",
+                    "directive_min_hours": str(f_min),
+                    "directive_recipient": f_to.strip(),
+                }):
+                    st.success("✅ تم الحفظ — سيلتزم بها العامل في الدورة القادمة.")
+                    st.rerun()
+
+        st.divider()
+        st.caption(
+            "ℹ️ الجدولة الأساسية (كل كم ساعة يفحص العامل) تُضبط من متغيّر البيئة "
+            "`WORKER_DIRECTIVE_HOURS` على خدمة الـ API. «أقل فاصل» هنا يقيّد الإرسال "
+            "فوق الجدولة دون لمس البيئة."
+        )
 

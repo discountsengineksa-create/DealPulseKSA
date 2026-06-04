@@ -64,8 +64,51 @@ def _render_email_html(result: dict[str, Any]) -> str:
     return "".join(parts)
 
 
+def _hours_since_last_directive() -> float:
+    """الساعات منذ آخر توجيه أُنتج. inf لو ما فيه أي توجيه بعد."""
+    try:
+        from api.db import get_db_context
+        with get_db_context() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT EXTRACT(EPOCH FROM (NOW() - MAX(generated_at)))/3600 "
+                    "FROM ai_directives"
+                )
+                row = cur.fetchone()
+                if row and row[0] is not None:
+                    return float(row[0])
+    except Exception as exc:
+        _log.warning("last-directive lookup failed: %s", exc)
+    return float("inf")
+
+
 def run_directive_cycle() -> None:
-    """One cycle: generate directive + email summary. Idempotent on cache hit."""
+    """One cycle: generate directive + email summary. Idempotent on cache hit.
+
+    يحترم ضوابط «متابعة المنصة» (platform_settings):
+      • directive_enabled='0'  → تخطّي الدورة كاملة (مفتاح إيقاف)
+      • directive_min_hours=N  → لا تُرسل إن مرّ < N ساعة على آخر توجيه (تقييد)
+      • directive_recipient    → بريد مستلِم بديل (فارغ = الافتراضي)
+    """
+    recipient: str | None = None
+    try:
+        from api.utils.settings import get_setting
+        if get_setting("directive_enabled", "1") != "1":
+            _log.info("Directive cycle disabled via platform_settings — skipping")
+            return
+        try:
+            min_hours = float(get_setting("directive_min_hours", "0") or "0")
+        except (TypeError, ValueError):
+            min_hours = 0.0
+        if min_hours > 0:
+            elapsed = _hours_since_last_directive()
+            if elapsed < min_hours:
+                _log.info("Directive throttled — last run %.1fh ago (< %.1fh)", elapsed, min_hours)
+                return
+        recipient = (get_setting("directive_recipient", "") or "").strip() or None
+    except Exception as exc:
+        _log.warning("platform_settings check skipped: %s", exc)
+
     try:
         result = generate_directive()
     except Exception as exc:
@@ -83,7 +126,7 @@ def run_directive_cycle() -> None:
     body_html = _render_email_html(result)
 
     try:
-        send_ops_alert(subject=subject, body_html=body_html, severity=severity)
+        send_ops_alert(subject=subject, body_html=body_html, severity=severity, to=recipient)
         _log.info("Directive %s emailed (cache_hit=%s, cost=$%.5f)",
                   result.get("directive_id"), result.get("cache_hit"),
                   result.get("cost_usd", 0.0))
