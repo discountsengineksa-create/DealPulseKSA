@@ -6343,11 +6343,8 @@ elif page == "تحليل المستخدمين":
                                 min_value=date_from,
                                 max_value=_default_to)
     with _ua_c4:
-        src_choice = st.radio(
-            "📡 المصدر:",
-            ["الكل", "🤖 البوت", "🌐 الموقع", "🔹 الميني-ويب"],
-            horizontal=True, key="ua_src",
-        )
+        st.markdown("&nbsp;", unsafe_allow_html=True)
+        st.caption("📡 فلتر المصدر داخل كل تبويب بالأسفل.")
 
     # عدد الأيام في النطاق (للاستعلامات اللي ما زالت تستخدم INTERVAL)
     N = max(1, (date_to - date_from).days + 1)
@@ -6360,7 +6357,8 @@ elif page == "تحليل المستخدمين":
         "🌐 الموقع":      ("web",),
         "🔹 الميني-ويب": ("telegram_miniapp", "miniapp"),
     }
-    _src_tuple = _SRC_SQL.get(src_choice)  # None = الكل
+    # كل تبويب يعيّن _src_tuple محلياً (None = الكل) — لا فلتر عام
+    _src_tuple = None
 
     _SRC_LABEL = {
         "bot":              "🤖 البوت",
@@ -7097,6 +7095,12 @@ elif page == "تحليل المستخدمين":
         _main_tabs = st.tabs(["🎯 الأرقام الكبرى", "📊 العد الشامل", "📡 تفصيل القنوات", "🎯 قوائم القرار", "🕐 التوقيت", "👥 الديموغرافيا", "🎯 Audience Builder", "🎯 RFM", "🌀 Cohort", "📈 LTV", "🔻 Funnel", "🗺️ الجغرافيا", "🔔 Anomaly"])
 
         with _main_tabs[0]:
+            _src_choice = st.radio(
+                "📡 المصدر:",
+                ["الكل", "🤖 البوت", "🌐 الموقع", "🔹 الميني-ويب"],
+                horizontal=True, key=f"ua_src_tab_0",
+            )
+            _src_tuple = _SRC_SQL.get(_src_choice)
             # ════════════════════════════════════════════════════════════════
             # SECTION 1 ─ KPIs الكبرى (موحّدة: ويب + بوت + ميني-ويب)
             # ════════════════════════════════════════════════════════════════
@@ -7170,6 +7174,12 @@ elif page == "تحليل المستخدمين":
             st.divider()
 
         with _main_tabs[1]:
+            _src_choice = st.radio(
+                "📡 المصدر:",
+                ["الكل", "🤖 البوت", "🌐 الموقع", "🔹 الميني-ويب"],
+                horizontal=True, key=f"ua_src_tab_1",
+            )
+            _src_tuple = _SRC_SQL.get(_src_choice)
             # ════════════════════════════════════════════════════════════════
             # SECTION 1.5 ─ العد الشامل: كل قناة + المربوطون
             # «المربوطون» = web_users.telegram_username يطابق bot_users.username
@@ -7254,6 +7264,12 @@ elif page == "تحليل المستخدمين":
             st.divider()
 
         with _main_tabs[2]:
+            _src_choice = st.radio(
+                "📡 المصدر:",
+                ["الكل", "🤖 البوت", "🌐 الموقع", "🔹 الميني-ويب"],
+                horizontal=True, key=f"ua_src_tab_2",
+            )
+            _src_tuple = _SRC_SQL.get(_src_choice)
             # ════════════════════════════════════════════════════════════════
             # SECTION 2 ─ تفصيل لكل قناة (مقارنة جنباً إلى جنب)
             # ════════════════════════════════════════════════════════════════
@@ -7369,6 +7385,12 @@ elif page == "تحليل المستخدمين":
             st.divider()
 
         with _main_tabs[3]:
+            _src_choice = st.radio(
+                "📡 المصدر:",
+                ["الكل", "🤖 البوت", "🌐 الموقع", "🔹 الميني-ويب"],
+                horizontal=True, key=f"ua_src_tab_3",
+            )
+            _src_tuple = _SRC_SQL.get(_src_choice)
             # ════════════════════════════════════════════════════════════════
             # SECTION 3 ─ قوائم القرار (Churn / Welcome / VIP)
             # ════════════════════════════════════════════════════════════════
@@ -7497,6 +7519,12 @@ elif page == "تحليل المستخدمين":
             st.divider()
 
         with _main_tabs[4]:
+            _src_choice = st.radio(
+                "📡 المصدر:",
+                ["الكل", "🤖 البوت", "🌐 الموقع", "🔹 الميني-ويب"],
+                horizontal=True, key=f"ua_src_tab_4",
+            )
+            _src_tuple = _SRC_SQL.get(_src_choice)
             # ════════════════════════════════════════════════════════════════
             # SECTION 4 ─ Heatmap: متى الجمهور موجود؟ (24 ساعة × 7 أيام)
             # ════════════════════════════════════════════════════════════════
@@ -7564,6 +7592,12 @@ elif page == "تحليل المستخدمين":
             st.divider()
 
         with _main_tabs[5]:
+            _src_choice = st.radio(
+                "📡 المصدر:",
+                ["الكل", "🤖 البوت", "🌐 الموقع", "🔹 الميني-ويب"],
+                horizontal=True, key=f"ua_src_tab_5",
+            )
+            _src_tuple = _SRC_SQL.get(_src_choice)
             # ════════════════════════════════════════════════════════════════
             # SECTION 5 ─ ديموغرافيا موحّدة (web + bot)
             # ════════════════════════════════════════════════════════════════
@@ -7743,6 +7777,12 @@ elif page == "تحليل المستخدمين":
             st.divider()
 
         with _main_tabs[6]:
+            _src_choice = st.radio(
+                "📡 المصدر:",
+                ["الكل", "🤖 البوت", "🌐 الموقع", "🔹 الميني-ويب"],
+                horizontal=True, key=f"ua_src_tab_6",
+            )
+            _src_tuple = _SRC_SQL.get(_src_choice)
             # ════════════════════════════════════════════════════════════════
             # SECTION 7 ─ 🎯 Audience Builder — منشئ الشرائح
             # ════════════════════════════════════════════════════════════════
@@ -7944,6 +7984,12 @@ elif page == "تحليل المستخدمين":
             st.divider()
 
         with _main_tabs[7]:
+            _src_choice = st.radio(
+                "📡 المصدر:",
+                ["الكل", "🤖 البوت", "🌐 الموقع", "🔹 الميني-ويب"],
+                horizontal=True, key=f"ua_src_tab_7",
+            )
+            _src_tuple = _SRC_SQL.get(_src_choice)
             # ════════════════════════════════════════════════════════════════
             # SECTION 8 ─ 🎯 RFM Matrix + Personas (شرائح ذكية)
             # R = Recency (أيام منذ آخر نشاط)
@@ -8076,6 +8122,12 @@ elif page == "تحليل المستخدمين":
             st.divider()
 
         with _main_tabs[8]:
+            _src_choice = st.radio(
+                "📡 المصدر:",
+                ["الكل", "🤖 البوت", "🌐 الموقع", "🔹 الميني-ويب"],
+                horizontal=True, key=f"ua_src_tab_8",
+            )
+            _src_tuple = _SRC_SQL.get(_src_choice)
             # ════════════════════════════════════════════════════════════════
             # SECTION 9 ─ 🌀 Cohort Retention — نمط البقاء
             # «من سجّل في شهر X، كم نسبتهم نشطون في الأشهر التالية؟»
@@ -8152,6 +8204,12 @@ elif page == "تحليل المستخدمين":
             st.divider()
 
         with _main_tabs[9]:
+            _src_choice = st.radio(
+                "📡 المصدر:",
+                ["الكل", "🤖 البوت", "🌐 الموقع", "🔹 الميني-ويب"],
+                horizontal=True, key=f"ua_src_tab_9",
+            )
+            _src_tuple = _SRC_SQL.get(_src_choice)
             # ════════════════════════════════════════════════════════════════
             # SECTION 10 ─ 📈 LTV Score + Pareto
             # LTV = نسخ×10 + نقرات×2 + متاجر_فريدة×5 + boost_حداثة
@@ -8262,6 +8320,12 @@ elif page == "تحليل المستخدمين":
             st.divider()
 
         with _main_tabs[10]:
+            _src_choice = st.radio(
+                "📡 المصدر:",
+                ["الكل", "🤖 البوت", "🌐 الموقع", "🔹 الميني-ويب"],
+                horizontal=True, key=f"ua_src_tab_10",
+            )
+            _src_tuple = _SRC_SQL.get(_src_choice)
             # ════════════════════════════════════════════════════════════════
             # SECTION 11 ─ 🔻 Funnel Conversion (search → view_tag → click → copy)
             # كم نسبة المسجّلين الذين بحثوا؟ شاهدوا قسم؟ نقروا؟ نسخوا؟
@@ -8347,6 +8411,12 @@ elif page == "تحليل المستخدمين":
             st.divider()
 
         with _main_tabs[11]:
+            _src_choice = st.radio(
+                "📡 المصدر:",
+                ["الكل", "🤖 البوت", "🌐 الموقع", "🔹 الميني-ويب"],
+                horizontal=True, key=f"ua_src_tab_11",
+            )
+            _src_tuple = _SRC_SQL.get(_src_choice)
             # ════════════════════════════════════════════════════════════════
             # SECTION 12 ─ 🗺️ خريطة جغرافية حية (السعودية + الباقي)
             # ════════════════════════════════════════════════════════════════
@@ -8417,6 +8487,12 @@ elif page == "تحليل المستخدمين":
             st.divider()
 
         with _main_tabs[12]:
+            _src_choice = st.radio(
+                "📡 المصدر:",
+                ["الكل", "🤖 البوت", "🌐 الموقع", "🔹 الميني-ويب"],
+                horizontal=True, key=f"ua_src_tab_12",
+            )
+            _src_tuple = _SRC_SQL.get(_src_choice)
             # ════════════════════════════════════════════════════════════════
             # SECTION 13 ─ 🔔 Action Center + Anomalies (تنبيهات + Broadcast)
             # ════════════════════════════════════════════════════════════════
