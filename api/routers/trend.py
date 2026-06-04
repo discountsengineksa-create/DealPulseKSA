@@ -29,6 +29,7 @@ from pydantic import BaseModel
 from api.db import get_db
 from api.utils.trend import (
     apply_anti_spam,
+    apply_overrides,
     assign_rank_titles,
     compute_trend,
     person_key,
@@ -154,6 +155,28 @@ def _load_favorites(conn, fav_filter: tuple[str, ...] | None) -> list[dict]:
     return out
 
 
+def _load_trend_overrides(conn, window: str) -> dict[int, str]:
+    """
+    يقرأ التجاوزات اليدوية للنافذة المُعطاة (admin pins من trend_overrides).
+    يُرجع {rank: store_id}. لو الجدول غير موجود (قبل تطبيق migration 030)،
+    نُرجع dict فاضي حتى ما نكسر الـ API على الأنظمة القديمة.
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT rank, store_id FROM trend_overrides WHERE window_kind = %s",
+                (window,),
+            )
+            return {row[0]: row[1] for row in cur.fetchall()}
+    except Exception:
+        # rollback عشان الـ transaction ما تعلق على الـ connection بعدنا.
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return {}
+
+
 def _load_master_meta(conn) -> dict[str, dict]:
     """
     خرائط المتجر للعرض: store_id → {logo_url, cloaked_slug}.
@@ -205,7 +228,14 @@ def _compute_window(conn, window: str, source: str, top_n: int) -> list[dict]:
     events = [e for e in events if e["store_id"] in active_ids]
     favorites = [f for f in favorites if f["store_id"] in active_ids]
 
-    raw = compute_trend(events, favorites, wstart, now_r, top_n)
+    # نطلب من الخوارزمية عدداً أكبر من top_n لأن التجاوزات قد تُزيح متاجر إلى
+    # داخل القائمة من خلف الحاجز. top_n + 10 احتياط آمن (max overrides = 10).
+    raw = compute_trend(events, favorites, wstart, now_r, top_n + 10)
+
+    # تطبيق التجاوزات اليدوية (admin pins) — تطغى على ترتيب الخوارزمية.
+    overrides = _load_trend_overrides(conn, window)
+    raw = apply_overrides(raw, overrides, top_n)
+
     items = assign_rank_titles(raw)
 
     # إثراء بالميتاداتا للعرض

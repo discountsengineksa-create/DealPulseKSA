@@ -171,3 +171,46 @@ def assign_rank_titles(items: list[dict]) -> list[dict]:
         else:
             it["rank_title"] = RANK_TITLES_POSITIONAL.get(rk, f"المركز {rk}")
     return items
+
+
+def apply_overrides(items: list[dict], overrides: dict[int, str],
+                    top_n: int) -> list[dict]:
+    """
+    يدمج نتائج الخوارزمية مع التجاوزات اليدوية (admin pins).
+
+    منطق الإزاحة (نفس ما طلبه المالك):
+      - لكل rank من 1 إلى top_n: لو فيه override → نضع المتجر المُثبَّت هناك.
+      - لو ما فيه override → نأخذ التالي من نتائج الخوارزمية، **متخطّين**
+        المتاجر المُجاوزة (لتجنّب التكرار). يضمن أن المتاجر اللي كانت في
+        موقع مُجاوَز تتزحّح طبيعياً للموقع التالي.
+
+    إذا المتجر المُجاوَز موجود أصلاً في نتائج الخوارزمية، نحافظ على نقاطه
+    (breakdown). إذا غير موجود (مثلاً متجر بلا نشاط هذه النافذة)، نُنشئ
+    placeholder بأصفار — الـ caller يُثري التفاصيل (logo/name_en) من master.
+
+    overrides: dict {rank: store_id}.
+    """
+    items_by_id = {it["store_id"]: it for it in items}
+    overridden_ids = set(overrides.values())
+    # algo pool — ترتيب الخوارزمية مع استبعاد المتاجر المُجاوزة (لمنع التكرار).
+    algo_pool = [it for it in items if it["store_id"] not in overridden_ids]
+
+    result: list[dict] = []
+    for rank in range(1, top_n + 1):
+        if rank in overrides:
+            sid = overrides[rank]
+            if sid in items_by_id:
+                # المتجر له نقاط من الخوارزمية — نستخدمها (مع تجاهل ترتيبه الأصلي).
+                result.append(dict(items_by_id[sid]))
+            else:
+                # غير نشط هذه النافذة — placeholder بأصفار.
+                result.append({
+                    "store_id": sid, "score": 0,
+                    "clicks": 0, "searches": 0, "copies": 0, "favs": 0,
+                    "unique_users": 0,
+                })
+        elif algo_pool:
+            result.append(algo_pool.pop(0))
+        # else: لا overrides ولا algo → نتوقف عند هذا المركز
+
+    return result

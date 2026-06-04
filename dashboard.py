@@ -3666,6 +3666,178 @@ elif page == "تحليل المتاجر":
         st.caption("نقاط موزونة: نقر=1 · بحث=2 · نسخ=3 · مفضلة=4 — مع قاعدة anti-spam "
                    "تمنع تضخيم الترند بالتكرار. الشرح الكامل أسفل الصفحة.")
 
+        # ════════════════════════════════════════════════════════════════════
+        # 🎛️ التحكم اليدوي بمراكز الترند (Admin Override / Pin)
+        #   يثبّت متجراً معيناً في مركز محدد. الباقي يتزحّح طبيعياً.
+        #   يُكتب في trend_overrides → الـ API يقرأه ويطبّقه قبل العرض للزوار.
+        # ════════════════════════════════════════════════════════════════════
+        with st.expander("🎛️ التحكم اليدوي بمراكز الترند (Admin Pin)", expanded=False):
+            st.caption(
+                "ثبّت متجراً في مركز محدد — الباقي يتزحّح تلقائياً. "
+                "مثال: تثبيت متجر «نمشي 3» في المركز الثاني للأسبوعي يدفع المتجر "
+                "اللي كان فيه إلى المركز الثالث، والثالث للرابع، وهكذا. "
+                "**ملاحظة**: التغييرات تظهر للزوار على الموقع والميني-ويب خلال **دقيقة** (كاش API)."
+            )
+
+            # ── تحميل المتاجر المتوفرة + التجاوزات الحالية ─────────────
+            try:
+                _ov_conn = get_conn()
+                _ov_conn.rollback()
+                # نضمن وجود الجدول قبل القراءة (للأنظمة قبل migration 030).
+                with _ov_conn.cursor() as _cur:
+                    _cur.execute("""
+                        CREATE TABLE IF NOT EXISTS trend_overrides (
+                            id BIGSERIAL PRIMARY KEY,
+                            window_kind TEXT NOT NULL CHECK (window_kind IN ('daily','weekly')),
+                            rank INTEGER NOT NULL CHECK (rank >= 1 AND rank <= 10),
+                            store_id TEXT NOT NULL,
+                            set_at TIMESTAMPTZ DEFAULT NOW(),
+                            set_by TEXT,
+                            CONSTRAINT trend_overrides_uniq_rank UNIQUE (window_kind, rank),
+                            CONSTRAINT trend_overrides_uniq_store UNIQUE (window_kind, store_id)
+                        )
+                    """)
+                    _ov_conn.commit()
+                _df_ov = pd.read_sql(
+                    "SELECT window_kind AS window, rank, store_id FROM trend_overrides",
+                    _ov_conn,
+                )
+            except Exception as _e:
+                st.error(f"⚠️ تعذّر قراءة التجاوزات: {_e}")
+                _df_ov = pd.DataFrame(columns=["window", "rank", "store_id"])
+            finally:
+                try: _ov_conn.close()
+                except Exception: pass
+
+            _ov_daily = dict(zip(
+                _df_ov[_df_ov["window"] == "daily"]["rank"].astype(int),
+                _df_ov[_df_ov["window"] == "daily"]["store_id"],
+            )) if not _df_ov.empty else {}
+            _ov_weekly = dict(zip(
+                _df_ov[_df_ov["window"] == "weekly"]["rank"].astype(int),
+                _df_ov[_df_ov["window"] == "weekly"]["store_id"],
+            )) if not _df_ov.empty else {}
+
+            # ── قائمة المتاجر المتوفرة (نشطة + غير منتهية) ─────────────
+            _store_options = sorted(df_master["store_id"].dropna().astype(str).unique().tolist())
+            _AUTO = "⚙️ تلقائي (بدون تثبيت)"
+            _option_list = [_AUTO] + _store_options
+
+            _DAILY_TITLES = {
+                1: "🥇 المركز 1 — الأعلى طلباً",
+                2: "🥈 المركز 2 — الأكثر شعبية",
+                3: "🥉 المركز 3 — الأوسع انتشاراً",
+            }
+            _WEEKLY_TITLES = {
+                1: "🥇 المركز 1 — الأعلى طلباً",
+                2: "🥈 المركز 2 — الأكثر شعبية",
+                3: "🥉 المركز 3 — الأوسع انتشاراً",
+                4: "🏅 المركز 4 — الرابع",
+                5: "🏅 المركز 5 — الخامس",
+                6: "🏅 المركز 6 — السادس",
+                7: "🏅 المركز 7 — السابع",
+            }
+
+            def _pinned_picker(window: str, rank: int, label: str, current: str | None):
+                """selectbox واحد لمركز محدد. يُرجع store_id أو None لو تلقائي."""
+                idx = (_option_list.index(current)
+                       if current in _option_list else 0)
+                pick = st.selectbox(label, _option_list, index=idx,
+                                     key=f"pin_{window}_{rank}")
+                return None if pick == _AUTO else pick
+
+            # ── الترند اليومي (3 مراكز) ─────────────────────────────────
+            st.markdown("##### 🌞 الترند اليومي (3 مراكز)")
+            _daily_picks: dict[int, str | None] = {}
+            for _rk, _lbl in _DAILY_TITLES.items():
+                _daily_picks[_rk] = _pinned_picker(
+                    "daily", _rk, _lbl, _ov_daily.get(_rk),
+                )
+
+            st.markdown("##### 📅 الترند الأسبوعي (7 مراكز)")
+            _weekly_picks: dict[int, str | None] = {}
+            _w_cols = st.columns(2)
+            for _i, (_rk, _lbl) in enumerate(_WEEKLY_TITLES.items()):
+                with _w_cols[_i % 2]:
+                    _weekly_picks[_rk] = _pinned_picker(
+                        "weekly", _rk, _lbl, _ov_weekly.get(_rk),
+                    )
+
+            # ── حفظ + تنبيه على التكرار داخل نفس النافذة ───────────────
+            _b_save, _b_clear = st.columns([1, 1])
+            with _b_save:
+                _save_clicked = st.button("💾 حفظ التجاوزات", width='stretch',
+                                            key="trend_pin_save", type="primary")
+            with _b_clear:
+                _clear_clicked = st.button("🧹 مسح كل التجاوزات", width='stretch',
+                                            key="trend_pin_clear")
+
+            if _save_clicked:
+                # تحقق: نفس المتجر مو مكرّر في مركزين بنفس النافذة
+                def _dup_in(picks: dict[int, str | None]) -> str | None:
+                    seen = {}
+                    for rk, sid in picks.items():
+                        if sid and sid in seen:
+                            return f"المتجر «{sid}» مكرّر في مركزين ({seen[sid]} و {rk})"
+                        if sid:
+                            seen[sid] = rk
+                    return None
+
+                err = _dup_in(_daily_picks) or _dup_in(_weekly_picks)
+                if err:
+                    st.error(f"⚠️ {err}. عدّل وأعد الحفظ.")
+                else:
+                    try:
+                        _sv_conn = get_conn()
+                        with _sv_conn.cursor() as _cur:
+                            _cur.execute("DELETE FROM trend_overrides")
+                            _rows = []
+                            for rk, sid in _daily_picks.items():
+                                if sid:
+                                    _rows.append(("daily", rk, sid))
+                            for rk, sid in _weekly_picks.items():
+                                if sid:
+                                    _rows.append(("weekly", rk, sid))
+                            if _rows:
+                                _cur.executemany(
+                                    "INSERT INTO trend_overrides (window_kind, rank, store_id) "
+                                    "VALUES (%s, %s, %s)",
+                                    _rows,
+                                )
+                            _sv_conn.commit()
+                        st.success(f"✅ تم حفظ {len(_rows)} تجاوز. ستظهر للزوار خلال دقيقة.")
+                    except Exception as _e:
+                        st.error(f"⚠️ فشل الحفظ: {_e}")
+                    finally:
+                        try: _sv_conn.close()
+                        except Exception: pass
+                    st.rerun()
+
+            if _clear_clicked:
+                try:
+                    _cl_conn = get_conn()
+                    with _cl_conn.cursor() as _cur:
+                        _cur.execute("DELETE FROM trend_overrides")
+                        _cl_conn.commit()
+                    st.success("✅ تم مسح كل التجاوزات. الترند رجع للخوارزمية فقط.")
+                except Exception as _e:
+                    st.error(f"⚠️ فشل المسح: {_e}")
+                finally:
+                    try: _cl_conn.close()
+                    except Exception: pass
+                st.rerun()
+
+            # ── جدول التجاوزات الحالية (سهل القراءة) ──────────────────
+            if not _df_ov.empty:
+                _show = _df_ov.copy()
+                _show["window"] = _show["window"].map({"daily": "🌞 يومي",
+                                                         "weekly": "📅 أسبوعي"})
+                _show = _show.rename(columns={"window": "النافذة",
+                                                "rank": "المركز",
+                                                "store_id": "المتجر"})
+                st.markdown("**📋 التجاوزات الحالية:**")
+                st.dataframe(_show, hide_index=True, width='stretch')
+
         tr_tab_all, tr_tab_bot, tr_tab_web, tr_tab_mini = st.tabs([
             "📡 الكل", "📱 البوت", "🌐 الموقع", "🔹 الميني-ويب",
         ])
