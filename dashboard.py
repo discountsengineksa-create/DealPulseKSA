@@ -6554,7 +6554,7 @@ elif page == "تحليل المستخدمين":
         # الحالة: نشط = آخر ظهور < 20 يوم، خامل = ≥ 20 يوم (يتجدّد مع الدخول)
         # الاكتمال: مكتمل = مربوط بين الطرفين (web.telegram_username = bot.username)
         @st.cache_data(ttl=120)
-        def _gen_fetch_users(src, status, complete, lang, t_from, t_to):
+        def _gen_fetch_users(src, status, complete, lang, gender, t_from, t_to):
             _BOT_HANDLES = ("SELECT LOWER(username) FROM bot_users "
                             "WHERE username IS NOT NULL")
             # tg مكتمل = مربوط بحساب موقع (نجلب بياناته عبر LEFT JOIN LATERAL أدناه)
@@ -6583,6 +6583,13 @@ elif page == "تحليل المستخدمين":
                     return f" AND {alias}.lang = 'en' "
                 return ""
 
+            def _gender(realm):
+                # الجنس من web_users فقط: tg مربوط → w3.gender، web → wu.gender
+                if gender not in ("male", "female"):
+                    return ""
+                col = "w3.gender" if realm == "tg" else "wu.gender"
+                return f" AND {col} = '{gender}' "
+
             # المكتمل (المربوط) نملأ اسمه/إيميله/جواله من حساب الموقع المرتبط
             tg_sql = f"""
                 SELECT 'tg' AS realm, bu.telegram_id::text AS person_id,
@@ -6592,14 +6599,14 @@ elif page == "تحليل المستخدمين":
                        bu.last_seen, {tg_complete} AS is_complete
                 FROM bot_users bu
                 LEFT JOIN LATERAL (
-                    SELECT id, display_name, email, phone_number
+                    SELECT id, display_name, email, phone_number, gender
                     FROM web_users w3
                     WHERE w3.telegram_username IS NOT NULL
                       AND LOWER(w3.telegram_username) = LOWER(bu.username)
                     LIMIT 1
                 ) w3 ON TRUE
                 WHERE bu.deleted_at IS NULL
-                  {_stat('bu')} {_compl(tg_complete)} {_lang('bu')}"""
+                  {_stat('bu')} {_compl(tg_complete)} {_lang('bu')} {_gender('tg')}"""
             web_unlinked = f"""
                 SELECT 'web' AS realm, wu.id::text AS person_id,
                        wu.telegram_username AS handle, wu.display_name AS name,
@@ -6608,14 +6615,14 @@ elif page == "تحليل المستخدمين":
                 FROM web_users wu
                 WHERE (wu.telegram_username IS NULL
                        OR LOWER(wu.telegram_username) NOT IN ({_BOT_HANDLES}))
-                  {_stat('wu')} {_compl(web_complete)} {_lang('wu')}"""
+                  {_stat('wu')} {_compl(web_complete)} {_lang('wu')} {_gender('web')}"""
             web_all = f"""
                 SELECT 'web' AS realm, wu.id::text AS person_id,
                        wu.telegram_username AS handle, wu.display_name AS name,
                        wu.email, wu.phone_number AS phone, wu.last_seen,
                        {web_complete} AS is_complete
                 FROM web_users wu
-                WHERE TRUE {_stat('wu')} {_compl(web_complete)} {_lang('wu')}"""
+                WHERE TRUE {_stat('wu')} {_compl(web_complete)} {_lang('wu')} {_gender('web')}"""
             params = []
             if src is None:                       # الكل
                 sql = tg_sql + " UNION ALL " + web_unlinked
@@ -6643,7 +6650,7 @@ elif page == "تحليل المستخدمين":
         _t_to   = (pd.Timestamp(gen_date_to) + pd.Timedelta(days=1)
                    ).strftime("%Y-%m-%d 00:00:00")
         df_users = _gen_fetch_users(gen_src, gen_status, gen_complete,
-                                    gen_lang, _t_from, _t_to)
+                                    gen_lang, gen_gender, _t_from, _t_to)
 
         st.markdown(f"### 👥 المستخدمون المطابقون: **{len(df_users)}**")
         if df_users.empty:
