@@ -6358,6 +6358,22 @@ elif page == "تحليل المستخدمين":
 
         st.divider()
 
+        # ── نطاق التاريخ (يحدّ كل الفلاتر تحت) ────────────────────────────
+        _gd1, _gd2 = st.columns(2)
+        _gen_today = date.today()
+        with _gd1:
+            gen_date_from = st.date_input(
+                "📅 من تاريخ", value=_gen_today - timedelta(days=30),
+                max_value=_gen_today, key="gen_date_from",
+            )
+        with _gd2:
+            gen_date_to = st.date_input(
+                "📅 إلى تاريخ", value=_gen_today,
+                min_value=gen_date_from, max_value=_gen_today, key="gen_date_to",
+            )
+
+        st.divider()
+
         # ── المسميات (الموجودة حالياً — تُزاد/تُحذف لاحقاً مع التجربة) ─────
         _STATUS_AR = {"all": "الكل", "active": "🟢 نشط", "idle": "😴 خامل"}
         _ACTION_AR = {
@@ -6369,10 +6385,11 @@ elif page == "تحليل المستخدمين":
             "view_all":              "📚 عرض كل المتاجر",
             "view_favorites":        "💛 عرض المفضلة",
             "view_story":            "🎬 مشاهدة ستوري",
-            "view_trending":         "🔥 عرض الترند",
+            "trend_daily":           "🔥 ترند يومي",
+            "trend_weekly":          "🔥 ترند أسبوعي",
             "favorite_add":          "❤️ مفضّلة متجر +",
             "category_favorite_add": "🏷️❤️ مفضّلة قسم +",
-            "reaction_heart":        "تفاعل ❤️",
+            "reaction_heart":        "❤️ تفاعل قلب",
             "request_code":          "📩 طلب كود",
             "report_code":           "🚫 إبلاغ كود لا يعمل",
             "start":                 "🚀 بدء جلسة",
@@ -6404,7 +6421,7 @@ elif page == "تحليل المستخدمين":
         gen_actions = [k for k, v in _ACTION_AR.items()
                        if v in (_act_labels or [])]
 
-        # ── فلتر الجنس (الموقع فقط — web_users.gender) ────────────────────
+        # ── الجنس (الموقع فقط — web_users.gender) ─────────────────────────
         _GENDER_AR = {"all": "الكل", "male": "♂️ ذكر", "female": "♀️ أنثى"}
         gen_gender_label = st.segmented_control(
             "⚧ الجنس", list(_GENDER_AR.values()), default="الكل",
@@ -6413,18 +6430,7 @@ elif page == "تحليل المستخدمين":
         gen_gender = next((k for k, v in _GENDER_AR.items()
                            if v == gen_gender_label), "all")
 
-        # ── فلتر العمر (الموقع فقط — web_users.birth_date) ────────────────
-        _AGE_AR = {
-            "u18":   "أقل من 18", "18-24": "18–24", "25-34": "25–34",
-            "35-44": "35–44",     "45-54": "45–54", "55p":   "55+",
-        }
-        _age_labels = st.pills(
-            "🎂 العمر", list(_AGE_AR.values()),
-            selection_mode="multi", key="gen_age",
-        )
-        gen_age = [k for k, v in _AGE_AR.items() if v in (_age_labels or [])]
-
-        # ── فلتر المدينة (من IP الحقيقي — action_logs.city، ديناميكي) ─────
+        # ── المدينة (من IP الحقيقي — action_logs.city، ديناميكي) ──────────
         @st.cache_data(ttl=300)
         def _gen_city_options():
             try:
@@ -6449,6 +6455,72 @@ elif page == "تحليل المستخدمين":
             selection_mode="multi", key="gen_cities",
         ) or []
 
+        # ── العمر (الموقع فقط — web_users.birth_date) ─────────────────────
+        _AGE_AR = {
+            "u18":   "أقل من 18", "18-24": "18–24", "25-34": "25–34",
+            "35-44": "35–44",     "45-54": "45–54", "55p":   "55+",
+        }
+        _age_labels = st.pills(
+            "🎂 العمر", list(_AGE_AR.values()),
+            selection_mode="multi", key="gen_age",
+        )
+        gen_age = [k for k, v in _AGE_AR.items() if v in (_age_labels or [])]
+
+        # ── المفضلة (نوعان — user_favorites.kind) ─────────────────────────
+        _FAV_AR = {"store": "🏪 مفضلة متاجر", "category": "🏷️ مفضلة أقسام"}
+        _fav_labels = st.pills(
+            "❤️ المفضلة", list(_FAV_AR.values()),
+            selection_mode="multi", key="gen_favs",
+        )
+        gen_favs = [k for k, v in _FAV_AR.items() if v in (_fav_labels or [])]
+
+        # ── الأقسام (ديناميكي — من master.store_tags) ─────────────────────
+        @st.cache_data(ttl=300)
+        def _gen_category_options():
+            try:
+                conn = get_conn()
+                conn.autocommit = True
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT DISTINCT TRIM(tag) AS tag
+                    FROM master,
+                         unnest(string_to_array(
+                             trim(both '{}' from COALESCE(store_tags, '')), ',')) AS tag
+                    WHERE TRIM(tag) <> ''
+                    ORDER BY tag
+                """)
+                rows = [r[0] for r in cur.fetchall()]
+                conn.close()
+                return rows
+            except Exception:
+                return []
+        gen_categories = st.pills(
+            "🏷️ الأقسام", _gen_category_options(),
+            selection_mode="multi", key="gen_categories",
+        ) or []
+
+        # ── المتاجر (ديناميكي — من master) ────────────────────────────────
+        @st.cache_data(ttl=300)
+        def _gen_store_options():
+            try:
+                conn = get_conn()
+                conn.autocommit = True
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT DISTINCT store_id FROM master
+                    WHERE store_id IS NOT NULL AND store_id <> ''
+                    ORDER BY store_id
+                """)
+                rows = [r[0] for r in cur.fetchall()]
+                conn.close()
+                return rows
+            except Exception:
+                return []
+        gen_stores = st.pills(
+            "🏪 المتاجر", _gen_store_options(),
+            selection_mode="multi", key="gen_stores",
+        ) or []
+
         # ── فلتر اكتمال الملف ─────────────────────────────────────────────
         # مكتمل = مستخدم موقع له بيانات تسجيل + ربط تليجرام محقّق
         #         (web_users.telegram_username يطابق bot_users.username).
@@ -6468,12 +6540,16 @@ elif page == "تحليل المستخدمين":
         # المختار: gen_src / gen_status / gen_actions / gen_gender / gen_age / gen_cities
         # ════════════════════════════════════════════════════════════════
         st.caption(
+            f"التاريخ: {gen_date_from} → {gen_date_to}  ·  "
             f"المصدر: {gen_src_label or 'الكل'}  ·  "
             f"الحالة: {gen_status_label or 'الكل'}  ·  "
             f"الحركات: {len(gen_actions)}  ·  "
             f"الجنس: {gen_gender_label or 'الكل'}  ·  "
-            f"العمر: {len(gen_age)}  ·  "
             f"المدن: {len(gen_cities)}  ·  "
+            f"العمر: {len(gen_age)}  ·  "
+            f"المفضلة: {len(gen_favs)}  ·  "
+            f"الأقسام: {len(gen_categories)}  ·  "
+            f"المتاجر: {len(gen_stores)}  ·  "
             f"الاكتمال: {gen_complete_label or 'الكل'}"
         )
 
