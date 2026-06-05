@@ -5771,6 +5771,20 @@ elif page == "تحليل المستخدمين":
         gen_store_status = next((k for k, v in _STORESTAT_AR.items()
                                  if v == _storestat_sel), "none")
 
+        # ── متاجر مختارة (قائمتها تتفلتر حسب حالة المتاجر المختارة) ───────
+        _store_cond = {
+            "active":   "AND last_time > CURRENT_DATE + 3",
+            "expired":  "AND last_time < CURRENT_DATE",
+            "expiring": "AND last_time BETWEEN CURRENT_DATE AND CURRENT_DATE + 3",
+        }.get(gen_store_status, "")
+        _store_opts = ["لا شيء", "الكل"] + _gen_distinct(f"""
+            SELECT DISTINCT store_id FROM master
+            WHERE store_id IS NOT NULL AND store_id <> '' {_store_cond}
+            ORDER BY store_id""")
+        _store_sel = st.segmented_control(
+            "🏪 متاجر مختارة", _store_opts, default="لا شيء", key="gen_stores")
+        gen_store = None if _store_sel in (None, "لا شيء", "الكل") else _store_sel
+
         # ── الأقسام (من master.store_tags) ────────────────────────────────
         _cat_opts = ["لا شيء", "الكل"] + _gen_distinct("""
             SELECT DISTINCT TRIM(tag) AS tag
@@ -5810,15 +5824,6 @@ elif page == "تحليل المستخدمين":
             key="gen_story")
         gen_story = next((k for k, v in _STORY_AR.items()
                           if v == _story_sel), "none")
-
-        # ── متاجر مختارة (من master) ──────────────────────────────────────
-        _store_opts = ["لا شيء", "الكل"] + _gen_distinct("""
-            SELECT DISTINCT store_id FROM master
-            WHERE store_id IS NOT NULL AND store_id <> ''
-            ORDER BY store_id""")
-        _store_sel = st.segmented_control(
-            "🏪 متاجر مختارة", _store_opts, default="لا شيء", key="gen_stores")
-        gen_store = None if _store_sel in (None, "لا شيء", "الكل") else _store_sel
 
         # ── الحركات (آخر فلتر) ────────────────────────────────────────────
         _act_sel = st.segmented_control(
