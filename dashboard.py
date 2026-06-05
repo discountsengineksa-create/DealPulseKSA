@@ -6408,6 +6408,69 @@ elif page == "تحليل المستخدمين":
         """نطاق زمني صريح (date_from ↔ date_to). يرجع (clause, params)."""
         return f" AND {alias}.action_time >= %s AND {alias}.action_time < %s ", [_t_from, _t_to]
 
+    # توحيد أسماء المدن — العربي والإنجليزي يصبحان مدينة واحدة (canonical عربي).
+    # يُستخدم في: الجغرافيا، تفصيل القنوات، الديموغرافيا، Audience Builder.
+    def _norm_city_sql(col_expr: str) -> str:
+        """يرجع SQL CASE WHEN يوحّد المدن السعودية بين العربي والإنجليزي."""
+        return f"""
+        CASE
+          WHEN LOWER(TRIM({col_expr})) IN ('الرياض','riyadh','ar riyadh','ar-riyadh','al riyadh','riyad','riadh') THEN 'الرياض'
+          WHEN LOWER(TRIM({col_expr})) IN ('جدة','جدة','جده','jeddah','jiddah','jedda','jiddah') THEN 'جدة'
+          WHEN LOWER(TRIM({col_expr})) IN ('مكة','مكة المكرمة','makkah','mecca','makka','makkah al mukarramah') THEN 'مكة المكرمة'
+          WHEN LOWER(TRIM({col_expr})) IN ('المدينة','المدينة المنورة','medina','madinah','al madinah','al-madinah') THEN 'المدينة المنورة'
+          WHEN LOWER(TRIM({col_expr})) IN ('الدمام','dammam','ad dammam','ad-dammam','al dammam') THEN 'الدمام'
+          WHEN LOWER(TRIM({col_expr})) IN ('الخبر','khobar','al khobar','al-khobar','khubar') THEN 'الخبر'
+          WHEN LOWER(TRIM({col_expr})) IN ('الظهران','dhahran','al dhahran') THEN 'الظهران'
+          WHEN LOWER(TRIM({col_expr})) IN ('ينبع','yanbu','yanbo','yenbo') THEN 'ينبع'
+          WHEN LOWER(TRIM({col_expr})) IN ('تبوك','tabuk','tabouk') THEN 'تبوك'
+          WHEN LOWER(TRIM({col_expr})) IN ('أبها','ابها','abha') THEN 'أبها'
+          WHEN LOWER(TRIM({col_expr})) IN ('خميس مشيط','khamis mushait','khamis mushayt','khamis') THEN 'خميس مشيط'
+          WHEN LOWER(TRIM({col_expr})) IN ('جازان','جيزان','jazan','jizan') THEN 'جازان'
+          WHEN LOWER(TRIM({col_expr})) IN ('نجران','najran') THEN 'نجران'
+          WHEN LOWER(TRIM({col_expr})) IN ('حائل','hail','ha''il','haaiel') THEN 'حائل'
+          WHEN LOWER(TRIM({col_expr})) IN ('الباحة','al baha','al-baha','baha') THEN 'الباحة'
+          WHEN LOWER(TRIM({col_expr})) IN ('بريدة','buraidah','buraydah','buraida') THEN 'بريدة'
+          WHEN LOWER(TRIM({col_expr})) IN ('الطائف','taif','at taif','at-taif','al taif') THEN 'الطائف'
+          WHEN LOWER(TRIM({col_expr})) IN ('عرعر','arar','ar ar') THEN 'عرعر'
+          WHEN LOWER(TRIM({col_expr})) IN ('سكاكا','sakaka','sakakah') THEN 'سكاكا'
+          WHEN LOWER(TRIM({col_expr})) IN ('القنفذة','qunfudah','al qunfudah','al-qunfudhah') THEN 'القنفذة'
+          WHEN LOWER(TRIM({col_expr})) IN ('عنيزة','unaizah','unayzah') THEN 'عنيزة'
+          WHEN LOWER(TRIM({col_expr})) IN ('الجبيل','jubail','al jubail','al-jubail') THEN 'الجبيل'
+          WHEN LOWER(TRIM({col_expr})) IN ('رابغ','rabigh') THEN 'رابغ'
+          WHEN LOWER(TRIM({col_expr})) IN ('القصيم','qassim','al qassim','al-qassim') THEN 'القصيم'
+          WHEN LOWER(TRIM({col_expr})) IN ('','—',NULL) THEN NULL
+          ELSE TRIM({col_expr})
+        END
+        """
+
+    # Python-side normalizer لاستخدامات pandas (filter/group)
+    _CITY_MAP_PY = {
+        # English → Arabic canonical
+        "riyadh":"الرياض","ar riyadh":"الرياض","ar-riyadh":"الرياض","al riyadh":"الرياض",
+        "riyad":"الرياض","riadh":"الرياض",
+        "jeddah":"جدة","jiddah":"جدة","jedda":"جدة","جده":"جدة",
+        "makkah":"مكة المكرمة","mecca":"مكة المكرمة","الرياض":"الرياض","مكة":"مكة المكرمة",
+        "medina":"المدينة المنورة","madinah":"المدينة المنورة","المدينة":"المدينة المنورة",
+        "dammam":"الدمام","ad dammam":"الدمام",
+        "khobar":"الخبر","al khobar":"الخبر",
+        "dhahran":"الظهران",
+        "yanbu":"ينبع","yanbo":"ينبع",
+        "tabuk":"تبوك",
+        "abha":"أبها","ابها":"أبها",
+        "khamis mushait":"خميس مشيط","khamis":"خميس مشيط",
+        "jazan":"جازان","jizan":"جازان","جيزان":"جازان",
+        "najran":"نجران",
+        "hail":"حائل",
+        "al baha":"الباحة","baha":"الباحة",
+        "buraidah":"بريدة","buraydah":"بريدة",
+        "taif":"الطائف","at taif":"الطائف",
+    }
+    def _norm_city_py(v):
+        if v is None: return None
+        s = str(v).strip().lower()
+        if s == "" or s == "—": return None
+        return _CITY_MAP_PY.get(s, str(v).strip())
+
     try:
         conn = get_conn()
         try: conn.rollback()
@@ -7747,15 +7810,16 @@ elif page == "تحليل المستخدمين":
             except Exception: pass
             # المدينة fallback: لو action_logs.city فاضي (الميني-ويب غالباً)
             # نستخدم مدينة المستخدم من ملفه (bot_users/web_users).
-            cities_per_src = pd.read_sql("""
+            _city_chan = f"""COALESCE(
+                NULLIF(TRIM(al.city),''),
+                NULLIF(TRIM(bu.city),''),
+                NULLIF(TRIM(wu.city),'')
+            )"""
+            cities_per_src = pd.read_sql(f"""
                 WITH events AS (
                   SELECT
                     COALESCE(al.source,'bot') AS source,
-                    COALESCE(
-                        NULLIF(TRIM(al.city),''),
-                        NULLIF(TRIM(bu.city),''),
-                        NULLIF(TRIM(wu.city),'')
-                    ) AS city
+                    { _norm_city_sql(_city_chan) } AS city
                   FROM action_logs al
                   LEFT JOIN bot_users bu
                          ON bu.telegram_id = al.user_id
@@ -8477,12 +8541,34 @@ elif page == "تحليل المستخدمين":
             # SECTION 7 ─ 🎯 Audience Builder — منشئ الشرائح
             # ════════════════════════════════════════════════════════════════
             st.markdown("## 🎯 Audience Builder — منشئ الشرائح")
-            st.caption("اختر معايير ← شاهد العدد ← صدّر CSV/Excel أو وجّه لمركز الإشعارات.")
+            st.caption("اختر معايير قابلة للجمع ← شاهد العدد ← صدّر CSV/Excel أو وجّه لمركز الإشعارات.")
 
             try: conn.rollback()
             except Exception: pass
 
-            with st.expander("⚙️ معايير الشريحة", expanded=True):
+            # نطاق التاريخ + الحالة (مستقلّ عن نطاق الصفحة العام)
+            with st.expander("📅 نطاق التاريخ + الحالة", expanded=True):
+                ab_d1, ab_d2, ab_d3 = st.columns(3)
+                with ab_d1:
+                    ab_date_from = st.date_input("📅 من تاريخ:", value=date.today() - timedelta(days=90),
+                                                 max_value=date.today(), key="ab_date_from")
+                with ab_d2:
+                    ab_date_to = st.date_input("📅 إلى تاريخ:", value=date.today(),
+                                               min_value=ab_date_from, max_value=date.today(),
+                                               key="ab_date_to")
+                with ab_d3:
+                    ab_status = st.radio(
+                        "📡 الحالة في النطاق:",
+                        ["الكل", "🟢 نشط (تفاعل ولو مرة)", "🔴 خامل (لا تفاعل)"],
+                        horizontal=False, key="ab_status",
+                    )
+                st.caption(
+                    "ℹ️ النطاق هنا مستقل عن نطاق الصفحة الأعلى. "
+                    "«نشط» = له حركة في action_logs خلال النطاق. «خامل» = موجود في الحسابات بدون أي حركة في النطاق."
+                )
+
+            # مرشّحات الديموغرافيا + المصدر
+            with st.expander("🎯 الديموغرافيا + المصدر + المفضّلة", expanded=True):
                 ab_c1, ab_c2, ab_c3 = st.columns(3)
                 with ab_c1:
                     ab_gender = st.multiselect("👥 الجنس:", ["ذكر","أنثى"],
@@ -8490,21 +8576,36 @@ elif page == "تحليل المستخدمين":
                     ab_age_min = st.number_input("🎂 العمر من:", 0, 100, 0, key="ab_age_min")
                     ab_age_max = st.number_input("🎂 العمر إلى:", 0, 100, 100, key="ab_age_max")
                 with ab_c2:
-                    cities_df = pd.read_sql("""
-                        SELECT DISTINCT TRIM(city) AS city FROM (
+                    # المدن من قاعدة مُوحَّدة
+                    cities_df = pd.read_sql(f"""
+                        SELECT DISTINCT { _norm_city_sql('city') } AS city FROM (
                           SELECT city FROM web_users WHERE city IS NOT NULL AND TRIM(city)<>''
                           UNION
                           SELECT city FROM bot_users WHERE city IS NOT NULL AND TRIM(city)<>''
                         ) u
-                        ORDER BY city
+                        WHERE { _norm_city_sql('city') } IS NOT NULL
+                        ORDER BY 1
                     """, conn)
-                    ab_cities = st.multiselect("📍 المدن:", cities_df["city"].tolist(),
+                    ab_cities = st.multiselect("📍 المدن (موحَّدة عربي/إنجليزي):",
+                                               cities_df["city"].dropna().tolist(),
                                                key="ab_cities", placeholder="الكل")
-                    ab_source = st.multiselect("📡 المصدر:", ["🤖 البوت","🌐 الموقع"],
+                    ab_source = st.multiselect("📡 المصدر:",
+                                               ["🤖 البوت","🌐 الموقع","🔹 الميني-ويب"],
                                                key="ab_source", placeholder="الكل")
                 with ab_c3:
-                    ab_active = st.slider("🟢 نشط آخر N يوم:", 0, 365, 0,
-                                          help="0 = الكل", key="ab_active")
+                    # المفضّلة/الاهتمامات — من user_favorites (kind='category')
+                    try: conn.rollback()
+                    except Exception: pass
+                    interests_df = pd.read_sql("""
+                        SELECT DISTINCT TRIM(category_name) AS cat
+                          FROM user_favorites
+                         WHERE kind='category' AND category_name IS NOT NULL AND TRIM(category_name)<>''
+                         ORDER BY 1
+                    """, conn)
+                    ab_interests = st.multiselect("❤️ مهتمّون بقسم/فضّلوه:",
+                                                  interests_df["cat"].tolist(),
+                                                  key="ab_interests", placeholder="الكل",
+                                                  help="من user_favorites حيث kind='category'")
                     ab_min_copies = st.number_input("🎟️ نسخ ≥:", 0, 10000, 0, key="ab_min_copies")
                     ab_pdpl = st.checkbox("✅ موافقون على PDPL فقط (الموقع)", key="ab_pdpl")
 
@@ -8524,19 +8625,24 @@ elif page == "تحليل المستخدمين":
 
             if ab_cities:
                 ph = ",".join(["%s"]*len(ab_cities))
-                ab_clauses_web.append(f"TRIM(city) IN ({ph})")
-                ab_clauses_bot.append(f"TRIM(city) IN ({ph})")
+                ab_clauses_web.append(f"{ _norm_city_sql('city') } IN ({ph})")
+                ab_clauses_bot.append(f"{ _norm_city_sql('city') } IN ({ph})")
                 ab_pw += ab_cities; ab_pb += ab_cities
-
-            if ab_active > 0:
-                ab_clauses_web.append(f"last_seen >= NOW() - INTERVAL '{int(ab_active)} days'")
-                ab_clauses_bot.append(f"last_seen >= NOW() - INTERVAL '{int(ab_active)} days'")
 
             if ab_pdpl:
                 ab_clauses_web.append("consent_at IS NOT NULL")
 
             include_web = (not ab_source) or "🌐 الموقع" in ab_source
-            include_bot = (not ab_source) or "🤖 البوت" in ab_source
+            include_bot = (not ab_source) or "🤖 البوت" in ab_source or "🔹 الميني-ويب" in ab_source
+            # لو فقط ميني-ويب مختار → نقتصر على bot_users اللي لهم نشاط ميني-ويب
+            miniapp_only = ("🔹 الميني-ويب" in ab_source
+                            and "🤖 البوت" not in ab_source
+                            and "🌐 الموقع" not in ab_source)
+            include_mini_filter = "🔹 الميني-ويب" in ab_source
+
+            # حدود زمن للفلاتر الزمنية في Audience Builder
+            ab_t_from = pd.Timestamp(ab_date_from).strftime("%Y-%m-%d 00:00:00")
+            ab_t_to   = (pd.Timestamp(ab_date_to) + pd.Timedelta(days=1)).strftime("%Y-%m-%d 00:00:00")
 
             # نستخدم flags وجود الأعمدة (محسوبة في قسم الديموغرافيا) لبناء
             # SELECT ديناميكي يتجنّب الإشارة لأعمدة غير موجودة على القاعدة.
@@ -8595,7 +8701,63 @@ elif page == "تحليل المستخدمين":
                 audience = pd.read_sql(ab_query, conn,
                                        params=tuple(all_params) if all_params else None)
 
-                # فلتر النسخ (بعد JOIN على action_logs)
+                # ─── فلتر «الحالة»: نشط/خامل في نطاق التاريخ ─────────────
+                if not audience.empty and ab_status != "الكل":
+                    try: conn.rollback()
+                    except Exception: pass
+                    activ = pd.read_sql("""
+                        SELECT
+                          CASE WHEN source='web' THEN 'web' ELSE 'bot' END AS src,
+                          user_id,
+                          COUNT(*) AS acts_in_range
+                        FROM action_logs
+                        WHERE user_id IS NOT NULL
+                          AND action_time >= %s AND action_time < %s
+                        GROUP BY src, user_id
+                    """, conn, params=(ab_t_from, ab_t_to))
+                    m = audience.merge(activ, left_on=["source","user_id"],
+                                       right_on=["src","user_id"], how="left")
+                    m["acts_in_range"] = m["acts_in_range"].fillna(0).astype(int)
+                    if ab_status.startswith("🟢"):
+                        audience = m[m["acts_in_range"] > 0].copy()
+                    else:
+                        audience = m[m["acts_in_range"] == 0].copy()
+
+                # ─── فلتر الميني-ويب فقط ──────────────────────────────
+                if not audience.empty and include_mini_filter:
+                    try: conn.rollback()
+                    except Exception: pass
+                    mini = pd.read_sql("""
+                        SELECT DISTINCT user_id
+                          FROM action_logs
+                         WHERE source IN ('telegram_miniapp','miniapp') AND user_id IS NOT NULL
+                    """, conn)
+                    mini_set = set(mini["user_id"].astype(int).tolist())
+                    if miniapp_only:
+                        audience = audience[
+                            (audience["source"]=="bot") & (audience["user_id"].isin(mini_set))
+                        ].copy()
+                    # لو ميني-ويب مع باقي المصادر → لا نُسقط أحداً (شامل)
+
+                # ─── فلتر الاهتمامات (مفضّلة قسم) ───────────────────────
+                if not audience.empty and ab_interests:
+                    try: conn.rollback()
+                    except Exception: pass
+                    ph = ",".join(["%s"] * len(ab_interests))
+                    favs = pd.read_sql(f"""
+                        SELECT DISTINCT
+                          CASE WHEN platform='web' THEN 'web' ELSE 'bot' END AS src,
+                          COALESCE(web_user_id, telegram_id) AS user_id
+                        FROM user_favorites
+                        WHERE kind='category'
+                          AND TRIM(category_name) IN ({ph})
+                    """, conn, params=tuple(ab_interests))
+                    interest_keys = set(zip(favs["src"].astype(str), favs["user_id"].astype(int)))
+                    audience["_key"] = list(zip(audience["source"].astype(str),
+                                                audience["user_id"].astype(int)))
+                    audience = audience[audience["_key"].isin(interest_keys)].drop(columns=["_key"]).copy()
+
+                # ─── فلتر النسخ ─────────────────────────────────────────
                 if ab_min_copies > 0 and not audience.empty:
                     copies_per = pd.read_sql("""
                         SELECT
@@ -9031,14 +9193,16 @@ elif page == "تحليل المستخدمين":
                     ph = ",".join(["%s"]*len(top_ids_web))
                     top_meta_parts.append((f"""
                         SELECT 'web' AS src, id AS user_id, display_name AS name, email,
-                               phone_number AS phone, telegram_username AS tg, city
+                               phone_number AS phone, telegram_username AS tg,
+                               { _norm_city_sql('city') } AS city
                         FROM web_users WHERE id IN ({ph})
                     """, top_ids_web))
                 if top_ids_bot:
                     ph = ",".join(["%s"]*len(top_ids_bot))
                     top_meta_parts.append((f"""
                         SELECT 'bot' AS src, telegram_id AS user_id, username AS name, NULL AS email,
-                               NULL AS phone, username AS tg, city
+                               NULL AS phone, username AS tg,
+                               { _norm_city_sql('city') } AS city
                         FROM bot_users WHERE telegram_id IN ({ph})
                     """, top_ids_bot))
                 meta_dfs = []
@@ -9077,40 +9241,60 @@ elif page == "تحليل المستخدمين":
             # ════════════════════════════════════════════════════════════════
             st.markdown("## 🔻 Funnel — أين يسقط الناس في الطريق؟")
             st.caption(
-                f"كل خطوة = «على الأقل مرّة واحدة» في النطاق **{date_from.strftime('%Y-%m-%d')} → "
-                f"{date_to.strftime('%Y-%m-%d')}**. الفلتر بالمصدر يطبّق."
+                f"📅 النطاق: **{date_from.strftime('%Y-%m-%d')} → "
+                f"{date_to.strftime('%Y-%m-%d')}** · يطبّق فلتر المصدر."
             )
+            with st.expander("ℹ️ شرح الـ Funnel — كيف يقرأ ولماذا الأرقام تنزل دائماً؟", expanded=False):
+                st.markdown("""
+**كل مرحلة subset من المرحلة السابقة** — يعني الشخص لا ينتقل للمرحلة التالية إلا إذا أتمّ السابقة. لذا الأرقام تنزل من الأعلى للأسفل دائماً.
+
+| المرحلة | شرطها |
+|---|---|
+| 👥 **وصلوا** | عمل أي حركة في النطاق (دخل، بحث، نسخ، نقر، أي شي) |
+| 🌐 **تصفّحوا** | وصلوا **+** بحثوا أو فتحوا قسماً أو عرضوا قائمة متاجر |
+| 🖱️ **نقروا** | تصفّحوا **+** نقروا رابط متجر واحد على الأقل |
+| 🎟️ **نسخوا (تحويل ناجح)** | نقروا **+** نسخوا كوبون واحد على الأقل |
+
+**السقوط** بين مرحلتين = عدد من وصل للسابقة لكن لم يكمل للحالية. الأكبر = نقطة الانهيار التي تحتاج تحسين.
+
+🔍 **مثال:** لو وصل ١٠٠، وتصفّح ٦٠، ونقر ٣٠، ونسخ ١٥ → معدّل التحويل النهائي ١٥٪، أكبر سقوط بين «وصلوا» و«تصفّحوا» (٤٠ سقطوا → ربما الواجهة الأولى مو جذابة).
+                """)
 
             try: conn.rollback()
             except Exception: pass
 
             fun_clause, fun_params = _ua_src_clause("al")
+            # مسار صارم: كل مرحلة subset من السابقة (BOOL_OR لكل شخص)
             df_fun = pd.read_sql(f"""
-                WITH base AS (
+                WITH user_acts AS (
                   SELECT
                     CASE WHEN al.source='web' THEN 'web' ELSE 'bot' END AS src,
-                    al.user_id, al.action_type
+                    al.user_id,
+                    BOOL_OR(al.action_type IN ('search','view_tag','view_all',
+                                               'view_trending','view_categories',
+                                               'view_favorites'))            AS did_browse,
+                    BOOL_OR(al.action_type='click_link')                      AS did_click,
+                    BOOL_OR(al.action_type='copy_coupon')                     AS did_copy
                   FROM action_logs al
                   WHERE al.action_time >= %s AND al.action_time < %s
                     AND al.user_id IS NOT NULL
                     { fun_clause }
+                  GROUP BY src, al.user_id
                 )
                 SELECT
-                  COUNT(DISTINCT (src, user_id))                                               AS reached,
-                  COUNT(DISTINCT (src, user_id)) FILTER (WHERE action_type='search')           AS searched,
-                  COUNT(DISTINCT (src, user_id)) FILTER (WHERE action_type='view_tag')         AS viewed_tag,
-                  COUNT(DISTINCT (src, user_id)) FILTER (WHERE action_type='click_link')       AS clicked,
-                  COUNT(DISTINCT (src, user_id)) FILTER (WHERE action_type='copy_coupon')      AS copied
-                FROM base
+                  COUNT(*)                                                              AS reached,
+                  COUNT(*) FILTER (WHERE did_browse)                                    AS browsed,
+                  COUNT(*) FILTER (WHERE did_browse AND did_click)                      AS clicked,
+                  COUNT(*) FILTER (WHERE did_browse AND did_click AND did_copy)         AS copied
+                FROM user_acts
             """, conn, params=tuple([_t_from, _t_to] + fun_params))
 
             r = df_fun.iloc[0]
             funnel_steps = [
-                ("👥 وصلوا للمنصة",  int(r["reached"]   or 0)),
-                ("🔍 بحثوا",          int(r["searched"]  or 0)),
-                ("🏷️ شاهدوا قسماً",   int(r["viewed_tag"] or 0)),
-                ("🖱️ نقروا",          int(r["clicked"]   or 0)),
-                ("🎟️ نسخوا",          int(r["copied"]    or 0)),
+                ("👥 وصلوا للمنصة",       int(r["reached"] or 0)),
+                ("🌐 تصفّحوا (بحث/قسم/قائمة)", int(r["browsed"] or 0)),
+                ("🖱️ نقروا متجراً",        int(r["clicked"] or 0)),
+                ("🎟️ نسخوا كوبوناً ✓",     int(r["copied"]  or 0)),
             ]
             df_funnel = pd.DataFrame(funnel_steps, columns=["المرحلة","العدد"])
             # نسب التحويل
@@ -9130,7 +9314,7 @@ elif page == "تحليل المستخدمين":
                     y=df_funnel["المرحلة"],
                     x=df_funnel["العدد"],
                     textinfo="value+percent initial",
-                    marker=dict(color=["#3B82F6","#06B6D4","#10B981","#F59E0B","#EF4444"]),
+                    marker=dict(color=["#3B82F6","#06B6D4","#F59E0B","#10B981"]),
                 ))
                 fig_fun.update_layout(title="مسار التحويل")
                 st.plotly_chart(apply_brand_theme(fig_fun), use_container_width=True)
@@ -9157,33 +9341,47 @@ elif page == "تحليل المستخدمين":
             st.markdown("#### 🔍 مين في كل مرحلة؟ + مين سقط بين كل مرحلتين؟")
             st.caption("اختر مرحلة لرؤية الأشخاص فيها، أو «سقط بين X و Y» لرؤية المتسرّبين.")
 
-            step_keys = ["وصلوا", "بحثوا", "شاهدوا قسماً", "نقروا", "نسخوا"]
+            # المسار المتدرّج (subset): نسخوا ⊆ نقروا ⊆ تصفّحوا ⊆ وصلوا
+            step_keys = ["وصلوا", "تصفّحوا", "نقروا", "نسخوا"]
             step_filters = {
-                "وصلوا":         "TRUE",                                     # كل من له حركة في النطاق
-                "بحثوا":          "EXISTS (SELECT 1 FROM action_logs al2 WHERE al2.user_id = base.user_id "
-                                  "AND base.src = (CASE WHEN al2.source='web' THEN 'web' ELSE 'bot' END) "
-                                  "AND al2.action_type='search' AND al2.action_time >= %s AND al2.action_time < %s)",
-                "شاهدوا قسماً":  "EXISTS (SELECT 1 FROM action_logs al2 WHERE al2.user_id = base.user_id "
-                                  "AND base.src = (CASE WHEN al2.source='web' THEN 'web' ELSE 'bot' END) "
-                                  "AND al2.action_type='view_tag' AND al2.action_time >= %s AND al2.action_time < %s)",
-                "نقروا":         "EXISTS (SELECT 1 FROM action_logs al2 WHERE al2.user_id = base.user_id "
-                                  "AND base.src = (CASE WHEN al2.source='web' THEN 'web' ELSE 'bot' END) "
-                                  "AND al2.action_type='click_link' AND al2.action_time >= %s AND al2.action_time < %s)",
-                "نسخوا":          "EXISTS (SELECT 1 FROM action_logs al2 WHERE al2.user_id = base.user_id "
-                                  "AND base.src = (CASE WHEN al2.source='web' THEN 'web' ELSE 'bot' END) "
-                                  "AND al2.action_type='copy_coupon' AND al2.action_time >= %s AND al2.action_time < %s)",
+                "وصلوا":     "TRUE",                                          # كل من له حركة في النطاق
+                "تصفّحوا":  "EXISTS (SELECT 1 FROM action_logs al2 WHERE al2.user_id = base.user_id "
+                              "AND base.src = (CASE WHEN al2.source='web' THEN 'web' ELSE 'bot' END) "
+                              "AND al2.action_type IN ('search','view_tag','view_all','view_trending','view_categories','view_favorites') "
+                              "AND al2.action_time >= %s AND al2.action_time < %s)",
+                "نقروا":    "EXISTS (SELECT 1 FROM action_logs al2 WHERE al2.user_id = base.user_id "
+                              "AND base.src = (CASE WHEN al2.source='web' THEN 'web' ELSE 'bot' END) "
+                              "AND al2.action_type='click_link' AND al2.action_time >= %s AND al2.action_time < %s)",
+                "نسخوا":     "EXISTS (SELECT 1 FROM action_logs al2 WHERE al2.user_id = base.user_id "
+                              "AND base.src = (CASE WHEN al2.source='web' THEN 'web' ELSE 'bot' END) "
+                              "AND al2.action_type='copy_coupon' AND al2.action_time >= %s AND al2.action_time < %s)",
+            }
+
+            # تركيب الـ AND للمراحل المتدرّجة (كل مرحلة subset)
+            step_cumulative = {
+                "وصلوا":     "TRUE",
+                "تصفّحوا":  step_filters["تصفّحوا"],
+                "نقروا":    f"({step_filters['تصفّحوا']}) AND ({step_filters['نقروا']})",
+                "نسخوا":     f"({step_filters['تصفّحوا']}) AND ({step_filters['نقروا']}) AND ({step_filters['نسخوا']})",
+            }
+            step_cum_params = {
+                "وصلوا":     0,
+                "تصفّحوا":  1,
+                "نقروا":    2,
+                "نسخوا":     3,
             }
 
             for i, step in enumerate(step_keys):
-                step_label = ["👥 وصلوا للمنصة","🔍 بحثوا","🏷️ شاهدوا قسماً","🖱️ نقروا","🎟️ نسخوا"][i]
+                step_label = ["👥 وصلوا للمنصة","🌐 تصفّحوا","🖱️ نقروا","🎟️ نسخوا (تحويل ناجح)"][i]
                 with st.expander(f"{step_label} — مين هم؟"):
                     try: conn.rollback()
                     except Exception: pass
+                    # نستخدم step_cumulative للحصول على strict subset
                     extra_clause = ""
                     extra_params = []
                     if step != "وصلوا":
-                        extra_clause = "AND " + step_filters[step]
-                        extra_params = [_t_from, _t_to]
+                        extra_clause = "AND " + step_cumulative[step]
+                        extra_params = [_t_from, _t_to] * step_cum_params[step]
                     df_step = pd.read_sql(f"""
                         WITH base AS (
                           SELECT DISTINCT
@@ -9218,20 +9416,20 @@ elif page == "تحليل المستخدمين":
                             key=f"ua_dl_fun_step_{i}",
                         )
 
-            # السقوط بين كل مرحلتين
+            # السقوط بين كل مرحلتين (cumulative)
             st.markdown("##### 🔻 المتسرّبون بين كل مرحلتين")
             for i in range(1, len(step_keys)):
                 prev_step = step_keys[i-1]
                 cur_step  = step_keys[i]
-                prev_label = ["👥 وصلوا","🔍 بحثوا","🏷️ شاهدوا قسماً","🖱️ نقروا"][i-1]
-                cur_label  = ["🔍 بحثوا","🏷️ شاهدوا قسماً","🖱️ نقروا","🎟️ نسخوا"][i-1]
+                prev_label = ["👥 وصلوا","🌐 تصفّحوا","🖱️ نقروا"][i-1]
+                cur_label  = ["🌐 تصفّحوا","🖱️ نقروا","🎟️ نسخوا"][i-1]
                 with st.expander(f"🔻 سقطوا بين «{prev_label}» و «{cur_label}»"):
                     try: conn.rollback()
                     except Exception: pass
-                    # في prev لكن ليس في cur
-                    prev_clause = "TRUE" if prev_step == "وصلوا" else step_filters[prev_step]
-                    cur_clause  = step_filters[cur_step]
-                    prev_params = [] if prev_step == "وصلوا" else [_t_from, _t_to]
+                    # وصلوا للسابق (cumulative) لكن لم يكملوا للحالي (الفلتر الجديد فقط)
+                    prev_clause = step_cumulative[prev_step]
+                    cur_clause  = step_filters[cur_step]   # الفلتر الإضافي فقط للحالي
+                    prev_params = [_t_from, _t_to] * step_cum_params[prev_step]
                     cur_params  = [_t_from, _t_to]
                     df_dropoff = pd.read_sql(f"""
                         WITH base AS (
@@ -9293,16 +9491,16 @@ elif page == "تحليل المستخدمين":
 
             geo_clause, geo_params = _ua_src_clause("al")
             # المدينة: أولاً من action_logs (CF Worker IP enrichment).
-            # لو NULL (الميني-ويب غالباً بسبب IPs تيليجرام) نرجع لمدينة
-            # المستخدم في bot_users/web_users — حسب نوع المصدر.
+            # لو NULL (الميني-ويب غالباً) نرجع لمدينة bot_users/web_users.
+            # ثم نوحّد العربي/الإنجليزي بـ _norm_city_sql.
+            _city_resolved = f"""COALESCE(
+                NULLIF(TRIM(al.city), ''),
+                NULLIF(TRIM(bu.city), ''),
+                NULLIF(TRIM(wu.city), '')
+            )"""
             df_geo = pd.read_sql(f"""
                 SELECT
-                  COALESCE(
-                      NULLIF(TRIM(al.city), ''),
-                      NULLIF(TRIM(bu.city), ''),
-                      NULLIF(TRIM(wu.city), ''),
-                      'غير معروف'
-                  )                                                                AS المدينة,
+                  COALESCE({ _norm_city_sql(_city_resolved) }, 'غير معروف')        AS المدينة,
                   COUNT(DISTINCT al.user_id)                                       AS مستخدمون,
                   COUNT(*) FILTER (WHERE al.action_type='copy_coupon')             AS نسخ,
                   COUNT(*) FILTER (WHERE al.action_type='click_link')              AS نقرات
@@ -9371,6 +9569,11 @@ elif page == "تحليل المستخدمين":
                 if city_pick:
                     try: conn.rollback()
                     except Exception: pass
+                    _city_resolved2 = f"""COALESCE(
+                        NULLIF(TRIM(al.city),''),
+                        NULLIF(TRIM(bu.city),''),
+                        NULLIF(TRIM(wu.city),'')
+                    )"""
                     df_city = pd.read_sql(f"""
                         WITH agg AS (
                           SELECT
@@ -9386,11 +9589,7 @@ elif page == "تحليل المستخدمين":
                           WHERE al.action_time >= %s AND al.action_time < %s
                             AND al.user_id IS NOT NULL
                             { geo_clause }
-                            AND COALESCE(
-                                NULLIF(TRIM(al.city),''),
-                                NULLIF(TRIM(bu.city),''),
-                                NULLIF(TRIM(wu.city),'')
-                            ) = %s
+                            AND { _norm_city_sql(_city_resolved2) } = %s
                           GROUP BY src, al.user_id
                         )
                         SELECT a.src AS source,
