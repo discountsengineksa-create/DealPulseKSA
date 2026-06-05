@@ -6554,7 +6554,7 @@ elif page == "تحليل المستخدمين":
         # الحالة: نشط = آخر ظهور < 20 يوم، خامل = ≥ 20 يوم (يتجدّد مع الدخول)
         # الاكتمال: مكتمل = مربوط بين الطرفين (web.telegram_username = bot.username)
         @st.cache_data(ttl=120)
-        def _gen_fetch_users(src, status, complete, lang, gender, age, t_from, t_to):
+        def _gen_fetch_users(src, status, complete, lang, gender, age, city, t_from, t_to):
             _BOT_HANDLES = ("SELECT LOWER(username) FROM bot_users "
                             "WHERE username IS NOT NULL")
             # tg مكتمل = مربوط بحساب موقع (نجلب بياناته عبر LEFT JOIN LATERAL أدناه)
@@ -6605,14 +6605,24 @@ elif page == "تحليل المستخدمين":
                 c = conds.get(age)
                 return f" AND {col} IS NOT NULL AND {c} " if c else ""
 
+            def _city_clause():
+                # المدينة من آخر IP (alias cty أدناه). «غير معروف» = بلا مدينة.
+                if not city:
+                    return ""
+                if city == "غير معروف":
+                    return " AND cty.city IS NULL "
+                safe = city.replace("'", "''")
+                return f" AND cty.city = '{safe}' "
+
             # المكتمل (المربوط) نملأ اسمه/إيميله/جواله من حساب الموقع المرتبط
             tg_sql = f"""
                 SELECT 'tg' AS realm, bu.telegram_id::text AS person_id,
                        bu.username AS handle,
                        COALESCE(w3.display_name, bu.name_en) AS name,
                        w3.email AS email, w3.phone_number AS phone,
+                       w3.gender AS gender,
                        EXTRACT(YEAR FROM AGE(w3.birth_date))::int AS age,
-                       w3.birth_date AS birth_date,
+                       w3.birth_date AS birth_date, cty.city AS city,
                        bu.last_seen, {tg_complete} AS is_complete
                 FROM bot_users bu
                 LEFT JOIN LATERAL (
@@ -6622,28 +6632,50 @@ elif page == "تحليل المستخدمين":
                       AND LOWER(w3.telegram_username) = LOWER(bu.username)
                     LIMIT 1
                 ) w3 ON TRUE
+                LEFT JOIN LATERAL (
+                    SELECT city FROM action_logs al
+                    WHERE al.user_id = bu.telegram_id
+                      AND al.source IN ('bot','telegram_miniapp')
+                      AND al.city IS NOT NULL AND al.city <> ''
+                      AND al.is_proxy IS NOT TRUE AND al.is_datacenter IS NOT TRUE
+                    ORDER BY al.action_time DESC LIMIT 1
+                ) cty ON TRUE
                 WHERE bu.deleted_at IS NULL
-                  {_stat('bu')} {_compl(tg_complete)} {_lang('bu')} {_gender('tg')} {_age('tg')}"""
+                  {_stat('bu')} {_compl(tg_complete)} {_lang('bu')} {_gender('tg')} {_age('tg')} {_city_clause()}"""
             web_unlinked = f"""
                 SELECT 'web' AS realm, wu.id::text AS person_id,
                        wu.telegram_username AS handle, wu.display_name AS name,
-                       wu.email, wu.phone_number AS phone,
+                       wu.email, wu.phone_number AS phone, wu.gender AS gender,
                        EXTRACT(YEAR FROM AGE(wu.birth_date))::int AS age,
-                       wu.birth_date AS birth_date,
+                       wu.birth_date AS birth_date, cty.city AS city,
                        wu.last_seen, {web_complete} AS is_complete
                 FROM web_users wu
+                LEFT JOIN LATERAL (
+                    SELECT city FROM action_logs al
+                    WHERE al.user_id = wu.id AND al.source = 'web'
+                      AND al.city IS NOT NULL AND al.city <> ''
+                      AND al.is_proxy IS NOT TRUE AND al.is_datacenter IS NOT TRUE
+                    ORDER BY al.action_time DESC LIMIT 1
+                ) cty ON TRUE
                 WHERE (wu.telegram_username IS NULL
                        OR LOWER(wu.telegram_username) NOT IN ({_BOT_HANDLES}))
-                  {_stat('wu')} {_compl(web_complete)} {_lang('wu')} {_gender('web')} {_age('web')}"""
+                  {_stat('wu')} {_compl(web_complete)} {_lang('wu')} {_gender('web')} {_age('web')} {_city_clause()}"""
             web_all = f"""
                 SELECT 'web' AS realm, wu.id::text AS person_id,
                        wu.telegram_username AS handle, wu.display_name AS name,
-                       wu.email, wu.phone_number AS phone,
+                       wu.email, wu.phone_number AS phone, wu.gender AS gender,
                        EXTRACT(YEAR FROM AGE(wu.birth_date))::int AS age,
-                       wu.birth_date AS birth_date,
+                       wu.birth_date AS birth_date, cty.city AS city,
                        wu.last_seen, {web_complete} AS is_complete
                 FROM web_users wu
-                WHERE TRUE {_stat('wu')} {_compl(web_complete)} {_lang('wu')} {_gender('web')} {_age('web')}"""
+                LEFT JOIN LATERAL (
+                    SELECT city FROM action_logs al
+                    WHERE al.user_id = wu.id AND al.source = 'web'
+                      AND al.city IS NOT NULL AND al.city <> ''
+                      AND al.is_proxy IS NOT TRUE AND al.is_datacenter IS NOT TRUE
+                    ORDER BY al.action_time DESC LIMIT 1
+                ) cty ON TRUE
+                WHERE TRUE {_stat('wu')} {_compl(web_complete)} {_lang('wu')} {_gender('web')} {_age('web')} {_city_clause()}"""
             params = []
             if src is None:                       # الكل
                 sql = tg_sql + " UNION ALL " + web_unlinked
@@ -6671,7 +6703,8 @@ elif page == "تحليل المستخدمين":
         _t_to   = (pd.Timestamp(gen_date_to) + pd.Timedelta(days=1)
                    ).strftime("%Y-%m-%d 00:00:00")
         df_users = _gen_fetch_users(gen_src, gen_status, gen_complete,
-                                    gen_lang, gen_gender, gen_age, _t_from, _t_to)
+                                    gen_lang, gen_gender, gen_age, gen_city,
+                                    _t_from, _t_to)
 
         st.markdown(f"### 👥 المستخدمون المطابقون: **{len(df_users)}**")
         if df_users.empty:
@@ -6682,13 +6715,18 @@ elif page == "تحليل المستخدمين":
                 {"tg": "🤖 تيليجرام", "web": "🌐 موقع"}).fillna(_disp["realm"])
             _disp["الملف"]  = _disp["is_complete"].map(
                 {True: "✅ مكتمل", False: "⛔ ناقص"})
+            _disp["الجنس"]  = _disp["gender"].map(
+                {"male": "♂️ ذكر", "female": "♀️ أنثى"}).fillna("—")
+            _disp["city"]   = _disp["city"].fillna("غير معروف")
             _disp = _disp.rename(columns={
                 "person_id": "المعرّف", "handle": "اليوزر",
                 "name": "الاسم", "email": "الإيميل",
                 "phone": "الجوال", "age": "العمر",
-                "birth_date": "تاريخ الميلاد", "last_seen": "آخر ظهور",
-            })[["النوع", "الملف", "المعرّف", "اليوزر", "الاسم",
-                "الإيميل", "الجوال", "العمر", "تاريخ الميلاد", "آخر ظهور"]]
+                "birth_date": "تاريخ الميلاد", "city": "المدينة",
+                "last_seen": "آخر ظهور",
+            })[["النوع", "الملف", "المعرّف", "اليوزر", "الاسم", "الإيميل",
+                "الجوال", "الجنس", "العمر", "تاريخ الميلاد", "المدينة",
+                "آخر ظهور"]]
             st.dataframe(_disp, use_container_width=True, hide_index=True)
 
     # ── القائمة الثانية: التحليل الفردي ─────────────────────────────────
