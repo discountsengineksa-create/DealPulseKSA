@@ -6557,10 +6557,8 @@ elif page == "تحليل المستخدمين":
         def _gen_fetch_users(src, status, complete, lang, t_from, t_to):
             _BOT_HANDLES = ("SELECT LOWER(username) FROM bot_users "
                             "WHERE username IS NOT NULL")
-            # تعبير «مكتمل» لكل طرف (يُستخدم للعمود والفلتر)
-            tg_complete  = (f"EXISTS (SELECT 1 FROM web_users w2 "
-                            f"WHERE w2.telegram_username IS NOT NULL "
-                            f"AND LOWER(w2.telegram_username) = LOWER(bu.username))")
+            # tg مكتمل = مربوط بحساب موقع (نجلب بياناته عبر LEFT JOIN LATERAL أدناه)
+            tg_complete  = "(w3.id IS NOT NULL)"
             web_complete = (f"(wu.telegram_username IS NOT NULL "
                             f"AND LOWER(wu.telegram_username) IN ({_BOT_HANDLES}))")
 
@@ -6585,18 +6583,27 @@ elif page == "تحليل المستخدمين":
                     return f" AND {alias}.lang = 'en' "
                 return ""
 
+            # المكتمل (المربوط) نملأ اسمه/إيميله/جواله من حساب الموقع المرتبط
             tg_sql = f"""
                 SELECT 'tg' AS realm, bu.telegram_id::text AS person_id,
-                       bu.username AS handle, bu.name_en AS name,
-                       NULL::text AS email, bu.last_seen,
-                       {tg_complete} AS is_complete
+                       bu.username AS handle,
+                       COALESCE(w3.display_name, bu.name_en) AS name,
+                       w3.email AS email, w3.phone_number AS phone,
+                       bu.last_seen, {tg_complete} AS is_complete
                 FROM bot_users bu
+                LEFT JOIN LATERAL (
+                    SELECT id, display_name, email, phone_number
+                    FROM web_users w3
+                    WHERE w3.telegram_username IS NOT NULL
+                      AND LOWER(w3.telegram_username) = LOWER(bu.username)
+                    LIMIT 1
+                ) w3 ON TRUE
                 WHERE bu.deleted_at IS NULL
                   {_stat('bu')} {_compl(tg_complete)} {_lang('bu')}"""
             web_unlinked = f"""
                 SELECT 'web' AS realm, wu.id::text AS person_id,
                        wu.telegram_username AS handle, wu.display_name AS name,
-                       wu.email, wu.last_seen,
+                       wu.email, wu.phone_number AS phone, wu.last_seen,
                        {web_complete} AS is_complete
                 FROM web_users wu
                 WHERE (wu.telegram_username IS NULL
@@ -6605,7 +6612,7 @@ elif page == "تحليل المستخدمين":
             web_all = f"""
                 SELECT 'web' AS realm, wu.id::text AS person_id,
                        wu.telegram_username AS handle, wu.display_name AS name,
-                       wu.email, wu.last_seen,
+                       wu.email, wu.phone_number AS phone, wu.last_seen,
                        {web_complete} AS is_complete
                 FROM web_users wu
                 WHERE TRUE {_stat('wu')} {_compl(web_complete)} {_lang('wu')}"""
@@ -6649,9 +6656,10 @@ elif page == "تحليل المستخدمين":
                 {True: "✅ مكتمل", False: "⛔ ناقص"})
             _disp = _disp.rename(columns={
                 "person_id": "المعرّف", "handle": "اليوزر",
-                "name": "الاسم", "email": "الإيميل", "last_seen": "آخر ظهور",
+                "name": "الاسم", "email": "الإيميل",
+                "phone": "الجوال", "last_seen": "آخر ظهور",
             })[["النوع", "الملف", "المعرّف", "اليوزر", "الاسم",
-                "الإيميل", "آخر ظهور"]]
+                "الإيميل", "الجوال", "آخر ظهور"]]
             st.dataframe(_disp, use_container_width=True, hide_index=True)
 
     # ── القائمة الثانية: التحليل الفردي ─────────────────────────────────
