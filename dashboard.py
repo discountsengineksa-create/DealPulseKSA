@@ -3264,1245 +3264,618 @@ if page == "تحليل الأقسام":
 # ════════════════════════════════════════════════════════════════════════════
 elif page == "تحليل المتاجر":
     page_title("📊", "تحليل المتاجر",
-               "لوحة قرار: مين تركّز عليه · مين تطيّره · مين تعطيه ترند — كل المتاجر بالأرقام الفعلية")
+               "مستخدمون · مفضلة · حركات — تفضيلات الترند اليدوية في تبويب مستقل")
 
-    CHAN_MAP = {"bot": "📱 بوت", "web": "🌐 ويب",
-                "telegram_miniapp": "🔹 بوت - ميني", "miniapp": "🔹 بوت - ميني"}
-    SRC_FILTER = {"📱 بوت": ["bot"], "🌐 ويب": ["web"],
-                  "🔹 بوت - ميني": ["telegram_miniapp", "miniapp"]}
+    # ── تبويبان رئيسيان فوق ────────────────────────────────────────
+    sm_tab_main, sm_tab_pin = st.tabs(
+        ["📊 تحليل المتاجر", "🎛️ تفضيلات الترند"])
 
-    # ── شريط التحكم ──────────────────────────────────────────────────────────
-    c_ref, c_src, c_hint = st.columns([1, 2.4, 2.6])
-    with c_ref:
-        if st.button("🔄 تحديث", width='stretch'):
-            _sa_load_actions.clear(); _sa_load_master.clear(); _sa_load_searches.clear()
-            st.rerun()
-    with c_src:
-        src_choice = st.radio("المصدر:", ["الكل", "📱 بوت", "🌐 ويب", "🔹 بوت - ميني"],
-                              horizontal=True, key="sm_src")
-    with c_hint:
-        st.caption("أرقام فعلية من action_logs و direct_search · مخزّنة 3 دقائق.")
+    # ── خرائط الفلاتر ──────────────────────────────────────────────
+    _SM_SRC_AR   = {"none": "لا شيء", "all": "الكل",
+                     "bot": "📱 البوت", "miniapp": "🔹 الميني-ويب",
+                     "web": "🌐 الموقع"}
+    _SM_STAT_AR  = {"none": "لا شيء", "all": "الكل",
+                     "active": "🟢 فعّال", "expiring": "⏳ قرب ينتهي",
+                     "expired": "🗄️ منتهي"}
+    _SM_TREND_AR = {"none": "لا شيء", "all": "الكل",
+                     "daily": "🌞 يومي", "weekly": "📅 أسبوعي"}
+    _SM_SRC_LOG  = {"bot": ["bot"],
+                     "miniapp": ["telegram_miniapp", "miniapp"],
+                     "web": ["web"]}
+    _SM_FAV_PLAT = {"bot": ["bot"], "miniapp": ["miniapp"], "web": ["web"]}
+    _SM_CHAN_AR  = {"bot": "📱 البوت", "web": "🌐 الموقع",
+                     "telegram_miniapp": "🔹 الميني-ويب",
+                     "miniapp": "🔹 الميني-ويب"}
 
-    try:
-        df_logs = _sa_load_actions()
-        df_master = _sa_load_master()
-        df_search = _sa_load_searches()
-    except Exception as e:
-        st.error(f"⚠️ تعذّر تحميل البيانات: {e}")
-        st.stop()
-
-    if df_master.empty:
-        st.info("📭 لا توجد متاجر في الماستر بعد.")
-        st.stop()
-
-    # ── استبعاد الكوبونات المنتهية (تاريخ الانتهاء فات) — مكانها «📦 أرشيف المنتهية» ──
-    _today_d = pd.Timestamp.today().date()
-    if "last_time" in df_master.columns:
-        _lt = pd.to_datetime(df_master["last_time"], errors="coerce").dt.date
-        df_master = df_master[_lt.isna() | (_lt >= _today_d)].copy()
-    if df_master.empty:
-        st.info("📭 لا توجد متاجر فعّالة (غير منتهية) حالياً. شوف صفحة «📦 أرشيف المنتهية».")
-        st.stop()
-    active_ids = set(df_master["store_id"])
-    if not df_logs.empty:
-        df_logs = df_logs[df_logs["store_id"].isin(active_ids)].copy()
-    if not df_search.empty:
-        df_search = df_search[df_search["store_id"].isin(active_ids)].copy()
-
-    # ── توقيت الرياض + توحيد الحقول ──────────────────────────────────────────
-    df_logs = df_logs.copy()
-    if not df_logs.empty:
-        df_logs["action_time"] = (pd.to_datetime(df_logs["action_time"])
-                                  + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
-        df_logs["adate"] = df_logs["action_time"].dt.date
-        df_logs["source"] = df_logs["source"].fillna("bot")
-        # المدينة الحقيقية = من الـ IP (action_logs.city) لكل المصادر: البوت يلتقطها وقت
-        # نقر الرابط عبر التحويل /go، والويب/الميني من الإثراء. bu_city افتراضية فلا نعتمدها.
-        df_logs["city_c"] = (df_logs["geo_city"].fillna("").astype(str)
-                             .str.strip().replace("", "غير معروف"))
-        df_logs["src_ar"] = df_logs["source"].map(CHAN_MAP).fillna("🌐 ويب")
-
-        def _clean(v):
-            """يحوّل أي قيمة لـ str ويتجاهل NaN/None (تجنّب ظهور 'nan' حرفياً)."""
-            if v is None or (isinstance(v, float) and pd.isna(v)):
-                return ""
-            s = str(v).strip()
-            return "" if s.lower() == "nan" else s
-
-        def _identity(r):
-            src = r["source"]
-            # ميني-ويب: مستخدم تيليجرام معروف — استخدم اسم التيليجرام أولاً
-            # (نفس منطق البوت). LEFT JOIN bot_users يربط user_id → bu_username
-            # تلقائياً في SQL، فالاسم متاح هنا حتى لمصدر telegram_miniapp.
-            if src in ("telegram_miniapp", "miniapp"):
-                u = _clean(r.get("bu_username"))
-                if u:
-                    return "@" + u.lstrip("@")
-                uid = r.get("user_id")
-                if pd.notna(uid):
-                    return f"🔹 بوت - ميني {int(uid)}"
-                h = _clean(r.get("ip_hex"))
-                if h:
-                    return f"🔹 بوت - ميني #{h[:6]}"
-                return "🔹 بوت - ميني (غير مسجّل)"
-            # ويب عادي: زائر مجهول → name/email/phone لو مسجّل، وإلا ip_hex
-            if src == "web":
-                for k in ("web_name", "web_email", "web_phone"):
-                    v = _clean(r.get(k))
-                    if v:
-                        return v
-                h = _clean(r.get("ip_hex"))
-                if h:
-                    return f"🌐 زائر ويب #{h[:6]}"
-                return "🌐 زائر ويب (غير مسجّل)"
-            # البوت (افتراضي): اسم تيليجرام → id → مجهول
-            u = _clean(r.get("bu_username"))
-            if u:
-                return "@" + u.lstrip("@")
-            uid = r.get("user_id")
-            return f"تيليجرام {int(uid)}" if pd.notna(uid) else "مجهول"
-        df_logs["identity"] = df_logs.apply(_identity, axis=1)
-    else:
-        for c in ["adate", "source", "city_c", "src_ar", "identity"]:
-            df_logs[c] = pd.Series(dtype="object")
-
-    if not df_search.empty:
-        df_search = df_search.copy()
-        df_search["search_date"] = (pd.to_datetime(df_search["search_date"])
-                                    + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
-        df_search["adate"] = df_search["search_date"].dt.date
-
-    # ── فلتر الفترة ──────────────────────────────────────────────────────────
-    if not df_logs.empty:
-        _min_d, _max_d = df_logs["adate"].min(), df_logs["adate"].max()
-    elif not df_search.empty:
-        _min_d, _max_d = df_search["adate"].min(), df_search["adate"].max()
-    else:
-        import datetime as _dt
-        _min_d = _max_d = _dt.date.today()
-
-    dcol1, dcol2 = st.columns([2, 3])
-    with dcol1:
-        _dr = st.date_input("📅 الفترة (من → إلى):", value=(_min_d, _max_d),
-                            min_value=_min_d, max_value=_max_d, key="sm_dates")
-    d_start, d_end = (_dr if isinstance(_dr, (list, tuple)) and len(_dr) == 2 else (_min_d, _max_d))
-    if not df_logs.empty:
-        df_logs = df_logs[(df_logs["adate"] >= d_start) & (df_logs["adate"] <= d_end)]
-    if not df_search.empty:
-        df_search = df_search[(df_search["adate"] >= d_start) & (df_search["adate"] <= d_end)]
-
-    # ── نطاق المصدر (يحدّد أرقام اللوحة) ──────────────────────────────────────
-    if src_choice in SRC_FILTER and not df_logs.empty:
-        df_scope = df_logs[df_logs["source"].isin(SRC_FILTER[src_choice])]
-    else:
-        df_scope = df_logs
-
-    def _search_scope(ds):
-        if ds is None or ds.empty:
-            return ds
-        p = ds["platform"].astype(str).str.lower()
-        is_mini = p.str.contains("mini")          # Miniapp / telegram_miniapp / TelegramMiniApp
-        if src_choice == "📱 بوت":
-            # البوت فقط — نستبعد الميني صراحةً حتى لو تسميته تحوي «telegram»
-            return ds[(p.str.contains("telegram") | p.str.contains("bot")) & ~is_mini]
-        if src_choice == "🌐 ويب":
-            return ds[p.str.contains("web")]
-        if src_choice == "🔹 بوت - ميني":
-            return ds[is_mini]
-        return ds
-    df_search_scope = _search_scope(df_search)
-
-    with dcol2:
-        st.caption(f"📅 {d_start} ← {d_end} · المصدر: {src_choice} · "
-                   f"أحداث: **{len(df_scope):,}**")
-
-    # ── تجميع لكل متجر (قاعدة = كل متاجر الماستر، حتى الخاملة بصفر) ───────────
-    def _store_agg(d, ds):
-        piv = (d.groupby(["store_id", "action_type"]).size().unstack(fill_value=0)
-               if not d.empty else pd.DataFrame())
-        for c in ["click_link", "copy_coupon"]:
-            if c not in piv.columns:
-                piv[c] = 0
-        piv = piv.rename(columns={"click_link": "نقرات", "copy_coupon": "نسخ"})
-        piv = piv[["نقرات", "نسخ"]] if not piv.empty else pd.DataFrame(columns=["نقرات", "نسخ"])
-        if ds is not None and not ds.empty:
-            sps = ds[ds["store_id"].notna()].groupby("store_id").size().rename("بحث")
-        else:
-            sps = pd.Series(dtype="int64", name="بحث")
-        return piv.join(sps, how="outer")
-
-    ev = _store_agg(df_scope, df_search_scope)
-    stores_all = df_master[["store_id", "is_trending", "logo_url"]].drop_duplicates("store_id").copy()
-    agg = stores_all.merge(ev, left_on="store_id", right_index=True, how="left")
-    for c in ["نقرات", "نسخ", "بحث"]:
-        if c not in agg.columns:
-            agg[c] = 0
-        agg[c] = agg[c].fillna(0).astype(int)
-
-    # ── أعداد المفضّلين لكل متجر (kind='store') — التفضيل كإشارة قرار مباشرة في
-    #    لوحة القرار، تناظراً مع عمود «مفضّلون» في صفحة «تحليل الأقسام». ──
-    try:
-        _favs_all = _sa_load_favorites()
-    except Exception:
-        _favs_all = pd.DataFrame()
-    if not _favs_all.empty and "kind" in _favs_all.columns:
-        _favs_store = _favs_all[_favs_all["kind"] == "store"].copy()
-        # احترام فلتر المصدر (platform) المختار أعلى الصفحة
-        _PLAT_F = {"📱 بوت": ["bot"], "🌐 ويب": ["web"], "🔹 بوت - ميني": ["miniapp"]}
-        if src_choice in _PLAT_F:
-            _favs_store = _favs_store[_favs_store["platform"].isin(_PLAT_F[src_choice])]
-        if not _favs_store.empty:
-            _fav_cnt = _favs_store.groupby("store_id").size().rename("مفضّلون")
-            agg = agg.merge(_fav_cnt, left_on="store_id", right_index=True, how="left")
-    if "مفضّلون" not in agg.columns:
-        agg["مفضّلون"] = 0
-    agg["مفضّلون"] = agg["مفضّلون"].fillna(0).astype(int)
-
-    # الإجمالي = أحداث التفاعل فقط (نقر/نسخ/بحث). التفضيل إشارة منفصلة لا تُجمع هنا.
-    agg["الإجمالي"] = agg["نقرات"] + agg["نسخ"] + agg["بحث"]
-    agg["is_trending"] = agg["is_trending"].fillna("عادي")
-    agg["logo_url"] = agg["logo_url"].fillna("")
-    agg["مُترند"] = agg["is_trending"].apply(lambda s: "🔥" if "ترند" in str(s) else "")
-
-    # ── محرّك التوصية ────────────────────────────────────────────────────────
-    n_stores = len(agg)
-    q_hi = agg["نسخ"].quantile(0.75) if n_stores >= 4 else agg["نسخ"].max()
-    q_lo = agg["نسخ"].quantile(0.25) if n_stores >= 4 else 0
-    s_hi = agg["بحث"].quantile(0.75) if n_stores >= 4 else agg["بحث"].max()
-
-    def _reco(r):
-        trending = "ترند" in str(r["is_trending"])
-        if r["الإجمالي"] == 0:
-            return "💤 خامل — مرشّح للإيقاف"
-        if r["نسخ"] >= q_hi and r["نسخ"] > 0 and not trending:
-            return "🔥 رشّح للترند"
-        if trending and r["نسخ"] <= q_lo:
-            return "⬇️ اسحب الترند"
-        if r["بحث"] >= s_hi and r["بحث"] > 0 and r["نسخ"] <= q_lo:
-            return "⚠️ مطلوب وضعيف — راجع العرض"
-        if r["نسخ"] <= q_lo and not trending:
-            return "🪫 ضعيف — قلّل التركيز"
-        return "✅ مستقر"
-    agg["التوصية"] = agg.apply(_reco, axis=1)
-    agg = agg.sort_values(["نسخ", "الإجمالي"], ascending=False).reset_index(drop=True)
-    agg.insert(0, "#", range(1, len(agg) + 1))
-
-    # ── 6 كروت: الأعلى/الأقل لكل مؤشر ────────────────────────────────────────
-    def _hi(col):
-        return agg.sort_values([col, "الإجمالي"], ascending=False).iloc[0]
-    def _lo(col):
-        return agg.sort_values([col, "الإجمالي"], ascending=True).iloc[0]
-    hn, ln = _hi("نسخ"), _lo("نسخ")
-    hs, ls = _hi("بحث"), _lo("بحث")
-    hc, lc = _hi("نقرات"), _lo("نقرات")
-
-    r1a, r1b, r1c = st.columns(3)
-    with r1a: kpi_card("🏆", "الأعلى نسخاً (ركّز)", f"{hn['store_id']}", "emerald", note=f"{int(hn['نسخ'])} نسخة")
-    with r1b: kpi_card("🔍", "الأعلى بحثاً", f"{hs['store_id']}", "info", note=f"{int(hs['بحث'])} بحث")
-    with r1c: kpi_card("🖱️", "الأعلى نقراً", f"{hc['store_id']}", "warning", note=f"{int(hc['نقرات'])} نقرة")
-    r2a, r2b, r2c = st.columns(3)
-    with r2a: kpi_card("🗑️", "الأقل نسخاً (طيّره؟)", f"{ln['store_id']}", "danger", note=f"{int(ln['نسخ'])} نسخة")
-    with r2b: kpi_card("📉", "الأقل بحثاً", f"{ls['store_id']}", "neutral", note=f"{int(ls['بحث'])} بحث")
-    with r2c: kpi_card("🔻", "الأقل نقراً", f"{lc['store_id']}", "neutral", note=f"{int(lc['نقرات'])} نقرة")
-
-    _SM_TABS = [
-        "🏆 لوحة القرار (كل المتاجر)",
-        "👤 مين نسخ من متجر",
-        "📈 الرسوم والمعدلات",
-        "❤️ المفضلة",
-        "🔥 الترند",
-    ]
-    # radio بدل st.tabs: يثبّت التبويب المختار عبر إعادة التشغيل. st.tabs يرجع
-    # للتبويب الأول مع أي rerun (تغيير الفلتر أو زر «تحديث») — هذا يبقيك مكانك.
-    _sm_tab = st.radio("العرض:", _SM_TABS, horizontal=True,
-                       key="sm_active_tab", label_visibility="collapsed")
-
-    # ─────────────────────────── لوحة القرار ───────────────────────────
-    if _sm_tab == _SM_TABS[0]:
-        st.caption("كل متاجر الماستر تظهر (حتى الخاملة بصفر) · مرتّبة بالنسخ · «التوصية» قاعدة آلية. "
-                   "اضغط رأس أي عمود للفرز.")
-        q = st.text_input("🔎 ابحث عن متجر:", key="sm_board_q")
-        board = agg.copy()
-        if q:
-            board = board[board["store_id"].str.contains(q, case=False, na=False)]
-        view = pd.DataFrame({
-            "#": board["#"].values,
-            "الشعار": board["logo_url"].values,
-            "المتجر": board["store_id"].values,
-            "🔥": board["مُترند"].values,
-            "نسخ": board["نسخ"].values,
-            "نقرات": board["نقرات"].values,
-            "بحث": board["بحث"].values,
-            "❤️": board["مفضّلون"].values,
-            "الإجمالي": board["الإجمالي"].values,
-            "التوصية": board["التوصية"].values,
-        })
-        _maxtot = int(max(1, agg["الإجمالي"].max()))
-        st.dataframe(
-            view, hide_index=True, width='stretch',
-            column_config={
-                "الشعار": st.column_config.ImageColumn("🏪", width="small"),
-                "❤️": st.column_config.NumberColumn("❤️ مفضّلون", help="عدد الأشخاص الذين أضافوا المتجر لمفضّلتهم"),
-                "الإجمالي": st.column_config.ProgressColumn(
-                    "الإجمالي", format="%d", min_value=0, max_value=_maxtot),
-            },
-        )
-        st.download_button("📥 تحميل CSV", view.to_csv(index=False).encode("utf-8-sig"),
-                           f"stores_decision_{d_start}_{d_end}.csv", "text/csv")
-
-        # تفصيل لكل مصدر (يظهر في وضع «الكل») — نسخ/نقر لكل متجر × مصدر
-        if src_choice == "الكل" and not df_logs.empty:
-            with st.expander("📱🌐🔹 تفصيل النسخ والنقر لكل متجر حسب المصدر"):
-                brk = (df_logs[df_logs["action_type"].isin(["copy_coupon", "click_link"])]
-                       .assign(chan=lambda d: d["source"].map(CHAN_MAP).fillna("أخرى"),
-                               نوع=lambda d: d["action_type"].map({"copy_coupon": "نسخ", "click_link": "نقر"}))
-                       .groupby(["store_id", "chan", "نوع"]).size().reset_index(name="ع"))
-                if brk.empty:
-                    st.info("لا توجد نسخ/نقر ضمن الفترة.")
-                else:
-                    pb = brk.pivot_table(index="store_id", columns=["chan", "نوع"],
-                                         values="ع", fill_value=0)
-                    pb.columns = [f"{a} {b}" for a, b in pb.columns]
-                    pb = pb.reset_index().rename(columns={"store_id": "المتجر"})
-                    st.dataframe(pb, hide_index=True, width='stretch')
-                    st.caption("النسخ والنقر مفصولة لكل مصدر (بوت/ويب/ميني-ويب). "
-                               "تظهر أرقام الميني-ويب بعد نشره واستخدامه فعلياً.")
+    # ════════════════════════════════════════════════════════════════
+    # TAB 1: تحليل المتاجر
+    # ════════════════════════════════════════════════════════════════
+    with sm_tab_main:
+        # ─── شريط الفلاتر العلوي: المصدر + تحديث ─────────────────
+        _c1, _c2 = st.columns([4, 1])
+        with _c1:
+            _src_lbl = st.segmented_control(
+                "📡 المصدر", list(_SM_SRC_AR.values()),
+                default="الكل", key="sm_src_pill")
+        with _c2:
+            st.markdown("&nbsp;", unsafe_allow_html=True)
+            if st.button("🔄 تحديث", key="sm_refresh",
+                         help="مسح الكاش وإعادة التحميل",
+                         width='stretch'):
+                _sa_load_actions.clear()
+                _sa_load_master.clear()
+                _sa_load_searches.clear()
+                _sa_load_favorites.clear()
+                st.rerun()
+        _src_key = next((k for k, v in _SM_SRC_AR.items()
+                          if v == _src_lbl), "all")
 
         st.divider()
-        cc1, cc2 = st.columns(2)
-        with cc1:
-            promote = agg[agg["التوصية"].str.contains("رشّح للترند")]
-            st.markdown("**🔥 رشّحهم للترند:**")
-            st.write("، ".join(promote["store_id"].tolist()) or "—")
-        with cc2:
-            drop = agg[agg["التوصية"].str.contains("اسحب الترند|الإيقاف|قلّل")]
-            st.markdown("**⬇️ راجعهم (اسحب ترند / أوقف / قلّل تركيز):**")
-            st.write("، ".join(drop["store_id"].tolist()) or "—")
 
-    # ─────────────────────────── مين نسخ ───────────────────────────
-    elif _sm_tab == _SM_TABS[1]:
-        st.caption("الافتراضي: كل المتاجر دفعة وحدة. اختر متجراً محدداً لو تبي تركّز عليه.")
-        _ALL_STORES = "— الكل (جميع المتاجر) —"
-        store_opts = [_ALL_STORES] + agg.sort_values("نسخ", ascending=False)["store_id"].tolist()
-        sel = st.selectbox("المتجر:", store_opts, key="sm_who_store")
+        # ─── نطاق التاريخ ───────────────────────────────────────
+        _d1, _d2 = st.columns(2)
+        _today = date.today()
+        with _d1:
+            sm_date_from = st.date_input(
+                "📅 من تاريخ",
+                value=_today - timedelta(days=30),
+                max_value=_today, key="sm_date_from")
+        with _d2:
+            sm_date_to = st.date_input(
+                "📅 إلى تاريخ", value=_today,
+                min_value=sm_date_from, max_value=_today,
+                key="sm_date_to")
 
-        if sel == _ALL_STORES:
-            sdf = df_scope
-        else:
-            sdf = df_scope[df_scope["store_id"] == sel] if not df_scope.empty else df_scope
-        scopy = sdf[sdf["action_type"] == "copy_coupon"] if not sdf.empty else sdf
-        sclick = sdf[sdf["action_type"] == "click_link"] if not sdf.empty else sdf
+        st.divider()
 
-        m1, m2, m3 = st.columns(3)
-        with m1: kpi_card("🎟️", "إجمالي النسخ", f"{len(scopy):,}", "emerald")
-        with m2: kpi_card("👤", "ناسخون مختلفون",
-                          f"{scopy['identity'].nunique() if not scopy.empty else 0:,}", "info")
-        if sel == _ALL_STORES:
-            with m3: kpi_card("🏪", "متاجر منسوخ منها",
-                              f"{scopy['store_id'].nunique() if not scopy.empty else 0:,}", "warning")
-        else:
-            with m3: kpi_card("🖱️", "النقرات", f"{len(sclick):,}", "warning")
+        # ─── حالة المتجر ────────────────────────────────────────
+        _stat_lbl = st.segmented_control(
+            "🏪 حالة المتجر", list(_SM_STAT_AR.values()),
+            default="الكل", key="sm_stat_pill")
+        _stat_key = next((k for k, v in _SM_STAT_AR.items()
+                           if v == _stat_lbl), "all")
 
-        # ── المفضِّلون لهذا النطاق (kind='store') — يظهرون حتى لو لم ينسخوا ──
-        def _cln(v):
-            if v is None or (isinstance(v, float) and pd.isna(v)):
-                return ""
-            s = str(v).strip()
-            return "" if s.lower() == "nan" else s
-
+        # ─── تحميل البيانات ─────────────────────────────────────
         try:
-            _fw = _sa_load_favorites()
+            df_logs_raw   = _sa_load_actions()
+            df_master_raw = _sa_load_master()
+            df_search_raw = _sa_load_searches()
+            df_fav_raw    = _sa_load_favorites()
+        except Exception as _e:
+            st.error(f"⚠️ تعذّر تحميل البيانات: {_e}")
+            st.stop()
+
+        if df_master_raw.empty:
+            st.info("📭 لا توجد متاجر في الماستر.")
+            st.stop()
+
+        # ─── فلتر حالة المتجر (last_time = تاريخ انتهاء الكوبون) ─
+        # فعّال = NULL أو ≥ today+7 · قرب ينتهي = today ≤ < today+7 ·
+        # منتهي = < today
+        master = df_master_raw.copy()
+        _soon = _today + timedelta(days=7)
+        _lt = pd.to_datetime(master.get("last_time"), errors="coerce").dt.date
+        if _stat_key == "active":
+            master = master[_lt.isna() | (_lt >= _soon)]
+        elif _stat_key == "expiring":
+            master = master[(~_lt.isna()) & (_lt >= _today) & (_lt < _soon)]
+        elif _stat_key == "expired":
+            master = master[(~_lt.isna()) & (_lt < _today)]
+        # "all" / "none" → لا تفلتر
+
+        # ─── حساب ترند IDs (live algorithm، نوافذ ثابتة) ────────
+        _now_r = (pd.Timestamp.utcnow().tz_localize(None)
+                  + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
+        _today_start = _now_r.normalize()
+        _week_start  = _now_r - pd.Timedelta(days=7)
+
+        _df_l = df_logs_raw.copy()
+        if not _df_l.empty:
+            _df_l["action_time"] = (
+                pd.to_datetime(_df_l["action_time"])
+                + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
+        _df_f = df_fav_raw.copy()
+        if not _df_f.empty:
+            _df_f["created_at"] = (
+                pd.to_datetime(_df_f["created_at"], utc=True)
+                .dt.tz_localize(None)
+                + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
+
+        _act_ids = set(master["store_id"])
+        try:
+            _daily_df  = _sa_compute_trend(_df_l, _df_f,
+                                            _today_start, _now_r, _act_ids)
+            _weekly_df = _sa_compute_trend(_df_l, _df_f,
+                                            _week_start, _now_r, _act_ids)
         except Exception:
-            _fw = pd.DataFrame()
-        if not _fw.empty and "kind" in _fw.columns:
-            _fw = _fw[_fw["kind"] == "store"].copy()
-            # فلتر المصدر: «📱 بوت» يعرض مفضّلي البوت فقط، إلخ (الكل = الجميع)
-            _PLAT_F = {"📱 بوت": ["bot"], "🌐 ويب": ["web"], "🔹 بوت - ميني": ["miniapp"]}
-            if src_choice in _PLAT_F:
-                _fw = _fw[_fw["platform"].isin(_PLAT_F[src_choice])]
-            if sel != _ALL_STORES:
-                _fw = _fw[_fw["store_id"] == sel]
-        else:
-            _fw = pd.DataFrame()
+            _daily_df  = pd.DataFrame()
+            _weekly_df = pd.DataFrame()
+        daily_ids  = (set(_daily_df["store_id"].tolist()[:3])
+                      if not _daily_df.empty else set())
+        weekly_ids = (set(_weekly_df["store_id"].tolist()[:7])
+                      if not _weekly_df.empty else set())
 
-        _CHAN_FAV = {"bot": "📱 بوت", "web": "🌐 ويب",
-                     "miniapp": "🔹 بوت - ميني", "telegram_miniapp": "🔹 بوت - ميني"}
-
-        def _fav_ident(r):
-            if pd.notna(r.get("telegram_id")):
-                u = _cln(r.get("bu_username"))
-                if u:
-                    return "@" + u.lstrip("@")
-                if r.get("platform") in ("miniapp", "telegram_miniapp"):
-                    return f"🔹 بوت - ميني {int(r['telegram_id'])}"
-                return f"تيليجرام {int(r['telegram_id'])}"
-            for k in ("web_name", "web_email"):
-                v = _cln(r.get(k))
-                if v:
-                    return v
-            return None
-
-        _fav_rows = []
-        if not _fw.empty:
-            for _, _fr in _fw.iterrows():
-                _id = _fav_ident(_fr)
-                if _id is None or pd.isna(_fr.get("store_id")):
-                    continue
-                _fav_rows.append({"identity": _id, "store_id": _fr["store_id"],
-                                  "fav_src": _CHAN_FAV.get(_fr.get("platform"), _fr.get("platform"))})
-        _fav_df = pd.DataFrame(_fav_rows)
-        _fav_set = (set(zip(_fav_df["identity"], _fav_df["store_id"]))
-                    if not _fav_df.empty else set())
-
-        if scopy.empty and _fav_df.empty:
-            st.info("لا توجد نسخات ولا مفضّلات ضمن الفترة/المصدر.")
-        else:
-            _group_keys = ["identity", "store_id"] if sel == _ALL_STORES else ["identity"]
-            # عدّاد نسخ/نقر/بحث + كل أحداث التفاعل لكل (مستخدم[+متجر])
-            events = (sdf[sdf["action_type"].isin(["copy_coupon", "click_link", "search"])]
-                      if not sdf.empty else sdf)
-            if not events.empty:
-                counts = (events.groupby(_group_keys + ["action_type"])
-                                .size().unstack(fill_value=0).reset_index())
-            else:
-                counts = pd.DataFrame(columns=list(_group_keys))
-            for c in ("copy_coupon", "click_link", "search"):
-                if c not in counts.columns:
-                    counts[c] = 0
-            # المصدر + أول/آخر تفاعل من **كل** أحداث الشخص على المتجر (نقر/بحث/نسخ)
-            # — لا النسخ فقط — حتى لا يطلع «None»/«—» لمن نقر أو بحث بلا نسخ.
-            if not events.empty:
-                meta = (events.groupby(_group_keys).agg(
-                            src=("src_ar", lambda s: "، ".join(sorted(set(s)))),
-                            first=("action_time", "min"),
-                            last=("action_time", "max"),
-                        ).reset_index())
-                who = counts.merge(meta, on=_group_keys, how="left")
-            else:
-                who = counts.copy()
-                who["src"] = pd.NA
-                who["first"] = pd.NaT
-                who["last"] = pd.NaT
-
-            # نُبقي: من نسخ (copy>0) أو من فضّل المتجر — نُقصي بقية الزوّار
-            if not who.empty:
-                def _keep(r):
-                    _sid = r["store_id"] if sel == _ALL_STORES else sel
-                    return (r["copy_coupon"] > 0) or ((r["identity"], _sid) in _fav_set)
-                who = who[who.apply(_keep, axis=1)].copy()
-
-            # أضف صفوف المفضِّلين الذين لا حدث (نسخ/نقر/بحث) لهم إطلاقاً (مفضّل فقط)
-            if not _fav_df.empty:
-                if sel == _ALL_STORES:
-                    _present = (set(zip(who["identity"], who["store_id"]))
-                                if not who.empty else set())
-                    _mask = [((i, s) not in _present)
-                             for i, s in zip(_fav_df["identity"], _fav_df["store_id"])]
-                else:
-                    _present = set(who["identity"]) if not who.empty else set()
-                    _mask = [(i not in _present) for i in _fav_df["identity"]]
-                _miss = _fav_df[_mask]
-                if not _miss.empty:
-                    _addcols = {
-                        "identity": _miss["identity"].values,
-                        "copy_coupon": 0, "click_link": 0, "search": 0,
-                        "src": _miss["fav_src"].values,
-                        "first": pd.NaT, "last": pd.NaT,
-                    }
-                    if sel == _ALL_STORES:
-                        _addcols["store_id"] = _miss["store_id"].values
-                    who = pd.concat([who, pd.DataFrame(_addcols)], ignore_index=True)
-
-            # ── ملف تعريف الشخص: إيميل/جوال/تيليجرام/مدينة التسجيل لكل identity ──
-            def _first_ne(series):
-                if series is None:
-                    return ""
-                for v in series:
-                    s = _cln(v)
-                    if s:
-                        return s
-                return ""
-
-            _profile = {}   # identity -> {email, phone, tg, city}
-            if not df_logs.empty and "identity" in df_logs.columns:
-                for _ident, _grp in df_logs.groupby("identity"):
-                    _tg = _first_ne(_grp.get("web_tg")) or _first_ne(_grp.get("bu_username"))
-                    _profile[_ident] = {
-                        "email": _first_ne(_grp.get("web_email")),
-                        "phone": _first_ne(_grp.get("web_phone")),
-                        "tg":    _tg,
-                        "city":  _first_ne(_grp.get("web_city")) or _first_ne(_grp.get("bu_city")),
-                    }
-            if not _fw.empty:
-                for _, _fr in _fw.iterrows():
-                    _ident = _fav_ident(_fr)
-                    if _ident is None or _ident in _profile:
-                        continue
-                    _tg = _cln(_fr.get("web_tg")) or _cln(_fr.get("bu_username"))
-                    _profile[_ident] = {
-                        "email": _cln(_fr.get("web_email")),
-                        "phone": _cln(_fr.get("web_phone")),
-                        "tg":    _tg,
-                        "city":  _cln(_fr.get("web_city")) or _cln(_fr.get("bu_city")),
-                    }
-
-            # المدينة: من IP (نقر /go) إن توفّر، وإلا من مدينة التسجيل
-            _geo = df_logs[df_logs["city_c"] != "غير معروف"]
-            _cmap = ({} if _geo.empty else
-                     _geo.groupby("identity")["city_c"].agg(
-                         lambda s: s.mode().iat[0] if not s.mode().empty else "غير معروف").to_dict())
-
-            def _city_of(ident):
-                c = _cmap.get(ident)
-                if c and c != "غير معروف":
-                    return c
-                return _profile.get(ident, {}).get("city") or "غير معروف"
-
-            def _tg_of(ident):
-                t = _profile.get(ident, {}).get("tg")
-                return ("@" + t.lstrip("@")) if t else "—"
-
-            if not who.empty:
-                who["المدينة"] = who["identity"].map(_city_of)
-                who["الإيميل"] = who["identity"].map(lambda i: _profile.get(i, {}).get("email") or "—")
-                who["الجوال"] = who["identity"].map(lambda i: _profile.get(i, {}).get("phone") or "—")
-                who["تيليجرام"] = who["identity"].map(_tg_of)
-            else:
-                for _c in ("المدينة", "الإيميل", "الجوال", "تيليجرام"):
-                    who[_c] = pd.Series(dtype="object")
-
-            def _who_fav(r):
-                _sid = r["store_id"] if sel == _ALL_STORES else sel
-                return f"❤️ {_sid}" if (r["identity"], _sid) in _fav_set else "—"
-            who["❤️ المفضلة"] = (who.apply(_who_fav, axis=1)
-                                 if not who.empty else pd.Series(dtype="object"))
-
-            who = who.rename(columns={"identity": "المستخدم", "store_id": "المتجر",
-                                      "copy_coupon": "نسخ", "click_link": "نقر",
-                                      "search": "بحث",
-                                      "src": "المصدر", "first": "أول تفاعل", "last": "آخر تفاعل"})
-            who = who.sort_values("نسخ", ascending=False)
-            who["أول تفاعل"] = pd.to_datetime(who["أول تفاعل"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
-            who["آخر تفاعل"] = pd.to_datetime(who["آخر تفاعل"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
-            who[["أول تفاعل", "آخر تفاعل"]] = who[["أول تفاعل", "آخر تفاعل"]].fillna("—")
-            who["المصدر"] = who["المصدر"].fillna("—")
-            _cols = (["المستخدم", "الإيميل", "الجوال", "تيليجرام", "المدينة",
-                      "المتجر", "المصدر", "نسخ", "نقر", "بحث",
-                      "❤️ المفضلة", "أول تفاعل", "آخر تفاعل"]
-                     if sel == _ALL_STORES else
-                     ["المستخدم", "الإيميل", "الجوال", "تيليجرام", "المدينة",
-                      "المصدر", "نسخ", "نقر", "بحث",
-                      "❤️ المفضلة", "أول تفاعل", "آخر تفاعل"])
-            st.dataframe(who[_cols], hide_index=True, width='stretch')
-            _fname = "all" if sel == _ALL_STORES else sel
-            st.download_button("📥 تحميل القائمة (CSV)",
-                               who.to_csv(index=False).encode("utf-8-sig"),
-                               f"interactions_{_fname}_{d_start}_{d_end}.csv", "text/csv")
-            st.caption("يشمل **من نسخ** و**من فضّل** المتجر · «المصدر» و«التفاعل» من كل أحداث الشخص "
-                       "(نقر/بحث/نسخ). مفضّل بلا أي تفاعل آخر = «—» في التاريخ. «المدينة» من IP نقر /go.")
-
-    # ─────────────────────────── الرسوم والمعدلات ───────────────────────────
-    elif _sm_tab == _SM_TABS[2]:
-        st.markdown("**🎟️ النسخ لكل متجر (أعلى 20)**")
-        topn = agg[agg["نسخ"] > 0].sort_values("نسخ", ascending=False).head(20)
-        if topn.empty:
-            st.info("لا توجد نسخ ضمن الفلتر الحالي.")
-        else:
-            fig1 = px.bar(topn, x="نسخ", y="store_id", orientation="h",
-                          color="نسخ", color_continuous_scale="Greens")
-            fig1.update_layout(yaxis=dict(autorange="reversed"), xaxis_title="عدد النسخ", yaxis_title="")
-            st.plotly_chart(apply_brand_theme(fig1), width='stretch')
-
-        st.markdown("**🔍 أعلى المتاجر بحثاً (أعلى 20)**")
-        tops = agg[agg["بحث"] > 0].sort_values("بحث", ascending=False).head(20)
-        if tops.empty:
-            st.info("لا توجد عمليات بحث ضمن الفلتر الحالي.")
-        else:
-            fig_s = px.bar(tops, x="بحث", y="store_id", orientation="h",
-                           color="بحث", color_continuous_scale="Blues")
-            fig_s.update_layout(yaxis=dict(autorange="reversed"), xaxis_title="عدد عمليات البحث", yaxis_title="")
-            st.plotly_chart(apply_brand_theme(fig_s), width='stretch')
-
-        st.markdown("**📱🌐🔹 النسخ والنقرات حسب المصدر**")
-        if not df_scope.empty:
-            bys = (df_scope[df_scope["action_type"].isin(["copy_coupon", "click_link"])]
-                   .assign(نوع=lambda d: d["action_type"].map({"copy_coupon": "نسخ", "click_link": "نقرات"}))
-                   .groupby(["src_ar", "نوع"]).size().reset_index(name="العدد"))
-            if not bys.empty:
-                fig2 = px.bar(bys, x="نوع", y="العدد", color="src_ar", barmode="group")
-                fig2.update_layout(xaxis_title="", yaxis_title="العدد", legend_title_text="المصدر")
-                st.plotly_chart(apply_brand_theme(fig2), width='stretch')
-            else:
-                st.info("لا توجد نسخ/نقر ضمن الفلتر.")
-        else:
-            st.info("لا توجد أحداث ضمن الفلتر.")
+        # ─── فلتر الترند ────────────────────────────────────────
+        _tr_lbl = st.segmented_control(
+            "🔥 الترند", list(_SM_TREND_AR.values()),
+            default="الكل", key="sm_trend_pill")
+        _tr_key = next((k for k, v in _SM_TREND_AR.items()
+                         if v == _tr_lbl), "all")
+        if _tr_key == "daily":
+            master = master[master["store_id"].isin(daily_ids)]
+        elif _tr_key == "weekly":
+            master = master[master["store_id"].isin(weekly_ids)]
 
         st.divider()
-        st.markdown("**📈 معدل النشاط عبر الزمن** — نسخ + نقرات + بحث")
-        gcol1, gcol2 = st.columns([1.6, 3])
-        with gcol1:
-            gran = st.radio("الحبيبة:", ["دقيقة", "ساعة", "يوم"], index=2,
-                            horizontal=True, key="sm_gran")
-            store_pick = st.selectbox("المتجر (الكل = إجمالي):",
-                                      ["— الكل —"] + agg["store_id"].tolist(), key="sm_ts_store")
-        rule = {"دقيقة": "min", "ساعة": "h", "يوم": "D"}[gran]
-        base = df_scope if store_pick == "— الكل —" else (
-            df_scope[df_scope["store_id"] == store_pick] if not df_scope.empty else df_scope)
-        if not base.empty:
-            ev_src = (base[base["action_type"].isin(["copy_coupon", "click_link"])]
-                      .assign(نوع=lambda d: d["action_type"].map({"copy_coupon": "نسخ", "click_link": "نقرات"})))
-        else:
-            ev_src = base
-        if ev_src is None or ev_src.empty:
-            ev_ts = pd.DataFrame(columns=["نوع", "action_time", "العدد"])
-        else:
-            ev_ts = (ev_src.set_index("action_time").groupby("نوع").resample(rule).size()
-                     .reset_index(name="العدد"))
-        if df_search_scope is not None and not df_search_scope.empty:
-            sb = df_search_scope if store_pick == "— الكل —" else df_search_scope[df_search_scope["store_id"] == store_pick]
-            if not sb.empty:
-                sb_ts = sb.set_index("search_date").resample(rule).size().reset_index(name="العدد")
-                sb_ts["نوع"] = "بحث"
-                sb_ts = sb_ts.rename(columns={"search_date": "action_time"})
-                ev_ts = pd.concat([ev_ts, sb_ts[["نوع", "action_time", "العدد"]]], ignore_index=True)
-        if ev_ts.empty:
-            st.info("لا توجد بيانات للرسم ضمن الفلتر.")
-        else:
-            figts = px.line(ev_ts, x="action_time", y="العدد", color="نوع", markers=(gran != "دقيقة"))
-            figts.update_layout(xaxis_title=f"الزمن ({gran} · توقيت الرياض)",
-                                yaxis_title="العدد", legend_title_text="")
-            st.plotly_chart(apply_brand_theme(figts), width='stretch')
-            st.caption("«دقيقة» لرصد دفعات النشاط اللحظية · «يوم» لرؤية الاتجاه العام.")
 
-    # ─────────────────────────── ❤️ المفضلة ───────────────────────────
-    elif _sm_tab == _SM_TABS[3]:
-        st.caption("من جدول `user_favorites` الموحّد (بوت + ميني-ويب + ويب). كل شخص يُحتسب "
-                   "مرة واحدة لكل متجر · أساس للتنبيهات المستقبلية (حقل last_notified_at جاهز).")
-        try:
-            df_fav = _sa_load_favorites()
-        except Exception as e:
-            st.error(f"⚠️ تعذّر تحميل المفضلة: {e}")
-            df_fav = pd.DataFrame()
+        # ─── اختيار المتجر (يعتمد على الفلاتر السابقة) ──────────
+        _store_pool = sorted(master["store_id"].dropna().unique().tolist())
+        if not _store_pool:
+            st.warning("📭 لا متاجر مطابقة للفلاتر المختارة.")
+            st.stop()
+        _store_pick = st.selectbox(
+            "🏬 المتجر",
+            ["لا شيء", "الكل"] + _store_pool,
+            index=1, key="sm_store_pick")
 
-        # تحليل المتاجر يعرض مفضلة المتاجر فقط — نُقصي صفوف الأقسام
-        # (موجودة في نفس الجدول بعد migration_028).
-        if not df_fav.empty and "kind" in df_fav.columns:
-            df_fav = df_fav[df_fav["kind"] == "store"].copy()
+        st.divider()
 
-        # فلتر المصدر (platform) — يحترم نفس اختيار شريط التحكم أعلى الصفحة
-        PLAT_FILTER = {"📱 بوت": ["bot"], "🌐 ويب": ["web"], "🔹 بوت - ميني": ["miniapp"]}
-        if src_choice in PLAT_FILTER and not df_fav.empty:
-            df_fav = df_fav[df_fav["platform"].isin(PLAT_FILTER[src_choice])].copy()
+        # ─── تطبيق الفلاتر على الجداول الثلاثة ───────────────────
+        active_ids = set(master["store_id"])
+
+        # logs (actions)
+        df_logs = pd.DataFrame()
+        if not df_logs_raw.empty:
+            d = df_logs_raw.copy()
+            d["action_time"] = (
+                pd.to_datetime(d["action_time"])
+                + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
+            d["adate"] = d["action_time"].dt.date
+            d = d[(d["adate"] >= sm_date_from)
+                  & (d["adate"] <= sm_date_to)
+                  & (d["store_id"].isin(active_ids))]
+            if _src_key in _SM_SRC_LOG:
+                d = d[d["source"].isin(_SM_SRC_LOG[_src_key])]
+            if _store_pick == "لا شيء":
+                d = d.iloc[0:0]
+            elif _store_pick != "الكل":
+                d = d[d["store_id"] == _store_pick]
+            df_logs = d
+
+        # searches
+        df_search = pd.DataFrame()
+        if not df_search_raw.empty:
+            s = df_search_raw.copy()
+            s["search_date"] = (
+                pd.to_datetime(s["search_date"])
+                + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
+            s["adate"] = s["search_date"].dt.date
+            s = s[(s["adate"] >= sm_date_from)
+                  & (s["adate"] <= sm_date_to)
+                  & (s["store_id"].notna())
+                  & (s["store_id"].isin(active_ids))]
+            if _src_key in _SM_SRC_LOG:
+                _p = s["platform"].astype(str).str.lower()
+                if _src_key == "bot":
+                    s = s[(_p.str.contains("bot") | _p.str.contains("telegram"))
+                          & ~_p.str.contains("mini")]
+                elif _src_key == "miniapp":
+                    s = s[_p.str.contains("mini")]
+                elif _src_key == "web":
+                    s = s[_p.str.contains("web")]
+            if _store_pick == "لا شيء":
+                s = s.iloc[0:0]
+            elif _store_pick != "الكل":
+                s = s[s["store_id"] == _store_pick]
+            df_search = s
+
+        # favorites
+        df_fav = pd.DataFrame()
+        if not df_fav_raw.empty:
+            f = df_fav_raw.copy()
+            if "kind" in f.columns:
+                f = f[f["kind"] == "store"]
+            f["created_at"] = (
+                pd.to_datetime(f["created_at"], utc=True)
+                .dt.tz_localize(None)
+                + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
+            f["adate"] = f["created_at"].dt.date
+            f = f[(f["adate"] >= sm_date_from)
+                  & (f["adate"] <= sm_date_to)
+                  & (f["store_id"].isin(active_ids))]
+            if _src_key in _SM_FAV_PLAT:
+                f = f[f["platform"].isin(_SM_FAV_PLAT[_src_key])]
+            if _store_pick == "لا شيء":
+                f = f.iloc[0:0]
+            elif _store_pick != "الكل":
+                f = f[f["store_id"] == _store_pick]
+            df_fav = f
+
+        # ─── ملخّص ──────────────────────────────────────────────
+        st.caption(
+            f"📅 {sm_date_from} ← {sm_date_to} · "
+            f"المصدر: {_src_lbl} · حالة: {_stat_lbl} · "
+            f"ترند: {_tr_lbl} · متجر: {_store_pick} · "
+            f"حركات: **{len(df_logs):,}** · "
+            f"بحث (مع متجر): **{len(df_search):,}** · "
+            f"مفضلة: **{len(df_fav):,}**")
+
+        # ─── helpers للهوية والبيانات الشخصية ──────────────────
+        def _clean(v):
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return ""
+            s = str(v).strip()
+            return "" if s.lower() == "nan" else s
+
+        def _name(r):
+            src = r.get("source", "")
+            v = _clean(r.get("web_name"))
+            if v: return v
+            v = _clean(r.get("bu_username"))
+            if v: return "@" + v.lstrip("@")
+            if src in ("telegram_miniapp", "miniapp"):
+                if pd.notna(r.get("user_id")):
+                    return f"🔹 ميني #{int(r['user_id'])}"
+            if src == "web":
+                h = _clean(r.get("ip_hex"))
+                if h: return f"🌐 زائر #{h[:6]}"
+                return "🌐 زائر"
+            if pd.notna(r.get("user_id")):
+                return f"📱 #{int(r['user_id'])}"
+            return "—"
+
+        def _email(r): return _clean(r.get("web_email")) or "—"
+        def _phone(r): return _clean(r.get("web_phone")) or "—"
+        def _tg(r):
+            v = _clean(r.get("web_tg")) or _clean(r.get("bu_username"))
+            return ("@" + v.lstrip("@")) if v else "—"
+        def _city(r):
+            return (_clean(r.get("geo_city"))
+                    or _clean(r.get("web_city"))
+                    or _clean(r.get("bu_city")) or "—")
+
+        # ════════════════════════════════════════════════════════
+        # 👥 جدول 1: المستخدمون المتفاعلون
+        # ════════════════════════════════════════════════════════
+        st.markdown("### 👥 المستخدمون")
+        st.caption("صف لكل (مستخدم × متجر) تفاعل خلال الفترة (نسخ + نقر + بحث).")
+
+        if df_logs.empty:
+            st.info("📭 لا حركات للفلاتر المختارة.")
+        else:
+            _grp = (["user_id", "ip_hex", "store_id"]
+                    if _store_pick == "الكل"
+                    else ["user_id", "ip_hex"])
+            ev = df_logs.copy()
+            ev["copy"]   = (ev["action_type"] == "copy_coupon").astype(int)
+            ev["click"]  = (ev["action_type"] == "click_link").astype(int)
+            ev["srch"]   = (ev["action_type"] == "search").astype(int)
+            agg = (ev.groupby(_grp, dropna=False)
+                     .agg(copy=("copy", "sum"),
+                          click=("click", "sum"),
+                          srch=("srch", "sum"),
+                          last_action=("action_time", "max"),
+                          src_any=("source", lambda s: "، ".join(sorted(set(
+                              _SM_CHAN_AR.get(x, x) for x in s)))))
+                     .reset_index())
+
+            # ملف الـ profile لكل (user_id, ip_hex) — نأخذ أول صف
+            _pcols = [c for c in ["user_id", "ip_hex", "source", "web_name",
+                                    "web_email", "web_phone", "web_tg",
+                                    "web_city", "bu_username", "bu_city",
+                                    "geo_city"] if c in ev.columns]
+            prof = (ev[_pcols]
+                    .drop_duplicates(subset=["user_id", "ip_hex"])
+                    .reset_index(drop=True))
+            agg = agg.merge(prof, on=["user_id", "ip_hex"], how="left")
+
+            agg["الاسم"]    = agg.apply(_name, axis=1)
+            agg["الإيميل"]  = agg.apply(_email, axis=1)
+            agg["الجوال"]   = agg.apply(_phone, axis=1)
+            agg["تيليجرام"] = agg.apply(_tg, axis=1)
+            agg["المدينة"]  = agg.apply(_city, axis=1)
+            agg["آخر تفاعل"] = pd.to_datetime(
+                agg["last_action"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+            agg = agg.rename(columns={"src_any": "المصدر",
+                                       "store_id": "المتجر",
+                                       "copy": "نسخ", "click": "نقر",
+                                       "srch": "بحث"})
+            agg["إجمالي الحركات"] = agg["نسخ"] + agg["نقر"] + agg["بحث"]
+
+            _cols = ["الاسم", "الإيميل", "الجوال", "تيليجرام",
+                      "المدينة", "المصدر"]
+            if _store_pick == "الكل":
+                _cols.append("المتجر")
+            _cols += ["نسخ", "نقر", "بحث", "إجمالي الحركات", "آخر تفاعل"]
+            agg = agg.sort_values("إجمالي الحركات", ascending=False)
+            st.dataframe(agg[_cols], hide_index=True, width='stretch')
+
+            _ub = BytesIO()
+            with pd.ExcelWriter(_ub, engine="xlsxwriter") as _w:
+                agg[_cols].to_excel(_w, sheet_name="المستخدمون", index=False)
+            _ub.seek(0)
+            st.download_button(
+                "📥 تحميل Excel — المستخدمون",
+                data=_ub.getvalue(),
+                file_name=(f"stores_users_"
+                            f"{sm_date_from.strftime('%Y%m%d')}_"
+                            f"{sm_date_to.strftime('%Y%m%d')}.xlsx"),
+                mime=("application/vnd.openxmlformats-officedocument"
+                       ".spreadsheetml.sheet"),
+                key="sm_users_xlsx")
+
+        st.divider()
+
+        # ════════════════════════════════════════════════════════
+        # ❤️ جدول 2: المفضّلون
+        # ════════════════════════════════════════════════════════
+        st.markdown("### ❤️ المفضّلون")
+        st.caption("من فضّل أي متجر خلال الفترة (kind='store').")
 
         if df_fav.empty:
-            st.info("📭 لا توجد مفضلات بعد. بمجرد ما يبدأ المستخدمون بإضافة متاجرهم المفضلة ستظهر هنا.")
+            st.info("📭 لا مفضلات للفلاتر المختارة.")
         else:
-            _plat_ar = {"bot": "📱 بوت", "web": "🌐 ويب", "miniapp": "🔹 بوت - ميني"}
+            fv = df_fav.copy()
+            fv["الاسم"]    = fv.apply(_name, axis=1)
+            fv["الإيميل"]  = fv.apply(_email, axis=1)
+            fv["الجوال"]   = fv.apply(_phone, axis=1)
+            fv["تيليجرام"] = fv.apply(_tg, axis=1)
+            fv["المدينة"]  = fv.apply(_city, axis=1)
+            fv["المصدر"]   = fv["platform"].map(
+                {"bot": "📱 البوت", "web": "🌐 الموقع",
+                 "miniapp": "🔹 الميني-ويب"}).fillna(fv["platform"])
+            fv["تاريخ الإضافة"] = fv["created_at"].dt.strftime(
+                "%Y-%m-%d %H:%M")
+            fv = fv.rename(columns={"store_id": "المتجر"})
+            _fcols = ["الاسم", "الإيميل", "الجوال", "تيليجرام",
+                       "المدينة", "المتجر", "المصدر", "تاريخ الإضافة"]
+            fv = fv.sort_values("created_at", ascending=False)
+            st.dataframe(fv[_fcols], hide_index=True, width='stretch')
 
-            # مفتاح هوية الشخص (ويب أو تيليجرام) لعدّ الأشخاص الفعليين
-            def _person_key(r):
-                if pd.notna(r.web_user_id):
-                    return f"w{int(r.web_user_id)}"
-                if pd.notna(r.telegram_id):
-                    return f"t{int(r.telegram_id)}"
-                return "?"
+            _fb = BytesIO()
+            with pd.ExcelWriter(_fb, engine="xlsxwriter") as _w:
+                fv[_fcols].to_excel(_w, sheet_name="المفضلة", index=False)
+            _fb.seek(0)
+            st.download_button(
+                "📥 تحميل Excel — المفضلة",
+                data=_fb.getvalue(),
+                file_name=(f"stores_favs_"
+                            f"{sm_date_from.strftime('%Y%m%d')}_"
+                            f"{sm_date_to.strftime('%Y%m%d')}.xlsx"),
+                mime=("application/vnd.openxmlformats-officedocument"
+                       ".spreadsheetml.sheet"),
+                key="sm_favs_xlsx")
 
-            total_fav    = len(df_fav)
-            uniq_stores  = df_fav["store_id"].nunique()
-            uniq_people  = df_fav.apply(_person_key, axis=1).nunique()
-            k1, k2, k3 = st.columns(3)
-            k1.metric("❤️ إجمالي الإضافات", f"{total_fav:,}")
-            k2.metric("🏪 متاجر مفضّلة",     f"{uniq_stores:,}")
-            k3.metric("👤 أشخاص فعّالون",    f"{uniq_people:,}")
+        st.divider()
 
-            # ── لوحة أكثر المتاجر تفضيلاً ──
-            st.markdown("**🏆 أكثر المتاجر تفضيلاً (عدد الأشخاص)**")
-            board_f = (df_fav.groupby("store_id").size()
-                       .reset_index(name="عدد الأشخاص")
-                       .sort_values("عدد الأشخاص", ascending=False))
-            board_f = board_f.merge(df_master[["store_id", "logo_url"]], on="store_id", how="left")
-            view_f = pd.DataFrame({
-                "الشعار": board_f["logo_url"].fillna("").values,
-                "المتجر": board_f["store_id"].values,
-                "عدد الأشخاص": board_f["عدد الأشخاص"].values,
-            })
-            _maxp = int(max(1, board_f["عدد الأشخاص"].max()))
-            st.dataframe(
-                view_f, hide_index=True, width='stretch',
-                column_config={
-                    "الشعار": st.column_config.ImageColumn("🏪", width="small"),
-                    "عدد الأشخاص": st.column_config.ProgressColumn(
-                        "عدد الأشخاص", format="%d", min_value=0, max_value=_maxp),
-                },
-            )
-            st.download_button("📥 تحميل CSV", view_f.to_csv(index=False).encode("utf-8-sig"),
-                               "favorites_leaderboard.csv", "text/csv", key="fav_csv")
+        # ════════════════════════════════════════════════════════
+        # 📋 جدول 3: سجل الحركات (صف لكل حركة منفردة)
+        # ════════════════════════════════════════════════════════
+        st.markdown("### 📋 سجل الحركات")
+        st.caption("كل حركة (نسخ/نقر/بحث) مع وقتها وصاحبها.")
 
-            # ── التوزيع حسب المنصة ──
-            if src_choice == "الكل":
-                st.markdown("**📊 التوزيع حسب المنصة**")
-                dist_f = (df_fav.assign(منصة=lambda d: d["platform"].map(_plat_ar).fillna(d["platform"]))
-                          .groupby("منصة").size().reset_index(name="العدد"))
-                fig_fp = px.pie(dist_f, names="منصة", values="العدد", hole=0.45)
-                st.plotly_chart(apply_brand_theme(fig_fp), width='stretch')
+        if df_logs.empty and df_search.empty:
+            st.info("📭 لا حركات للفلاتر المختارة.")
+        else:
+            _ACT_AR = {"copy_coupon": "🎟️ نسخ",
+                        "click_link":  "🖱️ نقر",
+                        "search":       "🔍 بحث"}
+            parts = []
+            if not df_logs.empty:
+                a = df_logs.copy()
+                a["النوع"]    = a["action_type"].map(_ACT_AR).fillna(a["action_type"])
+                a["الاسم"]    = a.apply(_name, axis=1)
+                a["الإيميل"]  = a.apply(_email, axis=1)
+                a["الجوال"]   = a.apply(_phone, axis=1)
+                a["تيليجرام"] = a.apply(_tg, axis=1)
+                a["المدينة"]  = a.apply(_city, axis=1)
+                a["المصدر"]   = a["source"].map(_SM_CHAN_AR).fillna(a["source"])
+                a["الوقت"]    = a["action_time"].dt.strftime("%Y-%m-%d %H:%M:%S")
+                a = a.rename(columns={"store_id": "المتجر"})
+                a["__ts"] = a["action_time"]
+                parts.append(a[["__ts", "الوقت", "الاسم", "الإيميل",
+                                 "الجوال", "تيليجرام", "المدينة",
+                                 "المتجر", "النوع", "المصدر"]])
+            if not df_search.empty:
+                s = df_search.copy()
+                s["النوع"] = "🔍 بحث"
+                s["الاسم"] = "—"
+                s["الإيميل"] = "—"
+                s["الجوال"] = "—"
+                s["تيليجرام"] = "—"
+                s["المدينة"] = "—"
+                _p = s["platform"].astype(str).str.lower()
+                s["المصدر"] = _p.apply(
+                    lambda p: ("🔹 الميني-ويب" if "mini" in p else
+                                "🌐 الموقع"   if "web"  in p else
+                                "📱 البوت"))
+                s["الوقت"] = s["search_date"].dt.strftime("%Y-%m-%d %H:%M:%S")
+                s = s.rename(columns={"store_id": "المتجر"})
+                s["__ts"] = s["search_date"]
+                parts.append(s[["__ts", "الوقت", "الاسم", "الإيميل",
+                                 "الجوال", "تيليجرام", "المدينة",
+                                 "المتجر", "النوع", "المصدر"]])
 
-            # ── من فضّل متجراً معيّناً؟ (الأساس لإرسال التنبيهات) ──
-            st.divider()
-            st.markdown("**🔍 مين فضّل متجراً معيّناً؟**")
-            store_sel = st.selectbox("اختر متجراً:", board_f["store_id"].tolist(), key="fav_store_sel")
-            sub_f = df_fav[df_fav["store_id"] == store_sel].copy()
+            all_mv = pd.concat(parts, ignore_index=True)
+            all_mv = all_mv.sort_values("__ts", ascending=False).drop(
+                columns=["__ts"])
+            st.dataframe(all_mv, hide_index=True, width='stretch')
 
-            def _fav_who(r):
-                if pd.notna(r.web_name) and str(r.web_name).strip():
-                    return str(r.web_name)
-                if pd.notna(r.web_email) and str(r.web_email).strip():
-                    return str(r.web_email)
-                if pd.notna(r.bu_username) and str(r.bu_username).strip():
-                    return "@" + str(r.bu_username).lstrip("@")
-                if pd.notna(r.telegram_id):
-                    return f"تيليجرام {int(r.telegram_id)}"
-                if pd.notna(r.web_user_id):
-                    return f"ويب #{int(r.web_user_id)}"
-                return "غير معروف"
+            _mb = BytesIO()
+            with pd.ExcelWriter(_mb, engine="xlsxwriter") as _w:
+                all_mv.to_excel(_w, sheet_name="الحركات", index=False)
+            _mb.seek(0)
+            st.download_button(
+                "📥 تحميل Excel — الحركات",
+                data=_mb.getvalue(),
+                file_name=(f"stores_actions_"
+                            f"{sm_date_from.strftime('%Y%m%d')}_"
+                            f"{sm_date_to.strftime('%Y%m%d')}.xlsx"),
+                mime=("application/vnd.openxmlformats-officedocument"
+                       ".spreadsheetml.sheet"),
+                key="sm_actions_xlsx")
 
-            def _fav_city(r):
-                for v in (r.web_city, r.bu_city):
-                    if pd.notna(v) and str(v).strip():
-                        return str(v)
-                return "—"
+    # ════════════════════════════════════════════════════════════════
+    # TAB 2: 🎛️ تفضيلات الترند (admin pinning)
+    # ════════════════════════════════════════════════════════════════
+    with sm_tab_pin:
+        st.markdown("### 🎛️ التحكم اليدوي بمراكز الترند")
+        st.caption(
+            "ثبّت متجراً في مركز محدد — الباقي يتزحّح تلقائياً. الخوارزمية "
+            "تحسب النقاط (نقر=1، بحث=2، نسخ=3، مفضلة=4) مع anti-spam؛ "
+            "التثبيت اليدوي يطغى عليها. التغيير يظهر للزوار خلال **دقيقة** "
+            "(كاش API).")
 
-            _ca = (pd.to_datetime(sub_f["created_at"], utc=True, errors="coerce")
-                   + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
-            out_f = pd.DataFrame({
-                "الشخص": sub_f.apply(_fav_who, axis=1).values,
-                "المدينة": sub_f.apply(_fav_city, axis=1).values,
-                "المنصة": sub_f["platform"].map(_plat_ar).fillna(sub_f["platform"]).values,
-                "تاريخ الإضافة": _ca.dt.strftime("%Y-%m-%d %H:%M").values,
-            })
-            st.dataframe(out_f, hide_index=True, width='stretch')
-            st.caption(f"👥 {len(out_f)} شخص فضّلوا «{store_sel}» — هؤلاء جمهور التنبيه المستقبلي "
-                       "عند نزول كوبون/خصم جديد لهذا المتجر.")
-
-    # ════════════════════════════════════════════════════════════════════════
-    # 🔥 الترند — نقاط موزونة + قاعدة Anti-Spam + تبويبات داخلية للمصدر
-    #    اليومي = من 12 ليلاً → الآن (يبدأ من صفر كل ليلة)
-    #    الأسبوعي = آخر 7 أيام rolling (يتحرّك ثانية بثانية)
-    #    ⚠️ يتجاوز فلتر التاريخ في أعلى الصفحة — الترند له نوافذه الخاصة.
-    # ════════════════════════════════════════════════════════════════════════
-    elif _sm_tab == _SM_TABS[4]:
-        # ── شريط الحداثة + إعادة التحميل اليدوي ─────────────────────
-        _now_ts = pd.Timestamp.utcnow().tz_localize(None) + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS)
-        c_info, c_btn = st.columns([4, 1])
-        with c_info:
-            st.caption(f"⏱️ آخر تحديث: **{_now_ts.strftime('%H:%M:%S')}** · "
-                       f"الكاش يُجدَّد تلقائياً كل 60 ثانية · للتحديث الفوري اضغط زرّ التحديث.")
-        with c_btn:
-            if st.button("🔄 تحديث الآن", width='stretch', key="trend_refresh"):
-                _sa_load_actions.clear()
-                _sa_load_favorites.clear()
-                _sa_load_master.clear()
-                st.rerun()
-        st.caption("نقاط موزونة: نقر=1 · بحث=2 · نسخ=3 · مفضلة=4 — مع قاعدة anti-spam "
-                   "تمنع تضخيم الترند بالتكرار. الشرح الكامل أسفل الصفحة.")
-
-        # ════════════════════════════════════════════════════════════════════
-        # 🎛️ التحكم اليدوي بمراكز الترند (Admin Override / Pin)
-        #   يثبّت متجراً معيناً في مركز محدد. الباقي يتزحّح طبيعياً.
-        #   يُكتب في trend_overrides → الـ API يقرأه ويطبّقه قبل العرض للزوار.
-        # ════════════════════════════════════════════════════════════════════
-        with st.expander("🎛️ التحكم اليدوي بمراكز الترند (Admin Pin)", expanded=False):
-            st.caption(
-                "ثبّت متجراً في مركز محدد — الباقي يتزحّح تلقائياً. "
-                "مثال: تثبيت متجر «نمشي 3» في المركز الثاني للأسبوعي يدفع المتجر "
-                "اللي كان فيه إلى المركز الثالث، والثالث للرابع، وهكذا. "
-                "**ملاحظة**: التغييرات تظهر للزوار على الموقع والميني-ويب خلال **دقيقة** (كاش API)."
-            )
-
-            # ── تحميل المتاجر المتوفرة + التجاوزات الحالية ─────────────
-            try:
-                _ov_conn = get_conn()
-                _ov_conn.rollback()
-                # نضمن وجود الجدول قبل القراءة (للأنظمة قبل migration 030).
-                with _ov_conn.cursor() as _cur:
-                    _cur.execute("""
-                        CREATE TABLE IF NOT EXISTS trend_overrides (
-                            id BIGSERIAL PRIMARY KEY,
-                            window_kind TEXT NOT NULL CHECK (window_kind IN ('daily','weekly')),
-                            rank INTEGER NOT NULL CHECK (rank >= 1 AND rank <= 10),
-                            store_id TEXT NOT NULL,
-                            set_at TIMESTAMPTZ DEFAULT NOW(),
-                            set_by TEXT,
-                            CONSTRAINT trend_overrides_uniq_rank UNIQUE (window_kind, rank),
-                            CONSTRAINT trend_overrides_uniq_store UNIQUE (window_kind, store_id)
-                        )
-                    """)
-                    _ov_conn.commit()
-                _df_ov = pd.read_sql(
-                    "SELECT window_kind AS window, rank, store_id FROM trend_overrides",
-                    _ov_conn,
-                )
-            except Exception as _e:
-                st.error(f"⚠️ تعذّر قراءة التجاوزات: {_e}")
-                _df_ov = pd.DataFrame(columns=["window", "rank", "store_id"])
-            finally:
-                try: _ov_conn.close()
-                except Exception: pass
-
-            _ov_daily = dict(zip(
-                _df_ov[_df_ov["window"] == "daily"]["rank"].astype(int),
-                _df_ov[_df_ov["window"] == "daily"]["store_id"],
-            )) if not _df_ov.empty else {}
-            _ov_weekly = dict(zip(
-                _df_ov[_df_ov["window"] == "weekly"]["rank"].astype(int),
-                _df_ov[_df_ov["window"] == "weekly"]["store_id"],
-            )) if not _df_ov.empty else {}
-
-            # ── قائمة المتاجر المتوفرة (نشطة + غير منتهية) ─────────────
-            _store_options = sorted(df_master["store_id"].dropna().astype(str).unique().tolist())
-            _AUTO = "⚙️ تلقائي (بدون تثبيت)"
-            _option_list = [_AUTO] + _store_options
-
-            _DAILY_TITLES = {
-                1: "🥇 المركز 1 — الأعلى طلباً",
-                2: "🥈 المركز 2 — الأكثر شعبية",
-                3: "🥉 المركز 3 — الأوسع انتشاراً",
-            }
-            _WEEKLY_TITLES = {
-                1: "🥇 المركز 1 — الأعلى طلباً",
-                2: "🥈 المركز 2 — الأكثر شعبية",
-                3: "🥉 المركز 3 — الأوسع انتشاراً",
-                4: "🏅 المركز 4 — الرابع",
-                5: "🏅 المركز 5 — الخامس",
-                6: "🏅 المركز 6 — السادس",
-                7: "🏅 المركز 7 — السابع",
-            }
-
-            def _pinned_picker(window: str, rank: int, label: str, current: str | None):
-                """selectbox واحد لمركز محدد. يُرجع store_id أو None لو تلقائي."""
-                idx = (_option_list.index(current)
-                       if current in _option_list else 0)
-                pick = st.selectbox(label, _option_list, index=idx,
-                                     key=f"pin_{window}_{rank}")
-                return None if pick == _AUTO else pick
-
-            # ── الترند اليومي (3 مراكز) ─────────────────────────────────
-            st.markdown("##### 🌞 الترند اليومي (3 مراكز)")
-            _daily_picks: dict[int, str | None] = {}
-            for _rk, _lbl in _DAILY_TITLES.items():
-                _daily_picks[_rk] = _pinned_picker(
-                    "daily", _rk, _lbl, _ov_daily.get(_rk),
-                )
-
-            st.markdown("##### 📅 الترند الأسبوعي (7 مراكز)")
-            _weekly_picks: dict[int, str | None] = {}
-            _w_cols = st.columns(2)
-            for _i, (_rk, _lbl) in enumerate(_WEEKLY_TITLES.items()):
-                with _w_cols[_i % 2]:
-                    _weekly_picks[_rk] = _pinned_picker(
-                        "weekly", _rk, _lbl, _ov_weekly.get(_rk),
+        try:
+            _ov_conn = get_conn()
+            _ov_conn.rollback()
+            with _ov_conn.cursor() as _cur:
+                _cur.execute("""
+                    CREATE TABLE IF NOT EXISTS trend_overrides (
+                        id BIGSERIAL PRIMARY KEY,
+                        window_kind TEXT NOT NULL CHECK (window_kind IN ('daily','weekly')),
+                        rank INTEGER NOT NULL CHECK (rank >= 1 AND rank <= 10),
+                        store_id TEXT NOT NULL,
+                        set_at TIMESTAMPTZ DEFAULT NOW(),
+                        set_by TEXT,
+                        CONSTRAINT trend_overrides_uniq_rank UNIQUE (window_kind, rank),
+                        CONSTRAINT trend_overrides_uniq_store UNIQUE (window_kind, store_id)
                     )
+                """)
+                _ov_conn.commit()
+            _df_ov = pd.read_sql(
+                "SELECT window_kind AS window, rank, store_id FROM trend_overrides",
+                _ov_conn)
+        except Exception as _e:
+            st.error(f"⚠️ تعذّر قراءة التجاوزات: {_e}")
+            _df_ov = pd.DataFrame(columns=["window", "rank", "store_id"])
+        finally:
+            try: _ov_conn.close()
+            except Exception: pass
 
-            # ── حفظ + تنبيه على التكرار داخل نفس النافذة ───────────────
-            _b_save, _b_clear = st.columns([1, 1])
-            with _b_save:
-                _save_clicked = st.button("💾 حفظ التجاوزات", width='stretch',
-                                            key="trend_pin_save", type="primary")
-            with _b_clear:
-                _clear_clicked = st.button("🧹 مسح كل التجاوزات", width='stretch',
-                                            key="trend_pin_clear")
+        _ov_daily = (dict(zip(
+            _df_ov[_df_ov["window"] == "daily"]["rank"].astype(int),
+            _df_ov[_df_ov["window"] == "daily"]["store_id"]))
+            if not _df_ov.empty else {})
+        _ov_weekly = (dict(zip(
+            _df_ov[_df_ov["window"] == "weekly"]["rank"].astype(int),
+            _df_ov[_df_ov["window"] == "weekly"]["store_id"]))
+            if not _df_ov.empty else {})
 
-            if _save_clicked:
-                # تحقق: نفس المتجر مو مكرّر في مركزين بنفس النافذة
-                def _dup_in(picks: dict[int, str | None]) -> str | None:
-                    seen = {}
-                    for rk, sid in picks.items():
-                        if sid and sid in seen:
-                            return f"المتجر «{sid}» مكرّر في مركزين ({seen[sid]} و {rk})"
-                        if sid:
-                            seen[sid] = rk
-                    return None
+        try:
+            _master_for_pin = _sa_load_master()
+        except Exception:
+            _master_for_pin = pd.DataFrame(columns=["store_id"])
+        _store_options = (sorted(_master_for_pin["store_id"]
+                                   .dropna().astype(str).unique().tolist())
+                          if not _master_for_pin.empty else [])
+        _AUTO = "⚙️ تلقائي (بدون تثبيت)"
+        _option_list = [_AUTO] + _store_options
 
-                err = _dup_in(_daily_picks) or _dup_in(_weekly_picks)
-                if err:
-                    st.error(f"⚠️ {err}. عدّل وأعد الحفظ.")
-                else:
-                    try:
-                        _sv_conn = get_conn()
-                        with _sv_conn.cursor() as _cur:
-                            _cur.execute("DELETE FROM trend_overrides")
-                            _rows = []
-                            for rk, sid in _daily_picks.items():
-                                if sid:
-                                    _rows.append(("daily", rk, sid))
-                            for rk, sid in _weekly_picks.items():
-                                if sid:
-                                    _rows.append(("weekly", rk, sid))
-                            if _rows:
-                                _cur.executemany(
-                                    "INSERT INTO trend_overrides (window_kind, rank, store_id) "
-                                    "VALUES (%s, %s, %s)",
-                                    _rows,
-                                )
-                            _sv_conn.commit()
-                        st.success(f"✅ تم حفظ {len(_rows)} تجاوز. ستظهر للزوار خلال دقيقة.")
-                    except Exception as _e:
-                        st.error(f"⚠️ فشل الحفظ: {_e}")
-                    finally:
-                        try: _sv_conn.close()
-                        except Exception: pass
-                    st.rerun()
+        _DAILY_TITLES = {
+            1: "🥇 المركز 1 — الأعلى طلباً",
+            2: "🥈 المركز 2 — الأكثر شعبية",
+            3: "🥉 المركز 3 — الأوسع انتشاراً",
+        }
+        _WEEKLY_TITLES = {
+            1: "🥇 المركز 1 — الأعلى طلباً",
+            2: "🥈 المركز 2 — الأكثر شعبية",
+            3: "🥉 المركز 3 — الأوسع انتشاراً",
+            4: "🏅 المركز 4 — الرابع",
+            5: "🏅 المركز 5 — الخامس",
+            6: "🏅 المركز 6 — السادس",
+            7: "🏅 المركز 7 — السابع",
+        }
 
-            if _clear_clicked:
+        def _pin_picker(window: str, rank: int, label: str, current):
+            idx = (_option_list.index(current)
+                   if current in _option_list else 0)
+            pick = st.selectbox(label, _option_list, index=idx,
+                                 key=f"pin_tab_{window}_{rank}")
+            return None if pick == _AUTO else pick
+
+        st.markdown("##### 🌞 الترند اليومي (3 مراكز)")
+        _daily_picks: dict[int, str | None] = {}
+        for _rk, _lbl in _DAILY_TITLES.items():
+            _daily_picks[_rk] = _pin_picker(
+                "daily", _rk, _lbl, _ov_daily.get(_rk))
+
+        st.markdown("##### 📅 الترند الأسبوعي (7 مراكز)")
+        _weekly_picks: dict[int, str | None] = {}
+        _w_cols = st.columns(2)
+        for _i, (_rk, _lbl) in enumerate(_WEEKLY_TITLES.items()):
+            with _w_cols[_i % 2]:
+                _weekly_picks[_rk] = _pin_picker(
+                    "weekly", _rk, _lbl, _ov_weekly.get(_rk))
+
+        _b1, _b2 = st.columns(2)
+        with _b1:
+            _save = st.button("💾 حفظ التجاوزات", width='stretch',
+                              key="pin_tab_save", type="primary")
+        with _b2:
+            _clear = st.button("🧹 مسح كل التجاوزات", width='stretch',
+                                key="pin_tab_clear")
+
+        if _save:
+            def _dup_in(picks: dict) -> str | None:
+                seen = {}
+                for rk, sid in picks.items():
+                    if sid and sid in seen:
+                        return (f"المتجر «{sid}» مكرّر في مركزين "
+                                f"({seen[sid]} و {rk})")
+                    if sid:
+                        seen[sid] = rk
+                return None
+            err = _dup_in(_daily_picks) or _dup_in(_weekly_picks)
+            if err:
+                st.error(f"⚠️ {err}")
+            else:
                 try:
-                    _cl_conn = get_conn()
-                    with _cl_conn.cursor() as _cur:
+                    _sv = get_conn()
+                    with _sv.cursor() as _cur:
                         _cur.execute("DELETE FROM trend_overrides")
-                        _cl_conn.commit()
-                    st.success("✅ تم مسح كل التجاوزات. الترند رجع للخوارزمية فقط.")
+                        _rows = []
+                        for rk, sid in _daily_picks.items():
+                            if sid: _rows.append(("daily", rk, sid))
+                        for rk, sid in _weekly_picks.items():
+                            if sid: _rows.append(("weekly", rk, sid))
+                        if _rows:
+                            _cur.executemany(
+                                "INSERT INTO trend_overrides "
+                                "(window_kind, rank, store_id) "
+                                "VALUES (%s, %s, %s)", _rows)
+                        _sv.commit()
+                    st.success(f"✅ تم حفظ {len(_rows)} تجاوز.")
                 except Exception as _e:
-                    st.error(f"⚠️ فشل المسح: {_e}")
+                    st.error(f"⚠️ فشل الحفظ: {_e}")
                 finally:
-                    try: _cl_conn.close()
+                    try: _sv.close()
                     except Exception: pass
                 st.rerun()
 
-            # ── جدول التجاوزات الحالية (سهل القراءة) ──────────────────
-            if not _df_ov.empty:
-                _show = _df_ov.copy()
-                _show["window"] = _show["window"].map({"daily": "🌞 يومي",
-                                                         "weekly": "📅 أسبوعي"})
-                _show = _show.rename(columns={"window": "النافذة",
-                                                "rank": "المركز",
-                                                "store_id": "المتجر"})
-                st.markdown("**📋 التجاوزات الحالية:**")
-                st.dataframe(_show, hide_index=True, width='stretch')
+        if _clear:
+            try:
+                _cl = get_conn()
+                with _cl.cursor() as _cur:
+                    _cur.execute("DELETE FROM trend_overrides")
+                    _cl.commit()
+                st.success("✅ تم مسح كل التجاوزات.")
+            except Exception as _e:
+                st.error(f"⚠️ فشل المسح: {_e}")
+            finally:
+                try: _cl.close()
+                except Exception: pass
+            st.rerun()
 
-        tr_tab_all, tr_tab_bot, tr_tab_web, tr_tab_mini = st.tabs([
-            "📡 الكل", "📱 البوت", "🌐 الموقع", "🔹 الميني-ويب",
-        ])
-
-        _TREND_SRC_MAP = {
-            "all": None,
-            "bot": ["bot"],
-            "web": ["web"],
-            "mini": ["telegram_miniapp", "miniapp"],
-        }
-        _TREND_FAV_PLAT_MAP = {"all": None, "bot": ["bot"],
-                                "web": ["web"], "mini": ["miniapp"]}
-
-        _LOGO_MAP = df_master.set_index("store_id")["logo_url"].fillna("").to_dict()
-
-        # توقيت الرياض كـ naive (للتطابق مع action_time المُزاح في الصفحة)
-        _NOW_R = pd.Timestamp.utcnow().tz_localize(None) + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS)
-        _TODAY_START = _NOW_R.normalize()
-        _WEEK_START = _NOW_R - pd.Timedelta(days=7)
-
-        # ── HTML card renderer ────────────────────────────────────────
-        def _trend_card_html(title: str, row, big: bool = True) -> str:
-            logo = (row.get("logo_url") or "").strip()
-            store = row.get("store_id", "—")
-            score = int(row.get("total_score", 0))
-            cl = int(row.get("clicks_counted", 0))
-            se = int(row.get("searches_counted", 0))
-            co = int(row.get("copies_counted", 0))
-            fv = int(row.get("favs_added", 0))
-            uu = int(row.get("unique_users", 0))
-            sz = 72 if big else 52
-            fs_score = "30px" if big else "20px"
-            fs_name = "17px" if big else "14px"
-            min_h = "230px" if big else "190px"
-            if logo:
-                logo_html = (f'<img src="{logo}" style="width:{sz}px;height:{sz}px;'
-                             f'object-fit:contain;border-radius:10px;background:{BRAND["surface"]};'
-                             f'padding:4px;border:1px solid {BRAND["border"]};'
-                             f'margin:6px auto;display:block">')
-            else:
-                logo_html = (f'<div style="width:{sz}px;height:{sz}px;border-radius:10px;'
-                             f'background:{BRAND["bg_alt"]};margin:6px auto;display:flex;'
-                             f'align-items:center;justify-content:center;font-size:24px;'
-                             f'border:1px solid {BRAND["border"]}">🏪</div>')
-            return f"""
-<div style="border:1px solid {BRAND["border"]};border-radius:14px;padding:14px;
-            text-align:center;background:{BRAND["surface"]};
-            box-shadow:0 1px 3px rgba(0,0,0,0.05);min-height:{min_h}">
-  <div style="font-size:13px;color:{BRAND["emerald_deep"]};font-weight:700;margin-bottom:2px">
-    {title}
-  </div>
-  {logo_html}
-  <div style="font-size:{fs_name};font-weight:700;color:{BRAND["text"]};margin:4px 0">
-    {store}
-  </div>
-  <div style="font-size:{fs_score};color:{BRAND["emerald_deep"]};font-weight:800;line-height:1.1">
-    {score}
-  </div>
-  <div style="font-size:10px;color:{BRAND["text_muted"]};margin-bottom:6px">نقطة</div>
-  <div style="font-size:11px;color:{BRAND["text_soft"]};line-height:1.6">
-    🔗 {cl} · 🔍 {se} · 📋 {co}<br>❤️ {fv} · 👤 {uu}
-  </div>
-</div>
-"""
-
-        def _empty_card_html(title: str) -> str:
-            return f"""
-<div style="border:1px dashed {BRAND["border"]};border-radius:14px;padding:20px;
-            text-align:center;background:{BRAND["bg_alt"]};min-height:230px;
-            display:flex;flex-direction:column;justify-content:center">
-  <div style="font-size:13px;color:{BRAND["text_muted"]};font-weight:700;margin-bottom:8px">
-    {title}
-  </div>
-  <div style="font-size:32px;opacity:0.4">—</div>
-  <div style="font-size:11px;color:{BRAND["text_muted"]};margin-top:8px">
-    لا توجد بيانات كافية
-  </div>
-</div>
-"""
-
-        def _render_detail_table(df_sec: pd.DataFrame, key_prefix: str, top_n: int) -> None:
-            v = df_sec.head(top_n).copy()
-            view = pd.DataFrame({
-                "#": v["rank"].values,
-                "الشعار": v["store_id"].map(_LOGO_MAP).fillna("").values,
-                "المتجر": v["store_id"].values,
-                "🔗 نقر": v["clicks_counted"].values,
-                "🔍 بحث": v["searches_counted"].values,
-                "📋 نسخ": v["copies_counted"].values,
-                "❤️ مفضلة": v["favs_added"].values,
-                "👤 أشخاص": v["unique_users"].values,
-                "النقاط": v["total_score"].values,
-            })
-            max_score = int(max(1, view["النقاط"].max())) if len(view) else 1
-            st.dataframe(
-                view, hide_index=True, width='stretch',
-                column_config={
-                    "الشعار": st.column_config.ImageColumn("🏪", width="small"),
-                    "النقاط": st.column_config.ProgressColumn(
-                        "النقاط", format="%d", min_value=0, max_value=max_score),
-                },
-                key=f"{key_prefix}_table",
-            )
-            st.download_button(
-                "📥 تحميل CSV",
-                view.to_csv(index=False).encode("utf-8-sig"),
-                f"trend_{key_prefix}.csv", "text/csv", key=f"{key_prefix}_csv",
-            )
-
-        # ── Drilldown: مين دفع متجراً معيّناً في الترند؟ ─────────────
-        def _render_drilldown(d_full_marked: pd.DataFrame,
-                              daily_df: pd.DataFrame, weekly_df: pd.DataFrame,
-                              key_prefix: str) -> None:
-            st.markdown("**🔍 مين دفع متجراً معيّناً في الترند؟**")
-            stores_pool = []
-            if not daily_df.empty: stores_pool.extend(daily_df["store_id"].tolist())
-            if not weekly_df.empty: stores_pool.extend(weekly_df["store_id"].tolist())
-            stores_pool = list(dict.fromkeys(stores_pool))  # uniq preserving order
-            if not stores_pool:
-                st.info("لا يوجد متجر في الترند حالياً.")
-                return
-            cdd1, cdd2 = st.columns([2, 3])
-            with cdd1:
-                store_sel = st.selectbox("اختر متجراً:", stores_pool,
-                                          key=f"{key_prefix}_dd_store")
-            with cdd2:
-                scope = st.radio("النطاق:",
-                                  ["📅 الأسبوعي (آخر 7 أيام)", "🌞 اليومي (منذ 12 ليلاً)"],
-                                  horizontal=True, key=f"{key_prefix}_dd_scope")
-            wstart = _WEEK_START if "أسبوعي" in scope else _TODAY_START
-
-            d = d_full_marked[
-                (d_full_marked["store_id"] == store_sel)
-                & (d_full_marked["action_time"] >= wstart)
-                & (d_full_marked["action_time"] <= _NOW_R)
-                & (d_full_marked["counted"])
-            ].copy()
-            if d.empty:
-                st.info("لا أحداث محسوبة (counted=True) لهذا المتجر في النطاق المحدد. "
-                        "ربما كل أحداثه ضمن فترة التبريد 5 ساعات.")
-                return
-
-            CHAN_AR = {"bot": "📱 بوت", "web": "🌐 ويب",
-                       "telegram_miniapp": "🔹 ميني-ويب", "miniapp": "🔹 ميني-ويب"}
-            POINTS_MAP = {"click_link": 1, "search": 2, "copy_coupon": 3}
-
-            def _ident(r):
-                src = r["source"]
-                if src in ("telegram_miniapp", "miniapp"):
-                    u = (r.get("bu_username") or "")
-                    if isinstance(u, str) and u.strip():
-                        return "@" + u.strip().lstrip("@")
-                    if pd.notna(r.get("user_id")):
-                        return f"🔹 ميني #{int(r['user_id'])}"
-                    return f"🔹 ميني #{(r.get('ip_hex') or '')[:6]}"
-                if src == "web":
-                    for k in ("web_name", "web_email"):
-                        v = r.get(k)
-                        if v is not None and not (isinstance(v, float) and pd.isna(v)):
-                            s = str(v).strip()
-                            if s: return s
-                    return f"🌐 زائر #{(r.get('ip_hex') or '')[:6]}"
-                u = (r.get("bu_username") or "")
-                if isinstance(u, str) and u.strip():
-                    return "@" + u.strip().lstrip("@")
-                if pd.notna(r.get("user_id")):
-                    return f"📱 بوت #{int(r['user_id'])}"
-                return "📱 بوت (غير مسجّل)"
-
-            d["الشخص"] = d.apply(_ident, axis=1)
-            d["القناة"] = d["source"].map(CHAN_AR).fillna(d["source"])
-            d["النقاط"] = d["action_type"].map(POINTS_MAP).fillna(0).astype(int)
-
-            piv = d.pivot_table(index=["الشخص", "القناة"], columns="action_type",
-                                 values="النقاط", aggfunc="count", fill_value=0)
-            for c in ["click_link", "search", "copy_coupon"]:
-                if c not in piv.columns: piv[c] = 0
-            piv = piv.rename(columns={"click_link": "🔗 نقر",
-                                      "search": "🔍 بحث",
-                                      "copy_coupon": "📋 نسخ"})
-            piv["النقاط"] = (piv["🔗 نقر"] * 1 + piv["🔍 بحث"] * 2 + piv["📋 نسخ"] * 3)
-            piv = piv.reset_index().sort_values("النقاط", ascending=False).head(20)
-            st.dataframe(piv, hide_index=True, width='stretch',
-                          key=f"{key_prefix}_dd_table")
-            st.caption(f"أعلى 20 شخصاً ساهموا في ترند «{store_sel}» (counted فقط). "
-                        f"ملاحظة: المفضلة تُحسب من جدول `user_favorites` ولا تظهر هنا.")
-
-        # ── Main per-source render ───────────────────────────────────
-        def _render_trend_for_source(src_key: str) -> None:
-            src_filter = _TREND_SRC_MAP[src_key]
-            fav_filter = _TREND_FAV_PLAT_MAP[src_key]
-
-            # Fresh load — يتجاوز فلتر التاريخ في أعلى الصفحة
-            df_logs_full = _sa_load_actions()
-            df_fav_full = _sa_load_favorites()
-
-            if not df_logs_full.empty:
-                df_logs_full = df_logs_full[df_logs_full["store_id"].isin(active_ids)].copy()
-                df_logs_full["action_time"] = (pd.to_datetime(df_logs_full["action_time"])
-                                                + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
-                if src_filter:
-                    df_logs_full = df_logs_full[df_logs_full["source"].isin(src_filter)]
-
-            if not df_fav_full.empty:
-                df_fav_full = df_fav_full.copy()
-                df_fav_full["created_at"] = (
-                    pd.to_datetime(df_fav_full["created_at"], utc=True)
-                    .dt.tz_localize(None)
-                    + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS)
-                )
-                if fav_filter:
-                    df_fav_full = df_fav_full[df_fav_full["platform"].isin(fav_filter)]
-
-            daily = _sa_compute_trend(df_logs_full, df_fav_full,
-                                       _TODAY_START, _NOW_R, active_ids)
-            weekly = _sa_compute_trend(df_logs_full, df_fav_full,
-                                        _WEEK_START, _NOW_R, active_ids)
-            for df_ in (daily, weekly):
-                if not df_.empty:
-                    df_["logo_url"] = df_["store_id"].map(_LOGO_MAP).fillna("")
-
-            # ── 🌞 اليومي ──────────────────────────────────────────
-            hours_in = max(1, int((_NOW_R - _TODAY_START).total_seconds() / 3600))
-            st.markdown("### 🌞 الترند اليومي")
-            st.caption(f"من 12:00 ص ← الآن · {hours_in} ساعة منقضية · "
-                        f"إجمالي متاجر داخل الترند: **{len(daily)}**")
-
-            DAILY_TITLES = ["🥇 الأعلى طلباً", "🥈 الأكثر شعبية", "🥉 الأوسع انتشاراً"]
-            cols = st.columns(3)
-            for i, (col, ttl) in enumerate(zip(cols, DAILY_TITLES)):
-                with col:
-                    if i < len(daily):
-                        st.markdown(_trend_card_html(ttl, daily.iloc[i], big=True),
-                                     unsafe_allow_html=True)
-                    else:
-                        st.markdown(_empty_card_html(ttl), unsafe_allow_html=True)
-
-            if not daily.empty:
-                with st.expander("📊 تفصيل النقاط اليومية (أعلى 15)", expanded=False):
-                    _render_detail_table(daily, f"{src_key}_daily", top_n=15)
-
+        if not _df_ov.empty:
+            _show = _df_ov.copy()
+            _show["window"] = _show["window"].map(
+                {"daily": "🌞 يومي", "weekly": "📅 أسبوعي"})
+            _show = _show.rename(columns={
+                "window": "النافذة", "rank": "المركز", "store_id": "المتجر"})
             st.divider()
-
-            # ── 📅 الأسبوعي ─────────────────────────────────────────
-            st.markdown("### 📅 الترند الأسبوعي")
-            st.caption(f"آخر 7 أيام (rolling) · من {_WEEK_START.strftime('%Y-%m-%d %H:%M')} "
-                        f"← الآن · إجمالي متاجر داخل الترند: **{len(weekly)}**")
-
-            cols = st.columns(3)
-            for i, (col, ttl) in enumerate(zip(cols, DAILY_TITLES)):
-                with col:
-                    if i < len(weekly):
-                        st.markdown(_trend_card_html(ttl, weekly.iloc[i], big=True),
-                                     unsafe_allow_html=True)
-                    else:
-                        st.markdown(_empty_card_html(ttl), unsafe_allow_html=True)
-
-            if len(weekly) > 3 or True:  # نُظهر الصف دائماً حتى لو فاضي (تنسيق ثابت)
-                st.markdown("**🏅 المراكز التالية:**")
-                cols2 = st.columns(4)
-                for i in range(4):
-                    pos_idx = 3 + i
-                    with cols2[i]:
-                        ttl = f"المركز {pos_idx + 1}"
-                        if pos_idx < len(weekly):
-                            st.markdown(_trend_card_html(ttl, weekly.iloc[pos_idx], big=False),
-                                         unsafe_allow_html=True)
-                        else:
-                            st.markdown(_empty_card_html(ttl), unsafe_allow_html=True)
-
-            if not weekly.empty:
-                with st.expander("📊 تفصيل النقاط الأسبوعية (أعلى 20)", expanded=False):
-                    _render_detail_table(weekly, f"{src_key}_weekly", top_n=20)
-
-            st.divider()
-
-            # ── 🔍 Drilldown (يحتاج counted على كامل الـ logs) ────
-            if df_logs_full is not None and not df_logs_full.empty:
-                d_full = df_logs_full.copy()
-                d_full = d_full[d_full["store_id"].notna()
-                                & (d_full["store_id"].astype(str).str.strip() != "")]
-                d_full["person_key"] = d_full.apply(
-                    lambda r: _sa_person_key(r.get("source"), r.get("user_id"), r.get("ip_hex")),
-                    axis=1,
-                )
-                d_full = _sa_apply_anti_spam(d_full, time_col="action_time")
-                _render_drilldown(d_full, daily, weekly, src_key)
-            else:
-                st.info("لا توجد أحداث في هذا النطاق.")
-
-            # ── ℹ️ شارح القاعدة ───────────────────────────────────
-            with st.expander("ℹ️ كيف يُحسب الترند؟ (شرح القاعدة)", expanded=False):
-                st.markdown("""
-**نظام النقاط الموزون:**
-
-| الفعل | النقاط لكل حدث |
-|---|---|
-| 🔗 نقر على رابط متجر | **1** |
-| 🔍 بحث باسم المتجر | **2** |
-| 📋 نسخ كوبون | **3** |
-| ❤️ إضافة للمفضلة | **4** *(تنخصم تلقائياً لو أزال المستخدم المفضلة — لأن الصف يُحذف فعلياً من الجدول)* |
-
-**قاعدة Anti-Spam (لكل نوع فعل × مستخدم × متجر بشكل مستقل):**
-
-- ✅ **أول ساعة:** أول فعلَين تُحسب نقاطهما.
-- ❌ **من ساعة 1 إلى ساعة 5:** أي فعل إضافي يُسجَّل في النظام بدون نقاط — يعني المستخدم يقدر ينسخ ويفتح وينقر زي ما يبي، بس ما يُضخّم الترند.
-- 🔄 **بعد 5 ساعات** من بداية النافذة: نافذة جديدة تفتح بأول فعل قادم.
-
-**النوافذ الزمنية:**
-
-- 🌞 **اليومي:** من 12:00 ص (توقيت الرياض) إلى الآن. يبدأ من صفر كل ليلة.
-- 📅 **الأسبوعي:** آخر 7 أيام (rolling) — يتحرك ثانية بثانية مع الوقت.
-
-**ضمانات الفوترة:**
-
-كل الأحداث الخام محفوظة في `action_logs` للأبد بختم زمني. لو طلبت شركة معلنة تقريراً «متى كان متجري في الترند هذا الشهر؟» نقدر نرجع لأي تاريخ ونعيد بناء الترند منه. **ما في تصفير أبداً** — الترند هو فقط *سؤال* نسأله للداتا الخام.
-                """)
-
-        with tr_tab_all:
-            _render_trend_for_source("all")
-        with tr_tab_bot:
-            _render_trend_for_source("bot")
-        with tr_tab_web:
-            _render_trend_for_source("web")
-        with tr_tab_mini:
-            _render_trend_for_source("mini")
+            st.markdown("**📋 التجاوزات الحالية:**")
+            st.dataframe(_show, hide_index=True, width='stretch')
 
 
 # ════════════════════════════════════════════════════════════════════════════
