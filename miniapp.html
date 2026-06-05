@@ -601,6 +601,22 @@ applyLang();
 function toggleLang() {
     LANG_CURRENT = (LANG_CURRENT === 'ar') ? 'en' : 'ar';
     try { localStorage.setItem('dp_lang', LANG_CURRENT); } catch(e){}
+    // نحفظ اللغة في bot_users.lang (آخر اختيار) — عشان المنشورات/الإيميلات
+    // توصل المستخدم بلغته. fire-and-forget (keepalive يكمل رغم إعادة التحميل).
+    if (tgUserId) {
+        try {
+            fetch(`${API_BASE}/track/set-lang`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    lang: LANG_CURRENT,
+                    source: 'telegram_miniapp',
+                    tg_user_id: tgUserId,
+                }),
+                keepalive: true,
+            }).catch(function(){});
+        } catch(e){}
+    }
     // نُعيد التحميل بلغة الجديدة (الـ API يردّ بـ name_en/store_bio_en حسب lang)
     location.reload();
 }
