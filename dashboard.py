@@ -7248,8 +7248,10 @@ elif page == "تحليل المستخدمين":
                       FROM bot_users WHERE deleted_at IS NULL
                 """
                 _q_web = """
-                    SELECT 'web', id::text, display_name, email,
-                           phone_number, created_at, last_seen
+                    SELECT 'web' AS source, id::text AS id,
+                           display_name AS name, email AS email,
+                           phone_number AS phone,
+                           created_at AS joined, last_seen AS last_seen
                       FROM web_users
                 """
                 _q_mini = f"""
@@ -7299,8 +7301,9 @@ elif page == "تحليل المستخدمين":
                        AND last_seen >= %s AND last_seen < %s
                 """
                 _q_web_a = """
-                    SELECT 'web', id::text, display_name, email, phone_number,
-                           created_at, last_seen
+                    SELECT 'web' AS source, id::text AS id, display_name AS name,
+                           email AS email, phone_number AS phone,
+                           created_at AS joined, last_seen AS last_seen
                       FROM web_users
                      WHERE last_seen >= %s AND last_seen < %s
                 """
@@ -7352,9 +7355,10 @@ elif page == "تحليل المستخدمين":
                        AND (last_seen IS NULL OR last_seen < %s)
                 """
                 _q_web_i = """
-                    SELECT 'web', id::text, display_name, email, phone_number,
-                           created_at, last_seen,
-                           EXTRACT(EPOCH FROM (NOW() - last_seen))/86400.0
+                    SELECT 'web' AS source, id::text AS id, display_name AS name,
+                           email AS email, phone_number AS phone,
+                           created_at AS joined, last_seen AS last_seen,
+                           EXTRACT(EPOCH FROM (NOW() - last_seen))/86400.0 AS days_silent
                       FROM web_users
                      WHERE (last_seen IS NULL OR last_seen < %s)
                 """
@@ -7406,8 +7410,9 @@ elif page == "تحليل المستخدمين":
                        AND joined_at >= %s AND joined_at < %s
                 """
                 _q_web_n = """
-                    SELECT 'web', id::text, display_name, email, phone_number,
-                           created_at, last_seen
+                    SELECT 'web' AS source, id::text AS id, display_name AS name,
+                           email AS email, phone_number AS phone,
+                           created_at AS joined, last_seen AS last_seen
                       FROM web_users
                      WHERE created_at >= %s AND created_at < %s
                 """
@@ -8362,12 +8367,15 @@ elif page == "تحليل المستخدمين":
                 sel_bot_b = "birth_date" if _has_bot_birth else "NULL::date"
                 try: conn.rollback()
                 except Exception: pass
+                # ملاحظة: Postgres يحوّل aliases غير المُقتبسة إلى lowercase.
+                # نستخدم lowercase صريح لتجنّب مفاجآت في pandas.
                 df_all = pd.read_sql(f"""
-                    SELECT 'web' AS source, id::text AS ID,
-                           display_name AS name, email, phone_number AS phone,
-                           telegram_username AS tg, city,
+                    SELECT 'web' AS source, id::text AS id,
+                           display_name AS name, email AS email,
+                           phone_number AS phone,
+                           telegram_username AS tg, city AS city,
                            {sel_web_g} AS gender, {sel_web_b} AS birth_date,
-                           created_at AS joined, last_seen
+                           created_at AS joined, last_seen AS last_seen
                       FROM web_users
                     UNION ALL
                     SELECT 'bot', telegram_id::text, username, NULL::text, NULL::text,
@@ -8404,12 +8412,12 @@ elif page == "تحليل المستخدمين":
                         if df_slice.empty:
                             st.caption("لا أحد في هذه الشريحة.")
                             return
-                        show = df_slice[["المصدر","ID","name","email","phone","تيليجرام",
+                        show = df_slice[["المصدر","id","name","email","phone","تيليجرام",
                                          "city","gender_ar","age","age_bucket","joined","last_seen"]].copy()
                         show["joined"]    = pd.to_datetime(show["joined"],    errors="coerce").dt.strftime("%Y-%m-%d")
                         show["last_seen"] = pd.to_datetime(show["last_seen"], errors="coerce").dt.strftime("%Y-%m-%d")
                         show = show.rename(columns={
-                            "name":"الاسم","email":"الإيميل","phone":"الجوال",
+                            "id":"ID","name":"الاسم","email":"الإيميل","phone":"الجوال",
                             "city":"المدينة","gender_ar":"الجنس","age":"العمر",
                             "age_bucket":"الفئة_العمرية",
                             "joined":"الانضمام","last_seen":"آخر_ظهور",
@@ -8889,7 +8897,7 @@ elif page == "تحليل المستخدمين":
                     try: conn.rollback()
                     except Exception: pass
                     df_coh_users = pd.read_sql("""
-                        SELECT 'bot' AS source, telegram_id::text AS ID, username AS name,
+                        SELECT 'bot' AS source, telegram_id::text AS id, username AS name,
                                NULL::text AS email, NULL::text AS phone,
                                joined_at AS joined, last_seen
                           FROM bot_users
@@ -8914,9 +8922,9 @@ elif page == "تحليل المستخدمين":
                             else "🟡 ظهر مؤخراً (8-30)" if pd.notna(v) and (pd.Timestamp.now(tz="UTC") - pd.to_datetime(v, utc=True, errors="coerce")).days <= 30
                             else "🔴 خامل (>30)"
                         )
-                        show = df_coh_users[["المصدر","ID","name","email","phone",
+                        show = df_coh_users[["المصدر","id","name","email","phone",
                                              "الانضمام","آخر_ظهور","الحالة"]].rename(
-                            columns={"name":"الاسم","email":"الإيميل","phone":"الجوال"}).fillna("—")
+                            columns={"id":"ID","name":"الاسم","email":"الإيميل","phone":"الجوال"}).fillna("—")
                         st.dataframe(show, use_container_width=True, hide_index=True, height=380)
                         # ملخّص حالة الـ cohort
                         active_n = int((df_coh_users["الحالة"]=="🟢 نشط (آخر 7 يوم)").sum())
