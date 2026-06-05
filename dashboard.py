@@ -4514,271 +4514,319 @@ elif page == "🎬 تحليلات الستوري":
     st.header("🎬 تحليلات الستوري")
     st.caption("كل فتحة، مين فتح، كم مرّة، وعلى أيش دخل من داخل الستوري، ونسخ كود من الستوري أو لا — لاتخاذ قرار: هذا الستوري يستحق الدفع؟")
 
-    sv_tab_all, sv_tab_web, sv_tab_mini = st.tabs(["📡 الكل", "🌐 الموقع", "🔹 الميني-ويب"])
+    # ════════════════════════════════════════════════════════════════
+    # شريط الفلاتر — تاريخ من/إلى + pills المصدر + pills الترند
+    # ════════════════════════════════════════════════════════════════
+    _sv_c1, _sv_c2, _sv_c3, _sv_c4 = st.columns([0.5, 1.2, 1.2, 3.1])
+    with _sv_c1:
+        st.markdown("&nbsp;", unsafe_allow_html=True)
+        if st.button("🔄", help="مسح الكاش وإعادة التحميل", key="sv_refresh"):
+            try: st.cache_data.clear()
+            except Exception: pass
+            st.rerun()
+    _sv_dt_to   = date.today()
+    _sv_dt_from = _sv_dt_to - timedelta(days=30)
+    with _sv_c2:
+        sv_date_from = st.date_input("📅 من تاريخ:", value=_sv_dt_from,
+                                     key="sv_date_from", max_value=_sv_dt_to)
+    with _sv_c3:
+        sv_date_to   = st.date_input("📅 إلى تاريخ:", value=_sv_dt_to,
+                                     key="sv_date_to",
+                                     min_value=sv_date_from, max_value=_sv_dt_to)
+    with _sv_c4:
+        st.markdown("&nbsp;", unsafe_allow_html=True)
+        st.caption(f"النطاق: **{sv_date_from.strftime('%Y-%m-%d')} → {sv_date_to.strftime('%Y-%m-%d')}**")
 
-    def _render_story_analytics(source_filter, key_prefix):
-        """source_filter=None → كل المصادر، 'web' → الموقع فقط، 'telegram_miniapp' → الميني-ويب."""
-        try:
-            conn_st = get_conn()
-            conn_st.rollback()
-            src_where = ""
-            params = []
-            if source_filter:
-                src_where = "WHERE source = %s"
-                params = [source_filter]
+    _sv_t_from = pd.Timestamp(sv_date_from).strftime("%Y-%m-%d 00:00:00")
+    _sv_t_to   = (pd.Timestamp(sv_date_to) + pd.Timedelta(days=1)).strftime("%Y-%m-%d 00:00:00")
 
-            kpi = pd.read_sql(f"""
-                SELECT
-                  COUNT(*)                                          AS total_views,
-                  COUNT(DISTINCT view_id)                           AS unique_opens,
-                  COUNT(DISTINCT store_id)                          AS stores_seen,
-                  COUNT(DISTINCT COALESCE(web_user_id::text,
-                                          'tg:' || tg_user_id::text)) AS unique_viewers
-                FROM story_views {src_where}
-            """, conn_st, params=params)
+    # pills المصدر
+    _sv_src_choice = st.radio(
+        "📡 المصدر:",
+        ["📡 الكل", "🌐 الموقع", "🔹 الميني-ويب"],
+        horizontal=True, key="sv_src_pill",
+    )
+    _SV_SRC_SQL = {"📡 الكل": None, "🌐 الموقع": "web", "🔹 الميني-ويب": "telegram_miniapp"}
+    sv_source_filter = _SV_SRC_SQL.get(_sv_src_choice)
 
-            eng_filter = ""
-            eng_params = []
-            if source_filter:
-                eng_filter = " AND al.source = %s "
-                eng_params = [source_filter]
-            eng = pd.read_sql(f"""
-                SELECT
-                  SUM(CASE WHEN al.action_type='copy_coupon' THEN 1 ELSE 0 END) AS copies,
-                  SUM(CASE WHEN al.action_type='click_link'  THEN 1 ELSE 0 END) AS clicks
-                FROM action_logs al
-                WHERE al.story_view_id IS NOT NULL {eng_filter}
-            """, conn_st, params=eng_params)
+    # pills الترند — يعتمد على master.is_trending = 'ترند 🔥'
+    _sv_trend_choice = st.radio(
+        "🔥 المشاهدات:",
+        ["📊 الكل", "🟢 العادي", "🔥 الترند"],
+        horizontal=True, key="sv_trend_pill",
+    )
+    _SV_TREND_KEY = {"📊 الكل": None, "🟢 العادي": "normal", "🔥 الترند": "trend"}
+    sv_trend_filter = _SV_TREND_KEY.get(_sv_trend_choice)
 
-            total_views    = int(kpi["total_views"].iloc[0]    or 0)
-            unique_viewers = int(kpi["unique_viewers"].iloc[0] or 0)
-            stores_seen    = int(kpi["stores_seen"].iloc[0]    or 0)
-            copies = int(eng["copies"].iloc[0] or 0)
-            clicks = int(eng["clicks"].iloc[0] or 0)
-            ctr = (clicks * 100.0 / total_views) if total_views else 0.0
-            cvr = (copies * 100.0 / total_views) if total_views else 0.0
+    st.markdown("---")
 
-            c1, c2, c3, c4, c5 = st.columns(5)
-            with c1: kpi_card("👀", "إجمالي الفتحات",  total_views,    "info")
-            with c2: kpi_card("👥", "مشاهدون فريدون", unique_viewers, "emerald")
-            with c3: kpi_card("🏬", "متاجر شُوهدت",    stores_seen,    "info")
-            with c4: kpi_card("📋", f"نسخ ({cvr:.1f}%)", copies,       "warning")
-            with c5: kpi_card("🚪", f"زيارات ({ctr:.1f}%)", clicks,    "emerald")
-
-            st.markdown("---")
-
-            # ─── جدول لكل متجر ─────────────────────────────────────────────
-            st.subheader("📊 تفصيل لكل متجر")
-            per_store_params = list(params) + list(eng_params)
-            per_store = pd.read_sql(f"""
-                WITH v AS (
-                  SELECT store_id,
-                         COUNT(*)                              AS views,
-                         COUNT(DISTINCT COALESCE(web_user_id::text,
-                                                 'tg:' || tg_user_id::text)) AS uniq_viewers
-                  FROM story_views {src_where}
-                  GROUP BY store_id
-                ),
-                e AS (
-                  SELECT al.store_id,
-                         SUM(CASE WHEN al.action_type='copy_coupon' THEN 1 ELSE 0 END) AS copies,
-                         SUM(CASE WHEN al.action_type='click_link'  THEN 1 ELSE 0 END) AS clicks
-                  FROM action_logs al
-                  WHERE al.story_view_id IS NOT NULL {eng_filter}
-                  GROUP BY al.store_id
-                )
-                SELECT v.store_id,
-                       v.views,
-                       v.uniq_viewers,
-                       COALESCE(e.copies, 0) AS copies,
-                       COALESCE(e.clicks, 0) AS clicks,
-                       CASE WHEN v.views > 0
-                            THEN ROUND((COALESCE(e.clicks,0)*100.0 / v.views)::numeric, 1)
-                            ELSE 0 END AS ctr_pct,
-                       CASE WHEN v.views > 0
-                            THEN ROUND((COALESCE(e.copies,0)*100.0 / v.views)::numeric, 1)
-                            ELSE 0 END AS cvr_pct
-                FROM v LEFT JOIN e USING (store_id)
-                ORDER BY v.views DESC
-            """, conn_st, params=per_store_params)
-
-            if per_store.empty:
-                st.info("📭 لا توجد بيانات ستوري بعد لهذا المصدر.")
-            else:
-                per_store.rename(columns={
-                    "store_id":     "المتجر",
-                    "views":        "الفتحات",
-                    "uniq_viewers": "مشاهدون فريدون",
-                    "copies":       "نُسخ من الستوري",
-                    "clicks":       "زيارات من الستوري",
-                    "ctr_pct":      "% زيارة",
-                    "cvr_pct":      "% نسخ",
-                }, inplace=True)
-                st.dataframe(per_store, use_container_width=True, hide_index=True)
-
-            # ─── كل المشاهدين (بياناتهم كاملة) ─────────────────────────────
-            st.markdown("---")
-            st.subheader("👥 كل المشاهدين — بياناتهم الكاملة")
-            st.caption("صف لكل شخص: مين هو، كم مرّة شاف، على أيش دخل، ونسخ كود من الستوري أو لا.")
-
-            all_viewers = pd.read_sql(f"""
-                WITH base AS (
-                  SELECT sv.web_user_id,
-                         sv.tg_user_id,
-                         sv.source,
-                         sv.store_id,
-                         sv.view_id,
-                         sv.viewed_at
-                  FROM story_views sv
-                  {src_where}
-                ),
-                agg AS (
-                  SELECT web_user_id, tg_user_id,
-                         MIN(source)                              AS source_any,
-                         COUNT(*)                                 AS views,
-                         COUNT(DISTINCT store_id)                 AS stores_count,
-                         STRING_AGG(DISTINCT store_id, '، ' ORDER BY store_id) AS stores_list,
-                         MIN(viewed_at)                           AS first_view,
-                         MAX(viewed_at)                           AS last_view,
-                         ARRAY_AGG(view_id)                       AS view_ids
-                  FROM base
-                  GROUP BY web_user_id, tg_user_id
-                ),
-                acts AS (
-                  SELECT
-                    a.web_user_id, a.tg_user_id,
-                    SUM(CASE WHEN al.action_type='copy_coupon' THEN 1 ELSE 0 END) AS copies,
-                    SUM(CASE WHEN al.action_type='click_link'  THEN 1 ELSE 0 END) AS clicks,
-                    STRING_AGG(DISTINCT al.store_id, '، ' ORDER BY al.store_id)
-                      FILTER (WHERE al.action_type='copy_coupon')                AS copied_stores,
-                    STRING_AGG(DISTINCT al.store_id, '، ' ORDER BY al.store_id)
-                      FILTER (WHERE al.action_type='click_link')                 AS visited_stores
-                  FROM agg a
-                  LEFT JOIN action_logs al
-                    ON al.story_view_id = ANY(a.view_ids)
-                   AND al.action_type IN ('copy_coupon','click_link')
-                  GROUP BY a.web_user_id, a.tg_user_id
-                )
-                SELECT
-                  agg.source_any                                                 AS source,
-                  COALESCE(wu.display_name, bu.username, '—')                    AS الاسم,
-                  COALESCE(wu.email, '—')                                        AS الإيميل,
-                  COALESCE(wu.phone_number, '—')                                 AS الجوال,
-                  COALESCE('@' || NULLIF(wu.telegram_username, ''),
-                           '@' || NULLIF(bu.username, ''), '—')                  AS تيليجرام,
-                  agg.views                                                      AS مرات_المشاهدة,
-                  agg.stores_count                                               AS عدد_المتاجر,
-                  agg.stores_list                                                AS متاجر_شاهدها,
-                  COALESCE(acts.clicks, 0)                                       AS زيارات_من_الستوري,
-                  COALESCE(acts.copies, 0)                                       AS نسخ_من_الستوري,
-                  CASE WHEN COALESCE(acts.copies, 0) > 0 THEN '✅ نعم' ELSE '❌ لا' END
-                                                                                 AS نسخ_كود_من_الستوري,
-                  COALESCE(acts.visited_stores, '—')                             AS دخل_على,
-                  COALESCE(acts.copied_stores,  '—')                             AS نسخ_من,
-                  agg.first_view                                                 AS أول_مشاهدة,
-                  agg.last_view                                                  AS آخر_مشاهدة
-                FROM agg
-                LEFT JOIN acts       USING (web_user_id, tg_user_id)
-                LEFT JOIN web_users wu ON wu.id          = agg.web_user_id
-                LEFT JOIN bot_users bu ON bu.telegram_id = agg.tg_user_id
-                ORDER BY agg.views DESC, agg.last_view DESC
-            """, conn_st, params=params)
-
-            if all_viewers.empty:
-                st.caption("لا مشاهدين بعد لهذا المصدر.")
-            else:
-                all_viewers["المصدر"] = all_viewers["source"].map(
-                    {"web": "🌐 الموقع", "telegram_miniapp": "🔹 الميني ويب"}).fillna(all_viewers["source"])
-                all_viewers["أول_مشاهدة"] = pd.to_datetime(all_viewers["أول_مشاهدة"], errors="coerce") \
-                                                  .dt.strftime("%Y-%m-%d %H:%M")
-                all_viewers["آخر_مشاهدة"] = pd.to_datetime(all_viewers["آخر_مشاهدة"], errors="coerce") \
-                                                  .dt.strftime("%Y-%m-%d %H:%M")
-                all_viewers.drop(columns=["source"], inplace=True)
-                cols_order = ["المصدر", "الاسم", "الإيميل", "الجوال", "تيليجرام",
-                              "مرات_المشاهدة", "عدد_المتاجر", "متاجر_شاهدها",
-                              "زيارات_من_الستوري", "نسخ_من_الستوري", "نسخ_كود_من_الستوري",
-                              "دخل_على", "نسخ_من", "أول_مشاهدة", "آخر_مشاهدة"]
-                all_viewers = all_viewers[cols_order]
-                st.dataframe(all_viewers, use_container_width=True, hide_index=True)
-                st.caption(f"👥 {len(all_viewers)} شخص شاهدوا الستوري لهذا المصدر.")
-
-            # ─── تفصيل المشاهدين لمتجر معيّن ──────────────────────────────
-            st.markdown("---")
-            st.subheader("🔍 مين شاهد ستوري متجر معيّن؟")
-            stores_with_views = pd.read_sql(
-                f"SELECT DISTINCT store_id FROM story_views {src_where} ORDER BY store_id",
-                conn_st, params=params,
+    # ─── بنّاء WHERE لـ story_views ──────────────────────────────────
+    def _sv_build_where(alias="sv"):
+        parts  = [f"{alias}.viewed_at >= %s", f"{alias}.viewed_at < %s"]
+        params = [_sv_t_from, _sv_t_to]
+        if sv_source_filter:
+            parts.append(f"{alias}.source = %s")
+            params.append(sv_source_filter)
+        if sv_trend_filter == "trend":
+            parts.append(
+                f"EXISTS (SELECT 1 FROM master m WHERE m.store_id = {alias}.store_id "
+                f"AND m.is_trending = 'ترند 🔥')"
             )
-            if stores_with_views.empty:
-                st.caption("لا متاجر بعد.")
+        elif sv_trend_filter == "normal":
+            parts.append(
+                f"NOT EXISTS (SELECT 1 FROM master m WHERE m.store_id = {alias}.store_id "
+                f"AND m.is_trending = 'ترند 🔥')"
+            )
+        return "WHERE " + " AND ".join(parts), params
+
+    try:
+        conn_st = get_conn()
+        conn_st.rollback()
+
+        sv_where, sv_params = _sv_build_where("sv")
+        # al.story_view_id IN (subquery يطبّق نفس فلاتر story_views)
+        sv2_where, sv2_params = _sv_build_where("sv2")
+        al_in_sql = f"al.story_view_id IN (SELECT view_id FROM story_views sv2 {sv2_where})"
+
+        kpi = pd.read_sql(f"""
+            SELECT
+              COUNT(*)                                          AS total_views,
+              COUNT(DISTINCT view_id)                           AS unique_opens,
+              COUNT(DISTINCT store_id)                          AS stores_seen,
+              COUNT(DISTINCT COALESCE(web_user_id::text,
+                                      'tg:' || tg_user_id::text)) AS unique_viewers
+            FROM story_views sv
+            {sv_where}
+        """, conn_st, params=sv_params)
+
+        eng = pd.read_sql(f"""
+            SELECT
+              SUM(CASE WHEN al.action_type='copy_coupon' THEN 1 ELSE 0 END) AS copies,
+              SUM(CASE WHEN al.action_type='click_link'  THEN 1 ELSE 0 END) AS clicks
+            FROM action_logs al
+            WHERE {al_in_sql}
+        """, conn_st, params=sv2_params)
+
+        total_views    = int(kpi["total_views"].iloc[0]    or 0)
+        unique_viewers = int(kpi["unique_viewers"].iloc[0] or 0)
+        stores_seen    = int(kpi["stores_seen"].iloc[0]    or 0)
+        copies = int(eng["copies"].iloc[0] or 0)
+        clicks = int(eng["clicks"].iloc[0] or 0)
+        ctr = (clicks * 100.0 / total_views) if total_views else 0.0
+        cvr = (copies * 100.0 / total_views) if total_views else 0.0
+
+        c1, c2, c3, c4, c5 = st.columns(5)
+        with c1: kpi_card("👀", "إجمالي الفتحات",  total_views,    "info")
+        with c2: kpi_card("👥", "مشاهدون فريدون", unique_viewers, "emerald")
+        with c3: kpi_card("🏬", "متاجر شُوهدت",    stores_seen,    "info")
+        with c4: kpi_card("📋", f"نسخ ({cvr:.1f}%)", copies,       "warning")
+        with c5: kpi_card("🚪", f"زيارات ({ctr:.1f}%)", clicks,    "emerald")
+
+        st.markdown("---")
+
+        # ─── جدول لكل متجر ─────────────────────────────────────────────
+        st.subheader("📊 تفصيل لكل متجر")
+        per_store = pd.read_sql(f"""
+            WITH v AS (
+              SELECT store_id,
+                     COUNT(*)                              AS views,
+                     COUNT(DISTINCT COALESCE(web_user_id::text,
+                                             'tg:' || tg_user_id::text)) AS uniq_viewers
+              FROM story_views sv
+              {sv_where}
+              GROUP BY store_id
+            ),
+            e AS (
+              SELECT al.store_id,
+                     SUM(CASE WHEN al.action_type='copy_coupon' THEN 1 ELSE 0 END) AS copies,
+                     SUM(CASE WHEN al.action_type='click_link'  THEN 1 ELSE 0 END) AS clicks
+              FROM action_logs al
+              WHERE {al_in_sql}
+              GROUP BY al.store_id
+            )
+            SELECT v.store_id,
+                   v.views,
+                   v.uniq_viewers,
+                   COALESCE(e.copies, 0) AS copies,
+                   COALESCE(e.clicks, 0) AS clicks,
+                   CASE WHEN v.views > 0
+                        THEN ROUND((COALESCE(e.clicks,0)*100.0 / v.views)::numeric, 1)
+                        ELSE 0 END AS ctr_pct,
+                   CASE WHEN v.views > 0
+                        THEN ROUND((COALESCE(e.copies,0)*100.0 / v.views)::numeric, 1)
+                        ELSE 0 END AS cvr_pct
+            FROM v LEFT JOIN e USING (store_id)
+            ORDER BY v.views DESC
+        """, conn_st, params=list(sv_params) + list(sv2_params))
+
+        if per_store.empty:
+            st.info("📭 لا توجد بيانات ستوري في هذا النطاق/الفلتر.")
+        else:
+            per_store.rename(columns={
+                "store_id":     "المتجر",
+                "views":        "الفتحات",
+                "uniq_viewers": "مشاهدون فريدون",
+                "copies":       "نُسخ من الستوري",
+                "clicks":       "زيارات من الستوري",
+                "ctr_pct":      "% زيارة",
+                "cvr_pct":      "% نسخ",
+            }, inplace=True)
+            st.dataframe(per_store, use_container_width=True, hide_index=True)
+
+        # ─── كل المشاهدين (بياناتهم كاملة) ─────────────────────────────
+        st.markdown("---")
+        st.subheader("👥 كل المشاهدين — بياناتهم الكاملة")
+        st.caption("صف لكل شخص: مين هو، كم مرّة شاف، على أيش دخل، ونسخ كود من الستوري أو لا.")
+
+        all_viewers = pd.read_sql(f"""
+            WITH base AS (
+              SELECT sv.web_user_id,
+                     sv.tg_user_id,
+                     sv.source,
+                     sv.store_id,
+                     sv.view_id,
+                     sv.viewed_at
+              FROM story_views sv
+              {sv_where}
+            ),
+            agg AS (
+              SELECT web_user_id, tg_user_id,
+                     MIN(source)                              AS source_any,
+                     COUNT(*)                                 AS views,
+                     COUNT(DISTINCT store_id)                 AS stores_count,
+                     STRING_AGG(DISTINCT store_id, '، ' ORDER BY store_id) AS stores_list,
+                     MIN(viewed_at)                           AS first_view,
+                     MAX(viewed_at)                           AS last_view,
+                     ARRAY_AGG(view_id)                       AS view_ids
+              FROM base
+              GROUP BY web_user_id, tg_user_id
+            ),
+            acts AS (
+              SELECT
+                a.web_user_id, a.tg_user_id,
+                SUM(CASE WHEN al.action_type='copy_coupon' THEN 1 ELSE 0 END) AS copies,
+                SUM(CASE WHEN al.action_type='click_link'  THEN 1 ELSE 0 END) AS clicks,
+                STRING_AGG(DISTINCT al.store_id, '، ' ORDER BY al.store_id)
+                  FILTER (WHERE al.action_type='copy_coupon')                AS copied_stores,
+                STRING_AGG(DISTINCT al.store_id, '، ' ORDER BY al.store_id)
+                  FILTER (WHERE al.action_type='click_link')                 AS visited_stores
+              FROM agg a
+              LEFT JOIN action_logs al
+                ON al.story_view_id = ANY(a.view_ids)
+               AND al.action_type IN ('copy_coupon','click_link')
+              GROUP BY a.web_user_id, a.tg_user_id
+            )
+            SELECT
+              agg.source_any                                                 AS source,
+              COALESCE(wu.display_name, bu.username, '—')                    AS الاسم,
+              COALESCE(wu.email, '—')                                        AS الإيميل,
+              COALESCE(wu.phone_number, '—')                                 AS الجوال,
+              COALESCE('@' || NULLIF(wu.telegram_username, ''),
+                       '@' || NULLIF(bu.username, ''), '—')                  AS تيليجرام,
+              agg.views                                                      AS مرات_المشاهدة,
+              agg.stores_count                                               AS عدد_المتاجر,
+              agg.stores_list                                                AS متاجر_شاهدها,
+              COALESCE(acts.clicks, 0)                                       AS زيارات_من_الستوري,
+              COALESCE(acts.copies, 0)                                       AS نسخ_من_الستوري,
+              CASE WHEN COALESCE(acts.copies, 0) > 0 THEN '✅ نعم' ELSE '❌ لا' END
+                                                                             AS نسخ_كود_من_الستوري,
+              COALESCE(acts.visited_stores, '—')                             AS دخل_على,
+              COALESCE(acts.copied_stores,  '—')                             AS نسخ_من,
+              agg.first_view                                                 AS أول_مشاهدة,
+              agg.last_view                                                  AS آخر_مشاهدة
+            FROM agg
+            LEFT JOIN acts       USING (web_user_id, tg_user_id)
+            LEFT JOIN web_users wu ON wu.id          = agg.web_user_id
+            LEFT JOIN bot_users bu ON bu.telegram_id = agg.tg_user_id
+            ORDER BY agg.views DESC, agg.last_view DESC
+        """, conn_st, params=sv_params)
+
+        if all_viewers.empty:
+            st.caption("لا مشاهدين في هذا النطاق/الفلتر.")
+        else:
+            all_viewers["المصدر"] = all_viewers["source"].map(
+                {"web": "🌐 الموقع", "telegram_miniapp": "🔹 الميني ويب"}).fillna(all_viewers["source"])
+            all_viewers["أول_مشاهدة"] = pd.to_datetime(all_viewers["أول_مشاهدة"], errors="coerce") \
+                                              .dt.strftime("%Y-%m-%d %H:%M")
+            all_viewers["آخر_مشاهدة"] = pd.to_datetime(all_viewers["آخر_مشاهدة"], errors="coerce") \
+                                              .dt.strftime("%Y-%m-%d %H:%M")
+            all_viewers.drop(columns=["source"], inplace=True)
+            cols_order = ["المصدر", "الاسم", "الإيميل", "الجوال", "تيليجرام",
+                          "مرات_المشاهدة", "عدد_المتاجر", "متاجر_شاهدها",
+                          "زيارات_من_الستوري", "نسخ_من_الستوري", "نسخ_كود_من_الستوري",
+                          "دخل_على", "نسخ_من", "أول_مشاهدة", "آخر_مشاهدة"]
+            all_viewers = all_viewers[cols_order]
+            st.dataframe(all_viewers, use_container_width=True, hide_index=True)
+            st.caption(f"👥 {len(all_viewers)} شخص شاهدوا الستوري في النطاق/الفلتر المختار.")
+
+        # ─── تفصيل المشاهدين لمتجر معيّن ──────────────────────────────
+        st.markdown("---")
+        st.subheader("🔍 مين شاهد ستوري متجر معيّن؟")
+        stores_with_views = pd.read_sql(
+            f"SELECT DISTINCT store_id FROM story_views sv {sv_where} ORDER BY store_id",
+            conn_st, params=sv_params,
+        )
+        if stores_with_views.empty:
+            st.caption("لا متاجر في هذا النطاق/الفلتر.")
+        else:
+            pick_store = st.selectbox("اختر المتجر:", options=stores_with_views["store_id"].tolist(),
+                                      key="sv_drill_store")
+            # نضيف فلتر المتجر فوق الفلاتر القائمة
+            drill_where = sv_where + " AND sv.store_id = %s"
+            drill_params = list(sv_params) + [pick_store]
+
+            viewers = pd.read_sql(f"""
+                SELECT
+                  sv.source,
+                  COALESCE(wu.display_name, bu.username, '—')            AS الاسم,
+                  COALESCE(wu.email, '—')                                AS الإيميل,
+                  COALESCE(wu.phone_number, '—')                         AS الجوال,
+                  COALESCE('@' || NULLIF(wu.telegram_username, ''),
+                           '@' || NULLIF(bu.username, ''), '—')          AS تيليجرام,
+                  COUNT(*)                                               AS مرات_المشاهدة,
+                  MIN(sv.viewed_at)                                      AS أول_مشاهدة,
+                  MAX(sv.viewed_at)                                      AS آخر_مشاهدة,
+                  (SELECT COUNT(*) FROM action_logs al
+                     WHERE al.story_view_id IN (
+                          SELECT view_id FROM story_views sv2
+                           WHERE sv2.store_id = sv.store_id
+                             AND (sv2.web_user_id = sv.web_user_id OR sv2.tg_user_id = sv.tg_user_id)
+                     ) AND al.action_type='copy_coupon')                 AS نُسخ,
+                  (SELECT COUNT(*) FROM action_logs al
+                     WHERE al.story_view_id IN (
+                          SELECT view_id FROM story_views sv2
+                           WHERE sv2.store_id = sv.store_id
+                             AND (sv2.web_user_id = sv.web_user_id OR sv2.tg_user_id = sv.tg_user_id)
+                     ) AND al.action_type='click_link')                  AS زيارات
+                FROM story_views sv
+                LEFT JOIN web_users wu ON wu.id          = sv.web_user_id
+                LEFT JOIN bot_users bu ON bu.telegram_id = sv.tg_user_id
+                {drill_where}
+                GROUP BY sv.source, sv.store_id, sv.web_user_id, sv.tg_user_id,
+                         wu.display_name, wu.email, wu.phone_number, wu.telegram_username,
+                         bu.username
+                ORDER BY مرات_المشاهدة DESC
+            """, conn_st, params=drill_params)
+
+            if viewers.empty:
+                st.caption("لا مشاهدين بعد لهذا المتجر في هذا النطاق.")
             else:
-                pick_store = st.selectbox("اختر المتجر:", options=stores_with_views["store_id"].tolist(),
-                                          key=f"sv_drill_{key_prefix}")
-                viewer_filter_src = ""
-                viewer_params = [pick_store]
-                if source_filter:
-                    viewer_filter_src = " AND sv.source = %s "
-                    viewer_params.append(source_filter)
+                viewers["المصدر"] = viewers["source"].map(
+                    {"web": "🌐 الموقع", "telegram_miniapp": "🔹 الميني ويب"}).fillna(viewers["source"])
+                viewers["أول_مشاهدة"] = pd.to_datetime(viewers["أول_مشاهدة"], errors="coerce") \
+                                              .dt.strftime("%Y-%m-%d %H:%M")
+                viewers["آخر_مشاهدة"] = pd.to_datetime(viewers["آخر_مشاهدة"], errors="coerce") \
+                                              .dt.strftime("%Y-%m-%d %H:%M")
+                viewers.drop(columns=["source"], inplace=True)
+                st.dataframe(viewers, use_container_width=True, hide_index=True)
+                st.caption(f"👥 {len(viewers)} شخص شاهدوا ستوري «{pick_store}». «نُسخ» و«زيارات» مقترنة بفتحاتهم.")
 
-                viewers = pd.read_sql(f"""
-                    SELECT
-                      sv.source,
-                      COALESCE(wu.display_name, bu.username, '—')            AS الاسم,
-                      COALESCE(wu.email, '—')                                AS الإيميل,
-                      COALESCE(wu.phone_number, '—')                         AS الجوال,
-                      COALESCE('@' || NULLIF(wu.telegram_username, ''),
-                               '@' || NULLIF(bu.username, ''), '—')          AS تيليجرام,
-                      COUNT(*)                                               AS مرات_المشاهدة,
-                      MIN(sv.viewed_at)                                      AS أول_مشاهدة,
-                      MAX(sv.viewed_at)                                      AS آخر_مشاهدة,
-                      (SELECT COUNT(*) FROM action_logs al
-                         WHERE al.story_view_id IN (
-                              SELECT view_id FROM story_views sv2
-                               WHERE sv2.store_id = sv.store_id
-                                 AND (sv2.web_user_id = sv.web_user_id OR sv2.tg_user_id = sv.tg_user_id)
-                         ) AND al.action_type='copy_coupon')                 AS نُسخ,
-                      (SELECT COUNT(*) FROM action_logs al
-                         WHERE al.story_view_id IN (
-                              SELECT view_id FROM story_views sv2
-                               WHERE sv2.store_id = sv.store_id
-                                 AND (sv2.web_user_id = sv.web_user_id OR sv2.tg_user_id = sv.tg_user_id)
-                         ) AND al.action_type='click_link')                  AS زيارات
-                    FROM story_views sv
-                    LEFT JOIN web_users wu ON wu.id          = sv.web_user_id
-                    LEFT JOIN bot_users bu ON bu.telegram_id = sv.tg_user_id
-                    WHERE sv.store_id = %s {viewer_filter_src}
-                    GROUP BY sv.source, sv.store_id, sv.web_user_id, sv.tg_user_id,
-                             wu.display_name, wu.email, wu.phone_number, wu.telegram_username,
-                             bu.username
-                    ORDER BY مرات_المشاهدة DESC
-                """, conn_st, params=viewer_params)
-
-                if viewers.empty:
-                    st.caption("لا مشاهدين بعد لهذا المتجر.")
-                else:
-                    viewers["المصدر"] = viewers["source"].map(
-                        {"web": "🌐 الموقع", "telegram_miniapp": "🔹 الميني ويب"}).fillna(viewers["source"])
-                    viewers["أول_مشاهدة"] = pd.to_datetime(viewers["أول_مشاهدة"], errors="coerce") \
-                                                  .dt.strftime("%Y-%m-%d %H:%M")
-                    viewers["آخر_مشاهدة"] = pd.to_datetime(viewers["آخر_مشاهدة"], errors="coerce") \
-                                                  .dt.strftime("%Y-%m-%d %H:%M")
-                    viewers.drop(columns=["source"], inplace=True)
-                    st.dataframe(viewers, use_container_width=True, hide_index=True)
-                    st.caption(f"👥 {len(viewers)} شخص شاهدوا ستوري «{pick_store}». «نُسخ» و«زيارات» مقترنة بفتحاتهم.")
-
-        except Exception as e:
-            st.error(f"⚠️ تعذّر تحميل تحليلات الستوري: {e}")
-        finally:
-            if 'conn_st' in locals():
-                try: conn_st.close()
-                except Exception: pass
-
-    with sv_tab_all:
-        _render_story_analytics(None, "all")
-    with sv_tab_web:
-        _render_story_analytics("web", "web")
-    with sv_tab_mini:
-        _render_story_analytics("telegram_miniapp", "mini")
+    except Exception as e:
+        st.error(f"⚠️ تعذّر تحميل تحليلات الستوري: {e}")
+    finally:
+        if 'conn_st' in locals():
+            try: conn_st.close()
+            except Exception: pass
 
 
 # ---  الصفحة الخامسة : مركز قيادة الأقسام والتاقات (إدارة الـ 10 أعمدة) ---
