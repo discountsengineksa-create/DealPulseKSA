@@ -7282,6 +7282,136 @@ elif page == "تحليل المستخدمين":
         st.markdown("# 📊 تحليلات عامّة")
         st.caption("الأرقام الكبرى + العد الشامل + القوائم + التوقيت + الديموغرافيا + التحليل المتقدّم.")
 
+        # ════════════════════════════════════════════════════════════════════
+        # نموذج «الأشخاص الفريدين» الموحّد — مصدر الحقيقة لكل عدّ للأشخاص
+        # ────────────────────────────────────────────────────────────────────
+        # العميل المربوط (يوزر تيليجرامه في الموقع يطابق username في البوت) =
+        # شخص واحد معروف، يُعدّ مرة واحدة — لا أرقام منفوخة للشركات.
+        #   • كل web_user = شخص (نضمّ له بوته المطابق إن وُجد).
+        #   • كل bot_user غير مطابق لأي ويب = شخص مستقل.
+        #   • joined = أول ظهور على أي قناة (LEAST) · last_seen = آخر ظهور (GREATEST).
+        # القنوات (بوت/ميني-ويب) لنفس الـ telegram_id = نفس الشخص، يميّزها
+        # النشاط في action_logs لا عدّ القاعدة.
+        # ════════════════════════════════════════════════════════════════════
+        try: conn.rollback()
+        except Exception: pass
+        df_persons = pd.read_sql("""
+            WITH wp AS (
+              SELECT id AS web_id, display_name, email, phone_number,
+                     NULLIF(LOWER(TRIM(telegram_username)), '') AS handle,
+                     telegram_username AS tg_raw, city,
+                     last_seen AS w_last, created_at AS w_join
+                FROM web_users
+            ),
+            bp AS (
+              SELECT telegram_id, username, LOWER(username) AS handle,
+                     city, last_seen AS b_last, joined_at AS b_join
+                FROM bot_users
+               WHERE deleted_at IS NULL
+            ),
+            web_person AS (
+              SELECT
+                'web:' || wp.web_id::text                       AS person_key,
+                TRUE                                            AS has_web,
+                bool_or(bp.telegram_id IS NOT NULL)             AS has_bot,
+                wp.web_id,
+                MAX(bp.telegram_id)                             AS telegram_id,
+                wp.display_name                                 AS name,
+                wp.email, wp.phone_number                       AS phone,
+                COALESCE(wp.tg_raw, MAX(bp.username))           AS telegram,
+                COALESCE(wp.city, MAX(bp.city))                 AS city,
+                GREATEST(wp.w_last, MAX(bp.b_last))             AS last_seen,
+                LEAST(wp.w_join, MIN(bp.b_join))                AS joined
+              FROM wp
+              LEFT JOIN bp ON bp.handle = wp.handle AND wp.handle IS NOT NULL
+              GROUP BY wp.web_id, wp.display_name, wp.email, wp.phone_number,
+                       wp.tg_raw, wp.city, wp.w_last, wp.w_join
+            ),
+            bot_only_person AS (
+              SELECT
+                'bot:' || bp.telegram_id::text                  AS person_key,
+                FALSE                                           AS has_web,
+                TRUE                                            AS has_bot,
+                NULL::bigint                                    AS web_id,
+                bp.telegram_id,
+                bp.username                                     AS name,
+                NULL::text                                      AS email,
+                NULL::text                                      AS phone,
+                bp.username                                     AS telegram,
+                bp.city,
+                bp.b_last                                       AS last_seen,
+                bp.b_join                                       AS joined
+              FROM bp
+              WHERE NOT EXISTS (
+                SELECT 1 FROM wp WHERE wp.handle = bp.handle AND wp.handle IS NOT NULL
+              )
+            ),
+            allp AS (
+              SELECT person_key, has_web, has_bot, web_id, telegram_id,
+                     name, email, phone, telegram, city, joined, last_seen
+                FROM web_person
+              UNION ALL
+              SELECT person_key, has_web, has_bot, web_id, telegram_id,
+                     name, email, phone, telegram, city, joined, last_seen
+                FROM bot_only_person
+            )
+            SELECT *,
+                   (last_seen >= %s AND last_seen < %s) AS is_active,
+                   (joined    >= %s AND joined    < %s) AS is_new
+              FROM allp
+        """, conn, params=(_t_from, _t_to, _t_from, _t_to))
+
+        df_persons["has_web"]   = df_persons["has_web"].fillna(False).astype(bool)
+        df_persons["has_bot"]   = df_persons["has_bot"].fillna(False).astype(bool)
+        df_persons["is_active"] = df_persons["is_active"].fillna(False).astype(bool)
+        df_persons["is_new"]    = df_persons["is_new"].fillna(False).astype(bool)
+
+        # أعداد الأشخاص الفريدين (مصدر الحقيقة — لا تضخيم)
+        grand_total  = int(len(df_persons))
+        grand_active = int(df_persons["is_active"].sum())
+        grand_new    = int(df_persons["is_new"].sum())
+        grand_idle   = grand_total - grand_active
+        linked_count   = int((df_persons["has_web"] & df_persons["has_bot"]).sum())
+        web_only_count = int((df_persons["has_web"] & ~df_persons["has_bot"]).sum())
+        bot_only_count = int((~df_persons["has_web"]).sum())
+        grand_unique   = grand_total
+
+        # خرائط: معرّف القناة → الشخص الفريد (لإزالة ازدواج المستفيدين)
+        _web_to_pk, _bot_to_pk = {}, {}
+        for _pk, _wid, _tid in zip(df_persons["person_key"],
+                                   df_persons["web_id"], df_persons["telegram_id"]):
+            if pd.notna(_wid): _web_to_pk[int(_wid)] = _pk
+            if pd.notna(_tid): _bot_to_pk.setdefault(int(_tid), _pk)
+
+        def _ua_channel_label(r):
+            if r["has_web"] and r["has_bot"]: return "🌐+🤖 موقع وتيليجرام"
+            if r["has_web"]:                  return "🌐 الموقع"
+            return "🤖 تيليجرام/بوت"
+
+        def _ua_persons_show(dfp, with_silence=False):
+            """يحوّل صفوف الأشخاص الفريدين لجدول عرض موحّد (شخص = صف واحد)."""
+            d = dfp.copy()
+            d["القناة"] = d.apply(_ua_channel_label, axis=1)
+            def _id_str(r):
+                parts = []
+                if pd.notna(r["web_id"]):      parts.append(f"web#{int(r['web_id'])}")
+                if pd.notna(r["telegram_id"]): parts.append(f"tg#{int(r['telegram_id'])}")
+                return " · ".join(parts) if parts else "—"
+            d["ID"] = d.apply(_id_str, axis=1)
+            d["التيليجرام"] = d["telegram"].apply(lambda s: f"@{s}" if isinstance(s, str) and s else "—")
+            d["تاريخ_الانضمام"] = pd.to_datetime(d["joined"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+            d["آخر_ظهور"]      = pd.to_datetime(d["last_seen"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+            cols = ["القناة", "ID", "name", "email", "phone", "التيليجرام",
+                    "city", "تاريخ_الانضمام", "آخر_ظهور"]
+            ren  = {"name": "الاسم", "email": "الإيميل", "phone": "الجوال", "city": "المدينة"}
+            if with_silence:
+                _now = pd.Timestamp.now(tz="UTC")
+                _ls  = pd.to_datetime(d["last_seen"], errors="coerce", utc=True)
+                d["أيام_صمت"] = ((_now - _ls).dt.total_seconds() / 86400).round(0)
+                d["أيام_صمت"] = d["أيام_صمت"].fillna(9999).astype(int)
+                cols.append("أيام_صمت")
+            return d[cols].rename(columns=ren).fillna("—")
+
         _main_tabs = st.tabs(["🎯 الأرقام الكبرى", "📊 العد الشامل", "📡 تفصيل القنوات", "🎯 قوائم القرار", "🕐 التوقيت", "👥 الديموغرافيا", "🎯 Audience Builder", "🎯 RFM", "🌀 Cohort", "📈 LTV", "🔻 Funnel", "🗺️ الجغرافيا", "🔔 Anomaly"])
 
         with _main_tabs[0]:
@@ -7324,10 +7454,8 @@ elif page == "تحليل المستخدمين":
             bot_new    = int(_r["bot_new"]    or 0)
             web_new    = int(_r["web_new"]    or 0)
 
-            grand_total  = bot_total + web_total
-            grand_active = bot_active + web_active
-            grand_new    = bot_new + web_new
-            grand_idle   = grand_total - grand_active
+            # كروت العملاء = أشخاص فريدون (المربوط مرة واحدة) — لا تضخيم.
+            # grand_total/active/new/idle مأخوذة من df_persons المحسوب قبل التبويبات.
 
             # نشاط مفلتر بالمصدر — نطاق زمني صريح
             _src_clause, _src_params = _ua_src_clause("al")
@@ -7337,9 +7465,7 @@ elif page == "تحليل المستخدمين":
                   COUNT(*) FILTER (WHERE action_type='copy_coupon') AS copies,
                   COUNT(*) FILTER (WHERE action_type='click_link')  AS clicks,
                   COUNT(*) FILTER (WHERE action_type='search')      AS searches,
-                  COUNT(*) FILTER (WHERE action_type='start')       AS sessions,
-                  COUNT(DISTINCT user_id) FILTER (WHERE action_type IN ('copy_coupon','click_link'))
-                                                                    AS beneficiaries
+                  COUNT(*) FILTER (WHERE action_type='start')       AS sessions
                 FROM action_logs al
                 WHERE 1=1
                 { _t_clause }
@@ -7349,23 +7475,44 @@ elif page == "تحليل المستخدمين":
             clicks        = int(act["clicks"][0]        or 0)
             searches      = int(act["searches"][0]      or 0)
             sessions      = int(act["sessions"][0]      or 0)
-            beneficiaries = int(act["beneficiaries"][0] or 0)
+
+            # المستفيدون = أشخاص فريدون نسخوا/نقروا (المربوط مرة واحدة عبر القنوات)
+            _ben_src_clause, _ben_src_params = _ua_src_clause("al")
+            _ben_ids = pd.read_sql(f"""
+                SELECT DISTINCT
+                  CASE WHEN al.source='web' THEN 'web' ELSE 'bot' END AS src,
+                  al.user_id
+                FROM action_logs al
+                WHERE al.action_time >= %s AND al.action_time < %s
+                  AND al.user_id IS NOT NULL
+                  AND al.action_type IN ('copy_coupon','click_link')
+                  { _ben_src_clause }
+            """, conn, params=tuple([_t_from, _t_to] + _ben_src_params))
+            _ben_pk = set()
+            for _src, _uid in zip(_ben_ids["src"], _ben_ids["user_id"]):
+                if pd.isna(_uid): continue
+                _uid = int(_uid)
+                if _src == "web":
+                    _ben_pk.add(_web_to_pk.get(_uid, f"web:{_uid}"))
+                else:
+                    _ben_pk.add(_bot_to_pk.get(_uid, f"bot:{_uid}"))
+            beneficiaries = len(_ben_pk)
 
             k1, k2, k3, k4 = st.columns(4)
-            with k1: kpi_card("👥", "إجمالي العملاء", f"{grand_total:,}", "info",
-                              note=f"🤖 بوت: {bot_total:,} · 🌐 موقع: {web_total:,}")
+            with k1: kpi_card("👥", "إجمالي العملاء (فريد)", f"{grand_total:,}", "info",
+                              note=f"🔗 مربوطون: {linked_count:,} · 🌐 ويب فقط: {web_only_count:,} · 🤖 بوت فقط: {bot_only_count:,}")
             with k2: kpi_card("🟢", "نشطون في النطاق", f"{grand_active:,}", "emerald",
                               note=f"🔴 خاملون: {grand_idle:,} · 🆕 جدد: {grand_new:,}")
             with k3: kpi_card("🎁", "المستفيدون فعلياً", f"{beneficiaries:,}", "warning",
-                              note="نسخوا أو نقروا (يطبّق فلتر المصدر)")
+                              note="أشخاص فريدون نسخوا أو نقروا (يطبّق فلتر المصدر)")
             with k4: kpi_card("🎟️", "نسخ كوبونات", f"{copies:,}", "emerald",
                               note=f"🖱️ نقرات: {clicks:,} · 🔍 بحث: {searches:,} · 🚀 جلسات: {sessions:,}")
 
             st.info(
-                "ℹ️ **فلتر المصدر** فوق التبويب: «الكل» يحسب كل القنوات معاً، أو "
-                "اختر قناة محدّدة (بوت/موقع/ميني-ويب) لتفلتر **كل أرقام هذا التبويب**. "
-                "كروت «إجمالي/نشط/خامل/جدد» لا تتأثر بالفلتر (مأخوذة من جداول الحسابات الكاملة)، "
-                "أما «المستفيدون/نسخ/نقرات/بحث/جلسات» تتأثر."
+                "ℹ️ **العميل المربوط (يوزر تيليجرامه مسجّل في الموقع) يُعدّ شخصاً واحداً** — "
+                "نعرض أرقاماً فريدة لا منفوخة. عمود «القناة» في التفاصيل يبيّن أين يستخدمنا كل شخص "
+                "(موقع/بوت/الاثنين). كروت «إجمالي/نشط/خامل/جدد» تمثّل الأشخاص الفريدين ولا تتأثر بفلتر "
+                "المصدر؛ أما «المستفيدون/نسخ/نقرات/بحث/جلسات» تتأثر بالفلتر."
             )
 
             # ════════════════════════════════════════════════════════════════
@@ -7381,216 +7528,69 @@ elif page == "تحليل المستخدمين":
                      WHERE source IN ('telegram_miniapp','miniapp') AND user_id IS NOT NULL
                 )"""
 
-            # ─── (١) إجمالي العملاء ─────────────────────────────────
-            with st.expander(f"👥 إجمالي العملاء ({grand_total:,}) — مين هم بالقناة والتاريخ؟"):
-                try: conn.rollback()
-                except Exception: pass
-                _q_bot = """
-                    SELECT 'bot' AS source, telegram_id::text AS id,
-                           username AS name, NULL::text AS email,
-                           NULL::text AS phone, joined_at AS joined, last_seen
-                      FROM bot_users WHERE deleted_at IS NULL
-                """
-                _q_web = """
-                    SELECT 'web' AS source, id::text AS id,
-                           display_name AS name, email AS email,
-                           phone_number AS phone,
-                           created_at AS joined, last_seen AS last_seen
-                      FROM web_users
-                """
-                _q_mini = f"""
-                    SELECT 'miniapp' AS source, telegram_id::text AS id,
-                           username AS name, NULL::text AS email,
-                           NULL::text AS phone, joined_at AS joined, last_seen
-                      FROM bot_users
-                     WHERE deleted_at IS NULL AND { _mini_users_subquery() }
-                """
-                if _src_tuple is None:
-                    total_q = f"{_q_bot} UNION ALL {_q_web}"
-                elif _src_tuple == ("bot",):
-                    total_q = _q_bot
-                elif _src_tuple == ("web",):
-                    total_q = _q_web
-                else:  # miniapp
-                    total_q = _q_mini
+            st.caption("القوائم التالية **شخص = صف واحد**؛ عمود «القناة» يبيّن أين يستخدمنا "
+                       "(موقع/بوت/الاثنين). لا تتأثر بفلتر المصدر — استخدم عمود القناة للفرز.")
 
-                df_total = pd.read_sql(f"{total_q} ORDER BY joined DESC NULLS LAST", conn)
-                if df_total.empty:
-                    st.caption("لا عملاء في هذا الفلتر.")
+            # ─── (١) إجمالي العملاء (فريد) ──────────────────────────
+            with st.expander(f"👥 إجمالي العملاء ({grand_total:,}) — مين هم بالقناة والتاريخ؟"):
+                if df_persons.empty:
+                    st.caption("لا عملاء.")
                 else:
-                    df_total["المصدر"] = df_total["source"].map(_SRC_LABEL).fillna(df_total["source"])
-                    df_total["تاريخ_الانضمام"] = pd.to_datetime(df_total["joined"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
-                    df_total["آخر_ظهور"] = pd.to_datetime(df_total["last_seen"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
-                    show = df_total[["المصدر","id","name","email","phone","تاريخ_الانضمام","آخر_ظهور"]].rename(
-                        columns={"id":"ID","name":"الاسم","email":"الإيميل","phone":"الجوال"}).fillna("—")
+                    show = _ua_persons_show(
+                        df_persons.sort_values("joined", ascending=False, na_position="last"))
                     st.dataframe(show, use_container_width=True, hide_index=True, height=420)
-                    st.caption(f"عرض {len(show):,} عميل — كله قابل للتنزيل.")
+                    st.caption(f"عرض {len(show):,} شخص فريد — كله قابل للتنزيل.")
                     st.download_button(
                         "📥 CSV — إجمالي العملاء",
                         show.to_csv(index=False).encode("utf-8-sig"),
                         f"users_total_{date.today()}.csv", "text/csv",
-                        key=f"ua_dl_total_{_src_choice}",
+                        key="ua_dl_total",
                     )
 
             # ─── (٢) نشطون في النطاق ─────────────────────────────────
             with st.expander(f"🟢 نشطون في النطاق ({grand_active:,}) — مين تفاعل ومتى؟"):
-                try: conn.rollback()
-                except Exception: pass
-                _q_bot_a = """
-                    SELECT 'bot' AS source, telegram_id::text AS id, username AS name,
-                           NULL::text AS email, NULL::text AS phone,
-                           joined_at AS joined, last_seen
-                      FROM bot_users
-                     WHERE deleted_at IS NULL
-                       AND last_seen >= %s AND last_seen < %s
-                """
-                _q_web_a = """
-                    SELECT 'web' AS source, id::text AS id, display_name AS name,
-                           email AS email, phone_number AS phone,
-                           created_at AS joined, last_seen AS last_seen
-                      FROM web_users
-                     WHERE last_seen >= %s AND last_seen < %s
-                """
-                _q_mini_a = f"""
-                    SELECT 'miniapp', telegram_id::text, username, NULL::text,
-                           NULL::text, joined_at, last_seen
-                      FROM bot_users
-                     WHERE deleted_at IS NULL
-                       AND last_seen >= %s AND last_seen < %s
-                       AND { _mini_users_subquery() }
-                """
-                if _src_tuple is None:
-                    q = f"{_q_bot_a} UNION ALL {_q_web_a}"
-                    p = (_t_from, _t_to, _t_from, _t_to)
-                elif _src_tuple == ("bot",):
-                    q = _q_bot_a; p = (_t_from, _t_to)
-                elif _src_tuple == ("web",):
-                    q = _q_web_a; p = (_t_from, _t_to)
-                else:
-                    q = _q_mini_a; p = (_t_from, _t_to)
-
-                df_act = pd.read_sql(f"{q} ORDER BY last_seen DESC NULLS LAST", conn, params=p)
-                if df_act.empty:
+                _dfa = df_persons[df_persons["is_active"]]
+                if _dfa.empty:
                     st.caption("لا نشطين في النطاق المحدّد.")
                 else:
-                    df_act["المصدر"] = df_act["source"].map(_SRC_LABEL).fillna(df_act["source"])
-                    df_act["تاريخ_الانضمام"] = pd.to_datetime(df_act["joined"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
-                    df_act["آخر_ظهور"] = pd.to_datetime(df_act["last_seen"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
-                    show = df_act[["المصدر","id","name","email","phone","تاريخ_الانضمام","آخر_ظهور"]].rename(
-                        columns={"id":"ID","name":"الاسم","email":"الإيميل","phone":"الجوال"}).fillna("—")
+                    show = _ua_persons_show(
+                        _dfa.sort_values("last_seen", ascending=False, na_position="last"))
                     st.dataframe(show, use_container_width=True, hide_index=True, height=380)
                     st.download_button(
                         "📥 CSV — النشطين", show.to_csv(index=False).encode("utf-8-sig"),
                         f"users_active_{date.today()}.csv", "text/csv",
-                        key=f"ua_dl_active_{_src_choice}",
+                        key="ua_dl_active",
                     )
 
             # ─── (٣) خاملون ─────────────────────────────────────────
-            with st.expander(f"🔴 خاملون ({grand_idle:,}) — آخر ظهور قبل النطاق"):
-                try: conn.rollback()
-                except Exception: pass
-                _q_bot_i = """
-                    SELECT 'bot' AS source, telegram_id::text AS id, username AS name,
-                           NULL::text AS email, NULL::text AS phone,
-                           joined_at AS joined, last_seen,
-                           EXTRACT(EPOCH FROM (NOW() - last_seen))/86400.0 AS days_silent
-                      FROM bot_users
-                     WHERE deleted_at IS NULL
-                       AND (last_seen IS NULL OR last_seen < %s)
-                """
-                _q_web_i = """
-                    SELECT 'web' AS source, id::text AS id, display_name AS name,
-                           email AS email, phone_number AS phone,
-                           created_at AS joined, last_seen AS last_seen,
-                           EXTRACT(EPOCH FROM (NOW() - last_seen))/86400.0 AS days_silent
-                      FROM web_users
-                     WHERE (last_seen IS NULL OR last_seen < %s)
-                """
-                _q_mini_i = f"""
-                    SELECT 'miniapp', telegram_id::text, username, NULL::text,
-                           NULL::text, joined_at, last_seen,
-                           EXTRACT(EPOCH FROM (NOW() - last_seen))/86400.0
-                      FROM bot_users
-                     WHERE deleted_at IS NULL
-                       AND (last_seen IS NULL OR last_seen < %s)
-                       AND { _mini_users_subquery() }
-                """
-                if _src_tuple is None:
-                    q = f"{_q_bot_i} UNION ALL {_q_web_i}"; p = (_t_from, _t_from)
-                elif _src_tuple == ("bot",):
-                    q = _q_bot_i; p = (_t_from,)
-                elif _src_tuple == ("web",):
-                    q = _q_web_i; p = (_t_from,)
-                else:
-                    q = _q_mini_i; p = (_t_from,)
-
-                df_idle = pd.read_sql(f"{q} ORDER BY last_seen DESC NULLS LAST", conn, params=p)
-                if df_idle.empty:
+            with st.expander(f"🔴 خاملون ({grand_idle:,}) — لم يظهروا داخل النطاق"):
+                _dfi = df_persons[~df_persons["is_active"]]
+                if _dfi.empty:
                     st.success("✨ لا خاملون — كل العملاء نشطون في النطاق.")
                 else:
-                    df_idle["المصدر"] = df_idle["source"].map(_SRC_LABEL).fillna(df_idle["source"])
-                    df_idle["تاريخ_الانضمام"] = pd.to_datetime(df_idle["joined"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
-                    df_idle["آخر_ظهور"] = pd.to_datetime(df_idle["last_seen"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
-                    df_idle["أيام_صمت"] = df_idle["days_silent"].fillna(9999).astype(float).round(0).astype(int)
-                    show = df_idle[["المصدر","id","name","email","phone","تاريخ_الانضمام","آخر_ظهور","أيام_صمت"]].rename(
-                        columns={"id":"ID","name":"الاسم","email":"الإيميل","phone":"الجوال"}).fillna("—")
+                    show = _ua_persons_show(
+                        _dfi.sort_values("last_seen", ascending=False, na_position="last"),
+                        with_silence=True)
                     st.dataframe(show, use_container_width=True, hide_index=True, height=380)
                     st.download_button(
                         "📥 CSV — الخاملون", show.to_csv(index=False).encode("utf-8-sig"),
                         f"users_idle_{date.today()}.csv", "text/csv",
-                        key=f"ua_dl_idle_{_src_choice}",
+                        key="ua_dl_idle",
                     )
 
             # ─── (٤) جدد في النطاق ──────────────────────────────────
-            with st.expander(f"🆕 جدد في النطاق ({grand_new:,}) — انضموا داخل التواريخ"):
-                try: conn.rollback()
-                except Exception: pass
-                _q_bot_n = """
-                    SELECT 'bot' AS source, telegram_id::text AS id, username AS name,
-                           NULL::text AS email, NULL::text AS phone,
-                           joined_at AS joined, last_seen
-                      FROM bot_users
-                     WHERE deleted_at IS NULL
-                       AND joined_at >= %s AND joined_at < %s
-                """
-                _q_web_n = """
-                    SELECT 'web' AS source, id::text AS id, display_name AS name,
-                           email AS email, phone_number AS phone,
-                           created_at AS joined, last_seen AS last_seen
-                      FROM web_users
-                     WHERE created_at >= %s AND created_at < %s
-                """
-                _q_mini_n = f"""
-                    SELECT 'miniapp', telegram_id::text, username, NULL::text,
-                           NULL::text, joined_at, last_seen
-                      FROM bot_users
-                     WHERE deleted_at IS NULL
-                       AND joined_at >= %s AND joined_at < %s
-                       AND { _mini_users_subquery() }
-                """
-                if _src_tuple is None:
-                    q = f"{_q_bot_n} UNION ALL {_q_web_n}"; p = (_t_from, _t_to, _t_from, _t_to)
-                elif _src_tuple == ("bot",):
-                    q = _q_bot_n; p = (_t_from, _t_to)
-                elif _src_tuple == ("web",):
-                    q = _q_web_n; p = (_t_from, _t_to)
-                else:
-                    q = _q_mini_n; p = (_t_from, _t_to)
-
-                df_new = pd.read_sql(f"{q} ORDER BY joined DESC", conn, params=p)
-                if df_new.empty:
+            with st.expander(f"🆕 جدد في النطاق ({grand_new:,}) — أول ظهور داخل التواريخ"):
+                _dfn = df_persons[df_persons["is_new"]]
+                if _dfn.empty:
                     st.caption("لا عملاء جدد في النطاق.")
                 else:
-                    df_new["المصدر"] = df_new["source"].map(_SRC_LABEL).fillna(df_new["source"])
-                    df_new["تاريخ_الانضمام"] = pd.to_datetime(df_new["joined"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
-                    df_new["آخر_ظهور"] = pd.to_datetime(df_new["last_seen"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
-                    show = df_new[["المصدر","id","name","email","phone","تاريخ_الانضمام","آخر_ظهور"]].rename(
-                        columns={"id":"ID","name":"الاسم","email":"الإيميل","phone":"الجوال"}).fillna("—")
+                    show = _ua_persons_show(
+                        _dfn.sort_values("joined", ascending=False, na_position="last"))
                     st.dataframe(show, use_container_width=True, hide_index=True, height=380)
                     st.download_button(
                         "📥 CSV — جدد", show.to_csv(index=False).encode("utf-8-sig"),
                         f"users_new_{date.today()}.csv", "text/csv",
-                        key=f"ua_dl_new_{_src_choice}",
+                        key="ua_dl_new",
                     )
 
             # ─── (٥) المستفيدون فعلياً + ماذا فعلوا ─────────────────
@@ -7618,24 +7618,37 @@ elif page == "تحليل المستخدمين":
                       GROUP BY src, al.user_id
                     )
                     SELECT a.src, a.user_id,
-                           COALESCE(wu.display_name, bu.username, '—') AS name,
-                           wu.email, wu.phone_number AS phone,
-                           bu.username AS tg,
                            a.copies, a.clicks, a.searches, a.uniq_stores,
                            a.first_action, a.last_action
                       FROM agg a
-                      LEFT JOIN web_users wu ON a.src='web' AND wu.id = a.user_id
-                      LEFT JOIN bot_users bu ON a.src='bot' AND bu.telegram_id = a.user_id
-                     ORDER BY a.copies DESC, a.clicks DESC
                 """, conn, params=tuple([_t_from, _t_to] + _ben_src_params))
                 if df_ben.empty:
                     st.caption("لا مستفيدين في هذا الفلتر/النطاق.")
                 else:
-                    df_ben["المصدر"]   = df_ben["src"].map({"web":"🌐 الموقع","bot":"🤖 البوت"}).fillna(df_ben["src"])
-                    df_ben["تيليجرام"] = df_ben["tg"].apply(lambda s: f"@{s}" if isinstance(s,str) and s else "—")
-                    df_ben["أول_فعل"]  = pd.to_datetime(df_ben["first_action"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
-                    df_ben["آخر_فعل"]  = pd.to_datetime(df_ben["last_action"],  errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
-                    show = df_ben[["المصدر","name","email","phone","تيليجرام",
+                    # دمج نشاط القنوات على مستوى الشخص الفريد (المربوط مرة واحدة)
+                    df_ben["person_key"] = [
+                        (_web_to_pk.get(int(u), f"web:{int(u)}") if s == "web"
+                         else _bot_to_pk.get(int(u), f"bot:{int(u)}"))
+                        for s, u in zip(df_ben["src"], df_ben["user_id"])
+                    ]
+                    ben_agg = (df_ben.groupby("person_key", as_index=False)
+                               .agg(copies=("copies", "sum"), clicks=("clicks", "sum"),
+                                    searches=("searches", "sum"),
+                                    uniq_stores=("uniq_stores", "sum"),
+                                    first_action=("first_action", "min"),
+                                    last_action=("last_action", "max")))
+                    _ident = (df_persons.set_index("person_key")
+                              [["name", "email", "phone", "telegram", "has_web", "has_bot"]])
+                    ben_v = ben_agg.merge(_ident, left_on="person_key",
+                                          right_index=True, how="left")
+                    ben_v["has_web"] = ben_v["has_web"].fillna(False)
+                    ben_v["has_bot"] = ben_v["has_bot"].fillna(False)
+                    ben_v["القناة"]   = ben_v.apply(_ua_channel_label, axis=1)
+                    ben_v["تيليجرام"] = ben_v["telegram"].apply(lambda s: f"@{s}" if isinstance(s, str) and s else "—")
+                    ben_v["أول_فعل"]  = pd.to_datetime(ben_v["first_action"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+                    ben_v["آخر_فعل"]  = pd.to_datetime(ben_v["last_action"],  errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+                    ben_v = ben_v.sort_values(["copies", "clicks"], ascending=[False, False])
+                    show = ben_v[["القناة","name","email","phone","تيليجرام",
                                    "copies","clicks","searches","uniq_stores",
                                    "أول_فعل","آخر_فعل"]].rename(
                         columns={"name":"الاسم","email":"الإيميل","phone":"الجوال",
@@ -7643,10 +7656,10 @@ elif page == "تحليل المستخدمين":
                                  "uniq_stores":"متاجر_فريدة"}).fillna("—")
                     st.dataframe(show, use_container_width=True, hide_index=True, height=420)
                     st.caption(
-                        f"📊 إجمالي المستفيدين: **{len(show):,}** — "
-                        f"نسخوا {int(df_ben['copies'].sum()):,} كوبون · "
-                        f"نقروا {int(df_ben['clicks'].sum()):,} رابط · "
-                        f"بحثوا {int(df_ben['searches'].sum()):,} مرة."
+                        f"📊 إجمالي المستفيدين (أشخاص فريدون): **{len(show):,}** — "
+                        f"نسخوا {int(ben_v['copies'].sum()):,} كوبون · "
+                        f"نقروا {int(ben_v['clicks'].sum()):,} رابط · "
+                        f"بحثوا {int(ben_v['searches'].sum()):,} مرة."
                     )
                     st.download_button(
                         "📥 CSV — المستفيدون", show.to_csv(index=False).encode("utf-8-sig"),
@@ -7686,16 +7699,9 @@ elif page == "تحليل المستخدمين":
             """, conn)
             mini_total = int(mini_count["n"].iloc[0] or 0)
 
-            # المربوطون: web_users.telegram_username يطابق bot_users.username
-            linked = pd.read_sql("""
-                SELECT COUNT(DISTINCT wu.id)::int AS n
-                FROM web_users wu
-                JOIN bot_users bu ON LOWER(bu.username) = LOWER(wu.telegram_username)
-                WHERE wu.telegram_username IS NOT NULL
-                  AND TRIM(wu.telegram_username) <> ''
-                  AND bu.deleted_at IS NULL
-            """, conn)
-            linked_count = int(linked["n"].iloc[0] or 0)
+            # linked_count / web_only_count / bot_only_count / grand_unique
+            # محسوبة مسبقاً من df_persons (نفس مصدر حقيقة تبويب «الأرقام الكبرى»)
+            # — لا إعادة حساب هنا لضمان تطابق الأرقام عبر التبويبات.
 
             # ميني-ويب نشطون مربوطون أيضاً (subset)
             mini_linked = pd.read_sql("""
@@ -7709,10 +7715,7 @@ elif page == "تحليل المستخدمين":
             """, conn)
             mini_linked_count = int(mini_linked["n"].iloc[0] or 0)
 
-            web_only_count = max(0, web_total - linked_count)
-            bot_only_count = max(0, bot_total - linked_count)
-            grand_unique   = web_only_count + bot_only_count + linked_count
-            link_pct       = (linked_count * 100.0 / web_total) if web_total else 0.0
+            link_pct = (linked_count * 100.0 / web_total) if web_total else 0.0
 
             g1, g2, g3, g4 = st.columns(4)
             with g1:
