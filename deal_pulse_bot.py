@@ -205,9 +205,9 @@ def ensure_tracking_tables():
 def register_or_update_user(message):
     """UPSERT في bot_users — تُستدعى في بداية كل handler.
 
-    لا نضبط country/city تلقائياً من language_code — نتركهما NULL
-    ليُكمَّلا عبر زر اللغة في onboarding (لتفادي بيانات تخمينية).
-    device_type يُستنتج تخميناً من is_premium لأن Telegram لا يكشفه."""
+    لا نضبط country/city إطلاقاً — تبقى NULL. الجغرافيا الحقيقية تأتي من
+    إثراء IP في action_logs (وقت نقر /go)، لا من البوت.
+    device_type = 'Telegram' كقيمة محايدة صادقة (Telegram لا يكشف الجهاز)."""
     user = message.from_user
 
     with _idle_lock:
@@ -238,21 +238,22 @@ def register_or_update_user(message):
 
 
 def needs_onboarding(user_id):
-    """هل يحتاج المستخدم لملء country/city/lang عبر زر اللغة؟"""
+    """هل يحتاج المستخدم لاختيار اللغة عبر زر الـ onboarding؟
+
+    لم نعد نجمع country/city من البوت (كانت مفبركة)، فالـ onboarding الآن =
+    اختيار اللغة فقط. المعيار: هل سبق وسجّل المستخدم حركة lang_pick؟"""
     try:
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("""
-            SELECT country, city,
-                   EXISTS(SELECT 1 FROM action_logs WHERE user_id=%s AND action_type='lang_pick')
-            FROM bot_users WHERE telegram_id = %s
-        """, (user_id, user_id))
-        row = cur.fetchone()
+            SELECT EXISTS(
+                SELECT 1 FROM action_logs
+                WHERE user_id=%s AND action_type='lang_pick'
+            )
+        """, (user_id,))
+        has_picked_lang = cur.fetchone()[0]
         release_conn(conn)
-        if not row:
-            return True
-        country, city, has_picked_lang = row
-        return not country or not city or not has_picked_lang
+        return not has_picked_lang
     except Exception as e:
         print(f"⚠️ needs_onboarding {user_id}: {e}")
         return False
@@ -1460,11 +1461,11 @@ def handle_text(message):
 #  Callback Handlers
 # ============================================================
 
+# ملاحظة: لا نضع هنا city/country — كانت ثوابت مفبركة («الرياض»/«السعودية»)
+# تُكتب لكل مستخدم بلا قياس. المدينة الحقيقية تأتي من إثراء IP في action_logs.
 _LANG_DEFAULTS = {
-    'ar_sa': {'lang': 'ar', 'country': 'المملكة العربية السعودية', 'city': 'الرياض',
-              'ack_key': 'lang_ar_picked'},
-    'en_us': {'lang': 'en', 'country': 'المملكة العربية السعودية', 'city': 'الرياض',
-              'ack_key': 'lang_en_picked'},
+    'ar_sa': {'lang': 'ar', 'ack_key': 'lang_ar_picked'},
+    'en_us': {'lang': 'en', 'ack_key': 'lang_en_picked'},
 }
 
 
@@ -1477,17 +1478,17 @@ def handle_lang_pick(call):
         bot.answer_callback_query(call.id, "⚠️ خيار غير معروف")
         return
 
-    is_premium  = getattr(call.from_user, 'is_premium', False)
-    device_type = 'iPhone' if is_premium else 'Android'
-
     try:
         conn = get_db_connection()
         cur  = conn.cursor()
+        # نكتب اللغة فقط. لا city/country/device_type — كانت قيماً مفبركة
+        # (ثابت «الرياض» + تخمين جهاز من premium). الجغرافيا الحقيقية من
+        # إثراء IP في action_logs، والجهاز من action_logs.device_class.
         cur.execute("""
             UPDATE bot_users
-            SET lang = %s, country = %s, city = %s, device_type = %s, user_status = 'Active'
+            SET lang = %s, user_status = 'Active'
             WHERE telegram_id = %s
-        """, (cfg['lang'], cfg['country'], cfg['city'], device_type, user_id))
+        """, (cfg['lang'], user_id))
         segment = _compute_segment(cur, user_id)
         cur.execute("""
             SELECT COUNT(*) FROM action_logs
@@ -1506,7 +1507,7 @@ def handle_lang_pick(call):
 
     invalidate_lang_cache(user_id)
     log_action(None, 'lang_pick', user_id=user_id,
-               details=f"code:{code};device:{device_type}")
+               details=f"code:{code}")
     bot.answer_callback_query(call.id)
 
     lang = cfg['lang']

@@ -6358,10 +6358,124 @@ elif page == "تحليل المستخدمين":
 
         st.divider()
 
+        # ── المسميات (الموجودة حالياً — تُزاد/تُحذف لاحقاً مع التجربة) ─────
+        _STATUS_AR = {"all": "الكل", "active": "🟢 نشط", "idle": "😴 خامل"}
+        _ACTION_AR = {
+            "copy_coupon":           "🎟️ نسخ كوبون",
+            "click_link":            "🖱️ نقر رابط",
+            "search":                "🔍 بحث",
+            "view_tag":              "🏷️ اختيار قسم",
+            "view_sections":         "📂 عرض الأقسام",
+            "view_all":              "📚 عرض كل المتاجر",
+            "view_favorites":        "💛 عرض المفضلة",
+            "view_story":            "🎬 مشاهدة ستوري",
+            "view_trending":         "🔥 عرض الترند",
+            "favorite_add":          "❤️ مفضّلة متجر +",
+            "category_favorite_add": "🏷️❤️ مفضّلة قسم +",
+            "reaction_heart":        "تفاعل ❤️",
+            "request_code":          "📩 طلب كود",
+            "report_code":           "🚫 إبلاغ كود لا يعمل",
+            "start":                 "🚀 بدء جلسة",
+            "end_session":           "⏹️ إنهاء جلسة",
+            "lang_pick":             "🌐 اختيار لغة",
+            "unknown_input":         "❓ إدخال غير مفهوم",
+            "idle_warn":             "⚠️ تحذير خمول",
+            "idle_alert":            "🟠 تنبيه خمول",
+            "idle_kick":             "🚪 طرد خمول",
+        }
+
+        # ── فلتر الحالة (نفس شكل الـ pills) ───────────────────────────────
+        gen_status_label = st.segmented_control(
+            "⚡ الحالة",
+            list(_STATUS_AR.values()),
+            default="الكل",
+            key="gen_status",
+        )
+        gen_status = next((k for k, v in _STATUS_AR.items()
+                           if v == gen_status_label), "all")
+
+        # ── فلتر الحركات (اختيار متعدد — pills) ───────────────────────────
+        _act_labels = st.pills(
+            "🎯 الحركات",
+            list(_ACTION_AR.values()),
+            selection_mode="multi",
+            key="gen_actions",
+        )
+        gen_actions = [k for k, v in _ACTION_AR.items()
+                       if v in (_act_labels or [])]
+
+        # ── فلتر الجنس (الموقع فقط — web_users.gender) ────────────────────
+        _GENDER_AR = {"all": "الكل", "male": "♂️ ذكر", "female": "♀️ أنثى"}
+        gen_gender_label = st.segmented_control(
+            "⚧ الجنس", list(_GENDER_AR.values()), default="الكل",
+            key="gen_gender",
+        )
+        gen_gender = next((k for k, v in _GENDER_AR.items()
+                           if v == gen_gender_label), "all")
+
+        # ── فلتر العمر (الموقع فقط — web_users.birth_date) ────────────────
+        _AGE_AR = {
+            "u18":   "أقل من 18", "18-24": "18–24", "25-34": "25–34",
+            "35-44": "35–44",     "45-54": "45–54", "55p":   "55+",
+        }
+        _age_labels = st.pills(
+            "🎂 العمر", list(_AGE_AR.values()),
+            selection_mode="multi", key="gen_age",
+        )
+        gen_age = [k for k, v in _AGE_AR.items() if v in (_age_labels or [])]
+
+        # ── فلتر المدينة (من IP الحقيقي — action_logs.city، ديناميكي) ─────
+        @st.cache_data(ttl=300)
+        def _gen_city_options():
+            try:
+                conn = get_conn()
+                conn.autocommit = True
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT DISTINCT city FROM action_logs
+                    WHERE city IS NOT NULL AND city <> ''
+                      AND is_proxy      IS NOT TRUE
+                      AND is_datacenter IS NOT TRUE
+                    ORDER BY city
+                """)
+                rows = [r[0] for r in cur.fetchall()]
+                conn.close()
+                return rows
+            except Exception:
+                return []
+        _city_opts = _gen_city_options() + ["غير معروف"]
+        gen_cities = st.pills(
+            "📍 المدينة", _city_opts,
+            selection_mode="multi", key="gen_cities",
+        ) or []
+
+        # ── فلتر اكتمال الملف ─────────────────────────────────────────────
+        # مكتمل = مستخدم موقع له بيانات تسجيل + ربط تليجرام محقّق
+        #         (web_users.telegram_username يطابق bot_users.username).
+        _COMPLETE_AR = {"all": "الكل", "complete": "✅ مكتمل", "partial": "⛔ ناقص"}
+        gen_complete_label = st.segmented_control(
+            "🧩 اكتمال الملف", list(_COMPLETE_AR.values()), default="الكل",
+            key="gen_complete",
+        )
+        gen_complete = next((k for k, v in _COMPLETE_AR.items()
+                             if v == gen_complete_label), "all")
+
+        st.divider()
+
         # ════════════════════════════════════════════════════════════════
-        # الأقسام التحليلية تُبنى هنا تباعاً (يُذكر كل قسم بوقته).
-        # كل قسم يحترم فلتر المصدر أعلاه عبر المتغيّر gen_src.
+        # ناتج الشريحة: جدول الأشخاص المطابقين + أعمدتهم.
+        # تُوصَّل المصادر وحدة وحدة في خطوات البناء القادمة.
+        # المختار: gen_src / gen_status / gen_actions / gen_gender / gen_age / gen_cities
         # ════════════════════════════════════════════════════════════════
+        st.caption(
+            f"المصدر: {gen_src_label or 'الكل'}  ·  "
+            f"الحالة: {gen_status_label or 'الكل'}  ·  "
+            f"الحركات: {len(gen_actions)}  ·  "
+            f"الجنس: {gen_gender_label or 'الكل'}  ·  "
+            f"العمر: {len(gen_age)}  ·  "
+            f"المدن: {len(gen_cities)}  ·  "
+            f"الاكتمال: {gen_complete_label or 'الكل'}"
+        )
 
     # ── القائمة الثانية: التحليل الفردي ─────────────────────────────────
     with tab_individual:
