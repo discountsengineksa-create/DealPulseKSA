@@ -7595,6 +7595,119 @@ elif page == "تحليل المستخدمين":
                                      title="تركيب القاعدة الفريدة")
                     st.plotly_chart(apply_brand_theme(fig_seg), use_container_width=True)
 
+            # ─── drill-downs لكل كارت ─────────────────────────────────
+            st.markdown("#### 🔍 تفصيل الكروت — مين هم؟")
+
+            with st.expander(f"🤖 البوت ({bot_total:,}) — كل بوت يوزر بالاسم والتاريخ"):
+                try: conn.rollback()
+                except Exception: pass
+                df_b = pd.read_sql("""
+                    SELECT telegram_id::text AS ID, username AS الاسم,
+                           city AS المدينة, lang AS اللغة,
+                           joined_at AS تاريخ_الانضمام,
+                           last_seen AS آخر_ظهور
+                      FROM bot_users
+                     WHERE deleted_at IS NULL
+                     ORDER BY joined_at DESC NULLS LAST
+                """, conn)
+                if df_b.empty:
+                    st.caption("لا بوت يوزرز.")
+                else:
+                    df_b["الاسم"] = df_b["الاسم"].apply(lambda s: f"@{s}" if isinstance(s,str) and s else "—")
+                    df_b["تاريخ_الانضمام"] = pd.to_datetime(df_b["تاريخ_الانضمام"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+                    df_b["آخر_ظهور"] = pd.to_datetime(df_b["آخر_ظهور"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+                    df_b = df_b.fillna("—")
+                    st.dataframe(df_b, use_container_width=True, hide_index=True, height=380)
+                    st.download_button("📥 CSV — بوت", df_b.to_csv(index=False).encode("utf-8-sig"),
+                                       f"bot_users_{date.today()}.csv", "text/csv", key="ua_dl_bot_list")
+
+            with st.expander(f"🌐 الموقع ({web_total:,}) — كل ويب يوزر بالاسم والتاريخ"):
+                try: conn.rollback()
+                except Exception: pass
+                df_w = pd.read_sql("""
+                    SELECT id::text AS ID, display_name AS الاسم, email AS الإيميل,
+                           phone_number AS الجوال,
+                           telegram_username AS تيليجرام,
+                           city AS المدينة, lang AS اللغة,
+                           created_at AS تاريخ_الانضمام,
+                           last_seen AS آخر_ظهور
+                      FROM web_users
+                     ORDER BY created_at DESC NULLS LAST
+                """, conn)
+                if df_w.empty:
+                    st.caption("لا ويب يوزرز.")
+                else:
+                    df_w["تيليجرام"] = df_w["تيليجرام"].apply(lambda s: f"@{s}" if isinstance(s,str) and s else "—")
+                    df_w["تاريخ_الانضمام"] = pd.to_datetime(df_w["تاريخ_الانضمام"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+                    df_w["آخر_ظهور"] = pd.to_datetime(df_w["آخر_ظهور"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+                    df_w = df_w.fillna("—")
+                    st.dataframe(df_w, use_container_width=True, hide_index=True, height=380)
+                    st.download_button("📥 CSV — موقع", df_w.to_csv(index=False).encode("utf-8-sig"),
+                                       f"web_users_{date.today()}.csv", "text/csv", key="ua_dl_web_list")
+
+            with st.expander(f"🔹 الميني-ويب ({mini_total:,}) — مين فتح الميني فعلاً"):
+                try: conn.rollback()
+                except Exception: pass
+                df_m = pd.read_sql("""
+                    SELECT bu.telegram_id::text AS ID, bu.username AS الاسم,
+                           bu.city AS المدينة, bu.lang AS اللغة,
+                           bu.joined_at AS تاريخ_الانضمام,
+                           bu.last_seen AS آخر_ظهور,
+                           COUNT(al.id)::int AS عدد_حركات_الميني
+                      FROM bot_users bu
+                      JOIN action_logs al ON al.user_id = bu.telegram_id
+                                         AND al.source IN ('telegram_miniapp','miniapp')
+                     WHERE bu.deleted_at IS NULL
+                     GROUP BY bu.telegram_id, bu.username, bu.city, bu.lang,
+                              bu.joined_at, bu.last_seen
+                     ORDER BY عدد_حركات_الميني DESC
+                """, conn)
+                if df_m.empty:
+                    st.caption("لا أحد فتح الميني-ويب بعد.")
+                else:
+                    df_m["الاسم"] = df_m["الاسم"].apply(lambda s: f"@{s}" if isinstance(s,str) and s else "—")
+                    df_m["تاريخ_الانضمام"] = pd.to_datetime(df_m["تاريخ_الانضمام"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+                    df_m["آخر_ظهور"] = pd.to_datetime(df_m["آخر_ظهور"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+                    df_m = df_m.fillna("—")
+                    st.dataframe(df_m, use_container_width=True, hide_index=True, height=380)
+                    st.download_button("📥 CSV — ميني-ويب", df_m.to_csv(index=False).encode("utf-8-sig"),
+                                       f"miniapp_users_{date.today()}.csv", "text/csv", key="ua_dl_mini_list")
+
+            with st.expander(f"🔗 المربوطون ({linked_count:,}) — ويب وتيليجرام نفس الشخص"):
+                try: conn.rollback()
+                except Exception: pass
+                df_l = pd.read_sql("""
+                    SELECT wu.id::text AS Web_ID,
+                           bu.telegram_id::text AS Telegram_ID,
+                           wu.display_name AS الاسم_بالموقع,
+                           bu.username AS التيليجرام,
+                           wu.email AS الإيميل, wu.phone_number AS الجوال,
+                           COALESCE(wu.city, bu.city) AS المدينة,
+                           wu.created_at AS تسجيل_الموقع,
+                           bu.joined_at AS انضمام_البوت,
+                           GREATEST(
+                               COALESCE(wu.last_seen, '1970-01-01'::timestamptz),
+                               COALESCE(bu.last_seen, '1970-01-01'::timestamptz)
+                           ) AS آخر_ظهور_موحّد
+                      FROM web_users wu
+                      JOIN bot_users bu ON LOWER(bu.username) = LOWER(wu.telegram_username)
+                     WHERE wu.telegram_username IS NOT NULL
+                       AND TRIM(wu.telegram_username) <> ''
+                       AND bu.deleted_at IS NULL
+                     ORDER BY آخر_ظهور_موحّد DESC NULLS LAST
+                """, conn)
+                if df_l.empty:
+                    st.caption("لا مربوطين بعد. شجّع العملاء يضيفون يوزر تيليجرام في الموقع.")
+                else:
+                    df_l["التيليجرام"] = df_l["التيليجرام"].apply(lambda s: f"@{s}" if isinstance(s,str) and s else "—")
+                    df_l["تسجيل_الموقع"] = pd.to_datetime(df_l["تسجيل_الموقع"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+                    df_l["انضمام_البوت"] = pd.to_datetime(df_l["انضمام_البوت"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+                    df_l["آخر_ظهور_موحّد"] = pd.to_datetime(df_l["آخر_ظهور_موحّد"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+                    df_l = df_l.fillna("—")
+                    st.dataframe(df_l, use_container_width=True, hide_index=True, height=380)
+                    st.download_button("📥 CSV — المربوطون", df_l.to_csv(index=False).encode("utf-8-sig"),
+                                       f"linked_users_{date.today()}.csv", "text/csv", key="ua_dl_linked_list")
+
             st.divider()
 
         with _main_tabs[2]:
@@ -7732,6 +7845,67 @@ elif page == "تحليل المستخدمين":
                        "أعلى_المدن","مفضلة_متاجر","مفضلة_أقسام"]
             full_compare = full_compare[[c for c in ordered if c in full_compare.columns]]
             st.dataframe(full_compare, use_container_width=True, hide_index=True)
+
+            # ─── drill-down: مين أحدث هذه الأرقام لكل قناة ───────────
+            st.markdown("#### 🔍 مين أحدث هذه الأرقام؟ — التفصيل لكل قناة")
+
+            def _channel_users_expander(label, sources_tuple, key_suffix):
+                """Render expander with users who acted in this channel during the date range."""
+                ph = ",".join(["%s"] * len(sources_tuple))
+                with st.expander(f"{label} — كل المستخدم وتفاصيل تفاعله"):
+                    try: conn.rollback()
+                    except Exception: pass
+                    df_ch = pd.read_sql(f"""
+                        WITH agg AS (
+                          SELECT
+                            CASE WHEN al.source='web' THEN 'web' ELSE 'bot' END AS src_norm,
+                            al.user_id,
+                            COUNT(*) FILTER (WHERE al.action_type='copy_coupon')  AS نسخ,
+                            COUNT(*) FILTER (WHERE al.action_type='click_link')   AS نقرات,
+                            COUNT(*) FILTER (WHERE al.action_type='search')       AS بحث,
+                            COUNT(*) FILTER (WHERE al.action_type='start')        AS جلسات,
+                            COUNT(*) AS إجمالي_الحركات,
+                            MIN(al.action_time) AS first_act,
+                            MAX(al.action_time) AS last_act
+                          FROM action_logs al
+                          WHERE al.source IN ({ph})
+                            AND al.action_time >= %s AND al.action_time < %s
+                            AND al.user_id IS NOT NULL
+                          GROUP BY src_norm, al.user_id
+                        )
+                        SELECT a.user_id,
+                               COALESCE(wu.display_name, bu.username, '—') AS الاسم,
+                               wu.email AS الإيميل, wu.phone_number AS الجوال,
+                               bu.username AS التيليجرام,
+                               COALESCE(wu.city, bu.city) AS المدينة,
+                               a.نسخ, a.نقرات, a.بحث, a.جلسات, a.إجمالي_الحركات,
+                               a.first_act, a.last_act
+                          FROM agg a
+                          LEFT JOIN web_users wu ON a.src_norm='web' AND wu.id = a.user_id
+                          LEFT JOIN bot_users bu ON a.src_norm='bot' AND bu.telegram_id = a.user_id
+                         ORDER BY a.إجمالي_الحركات DESC
+                    """, conn, params=tuple(list(sources_tuple) + [_t_from, _t_to]))
+                    if df_ch.empty:
+                        st.caption(f"لا تفاعلات في {label} داخل النطاق.")
+                    else:
+                        df_ch["التيليجرام"] = df_ch["التيليجرام"].apply(lambda s: f"@{s}" if isinstance(s,str) and s else "—")
+                        df_ch["أول_فعل"] = pd.to_datetime(df_ch["first_act"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+                        df_ch["آخر_فعل"] = pd.to_datetime(df_ch["last_act"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+                        show = df_ch[["الاسم","الإيميل","الجوال","التيليجرام","المدينة",
+                                      "نسخ","نقرات","بحث","جلسات","إجمالي_الحركات",
+                                      "أول_فعل","آخر_فعل"]].fillna("—")
+                        st.dataframe(show, use_container_width=True, hide_index=True, height=380)
+                        st.caption(f"📊 {len(show):,} مستخدم تفاعل من {label}")
+                        st.download_button(
+                            f"📥 CSV — {label}",
+                            show.to_csv(index=False).encode("utf-8-sig"),
+                            f"channel_{key_suffix}_{date.today()}.csv", "text/csv",
+                            key=f"ua_dl_ch_{key_suffix}",
+                        )
+
+            _channel_users_expander("🤖 البوت", ("bot",), "bot")
+            _channel_users_expander("🌐 الموقع", ("web",), "web")
+            _channel_users_expander("🔹 الميني-ويب", ("telegram_miniapp", "miniapp"), "mini")
 
             st.divider()
 
@@ -7882,6 +8056,10 @@ elif page == "تحليل المستخدمين":
             st.markdown("### 🕐 متى يكون الجمهور موجوداً؟")
             st.caption(f"خط النشاط بالساعة (٠–٢٣) في النطاق المحدّد — الذروة = أفضل وقت للـ broadcast.")
 
+            # نُعيد حساب فلتر المصدر/الزمن محلياً (التبويب له فلتر مستقل)
+            _src_clause, _src_params = _ua_src_clause("al")
+            _t_clause, _t_params = _ua_time_clause("al")
+
             try: conn.rollback()
             except Exception: pass
 
@@ -7939,6 +8117,53 @@ elif page == "تحليل المستخدمين":
                                          title="النشاط بالساعة — منفصل لكل يوم")
                     fig_perday.update_xaxes(dtick=1, tickformat="d")
                     st.plotly_chart(apply_brand_theme(fig_perday), use_container_width=True)
+
+                # ─── drill-down: مين النشط بالساعة المختارة ───────
+                st.markdown("#### 🔍 مين النشط في ساعة محدّدة؟")
+                st.caption(f"ساعة الذروة الافتراضية: **{peak_h:02d}:00**. اختر ساعة لرؤية الأشخاص.")
+                pick_hour = st.slider("⏰ الساعة:", 0, 23, peak_h, key=f"ua_hour_pick_{_src_choice}")
+                try: conn.rollback()
+                except Exception: pass
+                df_h_users = pd.read_sql(f"""
+                    WITH at_hour AS (
+                      SELECT DISTINCT
+                        CASE WHEN al.source='web' THEN 'web' ELSE 'bot' END AS src,
+                        al.user_id,
+                        COUNT(*) AS عدد_الحركات,
+                        MAX(al.action_time) AS last_act
+                      FROM action_logs al
+                      WHERE al.action_time >= %s AND al.action_time < %s
+                        AND EXTRACT(HOUR FROM al.action_time)::int = %s
+                        AND al.user_id IS NOT NULL
+                        { _src_clause }
+                      GROUP BY src, al.user_id
+                    )
+                    SELECT a.src AS source,
+                           COALESCE(wu.display_name, bu.username, '—') AS الاسم,
+                           wu.email AS الإيميل, wu.phone_number AS الجوال,
+                           bu.username AS التيليجرام,
+                           a.عدد_الحركات, a.last_act
+                      FROM at_hour a
+                      LEFT JOIN web_users wu ON a.src='web' AND wu.id = a.user_id
+                      LEFT JOIN bot_users bu ON a.src='bot' AND bu.telegram_id = a.user_id
+                     ORDER BY a.عدد_الحركات DESC
+                """, conn, params=tuple([_t_from, _t_to, int(pick_hour)] + _src_params))
+                if df_h_users.empty:
+                    st.caption(f"لا أحد نشط بالساعة {pick_hour:02d}:00 في النطاق.")
+                else:
+                    df_h_users["المصدر"] = df_h_users["source"].map({"web":"🌐 الموقع","bot":"🤖 البوت"})
+                    df_h_users["التيليجرام"] = df_h_users["التيليجرام"].apply(lambda s: f"@{s}" if isinstance(s,str) and s else "—")
+                    df_h_users["آخر_فعل"] = pd.to_datetime(df_h_users["last_act"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+                    show = df_h_users[["المصدر","الاسم","الإيميل","الجوال","التيليجرام",
+                                       "عدد_الحركات","آخر_فعل"]].fillna("—")
+                    st.dataframe(show, use_container_width=True, hide_index=True, height=320)
+                    st.caption(f"📊 {len(show):,} شخص نشط بالساعة {pick_hour:02d}:00 — مرشّحون لـ broadcast بهذا الوقت.")
+                    st.download_button(
+                        f"📥 CSV — نشط بـ {pick_hour:02d}:00",
+                        show.to_csv(index=False).encode("utf-8-sig"),
+                        f"active_hour_{pick_hour}_{date.today()}.csv", "text/csv",
+                        key=f"ua_dl_hour_{pick_hour}_{_src_choice}",
+                    )
 
             st.divider()
 
@@ -8124,6 +8349,107 @@ elif page == "تحليل المستخدمين":
                 except Exception:
                     try: conn.rollback()
                     except Exception: pass
+
+            # ─── drill-downs: مين هم في كل شريحة ديموغرافية ─────────
+            if _has_gender or _has_birth:
+                st.markdown("#### 🔍 من هم في كل شريحة؟")
+                st.caption("اختر شريحة لرؤية كل أعضائها بالاسم/الإيميل/القناة + CSV.")
+
+                # نبني UNION واحد للجنسين معاً (مع NULL-safe للأعمدة المفقودة)
+                sel_web_g = "gender" if _has_web_gender else "NULL::text"
+                sel_web_b = "birth_date" if _has_web_birth else "NULL::date"
+                sel_bot_g = "gender" if _has_bot_gender else "NULL::text"
+                sel_bot_b = "birth_date" if _has_bot_birth else "NULL::date"
+                try: conn.rollback()
+                except Exception: pass
+                df_all = pd.read_sql(f"""
+                    SELECT 'web' AS source, id::text AS ID,
+                           display_name AS name, email, phone_number AS phone,
+                           telegram_username AS tg, city,
+                           {sel_web_g} AS gender, {sel_web_b} AS birth_date,
+                           created_at AS joined, last_seen
+                      FROM web_users
+                    UNION ALL
+                    SELECT 'bot', telegram_id::text, username, NULL::text, NULL::text,
+                           username, city,
+                           {sel_bot_g}, {sel_bot_b},
+                           joined_at, last_seen
+                      FROM bot_users
+                     WHERE deleted_at IS NULL
+                """, conn)
+
+                df_all["age"] = pd.NA
+                if "birth_date" in df_all.columns:
+                    today = pd.Timestamp.today().normalize()
+                    bd = pd.to_datetime(df_all["birth_date"], errors="coerce")
+                    df_all["age"] = ((today - bd).dt.days // 365).astype("Int64")
+
+                def _age_bucket(a):
+                    if pd.isna(a): return "—"
+                    a = int(a)
+                    if a < 18: return "أقل من 18"
+                    if a <= 24: return "18-24"
+                    if a <= 34: return "25-34"
+                    if a <= 44: return "35-44"
+                    if a <= 54: return "45-54"
+                    return "55+"
+                df_all["age_bucket"] = df_all["age"].apply(_age_bucket)
+                df_all["gender_ar"] = df_all["gender"].map({"male":"ذكر","female":"أنثى"}).fillna("—")
+                df_all["المصدر"] = df_all["source"].map({"web":"🌐 الموقع","bot":"🤖 البوت"})
+                df_all["تيليجرام"] = df_all["tg"].apply(lambda s: f"@{s}" if isinstance(s,str) and s else "—")
+
+                def _render_slice(label, df_slice, key):
+                    """Render an expander with the slice's user list."""
+                    with st.expander(f"{label} — {len(df_slice):,} مستخدم"):
+                        if df_slice.empty:
+                            st.caption("لا أحد في هذه الشريحة.")
+                            return
+                        show = df_slice[["المصدر","ID","name","email","phone","تيليجرام",
+                                         "city","gender_ar","age","age_bucket","joined","last_seen"]].copy()
+                        show["joined"]    = pd.to_datetime(show["joined"],    errors="coerce").dt.strftime("%Y-%m-%d")
+                        show["last_seen"] = pd.to_datetime(show["last_seen"], errors="coerce").dt.strftime("%Y-%m-%d")
+                        show = show.rename(columns={
+                            "name":"الاسم","email":"الإيميل","phone":"الجوال",
+                            "city":"المدينة","gender_ar":"الجنس","age":"العمر",
+                            "age_bucket":"الفئة_العمرية",
+                            "joined":"الانضمام","last_seen":"آخر_ظهور",
+                        }).fillna("—")
+                        st.dataframe(show, use_container_width=True, hide_index=True, height=320)
+                        st.download_button(
+                            f"📥 CSV — {label}",
+                            show.to_csv(index=False).encode("utf-8-sig"),
+                            f"slice_{key}_{date.today()}.csv", "text/csv",
+                            key=f"ua_dl_demo_{key}",
+                        )
+
+                # تابز للأبعاد الثلاثة
+                _dtab_g, _dtab_a, _dtab_c = st.tabs(["👥 حسب الجنس", "🎂 حسب الفئة العمرية", "📍 حسب المدينة"])
+
+                with _dtab_g:
+                    if _has_gender:
+                        for g_label, g_key in [("👨 ذكور","ذكر"), ("👩 إناث","أنثى")]:
+                            _render_slice(g_label, df_all[df_all["gender_ar"]==g_key], f"gender_{g_key}")
+                    else:
+                        st.caption("⚙️ عمود `gender` غير موجود.")
+
+                with _dtab_a:
+                    if _has_birth:
+                        for b in ["أقل من 18","18-24","25-34","35-44","45-54","55+"]:
+                            _render_slice(f"🎂 {b}", df_all[df_all["age_bucket"]==b], f"age_{b}")
+                    else:
+                        st.caption("⚙️ عمود `birth_date` غير موجود.")
+
+                with _dtab_c:
+                    # نختار أعلى 10 مدن لتجنّب فوضى الشاشة، ثم زر "كل المدن"
+                    top_cities = (df_all[df_all["city"].notna() & (df_all["city"].astype(str).str.strip()!="")]
+                                  ["city"].astype(str).str.strip().value_counts().head(10).index.tolist())
+                    if not top_cities:
+                        st.caption("لا بيانات مدن.")
+                    else:
+                        for c in top_cities:
+                            _render_slice(f"📍 {c}",
+                                          df_all[df_all["city"].astype(str).str.strip() == c],
+                                          f"city_{c}")
 
             st.divider()
 
@@ -8552,6 +8878,61 @@ elif page == "تحليل المستخدمين":
                     if avg_m3 is not None and pd.notna(avg_m3):
                         with ic2: kpi_card("📅", "متوسط البقاء بعد 3 أشهر", f"{avg_m3:.1f}%", "warning")
 
+                # ─── drill-down: مين انضمّ في cohort معيّن ─────────
+                st.markdown("#### 🔍 مين انضمّ في شهر معيّن؟ + حالتهم الحالية")
+                st.caption("اختر شهر cohort لرؤية كل من انضمّ فيه ومتى آخر ظهور — لتقييم البقاء الفعلي.")
+                cohort_months = pivot_coh.index.tolist()
+                if cohort_months:
+                    pick_cohort = st.selectbox("📅 شهر الـ cohort:", cohort_months,
+                                               index=len(cohort_months)-1,
+                                               key="ua_cohort_pick")
+                    try: conn.rollback()
+                    except Exception: pass
+                    df_coh_users = pd.read_sql("""
+                        SELECT 'bot' AS source, telegram_id::text AS ID, username AS name,
+                               NULL::text AS email, NULL::text AS phone,
+                               joined_at AS joined, last_seen
+                          FROM bot_users
+                         WHERE deleted_at IS NULL
+                           AND TO_CHAR(joined_at, 'YYYY-MM') = %s
+                        UNION ALL
+                        SELECT 'web', id::text, display_name, email, phone_number,
+                               created_at, last_seen
+                          FROM web_users
+                         WHERE TO_CHAR(created_at, 'YYYY-MM') = %s
+                        ORDER BY last_seen DESC NULLS LAST
+                    """, conn, params=(pick_cohort, pick_cohort))
+                    if df_coh_users.empty:
+                        st.caption("لا أحد انضمّ في هذا الشهر.")
+                    else:
+                        df_coh_users["المصدر"] = df_coh_users["source"].map(_SRC_LABEL).fillna(df_coh_users["source"])
+                        df_coh_users["الانضمام"] = pd.to_datetime(df_coh_users["joined"], errors="coerce").dt.strftime("%Y-%m-%d")
+                        df_coh_users["آخر_ظهور"] = pd.to_datetime(df_coh_users["last_seen"], errors="coerce").dt.strftime("%Y-%m-%d")
+                        # نحسب «نشط/خامل» بناءً على last_seen
+                        df_coh_users["الحالة"] = df_coh_users["last_seen"].apply(
+                            lambda v: "🟢 نشط (آخر 7 يوم)" if pd.notna(v) and (pd.Timestamp.now(tz="UTC") - pd.to_datetime(v, utc=True, errors="coerce")).days <= 7
+                            else "🟡 ظهر مؤخراً (8-30)" if pd.notna(v) and (pd.Timestamp.now(tz="UTC") - pd.to_datetime(v, utc=True, errors="coerce")).days <= 30
+                            else "🔴 خامل (>30)"
+                        )
+                        show = df_coh_users[["المصدر","ID","name","email","phone",
+                                             "الانضمام","آخر_ظهور","الحالة"]].rename(
+                            columns={"name":"الاسم","email":"الإيميل","phone":"الجوال"}).fillna("—")
+                        st.dataframe(show, use_container_width=True, hide_index=True, height=380)
+                        # ملخّص حالة الـ cohort
+                        active_n = int((df_coh_users["الحالة"]=="🟢 نشط (آخر 7 يوم)").sum())
+                        idle_n   = int((df_coh_users["الحالة"]=="🔴 خامل (>30)").sum())
+                        st.caption(
+                            f"📊 cohort {pick_cohort}: **{len(show):,}** انضمّوا · "
+                            f"🟢 {active_n} نشطون · 🔴 {idle_n} خاملون → "
+                            f"بقاء فعلي: **{(active_n*100/max(1,len(show))):.1f}%**"
+                        )
+                        st.download_button(
+                            f"📥 CSV — cohort {pick_cohort}",
+                            show.to_csv(index=False).encode("utf-8-sig"),
+                            f"cohort_{pick_cohort}_{date.today()}.csv", "text/csv",
+                            key=f"ua_dl_cohort_{pick_cohort}",
+                        )
+
             st.divider()
 
         with _main_tabs[9]:
@@ -8759,6 +9140,123 @@ elif page == "تحليل المستخدمين":
                         f"(**{worst[3]}%**)."
                     )
 
+            # ─── drill-down: مين في كل مرحلة + مين سقط ──────────────
+            st.markdown("#### 🔍 مين في كل مرحلة؟ + مين سقط بين كل مرحلتين؟")
+            st.caption("اختر مرحلة لرؤية الأشخاص فيها، أو «سقط بين X و Y» لرؤية المتسرّبين.")
+
+            step_keys = ["وصلوا", "بحثوا", "شاهدوا قسماً", "نقروا", "نسخوا"]
+            step_filters = {
+                "وصلوا":         "TRUE",                                     # كل من له حركة في النطاق
+                "بحثوا":          "EXISTS (SELECT 1 FROM action_logs al2 WHERE al2.user_id = base.user_id "
+                                  "AND base.src = (CASE WHEN al2.source='web' THEN 'web' ELSE 'bot' END) "
+                                  "AND al2.action_type='search' AND al2.action_time >= %s AND al2.action_time < %s)",
+                "شاهدوا قسماً":  "EXISTS (SELECT 1 FROM action_logs al2 WHERE al2.user_id = base.user_id "
+                                  "AND base.src = (CASE WHEN al2.source='web' THEN 'web' ELSE 'bot' END) "
+                                  "AND al2.action_type='view_tag' AND al2.action_time >= %s AND al2.action_time < %s)",
+                "نقروا":         "EXISTS (SELECT 1 FROM action_logs al2 WHERE al2.user_id = base.user_id "
+                                  "AND base.src = (CASE WHEN al2.source='web' THEN 'web' ELSE 'bot' END) "
+                                  "AND al2.action_type='click_link' AND al2.action_time >= %s AND al2.action_time < %s)",
+                "نسخوا":          "EXISTS (SELECT 1 FROM action_logs al2 WHERE al2.user_id = base.user_id "
+                                  "AND base.src = (CASE WHEN al2.source='web' THEN 'web' ELSE 'bot' END) "
+                                  "AND al2.action_type='copy_coupon' AND al2.action_time >= %s AND al2.action_time < %s)",
+            }
+
+            for i, step in enumerate(step_keys):
+                step_label = ["👥 وصلوا للمنصة","🔍 بحثوا","🏷️ شاهدوا قسماً","🖱️ نقروا","🎟️ نسخوا"][i]
+                with st.expander(f"{step_label} — مين هم؟"):
+                    try: conn.rollback()
+                    except Exception: pass
+                    extra_clause = ""
+                    extra_params = []
+                    if step != "وصلوا":
+                        extra_clause = "AND " + step_filters[step]
+                        extra_params = [_t_from, _t_to]
+                    df_step = pd.read_sql(f"""
+                        WITH base AS (
+                          SELECT DISTINCT
+                            CASE WHEN al.source='web' THEN 'web' ELSE 'bot' END AS src,
+                            al.user_id
+                          FROM action_logs al
+                          WHERE al.action_time >= %s AND al.action_time < %s
+                            AND al.user_id IS NOT NULL
+                            { fun_clause }
+                        )
+                        SELECT base.src AS source, base.user_id,
+                               COALESCE(wu.display_name, bu.username, '—') AS الاسم,
+                               wu.email AS الإيميل, wu.phone_number AS الجوال,
+                               bu.username AS التيليجرام
+                          FROM base
+                          LEFT JOIN web_users wu ON base.src='web' AND wu.id = base.user_id
+                          LEFT JOIN bot_users bu ON base.src='bot' AND bu.telegram_id = base.user_id
+                         WHERE TRUE { extra_clause }
+                    """, conn, params=tuple([_t_from, _t_to] + fun_params + extra_params))
+                    if df_step.empty:
+                        st.caption("لا أحد في هذه المرحلة.")
+                    else:
+                        df_step["المصدر"] = df_step["source"].map({"web":"🌐 الموقع","bot":"🤖 البوت"})
+                        df_step["التيليجرام"] = df_step["التيليجرام"].apply(lambda s: f"@{s}" if isinstance(s,str) and s else "—")
+                        show = df_step[["المصدر","الاسم","الإيميل","الجوال","التيليجرام"]].fillna("—")
+                        st.dataframe(show, use_container_width=True, hide_index=True, height=280)
+                        st.caption(f"📊 {len(show):,} شخص في «{step}»")
+                        st.download_button(
+                            f"📥 CSV — {step}",
+                            show.to_csv(index=False).encode("utf-8-sig"),
+                            f"funnel_step_{step}_{date.today()}.csv", "text/csv",
+                            key=f"ua_dl_fun_step_{i}",
+                        )
+
+            # السقوط بين كل مرحلتين
+            st.markdown("##### 🔻 المتسرّبون بين كل مرحلتين")
+            for i in range(1, len(step_keys)):
+                prev_step = step_keys[i-1]
+                cur_step  = step_keys[i]
+                prev_label = ["👥 وصلوا","🔍 بحثوا","🏷️ شاهدوا قسماً","🖱️ نقروا"][i-1]
+                cur_label  = ["🔍 بحثوا","🏷️ شاهدوا قسماً","🖱️ نقروا","🎟️ نسخوا"][i-1]
+                with st.expander(f"🔻 سقطوا بين «{prev_label}» و «{cur_label}»"):
+                    try: conn.rollback()
+                    except Exception: pass
+                    # في prev لكن ليس في cur
+                    prev_clause = "TRUE" if prev_step == "وصلوا" else step_filters[prev_step]
+                    cur_clause  = step_filters[cur_step]
+                    prev_params = [] if prev_step == "وصلوا" else [_t_from, _t_to]
+                    cur_params  = [_t_from, _t_to]
+                    df_dropoff = pd.read_sql(f"""
+                        WITH base AS (
+                          SELECT DISTINCT
+                            CASE WHEN al.source='web' THEN 'web' ELSE 'bot' END AS src,
+                            al.user_id
+                          FROM action_logs al
+                          WHERE al.action_time >= %s AND al.action_time < %s
+                            AND al.user_id IS NOT NULL
+                            { fun_clause }
+                        )
+                        SELECT base.src AS source, base.user_id,
+                               COALESCE(wu.display_name, bu.username, '—') AS الاسم,
+                               wu.email AS الإيميل, wu.phone_number AS الجوال,
+                               bu.username AS التيليجرام
+                          FROM base
+                          LEFT JOIN web_users wu ON base.src='web' AND wu.id = base.user_id
+                          LEFT JOIN bot_users bu ON base.src='bot' AND bu.telegram_id = base.user_id
+                         WHERE ({prev_clause})
+                           AND NOT ({cur_clause})
+                    """, conn, params=tuple(
+                        [_t_from, _t_to] + fun_params + prev_params + cur_params
+                    ))
+                    if df_dropoff.empty:
+                        st.success("✅ لا أحد سقط — كل من في المرحلة السابقة وصلوا للحالية.")
+                    else:
+                        df_dropoff["المصدر"] = df_dropoff["source"].map({"web":"🌐 الموقع","bot":"🤖 البوت"})
+                        df_dropoff["التيليجرام"] = df_dropoff["التيليجرام"].apply(lambda s: f"@{s}" if isinstance(s,str) and s else "—")
+                        show = df_dropoff[["المصدر","الاسم","الإيميل","الجوال","التيليجرام"]].fillna("—")
+                        st.dataframe(show, use_container_width=True, hide_index=True, height=260)
+                        st.warning(f"⚠️ **{len(show):,}** شخص وصلوا «{prev_step}» ولم يصلوا «{cur_step}» — broadcast استرجاع.")
+                        st.download_button(
+                            f"📥 CSV — متسرّبون {prev_step} → {cur_step}",
+                            show.to_csv(index=False).encode("utf-8-sig"),
+                            f"funnel_dropoff_{i}_{date.today()}.csv", "text/csv",
+                            key=f"ua_dl_dropoff_{i}",
+                        )
+
             st.divider()
 
         with _main_tabs[11]:
@@ -8848,6 +9346,66 @@ elif page == "تحليل المستخدمين":
                                    df_geo.to_csv(index=False).encode("utf-8-sig"),
                                    f"geo_{date.today()}.csv", "text/csv",
                                    key="ua_dl_geo")
+
+                # ─── drill-down لكل مدينة ──────────────────────────
+                st.markdown("#### 🔍 مين في كل مدينة؟")
+                st.caption("اختر مدينة لرؤية كل العملاء فيها مع تفاصيل تفاعلهم.")
+                city_pick = st.selectbox(
+                    "📍 اختر مدينة:",
+                    options=df_geo["المدينة"].tolist(),
+                    key=f"ua_geo_city_{_src_choice}",
+                )
+                if city_pick:
+                    try: conn.rollback()
+                    except Exception: pass
+                    df_city = pd.read_sql(f"""
+                        WITH agg AS (
+                          SELECT
+                            CASE WHEN al.source='web' THEN 'web' ELSE 'bot' END AS src,
+                            al.user_id,
+                            COUNT(*) FILTER (WHERE al.action_type='copy_coupon')  AS نسخ,
+                            COUNT(*) FILTER (WHERE al.action_type='click_link')   AS نقرات,
+                            MAX(al.action_time) AS last_act
+                          FROM action_logs al
+                          LEFT JOIN bot_users bu ON bu.telegram_id = al.user_id
+                                                AND COALESCE(al.source,'bot') IN ('bot','telegram_miniapp','miniapp')
+                          LEFT JOIN web_users wu ON wu.id = al.user_id AND al.source = 'web'
+                          WHERE al.action_time >= %s AND al.action_time < %s
+                            AND al.user_id IS NOT NULL
+                            { geo_clause }
+                            AND COALESCE(
+                                NULLIF(TRIM(al.city),''),
+                                NULLIF(TRIM(bu.city),''),
+                                NULLIF(TRIM(wu.city),'')
+                            ) = %s
+                          GROUP BY src, al.user_id
+                        )
+                        SELECT a.src AS source,
+                               COALESCE(wu.display_name, bu.username, '—') AS الاسم,
+                               wu.email AS الإيميل, wu.phone_number AS الجوال,
+                               bu.username AS التيليجرام,
+                               a.نسخ, a.نقرات, a.last_act
+                          FROM agg a
+                          LEFT JOIN web_users wu ON a.src='web' AND wu.id = a.user_id
+                          LEFT JOIN bot_users bu ON a.src='bot' AND bu.telegram_id = a.user_id
+                         ORDER BY (a.نسخ + a.نقرات) DESC
+                    """, conn, params=tuple([_t_from, _t_to] + geo_params + [city_pick]))
+                    if df_city.empty:
+                        st.caption("لا تفاعلات من هذه المدينة في النطاق.")
+                    else:
+                        df_city["المصدر"] = df_city["source"].map({"web":"🌐 الموقع","bot":"🤖 البوت"})
+                        df_city["التيليجرام"] = df_city["التيليجرام"].apply(lambda s: f"@{s}" if isinstance(s,str) and s else "—")
+                        df_city["آخر_فعل"] = pd.to_datetime(df_city["last_act"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+                        show = df_city[["المصدر","الاسم","الإيميل","الجوال","التيليجرام",
+                                        "نسخ","نقرات","آخر_فعل"]].fillna("—")
+                        st.dataframe(show, use_container_width=True, hide_index=True, height=320)
+                        st.caption(f"📊 {len(show):,} مستخدم في «{city_pick}»")
+                        st.download_button(
+                            f"📥 CSV — {city_pick}",
+                            show.to_csv(index=False).encode("utf-8-sig"),
+                            f"city_{city_pick}_{date.today()}.csv", "text/csv",
+                            key=f"ua_dl_city_{city_pick}",
+                        )
 
             st.divider()
 
