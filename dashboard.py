@@ -6376,30 +6376,13 @@ elif page == "تحليل المستخدمين":
 
         # ── المسميات (الموجودة حالياً — تُزاد/تُحذف لاحقاً مع التجربة) ─────
         _STATUS_AR = {"all": "الكل", "active": "🟢 نشط", "idle": "😴 خامل"}
-        _ACTION_AR = {
-            "copy_coupon":           "🎟️ نسخ كوبون",
-            "click_link":            "🖱️ نقر رابط",
-            "search":                "🔍 بحث",
-            "view_tag":              "🏷️ اختيار قسم",
-            "view_sections":         "📂 عرض الأقسام",
-            "view_all":              "📚 عرض كل المتاجر",
-            "view_favorites":        "💛 عرض المفضلة",
-            "view_story":            "🎬 مشاهدة ستوري",
-            "trend_daily":           "🔥 ترند يومي",
-            "trend_weekly":          "🔥 ترند أسبوعي",
-            "favorite_add":          "❤️ مفضّلة متجر +",
-            "category_favorite_add": "🏷️❤️ مفضّلة قسم +",
-            "reaction_heart":        "❤️ تفاعل قلب",
-            "request_code":          "📩 طلب كود",
-            "report_code":           "🚫 إبلاغ كود لا يعمل",
-            "start":                 "🚀 بدء جلسة",
-            "end_session":           "⏹️ إنهاء جلسة",
-            "lang_pick":             "🌐 اختيار لغة",
-            "unknown_input":         "❓ إدخال غير مفهوم",
-            "idle_warn":             "⚠️ تحذير خمول",
-            "idle_alert":            "🟠 تنبيه خمول",
-            "idle_kick":             "🚪 طرد خمول",
-        }
+        # الحركات الأساسية فقط (نزيد لاحقاً). الباقي صار له فلتر مستقل تحت.
+        _ACTION_AR    = {"all": "الكل", "copy_coupon": "🎟️ نسخ كوبون",
+                         "click_link": "🖱️ نقر رابط", "search": "🔍 بحث"}
+        _TREND_AR     = {"all": "الكل", "daily": "🔥 يومي", "weekly": "🔥 أسبوعي"}
+        _STORY_AR     = {"all": "الكل", "normal": "🎬 عادي", "trend": "🔥 ترند"}
+        _STORESTAT_AR = {"all": "الكل", "active": "🟢 فعّالة",
+                         "expired": "🗄️ منتهية", "expiring": "⏳ قربت تنتهي"}
 
         # ── فلتر الحالة (نفس شكل الـ pills) ───────────────────────────────
         gen_status_label = st.segmented_control(
@@ -6411,15 +6394,29 @@ elif page == "تحليل المستخدمين":
         gen_status = next((k for k, v in _STATUS_AR.items()
                            if v == gen_status_label), "all")
 
-        # ── فلتر الحركات (اختيار متعدد — pills) ───────────────────────────
-        _act_labels = st.pills(
-            "🎯 الحركات",
-            list(_ACTION_AR.values()),
-            selection_mode="multi",
+        # ── الحركات (اختيار واحد، «الكل» أول) ────────────────────────────
+        _act_sel = st.segmented_control(
+            "🎯 الحركات", list(_ACTION_AR.values()), default="الكل",
             key="gen_actions",
         )
-        gen_actions = [k for k, v in _ACTION_AR.items()
-                       if v in (_act_labels or [])]
+        gen_action = next((k for k, v in _ACTION_AR.items()
+                           if v == _act_sel), "all")
+
+        # ── الترند (اختيار واحد) ──────────────────────────────────────────
+        _trend_sel = st.segmented_control(
+            "🔥 الترند", list(_TREND_AR.values()), default="الكل",
+            key="gen_trend",
+        )
+        gen_trend = next((k for k, v in _TREND_AR.items()
+                          if v == _trend_sel), "all")
+
+        # ── الستوري (اختيار واحد) ─────────────────────────────────────────
+        _story_sel = st.segmented_control(
+            "🎬 الستوري", list(_STORY_AR.values()), default="الكل",
+            key="gen_story",
+        )
+        gen_story = next((k for k, v in _STORY_AR.items()
+                          if v == _story_sel), "all")
 
         # ── الجنس (الموقع فقط — web_users.gender) ─────────────────────────
         _GENDER_AR = {"all": "الكل", "male": "♂️ ذكر", "female": "♀️ أنثى"}
@@ -6429,6 +6426,13 @@ elif page == "تحليل المستخدمين":
         )
         gen_gender = next((k for k, v in _GENDER_AR.items()
                            if v == gen_gender_label), "all")
+
+        # ── اللغة (bot_users.lang / web_users.lang) ───────────────────────
+        _LANG_AR = {"all": "الكل", "ar": "🇸🇦 عربي", "en": "🇬🇧 إنجليزي"}
+        _lang_sel = st.segmented_control(
+            "🌐 اللغة", list(_LANG_AR.values()), default="الكل", key="gen_lang",
+        )
+        gen_lang = next((k for k, v in _LANG_AR.items() if v == _lang_sel), "all")
 
         # ── المدينة (من IP الحقيقي — action_logs.city، ديناميكي) ──────────
         @st.cache_data(ttl=300)
@@ -6449,30 +6453,29 @@ elif page == "تحليل المستخدمين":
                 return rows
             except Exception:
                 return []
-        _city_opts = _gen_city_options() + ["غير معروف"]
-        gen_cities = st.pills(
-            "📍 المدينة", _city_opts,
-            selection_mode="multi", key="gen_cities",
-        ) or []
+        _city_opts = ["الكل"] + _gen_city_options() + ["غير معروف"]
+        _city_sel = st.segmented_control(
+            "📍 المدينة", _city_opts, default="الكل", key="gen_cities",
+        )
+        gen_city = None if _city_sel in (None, "الكل") else _city_sel
 
         # ── العمر (الموقع فقط — web_users.birth_date) ─────────────────────
         _AGE_AR = {
-            "u18":   "أقل من 18", "18-24": "18–24", "25-34": "25–34",
-            "35-44": "35–44",     "45-54": "45–54", "55p":   "55+",
+            "all": "الكل", "u18": "أقل من 18", "18-24": "18–24",
+            "25-34": "25–34", "35-44": "35–44", "45-54": "45–54", "55p": "55+",
         }
-        _age_labels = st.pills(
-            "🎂 العمر", list(_AGE_AR.values()),
-            selection_mode="multi", key="gen_age",
+        _age_sel = st.segmented_control(
+            "🎂 العمر", list(_AGE_AR.values()), default="الكل", key="gen_age",
         )
-        gen_age = [k for k, v in _AGE_AR.items() if v in (_age_labels or [])]
+        gen_age = next((k for k, v in _AGE_AR.items() if v == _age_sel), "all")
 
-        # ── المفضلة (نوعان — user_favorites.kind) ─────────────────────────
-        _FAV_AR = {"store": "🏪 مفضلة متاجر", "category": "🏷️ مفضلة أقسام"}
-        _fav_labels = st.pills(
-            "❤️ المفضلة", list(_FAV_AR.values()),
-            selection_mode="multi", key="gen_favs",
+        # ── المفضلة (user_favorites.kind) ─────────────────────────────────
+        _FAV_AR = {"all": "الكل", "store": "🏪 مفضلة متاجر",
+                   "category": "🏷️ مفضلة أقسام"}
+        _fav_sel = st.segmented_control(
+            "❤️ المفضلة", list(_FAV_AR.values()), default="الكل", key="gen_favs",
         )
-        gen_favs = [k for k, v in _FAV_AR.items() if v in (_fav_labels or [])]
+        gen_fav = next((k for k, v in _FAV_AR.items() if v == _fav_sel), "all")
 
         # ── الأقسام (ديناميكي — من master.store_tags) ─────────────────────
         @st.cache_data(ttl=300)
@@ -6494,10 +6497,11 @@ elif page == "تحليل المستخدمين":
                 return rows
             except Exception:
                 return []
-        gen_categories = st.pills(
-            "🏷️ الأقسام", _gen_category_options(),
-            selection_mode="multi", key="gen_categories",
-        ) or []
+        _cat_opts = ["الكل"] + _gen_category_options()
+        _cat_sel = st.segmented_control(
+            "🏷️ الأقسام", _cat_opts, default="الكل", key="gen_categories",
+        )
+        gen_category = None if _cat_sel in (None, "الكل") else _cat_sel
 
         # ── المتاجر (ديناميكي — من master) ────────────────────────────────
         @st.cache_data(ttl=300)
@@ -6516,10 +6520,19 @@ elif page == "تحليل المستخدمين":
                 return rows
             except Exception:
                 return []
-        gen_stores = st.pills(
-            "🏪 المتاجر", _gen_store_options(),
-            selection_mode="multi", key="gen_stores",
-        ) or []
+        _store_opts = ["الكل"] + _gen_store_options()
+        _store_sel = st.segmented_control(
+            "🏪 المتاجر", _store_opts, default="الكل", key="gen_stores",
+        )
+        gen_store = None if _store_sel in (None, "الكل") else _store_sel
+
+        # ── حالة المتجر (فعّالة / منتهية / قربت تنتهي) ───────────────────
+        _storestat_sel = st.segmented_control(
+            "🏬 حالة المتجر", list(_STORESTAT_AR.values()), default="الكل",
+            key="gen_store_status",
+        )
+        gen_store_status = next((k for k, v in _STORESTAT_AR.items()
+                                 if v == _storestat_sel), "all")
 
         # ── فلتر اكتمال الملف ─────────────────────────────────────────────
         # مكتمل = مستخدم موقع له بيانات تسجيل + ربط تليجرام محقّق
@@ -6543,13 +6556,17 @@ elif page == "تحليل المستخدمين":
             f"التاريخ: {gen_date_from} → {gen_date_to}  ·  "
             f"المصدر: {gen_src_label or 'الكل'}  ·  "
             f"الحالة: {gen_status_label or 'الكل'}  ·  "
-            f"الحركات: {len(gen_actions)}  ·  "
+            f"الحركة: {_act_sel or 'الكل'}  ·  "
+            f"الترند: {_trend_sel or 'الكل'}  ·  "
+            f"الستوري: {_story_sel or 'الكل'}  ·  "
             f"الجنس: {gen_gender_label or 'الكل'}  ·  "
-            f"المدن: {len(gen_cities)}  ·  "
-            f"العمر: {len(gen_age)}  ·  "
-            f"المفضلة: {len(gen_favs)}  ·  "
-            f"الأقسام: {len(gen_categories)}  ·  "
-            f"المتاجر: {len(gen_stores)}  ·  "
+            f"اللغة: {_lang_sel or 'الكل'}  ·  "
+            f"المدينة: {_city_sel or 'الكل'}  ·  "
+            f"العمر: {_age_sel or 'الكل'}  ·  "
+            f"المفضلة: {_fav_sel or 'الكل'}  ·  "
+            f"القسم: {_cat_sel or 'الكل'}  ·  "
+            f"المتجر: {_store_sel or 'الكل'}  ·  "
+            f"حالة المتجر: {_storestat_sel or 'الكل'}  ·  "
             f"الاكتمال: {gen_complete_label or 'الكل'}"
         )
 
