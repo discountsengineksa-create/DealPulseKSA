@@ -6379,18 +6379,25 @@ elif page == "تحليل المستخدمين":
         # (لا يجبرك على الاختيار؛ لا شيء = هذا الفلتر غير مطبَّق).
         _STATUS_AR    = {"all": "الكل", "active": "🟢 نشط", "idle": "😴 خامل"}
         _COMPLETE_AR  = {"all": "الكل", "complete": "✅ مكتمل", "partial": "⛔ ناقص"}
-        _LANG_AR      = {"none": "لا شيء", "ar": "🇸🇦 عربي", "en": "🇬🇧 إنجليزي"}
-        _GENDER_AR    = {"none": "لا شيء", "male": "♂️ ذكر", "female": "♀️ أنثى"}
-        _AGE_AR       = {"none": "لا شيء", "u18": "أقل من 18", "18-24": "18–24",
-                         "25-34": "25–34", "35-44": "35–44", "45-54": "45–54",
-                         "55p": "55+"}
-        _STORESTAT_AR = {"none": "لا شيء", "active": "🟢 فعّالة",
+        _LANG_AR      = {"none": "لا شيء", "all": "الكل",
+                         "ar": "🇸🇦 عربي", "en": "🇬🇧 إنجليزي"}
+        _GENDER_AR    = {"none": "لا شيء", "all": "الكل",
+                         "male": "♂️ ذكر", "female": "♀️ أنثى"}
+        _AGE_AR       = {"none": "لا شيء", "all": "الكل", "u18": "أقل من 18",
+                         "18-24": "18–24", "25-34": "25–34", "35-44": "35–44",
+                         "45-54": "45–54", "55p": "55+"}
+        _STORESTAT_AR = {"none": "لا شيء", "all": "الكل", "active": "🟢 فعّالة",
                          "expired": "🗄️ منتهية", "expiring": "⏳ قربت تنتهي"}
-        _FAVSTORE_AR  = {"none": "لا شيء", "has": "❤️ عنده", "not": "🤍 بلا"}
-        _FAVCAT_AR    = {"none": "لا شيء", "has": "🏷️ عنده", "not": "🤍 بلا"}
-        _TREND_AR     = {"none": "لا شيء", "daily": "🔥 يومي", "weekly": "🔥 أسبوعي"}
-        _STORY_AR     = {"none": "لا شيء", "normal": "🎬 عادي", "trend": "🔥 ترند"}
-        _ACTION_AR    = {"none": "لا شيء", "copy_coupon": "🎟️ نسخ كوبون",
+        _FAVSTORE_AR  = {"none": "لا شيء", "all": "الكل",
+                         "has": "❤️ عنده", "not": "🤍 بلا"}
+        _FAVCAT_AR    = {"none": "لا شيء", "all": "الكل",
+                         "has": "🏷️ عنده", "not": "🤍 بلا"}
+        _TREND_AR     = {"none": "لا شيء", "all": "الكل",
+                         "daily": "🔥 يومي", "weekly": "🔥 أسبوعي"}
+        _STORY_AR     = {"none": "لا شيء", "all": "الكل",
+                         "normal": "🎬 عادي", "trend": "🔥 ترند"}
+        _ACTION_AR    = {"none": "لا شيء", "all": "الكل",
+                         "copy_coupon": "🎟️ نسخ كوبون",
                          "click_link": "🖱️ نقر رابط", "search": "🔍 بحث"}
 
         @st.cache_data(ttl=300)
@@ -6440,14 +6447,14 @@ elif page == "تحليل المستخدمين":
         gen_age = next((k for k, v in _AGE_AR.items() if v == _age_sel), "none")
 
         # ── المدينة (من IP الحقيقي — action_logs.city) ────────────────────
-        _city_opts = ["لا شيء"] + _gen_distinct("""
+        _city_opts = ["لا شيء", "الكل"] + _gen_distinct("""
             SELECT DISTINCT city FROM action_logs
             WHERE city IS NOT NULL AND city <> ''
               AND is_proxy IS NOT TRUE AND is_datacenter IS NOT TRUE
             ORDER BY city""") + ["غير معروف"]
         _city_sel = st.segmented_control(
             "📍 المدينة", _city_opts, default="لا شيء", key="gen_cities")
-        gen_city = None if _city_sel in (None, "لا شيء") else _city_sel
+        gen_city = None if _city_sel in (None, "لا شيء", "الكل") else _city_sel
 
         # ── حالة المتجر (منها تظهر المتاجر المطلوبة لاحقاً) ───────────────
         _storestat_sel = st.segmented_control(
@@ -6457,7 +6464,7 @@ elif page == "تحليل المستخدمين":
                                  if v == _storestat_sel), "none")
 
         # ── الأقسام (من master.store_tags) ────────────────────────────────
-        _cat_opts = ["لا شيء"] + _gen_distinct("""
+        _cat_opts = ["لا شيء", "الكل"] + _gen_distinct("""
             SELECT DISTINCT TRIM(tag) AS tag
             FROM master,
                  unnest(string_to_array(
@@ -6466,7 +6473,7 @@ elif page == "تحليل المستخدمين":
             ORDER BY tag""")
         _cat_sel = st.segmented_control(
             "🏷️ الأقسام", _cat_opts, default="لا شيء", key="gen_categories")
-        gen_category = None if _cat_sel in (None, "لا شيء") else _cat_sel
+        gen_category = None if _cat_sel in (None, "لا شيء", "الكل") else _cat_sel
 
         # ── مفضلة المتاجر (user_favorites kind=store) ─────────────────────
         _favstore_sel = st.segmented_control(
@@ -6497,13 +6504,13 @@ elif page == "تحليل المستخدمين":
                           if v == _story_sel), "none")
 
         # ── متاجر مختارة (من master) ──────────────────────────────────────
-        _store_opts = ["لا شيء"] + _gen_distinct("""
+        _store_opts = ["لا شيء", "الكل"] + _gen_distinct("""
             SELECT DISTINCT store_id FROM master
             WHERE store_id IS NOT NULL AND store_id <> ''
             ORDER BY store_id""")
         _store_sel = st.segmented_control(
             "🏪 متاجر مختارة", _store_opts, default="لا شيء", key="gen_stores")
-        gen_store = None if _store_sel in (None, "لا شيء") else _store_sel
+        gen_store = None if _store_sel in (None, "لا شيء", "الكل") else _store_sel
 
         # ── الحركات (آخر فلتر) ────────────────────────────────────────────
         _act_sel = st.segmented_control(
