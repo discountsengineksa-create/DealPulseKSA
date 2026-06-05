@@ -4680,6 +4680,24 @@ elif page == "🎬 تحليلات الستوري":
             st.dataframe(journey, use_container_width=True, hide_index=True)
             st.caption(f"📋 {len(journey)} صف — كل صف عميل × متجر شاف ستوريه. الحركات داخل الستوري فقط (story_view_id).")
 
+            # ─── تحميل Excel ─────────────────────────────────────────────
+            _sv_xlsx_buf = BytesIO()
+            with pd.ExcelWriter(_sv_xlsx_buf, engine="xlsxwriter") as _sv_writer:
+                journey.to_excel(_sv_writer, sheet_name="تحليلات الستوري",
+                                 index=False)
+            _sv_xlsx_buf.seek(0)
+            _sv_fname = (f"story_analytics_"
+                         f"{sv_date_from.strftime('%Y%m%d')}_"
+                         f"{sv_date_to.strftime('%Y%m%d')}.xlsx")
+            st.download_button(
+                "📥 تحميل Excel",
+                data=_sv_xlsx_buf.getvalue(),
+                file_name=_sv_fname,
+                mime=("application/vnd.openxmlformats-officedocument"
+                      ".spreadsheetml.sheet"),
+                key="sv_download_xlsx",
+            )
+
     except Exception as e:
         st.error(f"⚠️ تعذّر تحميل تحليلات الستوري: {e}")
     finally:
