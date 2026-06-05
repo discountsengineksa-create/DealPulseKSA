@@ -3279,6 +3279,9 @@ elif page == "تحليل المتاجر":
                      "expired": "🗄️ منتهي"}
     _SM_TREND_AR = {"none": "لا شيء", "all": "الكل",
                      "daily": "🌞 يومي", "weekly": "📅 أسبوعي"}
+    _SM_ACT_AR   = {"none": "لا شيء", "all": "الكل",
+                     "click_link": "🖱️ نقر", "search": "🔍 بحث",
+                     "copy_coupon": "🎟️ نسخ"}
     _SM_SRC_LOG  = {"bot": ["bot"],
                      "miniapp": ["telegram_miniapp", "miniapp"],
                      "web": ["web"]}
@@ -3420,7 +3423,16 @@ elif page == "تحليل المتاجر":
 
         st.divider()
 
-        # ─── تطبيق الفلاتر على الجداول الثلاثة ───────────────────
+        # ─── فلتر الحركات (action_type) ──────────────────────────
+        _act_lbl = st.segmented_control(
+            "🎬 الحركات", list(_SM_ACT_AR.values()),
+            default="الكل", key="sm_act_pill")
+        _act_key = next((k for k, v in _SM_ACT_AR.items()
+                          if v == _act_lbl), "all")
+
+        st.divider()
+
+        # ─── تطبيق الفلاتر على البيانات ──────────────────────────
         active_ids = set(master["store_id"])
 
         # logs (actions)
@@ -3440,6 +3452,9 @@ elif page == "تحليل المتاجر":
                 d = d.iloc[0:0]
             elif _store_pick != "الكل":
                 d = d[d["store_id"] == _store_pick]
+            # فلتر نوع الحركة
+            if _act_key in ("click_link", "search", "copy_coupon"):
+                d = d[d["action_type"] == _act_key]
             df_logs = d
 
         # searches
@@ -3467,6 +3482,9 @@ elif page == "تحليل المتاجر":
                 s = s.iloc[0:0]
             elif _store_pick != "الكل":
                 s = s[s["store_id"] == _store_pick]
+            # فلتر الحركات: البحث يطلع فقط لو الفلتر "بحث" أو "الكل" أو "لا شيء"
+            if _act_key in ("click_link", "copy_coupon"):
+                s = s.iloc[0:0]
             df_search = s
 
         # favorites
@@ -3489,6 +3507,9 @@ elif page == "تحليل المتاجر":
                 f = f.iloc[0:0]
             elif _store_pick != "الكل":
                 f = f[f["store_id"] == _store_pick]
+            # فلتر الحركات: المفضلة تظهر فقط لو الفلتر "الكل" أو "لا شيء"
+            if _act_key in ("click_link", "search", "copy_coupon"):
+                f = f.iloc[0:0]
             df_fav = f
 
         # ─── ملخّص ──────────────────────────────────────────────
@@ -3535,22 +3556,24 @@ elif page == "تحليل المتاجر":
                     or _clean(r.get("bu_city")) or "—")
 
         # ════════════════════════════════════════════════════════
-        # 👥 جدول 1: المستخدمون المتفاعلون
+        # 📋 الجدول الموحّد — مستخدم × متجر مع كل البيانات
         # ════════════════════════════════════════════════════════
-        st.markdown("### 👥 المستخدمون")
-        st.caption("صف لكل (مستخدم × متجر) تفاعل خلال الفترة (نسخ + نقر + بحث).")
+        st.markdown("### 📋 الجدول")
+        st.caption(
+            "صف لكل (مستخدم × متجر) — يدمج الحركات + المفضلة. فلتر «الحركات» "
+            "أعلاه يحدد ما يُعرض (نقر/بحث/نسخ/الكل/لا شيء).")
 
-        if df_logs.empty:
-            st.info("📭 لا حركات للفلاتر المختارة.")
-        else:
-            _grp = (["user_id", "ip_hex", "store_id"]
-                    if _store_pick == "الكل"
-                    else ["user_id", "ip_hex"])
+        # aggregate من df_logs
+        _grp_keys = (["user_id", "ip_hex", "store_id"]
+                     if _store_pick == "الكل"
+                     else ["user_id", "ip_hex"])
+
+        if not df_logs.empty:
             ev = df_logs.copy()
             ev["copy"]   = (ev["action_type"] == "copy_coupon").astype(int)
             ev["click"]  = (ev["action_type"] == "click_link").astype(int)
             ev["srch"]   = (ev["action_type"] == "search").astype(int)
-            agg = (ev.groupby(_grp, dropna=False)
+            agg = (ev.groupby(_grp_keys, dropna=False)
                      .agg(copy=("copy", "sum"),
                           click=("click", "sum"),
                           srch=("srch", "sum"),
@@ -3558,8 +3581,6 @@ elif page == "تحليل المتاجر":
                           src_any=("source", lambda s: "، ".join(sorted(set(
                               _SM_CHAN_AR.get(x, x) for x in s)))))
                      .reset_index())
-
-            # ملف الـ profile لكل (user_id, ip_hex) — نأخذ أول صف
             _pcols = [c for c in ["user_id", "ip_hex", "source", "web_name",
                                     "web_email", "web_phone", "web_tg",
                                     "web_city", "bu_username", "bu_city",
@@ -3568,6 +3589,79 @@ elif page == "تحليل المتاجر":
                     .drop_duplicates(subset=["user_id", "ip_hex"])
                     .reset_index(drop=True))
             agg = agg.merge(prof, on=["user_id", "ip_hex"], how="left")
+        else:
+            agg = pd.DataFrame()
+
+        # إضافة rows من df_fav للمفضّلين بدون حركات (الفلتر يسمح)
+        if not df_fav.empty:
+            f = df_fav.copy()
+            f["user_id"] = f["telegram_id"].fillna(f["web_user_id"])
+            f["ip_hex"]  = None
+
+            if _store_pick == "الكل":
+                _exist = (set(zip(agg["user_id"], agg["store_id"]))
+                          if not agg.empty else set())
+                _missing = [
+                    (uid, sid) not in _exist
+                    for uid, sid in zip(f["user_id"], f["store_id"])
+                ]
+            else:
+                _exist = (set(agg["user_id"]) if not agg.empty else set())
+                _missing = [uid not in _exist for uid in f["user_id"]]
+            miss = f[_missing]
+            if not miss.empty:
+                _plat_ar = {"bot": "📱 البوت", "web": "🌐 الموقع",
+                             "miniapp": "🔹 الميني-ويب"}
+                new_rows = {
+                    "user_id":     miss["user_id"].values,
+                    "ip_hex":      [None] * len(miss),
+                    "copy":        [0] * len(miss),
+                    "click":       [0] * len(miss),
+                    "srch":        [0] * len(miss),
+                    "last_action": miss["created_at"].values,
+                    "src_any":     miss["platform"].map(_plat_ar)
+                                       .fillna(miss["platform"]).values,
+                    "source":      miss["platform"].values,
+                    "web_name":    miss["web_name"].values,
+                    "web_email":   miss["web_email"].values,
+                    "web_phone":   miss["web_phone"].values,
+                    "web_tg":      miss["web_tg"].values,
+                    "web_city":    miss["web_city"].values,
+                    "bu_username": miss["bu_username"].values,
+                    "bu_city":     miss["bu_city"].values,
+                    "geo_city":    [""] * len(miss),
+                }
+                if _store_pick == "الكل":
+                    new_rows["store_id"] = miss["store_id"].values
+                agg = pd.concat([agg, pd.DataFrame(new_rows)],
+                                 ignore_index=True)
+
+        if agg.empty:
+            st.info("📭 لا بيانات للفلاتر المختارة.")
+        else:
+            # عمود "مفضل" — match (user, store) مع df_fav الكامل (مش المفلتر بالحركات)
+            _fav_full = df_fav_raw.copy()
+            if not _fav_full.empty:
+                if "kind" in _fav_full.columns:
+                    _fav_full = _fav_full[_fav_full["kind"] == "store"]
+                _fav_full["uid"] = _fav_full["telegram_id"].fillna(
+                    _fav_full["web_user_id"])
+                _fav_set = set(zip(_fav_full["uid"], _fav_full["store_id"]))
+            else:
+                _fav_set = set()
+
+            if _store_pick == "الكل":
+                agg["مفضل"] = [
+                    "✅ نعم" if (uid, sid) in _fav_set else "—"
+                    for uid, sid in zip(agg["user_id"], agg["store_id"])
+                ]
+            else:
+                _fixed_sid = (_store_pick if _store_pick not in
+                              ("الكل", "لا شيء") else None)
+                agg["مفضل"] = [
+                    "✅ نعم" if (uid, _fixed_sid) in _fav_set else "—"
+                    for uid in agg["user_id"]
+                ]
 
             agg["الاسم"]    = agg.apply(_name, axis=1)
             agg["الإيميل"]  = agg.apply(_email, axis=1)
@@ -3575,7 +3669,8 @@ elif page == "تحليل المتاجر":
             agg["تيليجرام"] = agg.apply(_tg, axis=1)
             agg["المدينة"]  = agg.apply(_city, axis=1)
             agg["آخر تفاعل"] = pd.to_datetime(
-                agg["last_action"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+                agg["last_action"], errors="coerce").dt.strftime(
+                    "%Y-%m-%d %H:%M")
             agg = agg.rename(columns={"src_any": "المصدر",
                                        "store_id": "المتجر",
                                        "copy": "نسخ", "click": "نقر",
@@ -3586,134 +3681,26 @@ elif page == "تحليل المتاجر":
                       "المدينة", "المصدر"]
             if _store_pick == "الكل":
                 _cols.append("المتجر")
-            _cols += ["نسخ", "نقر", "بحث", "إجمالي الحركات", "آخر تفاعل"]
+            _cols += ["نسخ", "نقر", "بحث", "إجمالي الحركات",
+                       "مفضل", "آخر تفاعل"]
             agg = agg.sort_values("إجمالي الحركات", ascending=False)
             st.dataframe(agg[_cols], hide_index=True, width='stretch')
+            st.caption(f"📋 {len(agg)} صف.")
 
             _ub = BytesIO()
             with pd.ExcelWriter(_ub, engine="xlsxwriter") as _w:
-                agg[_cols].to_excel(_w, sheet_name="المستخدمون", index=False)
+                agg[_cols].to_excel(_w, sheet_name="تحليل المتاجر",
+                                      index=False)
             _ub.seek(0)
             st.download_button(
-                "📥 تحميل Excel — المستخدمون",
+                "📥 تحميل Excel",
                 data=_ub.getvalue(),
-                file_name=(f"stores_users_"
+                file_name=(f"stores_analytics_"
                             f"{sm_date_from.strftime('%Y%m%d')}_"
                             f"{sm_date_to.strftime('%Y%m%d')}.xlsx"),
                 mime=("application/vnd.openxmlformats-officedocument"
                        ".spreadsheetml.sheet"),
-                key="sm_users_xlsx")
-
-        st.divider()
-
-        # ════════════════════════════════════════════════════════
-        # ❤️ جدول 2: المفضّلون
-        # ════════════════════════════════════════════════════════
-        st.markdown("### ❤️ المفضّلون")
-        st.caption("من فضّل أي متجر خلال الفترة (kind='store').")
-
-        if df_fav.empty:
-            st.info("📭 لا مفضلات للفلاتر المختارة.")
-        else:
-            fv = df_fav.copy()
-            fv["الاسم"]    = fv.apply(_name, axis=1)
-            fv["الإيميل"]  = fv.apply(_email, axis=1)
-            fv["الجوال"]   = fv.apply(_phone, axis=1)
-            fv["تيليجرام"] = fv.apply(_tg, axis=1)
-            fv["المدينة"]  = fv.apply(_city, axis=1)
-            fv["المصدر"]   = fv["platform"].map(
-                {"bot": "📱 البوت", "web": "🌐 الموقع",
-                 "miniapp": "🔹 الميني-ويب"}).fillna(fv["platform"])
-            fv["تاريخ الإضافة"] = fv["created_at"].dt.strftime(
-                "%Y-%m-%d %H:%M")
-            fv = fv.rename(columns={"store_id": "المتجر"})
-            _fcols = ["الاسم", "الإيميل", "الجوال", "تيليجرام",
-                       "المدينة", "المتجر", "المصدر", "تاريخ الإضافة"]
-            fv = fv.sort_values("created_at", ascending=False)
-            st.dataframe(fv[_fcols], hide_index=True, width='stretch')
-
-            _fb = BytesIO()
-            with pd.ExcelWriter(_fb, engine="xlsxwriter") as _w:
-                fv[_fcols].to_excel(_w, sheet_name="المفضلة", index=False)
-            _fb.seek(0)
-            st.download_button(
-                "📥 تحميل Excel — المفضلة",
-                data=_fb.getvalue(),
-                file_name=(f"stores_favs_"
-                            f"{sm_date_from.strftime('%Y%m%d')}_"
-                            f"{sm_date_to.strftime('%Y%m%d')}.xlsx"),
-                mime=("application/vnd.openxmlformats-officedocument"
-                       ".spreadsheetml.sheet"),
-                key="sm_favs_xlsx")
-
-        st.divider()
-
-        # ════════════════════════════════════════════════════════
-        # 📋 جدول 3: سجل الحركات (صف لكل حركة منفردة)
-        # ════════════════════════════════════════════════════════
-        st.markdown("### 📋 سجل الحركات")
-        st.caption("كل حركة (نسخ/نقر/بحث) مع وقتها وصاحبها.")
-
-        if df_logs.empty and df_search.empty:
-            st.info("📭 لا حركات للفلاتر المختارة.")
-        else:
-            _ACT_AR = {"copy_coupon": "🎟️ نسخ",
-                        "click_link":  "🖱️ نقر",
-                        "search":       "🔍 بحث"}
-            parts = []
-            if not df_logs.empty:
-                a = df_logs.copy()
-                a["النوع"]    = a["action_type"].map(_ACT_AR).fillna(a["action_type"])
-                a["الاسم"]    = a.apply(_name, axis=1)
-                a["الإيميل"]  = a.apply(_email, axis=1)
-                a["الجوال"]   = a.apply(_phone, axis=1)
-                a["تيليجرام"] = a.apply(_tg, axis=1)
-                a["المدينة"]  = a.apply(_city, axis=1)
-                a["المصدر"]   = a["source"].map(_SM_CHAN_AR).fillna(a["source"])
-                a["الوقت"]    = a["action_time"].dt.strftime("%Y-%m-%d %H:%M:%S")
-                a = a.rename(columns={"store_id": "المتجر"})
-                a["__ts"] = a["action_time"]
-                parts.append(a[["__ts", "الوقت", "الاسم", "الإيميل",
-                                 "الجوال", "تيليجرام", "المدينة",
-                                 "المتجر", "النوع", "المصدر"]])
-            if not df_search.empty:
-                s = df_search.copy()
-                s["النوع"] = "🔍 بحث"
-                s["الاسم"] = "—"
-                s["الإيميل"] = "—"
-                s["الجوال"] = "—"
-                s["تيليجرام"] = "—"
-                s["المدينة"] = "—"
-                _p = s["platform"].astype(str).str.lower()
-                s["المصدر"] = _p.apply(
-                    lambda p: ("🔹 الميني-ويب" if "mini" in p else
-                                "🌐 الموقع"   if "web"  in p else
-                                "📱 البوت"))
-                s["الوقت"] = s["search_date"].dt.strftime("%Y-%m-%d %H:%M:%S")
-                s = s.rename(columns={"store_id": "المتجر"})
-                s["__ts"] = s["search_date"]
-                parts.append(s[["__ts", "الوقت", "الاسم", "الإيميل",
-                                 "الجوال", "تيليجرام", "المدينة",
-                                 "المتجر", "النوع", "المصدر"]])
-
-            all_mv = pd.concat(parts, ignore_index=True)
-            all_mv = all_mv.sort_values("__ts", ascending=False).drop(
-                columns=["__ts"])
-            st.dataframe(all_mv, hide_index=True, width='stretch')
-
-            _mb = BytesIO()
-            with pd.ExcelWriter(_mb, engine="xlsxwriter") as _w:
-                all_mv.to_excel(_w, sheet_name="الحركات", index=False)
-            _mb.seek(0)
-            st.download_button(
-                "📥 تحميل Excel — الحركات",
-                data=_mb.getvalue(),
-                file_name=(f"stores_actions_"
-                            f"{sm_date_from.strftime('%Y%m%d')}_"
-                            f"{sm_date_to.strftime('%Y%m%d')}.xlsx"),
-                mime=("application/vnd.openxmlformats-officedocument"
-                       ".spreadsheetml.sheet"),
-                key="sm_actions_xlsx")
+                key="sm_unified_xlsx")
 
     # ════════════════════════════════════════════════════════════════
     # TAB 2: 🎛️ تفضيلات الترند (admin pinning)
