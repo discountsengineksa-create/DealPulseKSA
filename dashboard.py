@@ -6547,6 +6547,82 @@ elif page == "تحليل المستخدمين":
             f"الحركة: {_act_sel or 'لا شيء'}"
         )
 
+        # ── جلب المستخدمين الأساسيين حسب المصدر ───────────────────────────
+        # tg  = bot_users (شخص تيليجرام له نشاط بوت/ميني ضمن المدى)
+        # web = web_users
+        # الكل = اتحاد منزوع الازدواج (الموقع المربوط بتيليجرام يُعدّ مرة)
+        # الحالة: نشط = آخر ظهور < 20 يوم، خامل = ≥ 20 يوم (يتجدّد مع الدخول)
+        @st.cache_data(ttl=120)
+        def _gen_fetch_users(src, status, t_from, t_to):
+            def _stat(alias):
+                if status == "active":
+                    return f" AND {alias}.last_seen >  NOW() - INTERVAL '20 days' "
+                if status == "idle":
+                    return f" AND {alias}.last_seen <= NOW() - INTERVAL '20 days' "
+                return ""
+            tg_sql = f"""
+                SELECT 'tg' AS realm, bu.telegram_id::text AS person_id,
+                       bu.username AS handle, bu.name_en AS name,
+                       NULL::text AS email, bu.last_seen
+                FROM bot_users bu
+                WHERE bu.deleted_at IS NULL {_stat('bu')}"""
+            web_unlinked = f"""
+                SELECT 'web' AS realm, wu.id::text AS person_id,
+                       wu.telegram_username AS handle, wu.display_name AS name,
+                       wu.email, wu.last_seen
+                FROM web_users wu
+                WHERE (wu.telegram_username IS NULL
+                       OR LOWER(wu.telegram_username) NOT IN
+                          (SELECT LOWER(username) FROM bot_users
+                           WHERE username IS NOT NULL))
+                  {_stat('wu')}"""
+            web_all = f"""
+                SELECT 'web' AS realm, wu.id::text AS person_id,
+                       wu.telegram_username AS handle, wu.display_name AS name,
+                       wu.email, wu.last_seen
+                FROM web_users wu
+                WHERE TRUE {_stat('wu')}"""
+            params = []
+            if src is None:                       # الكل
+                sql = tg_sql + " UNION ALL " + web_unlinked
+            elif "web" in src:                    # الموقع
+                sql = web_all
+            else:                                 # بوت / ميني-ويب
+                sql = tg_sql + """
+                  AND EXISTS (SELECT 1 FROM action_logs al
+                              WHERE al.user_id = bu.telegram_id
+                                AND al.source = ANY(%s)
+                                AND al.action_time >= %s
+                                AND al.action_time <  %s)"""
+                params = [list(src), t_from, t_to]
+            try:
+                conn = get_conn()
+                conn.autocommit = True
+                df = pd.read_sql(sql, conn, params=params or None)
+                conn.close()
+                return df
+            except Exception as e:
+                st.error(f"خطأ جلب المستخدمين: {e}")
+                return pd.DataFrame()
+
+        _t_from = pd.Timestamp(gen_date_from).strftime("%Y-%m-%d 00:00:00")
+        _t_to   = (pd.Timestamp(gen_date_to) + pd.Timedelta(days=1)
+                   ).strftime("%Y-%m-%d 00:00:00")
+        df_users = _gen_fetch_users(gen_src, gen_status, _t_from, _t_to)
+
+        st.markdown(f"### 👥 المستخدمون المطابقون: **{len(df_users)}**")
+        if df_users.empty:
+            st.info("لا مستخدمين مطابقين لهذا المصدر/الحالة/المدى.")
+        else:
+            _disp = df_users.copy()
+            _disp["النوع"]   = _disp["realm"].map(
+                {"tg": "🤖 تيليجرام", "web": "🌐 موقع"}).fillna(_disp["realm"])
+            _disp = _disp.rename(columns={
+                "person_id": "المعرّف", "handle": "اليوزر",
+                "name": "الاسم", "email": "الإيميل", "last_seen": "آخر ظهور",
+            })[["النوع", "المعرّف", "اليوزر", "الاسم", "الإيميل", "آخر ظهور"]]
+            st.dataframe(_disp, use_container_width=True, hide_index=True)
+
     # ── القائمة الثانية: التحليل الفردي ─────────────────────────────────
     with tab_individual:
         pass  # نبدأ البناء هنا
