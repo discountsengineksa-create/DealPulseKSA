@@ -6614,6 +6614,87 @@ elif page == "تحليل المستخدمين":
                     where_conds.append(f"(COALESCE(source,'bot') IN ('bot','telegram_miniapp','miniapp') AND user_id = {bu_tg})")
                 where_acts = " OR ".join(where_conds) if where_conds else "1=0"
 
+                # ════════════════════════════════════════════════════
+                # 🔬 الصف الخام من القاعدة — بدون JOIN ولا تحويل
+                #   كل عمود من كل جدول بالقيمة الحقيقية كما هي في DB.
+                # ════════════════════════════════════════════════════
+                st.divider()
+                st.markdown("### 🔬 الصف الخام من القاعدة — بدون أي تحويل")
+                st.caption("ما تراه هنا هو القيمة الفعلية في PostgreSQL — لا COALESCE ولا normalize ولا fallback. الحقيقة العارية.")
+
+                _raw_tabs = st.tabs([
+                    "🌐 web_users (الخام)",
+                    "🤖 bot_users (الخام)",
+                    "📜 action_logs (آخر 200 حركة خام)",
+                ])
+
+                with _raw_tabs[0]:
+                    if web_user and wu_id:
+                        try: conn.rollback()
+                        except Exception: pass
+                        df_raw_web = pd.read_sql(
+                            "SELECT * FROM web_users WHERE id = %s",
+                            conn, params=(wu_id,))
+                        if df_raw_web.empty:
+                            st.warning("الصف غير موجود.")
+                        else:
+                            # نقلب لـ key/value لقراءة كل عمود بوضوح
+                            raw_kv = df_raw_web.iloc[0].astype(str).reset_index()
+                            raw_kv.columns = ["العمود", "القيمة الفعلية في DB"]
+                            st.dataframe(raw_kv, use_container_width=True,
+                                         hide_index=True, height=560)
+                    else:
+                        st.caption("لا حساب ويب لهذا المستخدم.")
+
+                with _raw_tabs[1]:
+                    if bot_user and bu_tg:
+                        try: conn.rollback()
+                        except Exception: pass
+                        df_raw_bot = pd.read_sql(
+                            "SELECT * FROM bot_users WHERE telegram_id = %s",
+                            conn, params=(bu_tg,))
+                        if df_raw_bot.empty:
+                            st.warning("الصف غير موجود.")
+                        else:
+                            raw_kv = df_raw_bot.iloc[0].astype(str).reset_index()
+                            raw_kv.columns = ["العمود", "القيمة الفعلية في DB"]
+                            st.dataframe(raw_kv, use_container_width=True,
+                                         hide_index=True, height=560)
+                    else:
+                        st.caption("لا حساب تيليجرام لهذا المستخدم.")
+
+                with _raw_tabs[2]:
+                    try: conn.rollback()
+                    except Exception: pass
+                    df_raw_acts = pd.read_sql(f"""
+                        SELECT *
+                          FROM action_logs
+                         WHERE { where_acts }
+                         ORDER BY action_time DESC
+                         LIMIT 200
+                    """, conn)
+                    if df_raw_acts.empty:
+                        st.caption("لا حركات.")
+                    else:
+                        # نحول الأعمدة بايتية إلى hex لتُعرض بدون مشاكل
+                        for c in df_raw_acts.columns:
+                            if df_raw_acts[c].dtype == object:
+                                try:
+                                    df_raw_acts[c] = df_raw_acts[c].apply(
+                                        lambda v: v.hex() if isinstance(v, (bytes, bytearray, memoryview)) else v
+                                    )
+                                except Exception:
+                                    pass
+                        st.dataframe(df_raw_acts, use_container_width=True,
+                                     hide_index=True, height=560)
+                        st.caption(f"آخر {len(df_raw_acts)} حركة خام — كل الأعمدة.")
+                        st.download_button(
+                            "📥 CSV — السجل الخام",
+                            df_raw_acts.astype(str).to_csv(index=False).encode("utf-8-sig"),
+                            f"raw_actions_{name}_{date.today()}.csv", "text/csv",
+                            key=f"ua_dl_raw_acts_{wu_id or bu_tg}",
+                        )
+
                 # ─── إحصائيات النشاط الكاملة ─────────────────────────
                 st.divider()
                 st.markdown("### 📊 سجل النشاط الكامل (كل الزمن، كل القنوات)")
@@ -8850,6 +8931,12 @@ elif page == "تحليل المستخدمين":
             # كل بُعد nytile(5) → 6 شخصيات سلوكية ثم Treemap + درل-داون
             # ════════════════════════════════════════════════════════════════
             st.markdown("## 🎯 RFM + شخصيات سلوكية (Personas)")
+            st.warning(
+                "⚠️ **هذا القسم ذو معنى فقط مع N ≥ 100 مستخدم نسخوا.** "
+                "الـ quintiles (1-5) تحتاج عيّنة كبيرة لتعطي شرائح معبّرة. "
+                "مع عيّنة صغيرة قد يصير الشخص الوحيد «Champion» بناءً على رتبته في عيّنة من ٥ — وهذا ليس معبّراً. "
+                "تستخدم هذا للاسترشاد فقط، ليس للقرارات التجارية."
+            )
             st.caption(
                 f"كل مستخدم نسخ ولو مرة في النطاق **{date_from.strftime('%Y-%m-%d')} → "
                 f"{date_to.strftime('%Y-%m-%d')}** له ٣ نقاط (1-5): "
@@ -8985,7 +9072,11 @@ elif page == "تحليل المستخدمين":
             # «من سجّل في شهر X، كم نسبتهم نشطون في الأشهر التالية؟»
             # ════════════════════════════════════════════════════════════════
             st.markdown("## 🌀 Cohort Retention — منحنى البقاء")
-            st.caption("صفّ = شهر الانضمام · عمود = الشهر منذ الانضمام · القيمة = % مازالوا نشطين.")
+            st.caption(
+                "صفّ = شهر الانضمام · عمود = الشهر منذ الانضمام · القيمة = % مازالوا تفاعلوا فعلاً. "
+                "**«تفاعل فعلي» = نسخ كوبون أو نقر رابط فقط** (لا يشمل بدء الجلسة `start` ولا view-only "
+                "حتى لا تتضخّم الأرقام)."
+            )
 
             try: conn.rollback()
             except Exception: pass
@@ -9005,7 +9096,7 @@ elif page == "تحليل المستخدمين":
                          user_id,
                          DATE_TRUNC('month', action_time)::date AS act_month
                     FROM action_logs
-                   WHERE action_type IN ('copy_coupon','click_link','search')
+                   WHERE action_type IN ('copy_coupon','click_link')  -- تفاعل فعلي فقط (لا start ولا view)
                      AND user_id IS NOT NULL
                    GROUP BY 1,2,3
                 )
@@ -9118,13 +9209,16 @@ elif page == "تحليل المستخدمين":
             )
             _src_tuple = _SRC_SQL.get(_src_choice)
             # ════════════════════════════════════════════════════════════════
-            # SECTION 10 ─ 📈 LTV Score + Pareto
-            # LTV = نسخ×10 + نقرات×2 + متاجر_فريدة×5 + boost_حداثة
+            # SECTION 10 ─ 📊 ترتيب التفاعل (سحب مباشر من action_logs)
+            # كان اسمه «LTV» — أُلغي. لا توجد لدينا بيانات إيرادات أو عمولة فعلية
+            # تسمح بحساب LTV حقيقي. نعرض فقط أرقام مسحوبة مباشرة.
             # ════════════════════════════════════════════════════════════════
-            st.markdown("## 📈 LTV Score — قيمة كل عميل")
-            st.caption(
-                "صيغة بسيطة شفافة: `LTV = نسخ×10 + نقرات×2 + متاجر_فريدة×5 + (100 / (1 + أيام_منذ_آخر_نشاط))`. "
-                "ليس قيمة نقدية — درجة سلوكية للمقارنة."
+            st.markdown("## 📊 ترتيب العملاء بالتفاعل الفعلي — مسحوب من action_logs")
+            st.error(
+                "⚠️ **تنبيه صدق:** كان هنا «LTV Score» بصيغة مُخترعة. حذفناه. "
+                "نعرض الآن فقط أرقاماً حقيقية مسحوبة من القاعدة: نسخ، نقرات، متاجر فريدة، "
+                "وآخر نشاط. **هذي ليست قيمة نقدية ولا توقّع — مجرد ترتيب بالنشاط.** "
+                "لا تنشرها على إنها LTV."
             )
 
             try: conn.rollback()
@@ -9147,43 +9241,19 @@ elif page == "تحليل المستخدمين":
             """, conn, params=ltv_src_params if ltv_src_params else None)
 
             if ltv_raw.empty:
-                st.info("📭 لا توجد بيانات نسخ لحساب LTV.")
+                st.info("📭 لا توجد بيانات نسخ.")
             else:
                 df_ltv = ltv_raw.copy()
                 df_ltv["days_since"] = df_ltv["days_since"].fillna(9999).astype(float).round(1)
-                df_ltv["ltv"] = (
-                    df_ltv["copies"]*10 +
-                    df_ltv["clicks"]*2 +
-                    df_ltv["uniq_stores"]*5 +
-                    (100.0 / (1.0 + df_ltv["days_since"]))
-                ).round(1)
-                df_ltv = df_ltv.sort_values("ltv", ascending=False).reset_index(drop=True)
+                # ترتيب بسيط بعدد النسخ ثم النقرات — لا معادلة مخترعة
+                df_ltv = df_ltv.sort_values(["copies","clicks","uniq_stores"],
+                                            ascending=[False,False,False]).reset_index(drop=True)
                 df_ltv["rank"] = df_ltv.index + 1
-                df_ltv["pct"]  = (100*df_ltv["rank"]/len(df_ltv)).round(2)
-                cum = df_ltv["ltv"].cumsum() / df_ltv["ltv"].sum() * 100
-                df_ltv["cum_ltv_pct"] = cum.round(1)
-
-                # Pareto (٢٠/٨٠)
-                top20_idx = max(1, int(len(df_ltv)*0.20))
-                top20_share = float(cum.iloc[top20_idx-1]) if len(cum) >= top20_idx else 0.0
 
                 l1, l2, l3 = st.columns(3)
-                with l1: kpi_card("👥", "مستخدمون له LTV > 0", f"{len(df_ltv):,}", "info")
-                with l2: kpi_card("👑", "أعلى LTV", f"{int(df_ltv['ltv'].iloc[0]):,}", "emerald",
-                                  note=df_ltv.iloc[0].get("user_id", ""))
-                with l3: kpi_card("⚖️", "حصّة أعلى 20% من القيمة", f"{top20_share:.1f}%", "warning",
-                                  note="قاعدة Pareto (80/20)")
-
-                # Pareto chart
-                df_par = df_ltv[["rank","cum_ltv_pct"]].copy()
-                df_par["rank_pct"] = (df_par["rank"]/len(df_par)*100).round(2)
-                fig_par = px.line(df_par, x="rank_pct", y="cum_ltv_pct", markers=False,
-                                  title="منحنى Pareto: % تراكمي للقيمة مقابل % تراكمي للمستخدمين",
-                                  labels={"rank_pct":"% المستخدمين (مرتبين بـ LTV نازل)",
-                                          "cum_ltv_pct":"% القيمة التراكمية"})
-                fig_par.add_shape(type="line", x0=20, x1=20, y0=0, y1=100,
-                                  line=dict(color="#DC2626", dash="dash"))
-                st.plotly_chart(apply_brand_theme(fig_par), use_container_width=True)
+                with l1: kpi_card("👥", "عملاء نسخوا على الأقل مرة", f"{len(df_ltv):,}", "info")
+                with l2: kpi_card("🎟️", "إجمالي النسخ", f"{int(df_ltv['copies'].sum()):,}", "emerald")
+                with l3: kpi_card("🖱️", "إجمالي النقرات", f"{int(df_ltv['clicks'].sum()):,}", "warning")
 
                 # Top-100 + JOIN لمعرفة الهوية
                 top_ids_web = df_ltv[df_ltv["src"]=="web"]["user_id"].head(100).tolist()
@@ -9215,16 +9285,17 @@ elif page == "تحليل المستخدمين":
                     top_view["المصدر"]  = top_view["src"].map({"web":"🌐 الموقع","bot":"🤖 البوت"})
                     top_view["تيليجرام"] = top_view["tg"].apply(lambda s: f"@{s}" if isinstance(s,str) and s else "—")
                     top_show = top_view[["rank","المصدر","name","email","phone","تيليجرام","city",
-                                         "copies","clicks","uniq_stores","days_since","ltv"]].rename(
+                                         "copies","clicks","uniq_stores","days_since"]].rename(
                         columns={"rank":"#","name":"الاسم","email":"الإيميل","phone":"الجوال","city":"المدينة",
-                                 "copies":"نسخ","clicks":"نقرات","uniq_stores":"متاجر","days_since":"أيام_منذ",
-                                 "ltv":"LTV"}).fillna("—")
-                    st.markdown("#### 🏅 Top 100 — قائمة الـ VIP الموسّعة")
+                                 "copies":"نسخ","clicks":"نقرات","uniq_stores":"متاجر_فريدة",
+                                 "days_since":"أيام_منذ_آخر_نشاط"}).fillna("—")
+                    st.markdown("#### 🏅 Top 100 بالتفاعل الفعلي")
+                    st.caption("مرتّبون بـ: نسخ ↓ ثم نقرات ↓ ثم متاجر فريدة ↓. **لا معادلة مشتقّة.** كل الأعمدة سحب مباشر من action_logs.")
                     st.dataframe(top_show, use_container_width=True, hide_index=True, height=380)
-                    st.download_button("📥 CSV — Top 100 LTV",
+                    st.download_button("📥 CSV — Top 100",
                                        top_show.to_csv(index=False).encode("utf-8-sig"),
-                                       f"ltv_top100_{date.today()}.csv", "text/csv",
-                                       key="ua_dl_ltv_top")
+                                       f"top100_engagement_{date.today()}.csv", "text/csv",
+                                       key="ua_dl_top100")
 
             st.divider()
 
