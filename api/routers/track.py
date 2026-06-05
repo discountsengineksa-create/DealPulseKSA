@@ -18,6 +18,7 @@ from api.utils.fraud_scoring import compute_quality_score
 from api.utils.event_publisher import publish_event
 from api.utils.code_reports import record_code_report
 from api.utils.rate_limit import LIMIT_TRACK, limiter
+from api.utils.trend_snapshot import compute_trending_store_ids
 
 # حدود مخصّصة لقنوات تسجيل خفيفة (search/request-code) — أقل من /track العام
 # لمنع إغراق direct_search و unavailable_codes_requests من سكربتات.
@@ -387,24 +388,46 @@ def log_story_view(payload: StoryViewRequest, request: Request, conn=Depends(get
 
     geo = extract_geo(request)
     with conn.cursor() as cur:
-        cur.execute("SELECT 1 FROM master WHERE store_id = %s", (payload.store_id,))
-        if cur.fetchone() is None:
+        # was_promoted: snapshot لـ master.is_promoted لحظة الفتح.
+        # BOOL_OR + COALESCE للتعامل مع master.store_id غير الفريد.
+        cur.execute(
+            """
+            SELECT BOOL_OR(COALESCE(is_promoted, FALSE)) AS was_promoted
+              FROM master
+             WHERE store_id = %s
+            """,
+            (payload.store_id,),
+        )
+        row = cur.fetchone()
+        if row is None or row[0] is None:
+            # BOOL_OR على مجموعة فارغة يُرجع NULL → ما في متجر بهذا الـ id
             raise HTTPException(404, f"store '{payload.store_id}' not found")
+        was_promoted = bool(row[0])
+
+        # was_trending: snapshot لما يراه العميل فعلاً في الستوري =
+        # نفس signal الـ miniapp (DAILY_TREND_IDS ∪ WEEKLY_TREND_IDS) المحسوب من
+        # خوارزمية compute_trend + trend_overrides — لا master.is_trending.
+        trending_ids = compute_trending_store_ids(conn)
+        was_trending = payload.store_id in trending_ids
 
         cur.execute(
             """
             INSERT INTO story_views (
                 view_id, store_id, source,
                 web_user_id, tg_user_id,
-                ip_hash, user_agent_hash
+                ip_hash, user_agent_hash,
+                was_promoted, was_trending
             )
-            VALUES (%s::uuid, %s, %s, %s, %s, decode(%s, 'hex'), decode(%s, 'hex'))
+            VALUES (%s::uuid, %s, %s, %s, %s,
+                    decode(%s, 'hex'), decode(%s, 'hex'),
+                    %s, %s)
             ON CONFLICT (view_id) DO NOTHING
             """,
             (
                 payload.view_id, payload.store_id, payload.source,
                 payload.web_user_id, payload.tg_user_id,
                 geo.ip_hash, geo.ua_hash,
+                was_promoted, was_trending,
             ),
         )
 
