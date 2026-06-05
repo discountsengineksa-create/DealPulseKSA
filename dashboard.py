@@ -5869,7 +5869,7 @@ elif page == "تحليل المستخدمين":
         @st.cache_data(ttl=120)
         def _gen_fetch_users(src, status, complete, lang, gender, age, city,
                              store_status, store, action, fav_store, fav_cat,
-                             category, story, t_from, t_to):
+                             category, story, trend, t_from, t_to):
             _BOT_HANDLES = ("SELECT LOWER(username) FROM bot_users "
                             "WHERE username IS NOT NULL")
             # tg مكتمل = مربوط بحساب موقع (نجلب بياناته عبر LEFT JOIN LATERAL أدناه)
@@ -5989,7 +5989,9 @@ elif page == "تحليل المستخدمين":
                         f"JOIN master mc ON mc.store_id = alc.store_id "
                         f"WHERE alc.user_id = {uid} AND alc.source IN {src} "
                         f"AND alc.store_id IS NOT NULL "
-                        f"AND mc.store_tags ILIKE '%{safe}%') ")
+                        f"AND '{safe}' IN (SELECT TRIM(t) FROM unnest("
+                        f"string_to_array(trim(both '{{}}' from "
+                        f"COALESCE(mc.store_tags,'')), ',')) AS t)) ")
 
             def _story_clause(realm):
                 if story not in ("normal", "trend"):
@@ -6001,13 +6003,24 @@ elif page == "تحليل المستخدمين":
                 return (f" AND EXISTS (SELECT 1 FROM story_views sv "
                         f"WHERE {key} AND {flag}) ")
 
+            def _trend_clause(realm):
+                # من trend_overrides (window_kind = daily/weekly) — القائمة المخزّنة
+                if trend not in ("daily", "weekly"):
+                    return ""
+                uid, src = _realm_src(realm)
+                return (f" AND EXISTS (SELECT 1 FROM action_logs alt "
+                        f"JOIN trend_overrides tov ON tov.store_id = alt.store_id "
+                        f"WHERE alt.user_id = {uid} AND alt.source IN {src} "
+                        f"AND alt.store_id IS NOT NULL "
+                        f"AND tov.window_kind = '{trend}') ")
+
             # المكتمل (المربوط) نملأ اسمه/إيميله/جواله من حساب الموقع المرتبط
             tg_sql = f"""
                 SELECT 'tg' AS realm, bu.telegram_id::text AS person_id,
                        bu.username AS handle,
                        COALESCE(w3.display_name, bu.name_en) AS name,
                        w3.email AS email, w3.phone_number AS phone,
-                       w3.gender AS gender,
+                       w3.gender AS gender, bu.lang AS lang,
                        EXTRACT(YEAR FROM AGE(w3.birth_date))::int AS age,
                        w3.birth_date AS birth_date, cty.city AS city,
                        bu.last_seen, {tg_complete} AS is_complete,
@@ -6015,7 +6028,16 @@ elif page == "تحليل المستخدمين":
                         FROM action_logs s
                         WHERE s.user_id = bu.telegram_id
                           AND s.source IN ('bot','telegram_miniapp')
-                          AND s.store_id IS NOT NULL) AS stores
+                          AND s.store_id IS NOT NULL) AS stores,
+                       (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = bu.telegram_id
+                          AND ac.source IN ('bot','telegram_miniapp') AND ac.action_type='copy_coupon') AS n_copy,
+                       (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = bu.telegram_id
+                          AND ac.source IN ('bot','telegram_miniapp') AND ac.action_type='click_link') AS n_click,
+                       (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = bu.telegram_id
+                          AND ac.source IN ('bot','telegram_miniapp') AND ac.action_type='search') AS n_search,
+                       (SELECT COUNT(*) FROM story_views sv WHERE sv.tg_user_id = bu.telegram_id) AS n_story,
+                       (SELECT COUNT(*) FROM user_favorites uf WHERE uf.telegram_id = bu.telegram_id AND uf.kind='store') AS n_fav_store,
+                       (SELECT COUNT(*) FROM user_favorites uf WHERE uf.telegram_id = bu.telegram_id AND uf.kind='category') AS n_fav_cat
                 FROM bot_users bu
                 LEFT JOIN LATERAL (
                     SELECT id, display_name, email, phone_number, gender, birth_date
@@ -6033,18 +6055,28 @@ elif page == "تحليل المستخدمين":
                     ORDER BY al.action_time DESC LIMIT 1
                 ) cty ON TRUE
                 WHERE bu.deleted_at IS NULL
-                  {_stat('bu')} {_compl(tg_complete)} {_lang('bu')} {_gender('tg')} {_age('tg')} {_city_clause()} {_storestat('tg')} {_store_clause('tg')} {_action_clause('tg')} {_fav_clause('tg','store',fav_store)} {_fav_clause('tg','category',fav_cat)} {_category_clause('tg')} {_story_clause('tg')}"""
+                  {_stat('bu')} {_compl(tg_complete)} {_lang('bu')} {_gender('tg')} {_age('tg')} {_city_clause()} {_storestat('tg')} {_store_clause('tg')} {_action_clause('tg')} {_fav_clause('tg','store',fav_store)} {_fav_clause('tg','category',fav_cat)} {_category_clause('tg')} {_story_clause('tg')} {_trend_clause('tg')}"""
             web_unlinked = f"""
                 SELECT 'web' AS realm, wu.id::text AS person_id,
                        wu.telegram_username AS handle, wu.display_name AS name,
                        wu.email, wu.phone_number AS phone, wu.gender AS gender,
+                       wu.lang AS lang,
                        EXTRACT(YEAR FROM AGE(wu.birth_date))::int AS age,
                        wu.birth_date AS birth_date, cty.city AS city,
                        wu.last_seen, {web_complete} AS is_complete,
                        (SELECT string_agg(DISTINCT s.store_id, ', ')
                         FROM action_logs s
                         WHERE s.user_id = wu.id AND s.source = 'web'
-                          AND s.store_id IS NOT NULL) AS stores
+                          AND s.store_id IS NOT NULL) AS stores,
+                       (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = wu.id
+                          AND ac.source='web' AND ac.action_type='copy_coupon') AS n_copy,
+                       (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = wu.id
+                          AND ac.source='web' AND ac.action_type='click_link') AS n_click,
+                       (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = wu.id
+                          AND ac.source='web' AND ac.action_type='search') AS n_search,
+                       (SELECT COUNT(*) FROM story_views sv WHERE sv.web_user_id = wu.id) AS n_story,
+                       (SELECT COUNT(*) FROM user_favorites uf WHERE uf.web_user_id = wu.id AND uf.kind='store') AS n_fav_store,
+                       (SELECT COUNT(*) FROM user_favorites uf WHERE uf.web_user_id = wu.id AND uf.kind='category') AS n_fav_cat
                 FROM web_users wu
                 LEFT JOIN LATERAL (
                     SELECT city FROM action_logs al
@@ -6055,18 +6087,28 @@ elif page == "تحليل المستخدمين":
                 ) cty ON TRUE
                 WHERE (wu.telegram_username IS NULL
                        OR LOWER(wu.telegram_username) NOT IN ({_BOT_HANDLES}))
-                  {_stat('wu')} {_compl(web_complete)} {_lang('wu')} {_gender('web')} {_age('web')} {_city_clause()} {_storestat('web')} {_store_clause('web')} {_action_clause('web')} {_fav_clause('web','store',fav_store)} {_fav_clause('web','category',fav_cat)} {_category_clause('web')} {_story_clause('web')}"""
+                  {_stat('wu')} {_compl(web_complete)} {_lang('wu')} {_gender('web')} {_age('web')} {_city_clause()} {_storestat('web')} {_store_clause('web')} {_action_clause('web')} {_fav_clause('web','store',fav_store)} {_fav_clause('web','category',fav_cat)} {_category_clause('web')} {_story_clause('web')} {_trend_clause('web')}"""
             web_all = f"""
                 SELECT 'web' AS realm, wu.id::text AS person_id,
                        wu.telegram_username AS handle, wu.display_name AS name,
                        wu.email, wu.phone_number AS phone, wu.gender AS gender,
+                       wu.lang AS lang,
                        EXTRACT(YEAR FROM AGE(wu.birth_date))::int AS age,
                        wu.birth_date AS birth_date, cty.city AS city,
                        wu.last_seen, {web_complete} AS is_complete,
                        (SELECT string_agg(DISTINCT s.store_id, ', ')
                         FROM action_logs s
                         WHERE s.user_id = wu.id AND s.source = 'web'
-                          AND s.store_id IS NOT NULL) AS stores
+                          AND s.store_id IS NOT NULL) AS stores,
+                       (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = wu.id
+                          AND ac.source='web' AND ac.action_type='copy_coupon') AS n_copy,
+                       (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = wu.id
+                          AND ac.source='web' AND ac.action_type='click_link') AS n_click,
+                       (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = wu.id
+                          AND ac.source='web' AND ac.action_type='search') AS n_search,
+                       (SELECT COUNT(*) FROM story_views sv WHERE sv.web_user_id = wu.id) AS n_story,
+                       (SELECT COUNT(*) FROM user_favorites uf WHERE uf.web_user_id = wu.id AND uf.kind='store') AS n_fav_store,
+                       (SELECT COUNT(*) FROM user_favorites uf WHERE uf.web_user_id = wu.id AND uf.kind='category') AS n_fav_cat
                 FROM web_users wu
                 LEFT JOIN LATERAL (
                     SELECT city FROM action_logs al
@@ -6075,7 +6117,7 @@ elif page == "تحليل المستخدمين":
                       AND al.is_proxy IS NOT TRUE AND al.is_datacenter IS NOT TRUE
                     ORDER BY al.action_time DESC LIMIT 1
                 ) cty ON TRUE
-                WHERE TRUE {_stat('wu')} {_compl(web_complete)} {_lang('wu')} {_gender('web')} {_age('web')} {_city_clause()} {_storestat('web')} {_store_clause('web')} {_action_clause('web')} {_fav_clause('web','store',fav_store)} {_fav_clause('web','category',fav_cat)} {_category_clause('web')} {_story_clause('web')}"""
+                WHERE TRUE {_stat('wu')} {_compl(web_complete)} {_lang('wu')} {_gender('web')} {_age('web')} {_city_clause()} {_storestat('web')} {_store_clause('web')} {_action_clause('web')} {_fav_clause('web','store',fav_store)} {_fav_clause('web','category',fav_cat)} {_category_clause('web')} {_story_clause('web')} {_trend_clause('web')}"""
             params = []
             if src is None:                       # الكل
                 sql = tg_sql + " UNION ALL " + web_unlinked
@@ -6106,7 +6148,7 @@ elif page == "تحليل المستخدمين":
                                     gen_lang, gen_gender, gen_age, gen_city,
                                     gen_store_status, gen_store, gen_action,
                                     gen_fav_store, gen_fav_cat, gen_category,
-                                    gen_story, _t_from, _t_to)
+                                    gen_story, gen_trend, _t_from, _t_to)
 
         st.markdown(f"### 👥 المستخدمون المطابقون: **{len(df_users)}**")
         if df_users.empty:
@@ -6119,16 +6161,22 @@ elif page == "تحليل المستخدمين":
                 {True: "✅ مكتمل", False: "⛔ ناقص"})
             _disp["الجنس"]  = _disp["gender"].map(
                 {"male": "♂️ ذكر", "female": "♀️ أنثى"}).fillna("—")
+            _disp["اللغة"]  = _disp["lang"].map(
+                {"ar": "🇸🇦 عربي", "en": "🇬🇧 إنجليزي"}).fillna("—")
             _disp["city"]   = _disp["city"].fillna("غير معروف")
             _disp = _disp.rename(columns={
                 "person_id": "المعرّف", "handle": "اليوزر",
                 "name": "الاسم", "email": "الإيميل",
                 "phone": "الجوال", "age": "العمر",
                 "birth_date": "تاريخ الميلاد", "city": "المدينة",
-                "stores": "المتاجر", "last_seen": "آخر ظهور",
+                "stores": "المتاجر", "n_copy": "نسخ", "n_click": "نقرات",
+                "n_search": "بحث", "n_story": "ستوري",
+                "n_fav_store": "مفضلة متاجر", "n_fav_cat": "مفضلة أقسام",
+                "last_seen": "آخر ظهور",
             })[["النوع", "الملف", "المعرّف", "اليوزر", "الاسم", "الإيميل",
-                "الجوال", "الجنس", "العمر", "تاريخ الميلاد", "المدينة",
-                "المتاجر", "آخر ظهور"]]
+                "الجوال", "الجنس", "اللغة", "العمر", "تاريخ الميلاد", "المدينة",
+                "المتاجر", "نسخ", "نقرات", "بحث", "ستوري",
+                "مفضلة متاجر", "مفضلة أقسام", "آخر ظهور"]]
             st.dataframe(_disp, use_container_width=True, hide_index=True)
 
     # ── القائمة الثانية: التحليل الفردي ─────────────────────────────────
