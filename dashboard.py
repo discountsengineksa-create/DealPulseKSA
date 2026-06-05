@@ -6554,7 +6554,7 @@ elif page == "تحليل المستخدمين":
         # الحالة: نشط = آخر ظهور < 20 يوم، خامل = ≥ 20 يوم (يتجدّد مع الدخول)
         # الاكتمال: مكتمل = مربوط بين الطرفين (web.telegram_username = bot.username)
         @st.cache_data(ttl=120)
-        def _gen_fetch_users(src, status, complete, t_from, t_to):
+        def _gen_fetch_users(src, status, complete, lang, t_from, t_to):
             _BOT_HANDLES = ("SELECT LOWER(username) FROM bot_users "
                             "WHERE username IS NOT NULL")
             # تعبير «مكتمل» لكل طرف (يُستخدم للعمود والفلتر)
@@ -6578,13 +6578,21 @@ elif page == "تحليل المستخدمين":
                     return f" AND NOT {expr} "
                 return ""
 
+            def _lang(alias):
+                if lang == "ar":
+                    return f" AND {alias}.lang = 'ar' "
+                if lang == "en":
+                    return f" AND {alias}.lang = 'en' "
+                return ""
+
             tg_sql = f"""
                 SELECT 'tg' AS realm, bu.telegram_id::text AS person_id,
                        bu.username AS handle, bu.name_en AS name,
                        NULL::text AS email, bu.last_seen,
                        {tg_complete} AS is_complete
                 FROM bot_users bu
-                WHERE bu.deleted_at IS NULL {_stat('bu')} {_compl(tg_complete)}"""
+                WHERE bu.deleted_at IS NULL
+                  {_stat('bu')} {_compl(tg_complete)} {_lang('bu')}"""
             web_unlinked = f"""
                 SELECT 'web' AS realm, wu.id::text AS person_id,
                        wu.telegram_username AS handle, wu.display_name AS name,
@@ -6593,14 +6601,14 @@ elif page == "تحليل المستخدمين":
                 FROM web_users wu
                 WHERE (wu.telegram_username IS NULL
                        OR LOWER(wu.telegram_username) NOT IN ({_BOT_HANDLES}))
-                  {_stat('wu')} {_compl(web_complete)}"""
+                  {_stat('wu')} {_compl(web_complete)} {_lang('wu')}"""
             web_all = f"""
                 SELECT 'web' AS realm, wu.id::text AS person_id,
                        wu.telegram_username AS handle, wu.display_name AS name,
                        wu.email, wu.last_seen,
                        {web_complete} AS is_complete
                 FROM web_users wu
-                WHERE TRUE {_stat('wu')} {_compl(web_complete)}"""
+                WHERE TRUE {_stat('wu')} {_compl(web_complete)} {_lang('wu')}"""
             params = []
             if src is None:                       # الكل
                 sql = tg_sql + " UNION ALL " + web_unlinked
@@ -6628,7 +6636,7 @@ elif page == "تحليل المستخدمين":
         _t_to   = (pd.Timestamp(gen_date_to) + pd.Timedelta(days=1)
                    ).strftime("%Y-%m-%d 00:00:00")
         df_users = _gen_fetch_users(gen_src, gen_status, gen_complete,
-                                    _t_from, _t_to)
+                                    gen_lang, _t_from, _t_to)
 
         st.markdown(f"### 👥 المستخدمون المطابقون: **{len(df_users)}**")
         if df_users.empty:

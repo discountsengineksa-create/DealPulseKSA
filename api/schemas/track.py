@@ -29,6 +29,25 @@ class TrackResponse(BaseModel):
     source: str
 
 
+class SetLangRequest(BaseModel):
+    """تحديث لغة المستخدم المفضّلة (آخر اختيار) — مصدر الحقيقة لإرسال
+    المنشورات/الإيميلات بلغته. لا فحص دوري؛ نعتمد آخر قيمة دائماً.
+
+    web                 → user_id (web_users.id) → web_users.lang
+    telegram_miniapp/bot → tg_user_id (telegram_id) → bot_users.lang
+    """
+    lang:       Literal["ar", "en"]
+    source:     Literal["web", "telegram_miniapp", "bot"] = "web"
+    user_id:    Optional[int] = Field(None, ge=0, description="web_users.id (للموقع)")
+    tg_user_id: Optional[int] = Field(None, ge=0, description="telegram_id (للبوت/الميني)")
+
+
+class SetLangResponse(BaseModel):
+    ok: bool
+    lang: str
+    source: str
+
+
 class CategoryViewRequest(BaseModel):
     """تسجيل اهتمام صريح بقسم (view_tag) — بلا متجر.
 

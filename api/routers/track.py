@@ -11,6 +11,7 @@ from api.schemas.track import (
     CodeRequestRequest, CodeRequestResponse,
     ReportCodeRequest, ReportCodeResponse,
     StoryViewRequest, StoryViewResponse,
+    SetLangRequest, SetLangResponse,
 )
 from api.utils.geo_extractor import extract as extract_geo
 from api.utils.fraud_scoring import compute_quality_score
@@ -408,3 +409,37 @@ def log_story_view(payload: StoryViewRequest, request: Request, conn=Depends(get
         )
 
     return StoryViewResponse(ok=True, view_id=payload.view_id)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# حفظ لغة المستخدم المفضّلة (آخر اختيار) — مصدر الحقيقة لإرسال المنشورات بلغته
+# ════════════════════════════════════════════════════════════════════════════
+@router.post("/set-lang", response_model=SetLangResponse, status_code=200)
+@limiter.limit("20/minute")
+def set_lang(payload: SetLangRequest, request: Request, conn=Depends(get_db)):
+    """يحدّث اللغة المعتمدة:
+      - web                  → web_users.lang  (WHERE id = user_id)
+      - telegram_miniapp/bot → bot_users.lang  (WHERE telegram_id = tg_user_id)
+
+    البوت يعرض اختيار اللغة مرة واحدة فقط، فالميني-ويب هو مكان تغييرها لاحقاً
+    لمستخدم تيليجرام (نفس الشخص، نفس صف bot_users).
+    """
+    if payload.source == "web":
+        if not payload.user_id:
+            raise HTTPException(400, "user_id is required for source='web'")
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE web_users SET lang = %s WHERE id = %s",
+                (payload.lang, payload.user_id),
+            )
+    else:  # telegram_miniapp / bot
+        if not payload.tg_user_id:
+            raise HTTPException(
+                400, f"tg_user_id is required for source='{payload.source}'")
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE bot_users SET lang = %s WHERE telegram_id = %s",
+                (payload.lang, payload.tg_user_id),
+            )
+
+    return SetLangResponse(ok=True, lang=payload.lang, source=payload.source)
