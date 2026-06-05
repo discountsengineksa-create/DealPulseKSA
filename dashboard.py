@@ -3279,6 +3279,8 @@ elif page == "تحليل المتاجر":
                      "expired": "🗄️ منتهي"}
     _SM_TREND_AR = {"none": "لا شيء", "all": "الكل",
                      "daily": "🌞 يومي", "weekly": "📅 أسبوعي"}
+    _SM_FAV_AR   = {"none": "لا شيء", "all": "الكل",
+                     "yes": "❤️ مفضل", "no": "🤍 غير مفضل"}
     _SM_ACT_AR   = {"none": "لا شيء", "all": "الكل",
                      "click_link": "🖱️ نقر", "search": "🔍 بحث",
                      "copy_coupon": "🎟️ نسخ"}
@@ -3411,6 +3413,15 @@ elif page == "تحليل المتاجر":
 
         st.divider()
 
+        # ─── فلتر المفضلة (يُطبَّق على صفوف الجدول لاحقاً) ────────
+        _fav_lbl = st.segmented_control(
+            "❤️ المفضلة", list(_SM_FAV_AR.values()),
+            default="الكل", key="sm_fav_pill")
+        _fav_key = next((k for k, v in _SM_FAV_AR.items()
+                          if v == _fav_lbl), "all")
+
+        st.divider()
+
         # ─── اختيار المتجر (يعتمد على الفلاتر السابقة) ──────────
         _store_pool = sorted(master["store_id"].dropna().unique().tolist())
         if not _store_pool:
@@ -3516,10 +3527,11 @@ elif page == "تحليل المتاجر":
         st.caption(
             f"📅 {sm_date_from} ← {sm_date_to} · "
             f"المصدر: {_src_lbl} · حالة: {_stat_lbl} · "
-            f"ترند: {_tr_lbl} · متجر: {_store_pick} · "
-            f"حركات: **{len(df_logs):,}** · "
-            f"بحث (مع متجر): **{len(df_search):,}** · "
-            f"مفضلة: **{len(df_fav):,}**")
+            f"ترند: {_tr_lbl} · مفضلة: {_fav_lbl} · "
+            f"حركات: {_act_lbl} · متجر: {_store_pick} · "
+            f"السطور: حركات **{len(df_logs):,}** · "
+            f"بحث **{len(df_search):,}** · "
+            f"مفضلة **{len(df_fav):,}**")
 
         # ─── helpers للهوية والبيانات الشخصية ──────────────────
         def _clean(v):
@@ -3577,6 +3589,7 @@ elif page == "تحليل المتاجر":
                      .agg(copy=("copy", "sum"),
                           click=("click", "sum"),
                           srch=("srch", "sum"),
+                          first_action=("action_time", "min"),
                           last_action=("action_time", "max"),
                           src_any=("source", lambda s: "، ".join(sorted(set(
                               _SM_CHAN_AR.get(x, x) for x in s)))))
@@ -3618,6 +3631,7 @@ elif page == "تحليل المتاجر":
                     "copy":        [0] * len(miss),
                     "click":       [0] * len(miss),
                     "srch":        [0] * len(miss),
+                    "first_action": miss["created_at"].values,
                     "last_action": miss["created_at"].values,
                     "src_any":     miss["platform"].map(_plat_ar)
                                        .fillna(miss["platform"]).values,
@@ -3663,12 +3677,21 @@ elif page == "تحليل المتاجر":
                     for uid in agg["user_id"]
                 ]
 
+            # تطبيق فلتر المفضلة pill
+            if _fav_key == "yes":
+                agg = agg[agg["مفضل"] == "✅ نعم"]
+            elif _fav_key == "no":
+                agg = agg[agg["مفضل"] != "✅ نعم"]
+
             agg["الاسم"]    = agg.apply(_name, axis=1)
             agg["الإيميل"]  = agg.apply(_email, axis=1)
             agg["الجوال"]   = agg.apply(_phone, axis=1)
             agg["تيليجرام"] = agg.apply(_tg, axis=1)
             agg["المدينة"]  = agg.apply(_city, axis=1)
-            agg["آخر تفاعل"] = pd.to_datetime(
+            agg["تاريخ أول حركة"] = pd.to_datetime(
+                agg["first_action"], errors="coerce").dt.strftime(
+                    "%Y-%m-%d %H:%M")
+            agg["تاريخ آخر حركة"] = pd.to_datetime(
                 agg["last_action"], errors="coerce").dt.strftime(
                     "%Y-%m-%d %H:%M")
             agg = agg.rename(columns={"src_any": "المصدر",
@@ -3682,7 +3705,7 @@ elif page == "تحليل المتاجر":
             if _store_pick == "الكل":
                 _cols.append("المتجر")
             _cols += ["نسخ", "نقر", "بحث", "إجمالي الحركات",
-                       "مفضل", "آخر تفاعل"]
+                       "مفضل", "تاريخ أول حركة", "تاريخ آخر حركة"]
             agg = agg.sort_values("إجمالي الحركات", ascending=False)
             st.dataframe(agg[_cols], hide_index=True, width='stretch')
             st.caption(f"📋 {len(agg)} صف.")
