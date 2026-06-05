@@ -18,6 +18,7 @@ from api.utils.fraud_scoring import compute_quality_score
 from api.utils.event_publisher import publish_event
 from api.utils.code_reports import record_code_report
 from api.utils.rate_limit import LIMIT_TRACK, limiter
+from api.utils.trend_snapshot import compute_trending_store_ids
 
 # حدود مخصّصة لقنوات تسجيل خفيفة (search/request-code) — أقل من /track العام
 # لمنع إغراق direct_search و unavailable_codes_requests من سكربتات.
@@ -387,22 +388,27 @@ def log_story_view(payload: StoryViewRequest, request: Request, conn=Depends(get
 
     geo = extract_geo(request)
     with conn.cursor() as cur:
-        # نجمع التحقق من وجود المتجر + snapshot للترند والمروّجة في استعلام
-        # واحد. BOOL_OR للتعامل مع master.store_id غير الفريد (راجع CLAUDE.md).
+        # was_promoted: snapshot لـ master.is_promoted لحظة الفتح.
+        # BOOL_OR + COALESCE للتعامل مع master.store_id غير الفريد.
         cur.execute(
             """
-            SELECT BOOL_OR(COALESCE(is_promoted, FALSE))            AS was_promoted,
-                   BOOL_OR(COALESCE(is_trending, '') = 'ترند 🔥')   AS was_trending
+            SELECT BOOL_OR(COALESCE(is_promoted, FALSE)) AS was_promoted
               FROM master
              WHERE store_id = %s
             """,
             (payload.store_id,),
         )
-        snap = cur.fetchone()
-        if snap is None or snap[0] is None:
-            # BOOL_OR على مجموعة فارغة يُرجع NULL — يعني ما في متجر بهذا الـ id
+        row = cur.fetchone()
+        if row is None or row[0] is None:
+            # BOOL_OR على مجموعة فارغة يُرجع NULL → ما في متجر بهذا الـ id
             raise HTTPException(404, f"store '{payload.store_id}' not found")
-        was_promoted, was_trending = bool(snap[0]), bool(snap[1])
+        was_promoted = bool(row[0])
+
+        # was_trending: snapshot لما يراه العميل فعلاً في الستوري =
+        # نفس signal الـ miniapp (DAILY_TREND_IDS ∪ WEEKLY_TREND_IDS) المحسوب من
+        # خوارزمية compute_trend + trend_overrides — لا master.is_trending.
+        trending_ids = compute_trending_store_ids(conn)
+        was_trending = payload.store_id in trending_ids
 
         cur.execute(
             """

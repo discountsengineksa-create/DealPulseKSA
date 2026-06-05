@@ -4514,8 +4514,10 @@ elif page == "🎬 تحليلات الستوري":
     st.header("🎬 تحليلات الستوري")
     st.caption(
         "سجل مسار العميل من داخل الستوري فقط — لو خرج من الستوري وراح للمتجر بطريق ثاني، "
-        "الحركات ما تتحسب هنا. تصنيف «ترند/عادي» يعتمد على snapshot لحظة فتح الستوري "
-        "(was_trending) لا على الحالة الحالية للمتجر."
+        "الحركات ما تتحسب هنا. تصنيف «ترند/عادي» = snapshot لحظة الفتح من خوارزمية "
+        "‎/api/v1/trend (يومي ∪ أسبوعي) — مطابق للحلقة البرتقالية اللي شافها العميل. "
+        "السجلات قبل migration 034 تظهر «— غير معروف» لأن البيانات التاريخية مفقودة "
+        "(ما نخترع تصنيف)."
     )
 
     # ─── شريط الفلاتر: المصدر (segmented_control) + زر تحديث ─────────
@@ -4573,9 +4575,10 @@ elif page == "🎬 تحليلات الستوري":
     _sv_t_to   = (pd.Timestamp(sv_date_to) + pd.Timedelta(days=1)).strftime("%Y-%m-%d 00:00:00")
 
     # ─── بنّاء WHERE لـ story_views ──────────────────────────────────
-    # الترند يعتمد على snapshot وقت الفتح (migration 034): sv.was_trending.
-    # السجلات القديمة قبل الـ migration لها was_trending = NULL — نسقط احتياطياً
-    # على master.is_trending فيها (proxy، يُذكر في caption).
+    # was_trending هو snapshot دقيق محفوظ لحظة الـ INSERT في track.py،
+    # محسوب من compute_trending_store_ids (يطابق /api/v1/trend الحي).
+    # ما نقدر نخترع تصنيف للسجلات القديمة (NULL)؛ فلتر «ترند» و «عادي»
+    # يستثنيها، فلتر «الكل» يضمّها.
     def _sv_build_where(alias="sv"):
         parts  = [f"{alias}.viewed_at >= %s", f"{alias}.viewed_at < %s"]
         params = [_sv_t_from, _sv_t_to]
@@ -4583,19 +4586,9 @@ elif page == "🎬 تحليلات الستوري":
             parts.append(f"{alias}.source = %s")
             params.append(sv_source_filter)
         if sv_trend_filter == "trend":
-            parts.append(
-                f"(COALESCE({alias}.was_trending, "
-                f"  EXISTS (SELECT 1 FROM master m WHERE m.store_id = {alias}.store_id "
-                f"          AND m.is_trending = 'ترند 🔥'))"
-                f" = TRUE)"
-            )
+            parts.append(f"{alias}.was_trending IS TRUE")
         elif sv_trend_filter == "normal":
-            parts.append(
-                f"(COALESCE({alias}.was_trending, "
-                f"  EXISTS (SELECT 1 FROM master m WHERE m.store_id = {alias}.store_id "
-                f"          AND m.is_trending = 'ترند 🔥'))"
-                f" = FALSE)"
-            )
+            parts.append(f"{alias}.was_trending IS FALSE")
         return "WHERE " + " AND ".join(parts), params
 
     try:
@@ -4611,24 +4604,22 @@ elif page == "🎬 تحليلات الستوري":
             WITH sv_f AS (
               SELECT sv.view_id, sv.store_id, sv.source,
                      sv.web_user_id, sv.tg_user_id, sv.viewed_at,
-                     -- snapshot الترند لحظة الفتح؛ NULL = صف قديم قبل migration 034،
-                     -- نسقط على master.is_trending الحالي كاحتياط.
-                     COALESCE(sv.was_trending,
-                              EXISTS (SELECT 1 FROM master m
-                                       WHERE m.store_id = sv.store_id
-                                         AND m.is_trending = 'ترند 🔥')) AS was_trending_eff
+                     -- was_trending: TRUE/FALSE = snapshot موثوق وقت الفتح،
+                     -- NULL = صف قبل migration 034 (لا تصنيف تاريخي).
+                     sv.was_trending
               FROM story_views sv
               {sv_where}
             ),
             agg AS (
               SELECT
                 web_user_id, tg_user_id, store_id,
-                MIN(source)                  AS source,
-                COUNT(*)                     AS views,
-                BOOL_OR(was_trending_eff)    AS any_trending,
-                MIN(viewed_at)               AS first_view,
-                MAX(viewed_at)               AS last_view,
-                ARRAY_AGG(view_id)           AS view_ids
+                MIN(source)                              AS source,
+                COUNT(*)                                 AS views,
+                BOOL_OR(was_trending IS TRUE)            AS any_trending,
+                BOOL_OR(was_trending IS NULL)            AS has_unknown,
+                MIN(viewed_at)                           AS first_view,
+                MAX(viewed_at)                           AS last_view,
+                ARRAY_AGG(view_id)                       AS view_ids
               FROM sv_f
               GROUP BY web_user_id, tg_user_id, store_id
             ),
@@ -4652,7 +4643,11 @@ elif page == "🎬 تحليلات الستوري":
               COALESCE(wu.email, '—')                                     AS الإيميل,
               COALESCE(wu.phone_number, '—')                              AS الجوال,
               agg.store_id                                                AS المتجر,
-              CASE WHEN agg.any_trending THEN '🔥 ترند' ELSE '🎬 عادي' END AS حالة_الستوري,
+              CASE
+                WHEN agg.any_trending             THEN '🔥 ترند'
+                WHEN agg.has_unknown              THEN '— غير معروف'
+                ELSE '🎬 عادي'
+              END                                                         AS حالة_الستوري,
               agg.views                                                   AS مرات_المشاهدة,
               CASE WHEN COALESCE(acts.clicks, 0) > 0 THEN '✅ نعم' ELSE '❌ لا' END
                                                                           AS دخل_المتجر,
