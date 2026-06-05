@@ -8416,12 +8416,17 @@ elif page == "تحليل المستخدمين":
                                          "city","gender_ar","age","age_bucket","joined","last_seen"]].copy()
                         show["joined"]    = pd.to_datetime(show["joined"],    errors="coerce").dt.strftime("%Y-%m-%d")
                         show["last_seen"] = pd.to_datetime(show["last_seen"], errors="coerce").dt.strftime("%Y-%m-%d")
+                        # age نوعه Int64 (nullable) — نحوّله لـ string لتعبئة "—" بدون TypeError
+                        show["age"] = show["age"].astype("string")
                         show = show.rename(columns={
                             "id":"ID","name":"الاسم","email":"الإيميل","phone":"الجوال",
                             "city":"المدينة","gender_ar":"الجنس","age":"العمر",
                             "age_bucket":"الفئة_العمرية",
                             "joined":"الانضمام","last_seen":"آخر_ظهور",
-                        }).fillna("—")
+                        })
+                        # تعبئة آمنة لكل عمود حسب نوعه (نمنع TypeError على Int64)
+                        for _col in show.columns:
+                            show[_col] = show[_col].astype("string").fillna("—").replace("<NA>", "—")
                         st.dataframe(show, use_container_width=True, hide_index=True, height=320)
                         st.download_button(
                             f"📥 CSV — {label}",
