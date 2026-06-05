@@ -6775,9 +6775,9 @@ elif page == "تحليل المستخدمين":
                 else:
                     st.caption("لا هوية معروفة لربط الطلبات.")
 
-                # ─── خط الأيام النشطة + آخر 50 حركة ──────────────
+                # ─── خط الأيام النشطة + كل الحركات في النطاق ──────────────
                 st.divider()
-                st.markdown("### 📜 خط الأيام النشطة + آخر 50 حركة")
+                st.markdown("### 📜 خط الأيام النشطة + كل حركات العميل في النطاق المحدّد")
 
                 df_tl = pd.read_sql(f"""
                     SELECT DATE(action_time) AS d, COUNT(*) AS c
@@ -6790,6 +6790,7 @@ elif page == "تحليل المستخدمين":
                                     title="الأيام التي دخل فيها (تكرار الحركات لكل يوم)")
                     st.plotly_chart(apply_brand_theme(fig_tl), use_container_width=True)
 
+                # كل حركات العميل في النطاق المحدّد (لا LIMIT — التاريخ هو الفلتر)
                 df_recent = pd.read_sql(f"""
                     SELECT
                       TO_CHAR(a.action_time,'YYYY-MM-DD HH24:MI:SS') AS الوقت,
@@ -6799,19 +6800,31 @@ elif page == "تحليل المستخدمين":
                       COALESCE(a.city,'') AS المدينة,
                       COALESCE(a.details,'') AS التفاصيل
                     FROM action_logs a
-                    WHERE {where_acts}
+                    WHERE ({where_acts})
+                      AND a.action_time >= %s AND a.action_time < %s
                     ORDER BY a.action_time DESC
-                    LIMIT 50
-                """, conn)
+                """, conn, params=(_t_from, _t_to))
                 if df_recent.empty:
-                    st.info("لا حركات بعد.")
+                    st.info(f"📭 لا حركات لهذا العميل في النطاق {date_from} → {date_to}.")
                 else:
                     df_recent["المصدر"] = df_recent["source"].map(_SRC_LABEL).fillna(df_recent["source"])
                     # ترجمة الحركة إلى العربي عبر القاموس الموحّد
                     df_recent["الحركة"] = df_recent["الحركة"].map(_ACTION_AR).fillna(df_recent["الحركة"])
                     df_recent = df_recent.drop(columns=["source"])
                     df_recent = df_recent[["الوقت","الحركة","المصدر","المتجر","المدينة","التفاصيل"]]
-                    st.dataframe(df_recent, use_container_width=True, hide_index=True, height=380)
+                    st.caption(
+                        f"📊 إجمالي الحركات في النطاق: **{len(df_recent):,}** "
+                        f"({date_from.strftime('%Y-%m-%d')} → {date_to.strftime('%Y-%m-%d')}) — "
+                        "اضبط نطاق التاريخ من فوق الصفحة لتغيير الحدود."
+                    )
+                    st.dataframe(df_recent, use_container_width=True, hide_index=True, height=520)
+                    # CSV مستقل لجميع الحركات
+                    st.download_button(
+                        "📥 CSV — كل حركات العميل في النطاق",
+                        df_recent.to_csv(index=False).encode("utf-8-sig"),
+                        f"actions_{name}_{date.today()}.csv", "text/csv",
+                        key=f"ua_dl_actions_full_{wu_id or bu_tg}",
+                    )
 
                 # ════════════════════════════════════════════════════════════
                 # 📜 السجل التفصيلي الكامل — كل حدث في سطر بالتاريخ والوقت
@@ -7103,7 +7116,7 @@ elif page == "تحليل المستخدمين":
                     pd.DataFrame([identity_rows]).T.to_excel(w, sheet_name="الهوية", header=["القيمة"])
                     if not df_stores.empty:  df_stores.to_excel(w, sheet_name="المتاجر", index=False)
                     if not df_stories.empty: df_stories.to_excel(w, sheet_name="الستوري", index=False)
-                    if not df_recent.empty:  df_recent.to_excel(w, sheet_name="آخر_50_حركة", index=False)
+                    if not df_recent.empty:  df_recent.to_excel(w, sheet_name="كل_الحركات", index=False)
                     # ── أوراق السجل التفصيلي (Migration 029 + V2) ──
                     for sheet_name, df_sheet in _ev_xlsx_sheets.items():
                         try:
