@@ -6554,7 +6554,8 @@ elif page == "تحليل المستخدمين":
         # الحالة: نشط = آخر ظهور < 20 يوم، خامل = ≥ 20 يوم (يتجدّد مع الدخول)
         # الاكتمال: مكتمل = مربوط بين الطرفين (web.telegram_username = bot.username)
         @st.cache_data(ttl=120)
-        def _gen_fetch_users(src, status, complete, lang, gender, age, city, t_from, t_to):
+        def _gen_fetch_users(src, status, complete, lang, gender, age, city,
+                             store_status, t_from, t_to):
             _BOT_HANDLES = ("SELECT LOWER(username) FROM bot_users "
                             "WHERE username IS NOT NULL")
             # tg مكتمل = مربوط بحساب موقع (نجلب بياناته عبر LEFT JOIN LATERAL أدناه)
@@ -6614,6 +6615,23 @@ elif page == "تحليل المستخدمين":
                 safe = city.replace("'", "''")
                 return f" AND cty.city = '{safe}' "
 
+            def _storestat(realm):
+                # الأشخاص اللي تعاملوا مع متجر بهذه الحالة (master.last_time)
+                if store_status not in ("active", "expired", "expiring"):
+                    return ""
+                uid = "bu.telegram_id" if realm == "tg" else "wu.id"
+                src = ("('bot','telegram_miniapp')" if realm == "tg"
+                       else "('web')")
+                cond = {
+                    "active":   "m.last_time > CURRENT_DATE + 3",
+                    "expiring": "m.last_time BETWEEN CURRENT_DATE AND CURRENT_DATE + 3",
+                    "expired":  "m.last_time < CURRENT_DATE",
+                }[store_status]
+                return (" AND EXISTS (SELECT 1 FROM action_logs al2 "
+                        "JOIN master m ON m.store_id = al2.store_id "
+                        f"WHERE al2.user_id = {uid} AND al2.source IN {src} "
+                        f"AND al2.store_id IS NOT NULL AND {cond}) ")
+
             # المكتمل (المربوط) نملأ اسمه/إيميله/جواله من حساب الموقع المرتبط
             tg_sql = f"""
                 SELECT 'tg' AS realm, bu.telegram_id::text AS person_id,
@@ -6641,7 +6659,7 @@ elif page == "تحليل المستخدمين":
                     ORDER BY al.action_time DESC LIMIT 1
                 ) cty ON TRUE
                 WHERE bu.deleted_at IS NULL
-                  {_stat('bu')} {_compl(tg_complete)} {_lang('bu')} {_gender('tg')} {_age('tg')} {_city_clause()}"""
+                  {_stat('bu')} {_compl(tg_complete)} {_lang('bu')} {_gender('tg')} {_age('tg')} {_city_clause()} {_storestat('tg')}"""
             web_unlinked = f"""
                 SELECT 'web' AS realm, wu.id::text AS person_id,
                        wu.telegram_username AS handle, wu.display_name AS name,
@@ -6659,7 +6677,7 @@ elif page == "تحليل المستخدمين":
                 ) cty ON TRUE
                 WHERE (wu.telegram_username IS NULL
                        OR LOWER(wu.telegram_username) NOT IN ({_BOT_HANDLES}))
-                  {_stat('wu')} {_compl(web_complete)} {_lang('wu')} {_gender('web')} {_age('web')} {_city_clause()}"""
+                  {_stat('wu')} {_compl(web_complete)} {_lang('wu')} {_gender('web')} {_age('web')} {_city_clause()} {_storestat('web')}"""
             web_all = f"""
                 SELECT 'web' AS realm, wu.id::text AS person_id,
                        wu.telegram_username AS handle, wu.display_name AS name,
@@ -6675,7 +6693,7 @@ elif page == "تحليل المستخدمين":
                       AND al.is_proxy IS NOT TRUE AND al.is_datacenter IS NOT TRUE
                     ORDER BY al.action_time DESC LIMIT 1
                 ) cty ON TRUE
-                WHERE TRUE {_stat('wu')} {_compl(web_complete)} {_lang('wu')} {_gender('web')} {_age('web')} {_city_clause()}"""
+                WHERE TRUE {_stat('wu')} {_compl(web_complete)} {_lang('wu')} {_gender('web')} {_age('web')} {_city_clause()} {_storestat('web')}"""
             params = []
             if src is None:                       # الكل
                 sql = tg_sql + " UNION ALL " + web_unlinked
@@ -6704,7 +6722,7 @@ elif page == "تحليل المستخدمين":
                    ).strftime("%Y-%m-%d 00:00:00")
         df_users = _gen_fetch_users(gen_src, gen_status, gen_complete,
                                     gen_lang, gen_gender, gen_age, gen_city,
-                                    _t_from, _t_to)
+                                    gen_store_status, _t_from, _t_to)
 
         st.markdown(f"### 👥 المستخدمون المطابقون: **{len(df_users)}**")
         if df_users.empty:
