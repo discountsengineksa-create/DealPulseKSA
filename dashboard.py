@@ -5868,7 +5868,8 @@ elif page == "تحليل المستخدمين":
         # الاكتمال: مكتمل = مربوط بين الطرفين (web.telegram_username = bot.username)
         @st.cache_data(ttl=120)
         def _gen_fetch_users(src, status, complete, lang, gender, age, city,
-                             store_status, store, t_from, t_to):
+                             store_status, store, action, fav_store, fav_cat,
+                             category, story, t_from, t_to):
             _BOT_HANDLES = ("SELECT LOWER(username) FROM bot_users "
                             "WHERE username IS NOT NULL")
             # tg مكتمل = مربوط بحساب موقع (نجلب بياناته عبر LEFT JOIN LATERAL أدناه)
@@ -5957,6 +5958,49 @@ elif page == "تحليل المستخدمين":
                         f"WHERE al3.user_id = {uid} AND al3.source IN {src} "
                         f"AND al3.store_id = '{safe}') ")
 
+            def _realm_src(realm):
+                return ("bu.telegram_id", "('bot','telegram_miniapp')") if realm == "tg" \
+                    else ("wu.id", "('web')")
+
+            def _action_clause(realm):
+                if action not in ("copy_coupon", "click_link", "search"):
+                    return ""
+                uid, src = _realm_src(realm)
+                return (f" AND EXISTS (SELECT 1 FROM action_logs ala "
+                        f"WHERE ala.user_id = {uid} AND ala.source IN {src} "
+                        f"AND ala.action_type = '{action}') ")
+
+            def _fav_clause(realm, kind, val):
+                # val: has / not / (none|all = بلا فلتر)
+                if val not in ("has", "not"):
+                    return ""
+                key = ("uf.telegram_id = bu.telegram_id" if realm == "tg"
+                       else "uf.web_user_id = wu.id")
+                ex = (f"EXISTS (SELECT 1 FROM user_favorites uf "
+                      f"WHERE {key} AND uf.kind = '{kind}')")
+                return f" AND {ex} " if val == "has" else f" AND NOT {ex} "
+
+            def _category_clause(realm):
+                if not category:
+                    return ""
+                uid, src = _realm_src(realm)
+                safe = category.replace("'", "''")
+                return (f" AND EXISTS (SELECT 1 FROM action_logs alc "
+                        f"JOIN master mc ON mc.store_id = alc.store_id "
+                        f"WHERE alc.user_id = {uid} AND alc.source IN {src} "
+                        f"AND alc.store_id IS NOT NULL "
+                        f"AND mc.store_tags ILIKE '%{safe}%') ")
+
+            def _story_clause(realm):
+                if story not in ("normal", "trend"):
+                    return ""
+                key = ("sv.tg_user_id = bu.telegram_id" if realm == "tg"
+                       else "sv.web_user_id = wu.id")
+                flag = ("sv.was_trending = TRUE" if story == "trend"
+                        else "sv.was_trending IS NOT TRUE")
+                return (f" AND EXISTS (SELECT 1 FROM story_views sv "
+                        f"WHERE {key} AND {flag}) ")
+
             # المكتمل (المربوط) نملأ اسمه/إيميله/جواله من حساب الموقع المرتبط
             tg_sql = f"""
                 SELECT 'tg' AS realm, bu.telegram_id::text AS person_id,
@@ -5966,7 +6010,12 @@ elif page == "تحليل المستخدمين":
                        w3.gender AS gender,
                        EXTRACT(YEAR FROM AGE(w3.birth_date))::int AS age,
                        w3.birth_date AS birth_date, cty.city AS city,
-                       bu.last_seen, {tg_complete} AS is_complete
+                       bu.last_seen, {tg_complete} AS is_complete,
+                       (SELECT string_agg(DISTINCT s.store_id, ', ')
+                        FROM action_logs s
+                        WHERE s.user_id = bu.telegram_id
+                          AND s.source IN ('bot','telegram_miniapp')
+                          AND s.store_id IS NOT NULL) AS stores
                 FROM bot_users bu
                 LEFT JOIN LATERAL (
                     SELECT id, display_name, email, phone_number, gender, birth_date
@@ -5984,14 +6033,18 @@ elif page == "تحليل المستخدمين":
                     ORDER BY al.action_time DESC LIMIT 1
                 ) cty ON TRUE
                 WHERE bu.deleted_at IS NULL
-                  {_stat('bu')} {_compl(tg_complete)} {_lang('bu')} {_gender('tg')} {_age('tg')} {_city_clause()} {_storestat('tg')} {_store_clause('tg')}"""
+                  {_stat('bu')} {_compl(tg_complete)} {_lang('bu')} {_gender('tg')} {_age('tg')} {_city_clause()} {_storestat('tg')} {_store_clause('tg')} {_action_clause('tg')} {_fav_clause('tg','store',fav_store)} {_fav_clause('tg','category',fav_cat)} {_category_clause('tg')} {_story_clause('tg')}"""
             web_unlinked = f"""
                 SELECT 'web' AS realm, wu.id::text AS person_id,
                        wu.telegram_username AS handle, wu.display_name AS name,
                        wu.email, wu.phone_number AS phone, wu.gender AS gender,
                        EXTRACT(YEAR FROM AGE(wu.birth_date))::int AS age,
                        wu.birth_date AS birth_date, cty.city AS city,
-                       wu.last_seen, {web_complete} AS is_complete
+                       wu.last_seen, {web_complete} AS is_complete,
+                       (SELECT string_agg(DISTINCT s.store_id, ', ')
+                        FROM action_logs s
+                        WHERE s.user_id = wu.id AND s.source = 'web'
+                          AND s.store_id IS NOT NULL) AS stores
                 FROM web_users wu
                 LEFT JOIN LATERAL (
                     SELECT city FROM action_logs al
@@ -6002,14 +6055,18 @@ elif page == "تحليل المستخدمين":
                 ) cty ON TRUE
                 WHERE (wu.telegram_username IS NULL
                        OR LOWER(wu.telegram_username) NOT IN ({_BOT_HANDLES}))
-                  {_stat('wu')} {_compl(web_complete)} {_lang('wu')} {_gender('web')} {_age('web')} {_city_clause()} {_storestat('web')} {_store_clause('web')}"""
+                  {_stat('wu')} {_compl(web_complete)} {_lang('wu')} {_gender('web')} {_age('web')} {_city_clause()} {_storestat('web')} {_store_clause('web')} {_action_clause('web')} {_fav_clause('web','store',fav_store)} {_fav_clause('web','category',fav_cat)} {_category_clause('web')} {_story_clause('web')}"""
             web_all = f"""
                 SELECT 'web' AS realm, wu.id::text AS person_id,
                        wu.telegram_username AS handle, wu.display_name AS name,
                        wu.email, wu.phone_number AS phone, wu.gender AS gender,
                        EXTRACT(YEAR FROM AGE(wu.birth_date))::int AS age,
                        wu.birth_date AS birth_date, cty.city AS city,
-                       wu.last_seen, {web_complete} AS is_complete
+                       wu.last_seen, {web_complete} AS is_complete,
+                       (SELECT string_agg(DISTINCT s.store_id, ', ')
+                        FROM action_logs s
+                        WHERE s.user_id = wu.id AND s.source = 'web'
+                          AND s.store_id IS NOT NULL) AS stores
                 FROM web_users wu
                 LEFT JOIN LATERAL (
                     SELECT city FROM action_logs al
@@ -6018,7 +6075,7 @@ elif page == "تحليل المستخدمين":
                       AND al.is_proxy IS NOT TRUE AND al.is_datacenter IS NOT TRUE
                     ORDER BY al.action_time DESC LIMIT 1
                 ) cty ON TRUE
-                WHERE TRUE {_stat('wu')} {_compl(web_complete)} {_lang('wu')} {_gender('web')} {_age('web')} {_city_clause()} {_storestat('web')} {_store_clause('web')}"""
+                WHERE TRUE {_stat('wu')} {_compl(web_complete)} {_lang('wu')} {_gender('web')} {_age('web')} {_city_clause()} {_storestat('web')} {_store_clause('web')} {_action_clause('web')} {_fav_clause('web','store',fav_store)} {_fav_clause('web','category',fav_cat)} {_category_clause('web')} {_story_clause('web')}"""
             params = []
             if src is None:                       # الكل
                 sql = tg_sql + " UNION ALL " + web_unlinked
@@ -6047,7 +6104,9 @@ elif page == "تحليل المستخدمين":
                    ).strftime("%Y-%m-%d 00:00:00")
         df_users = _gen_fetch_users(gen_src, gen_status, gen_complete,
                                     gen_lang, gen_gender, gen_age, gen_city,
-                                    gen_store_status, gen_store, _t_from, _t_to)
+                                    gen_store_status, gen_store, gen_action,
+                                    gen_fav_store, gen_fav_cat, gen_category,
+                                    gen_story, _t_from, _t_to)
 
         st.markdown(f"### 👥 المستخدمون المطابقون: **{len(df_users)}**")
         if df_users.empty:
@@ -6066,10 +6125,10 @@ elif page == "تحليل المستخدمين":
                 "name": "الاسم", "email": "الإيميل",
                 "phone": "الجوال", "age": "العمر",
                 "birth_date": "تاريخ الميلاد", "city": "المدينة",
-                "last_seen": "آخر ظهور",
+                "stores": "المتاجر", "last_seen": "آخر ظهور",
             })[["النوع", "الملف", "المعرّف", "اليوزر", "الاسم", "الإيميل",
                 "الجوال", "الجنس", "العمر", "تاريخ الميلاد", "المدينة",
-                "آخر ظهور"]]
+                "المتاجر", "آخر ظهور"]]
             st.dataframe(_disp, use_container_width=True, hide_index=True)
 
     # ── القائمة الثانية: التحليل الفردي ─────────────────────────────────
