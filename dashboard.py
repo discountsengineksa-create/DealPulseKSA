@@ -5983,14 +5983,17 @@ elif page == "تحليل المستخدمين":
             def _category_clause(realm):
                 if not category:
                     return ""
-                # نية صريحة: ضغط القسم (view_tag, details='tag:<اسم>')
-                # لا وراثة لوسوم المتجر — يعدّ فقط القسم اللي اختاره الشخص بنفسه.
+                # القسم = نقره (view_tag) أو بحثه باسمه (direct_search) — لا وراثة وسوم
                 uid, src = _realm_src(realm)
+                plat = "('TelegramBot','Miniapp')" if realm == "tg" else "('Web')"
                 safe = category.replace("'", "''")
-                return (f" AND EXISTS (SELECT 1 FROM action_logs alc "
+                return (f" AND (EXISTS (SELECT 1 FROM action_logs alc "
                         f"WHERE alc.user_id = {uid} AND alc.source IN {src} "
                         f"AND alc.action_type = 'view_tag' "
-                        f"AND alc.details = 'tag:{safe}') ")
+                        f"AND split_part(alc.details,'tag:',2) = '{safe}') "
+                        f"OR EXISTS (SELECT 1 FROM direct_search dsc "
+                        f"WHERE dsc.user_id = {uid} AND dsc.platform IN {plat} "
+                        f"AND LOWER(TRIM(dsc.search_keyword)) = LOWER('{safe}'))) ")
 
             def _story_clause(realm):
                 if story not in ("normal", "trend"):
@@ -6028,10 +6031,17 @@ elif page == "تحليل المستخدمين":
                         WHERE s.user_id = bu.telegram_id
                           AND s.source IN ('bot','telegram_miniapp')
                           AND s.store_id IS NOT NULL) AS stores,
-                       (SELECT string_agg(DISTINCT replace(ad.details,'tag:',''), ', ')
-                        FROM action_logs ad WHERE ad.user_id = bu.telegram_id
-                          AND ad.source IN ('bot','telegram_miniapp')
-                          AND ad.action_type='view_tag') AS categories,
+                       (SELECT string_agg(DISTINCT cx.cat, ', ') FROM (
+                          SELECT split_part(ad.details,'tag:',2) AS cat
+                          FROM action_logs ad WHERE ad.user_id = bu.telegram_id
+                            AND ad.source IN ('bot','telegram_miniapp') AND ad.action_type='view_tag'
+                          UNION
+                          SELECT TRIM(ds.search_keyword)
+                          FROM direct_search ds WHERE ds.user_id = bu.telegram_id
+                            AND ds.platform IN ('TelegramBot','Miniapp')
+                            AND LOWER(TRIM(ds.search_keyword)) IN (SELECT LOWER(TRIM(t)) FROM master,
+                                unnest(string_to_array(trim(both '{{}}' from COALESCE(store_tags,'')), ',')) AS t WHERE TRIM(t)<>'')
+                        ) cx WHERE cx.cat IS NOT NULL AND TRIM(cx.cat) <> '') AS categories,
                        (SELECT COUNT(*) FROM action_logs av WHERE av.user_id = bu.telegram_id
                           AND av.source IN ('bot','telegram_miniapp') AND av.action_type='view_tag') AS n_cat_click,
                        (SELECT COUNT(*) FROM direct_search ds WHERE ds.user_id = bu.telegram_id
@@ -6078,9 +6088,15 @@ elif page == "تحليل المستخدمين":
                         FROM action_logs s
                         WHERE s.user_id = wu.id AND s.source = 'web'
                           AND s.store_id IS NOT NULL) AS stores,
-                       (SELECT string_agg(DISTINCT replace(ad.details,'tag:',''), ', ')
-                        FROM action_logs ad WHERE ad.user_id = wu.id AND ad.source='web'
-                          AND ad.action_type='view_tag') AS categories,
+                       (SELECT string_agg(DISTINCT cx.cat, ', ') FROM (
+                          SELECT split_part(ad.details,'tag:',2) AS cat
+                          FROM action_logs ad WHERE ad.user_id = wu.id AND ad.source='web' AND ad.action_type='view_tag'
+                          UNION
+                          SELECT TRIM(ds.search_keyword)
+                          FROM direct_search ds WHERE ds.user_id = wu.id AND ds.platform='Web'
+                            AND LOWER(TRIM(ds.search_keyword)) IN (SELECT LOWER(TRIM(t)) FROM master,
+                                unnest(string_to_array(trim(both '{{}}' from COALESCE(store_tags,'')), ',')) AS t WHERE TRIM(t)<>'')
+                        ) cx WHERE cx.cat IS NOT NULL AND TRIM(cx.cat) <> '') AS categories,
                        (SELECT COUNT(*) FROM action_logs av WHERE av.user_id = wu.id
                           AND av.source='web' AND av.action_type='view_tag') AS n_cat_click,
                        (SELECT COUNT(*) FROM direct_search ds WHERE ds.user_id = wu.id
@@ -6120,9 +6136,15 @@ elif page == "تحليل المستخدمين":
                         FROM action_logs s
                         WHERE s.user_id = wu.id AND s.source = 'web'
                           AND s.store_id IS NOT NULL) AS stores,
-                       (SELECT string_agg(DISTINCT replace(ad.details,'tag:',''), ', ')
-                        FROM action_logs ad WHERE ad.user_id = wu.id AND ad.source='web'
-                          AND ad.action_type='view_tag') AS categories,
+                       (SELECT string_agg(DISTINCT cx.cat, ', ') FROM (
+                          SELECT split_part(ad.details,'tag:',2) AS cat
+                          FROM action_logs ad WHERE ad.user_id = wu.id AND ad.source='web' AND ad.action_type='view_tag'
+                          UNION
+                          SELECT TRIM(ds.search_keyword)
+                          FROM direct_search ds WHERE ds.user_id = wu.id AND ds.platform='Web'
+                            AND LOWER(TRIM(ds.search_keyword)) IN (SELECT LOWER(TRIM(t)) FROM master,
+                                unnest(string_to_array(trim(both '{{}}' from COALESCE(store_tags,'')), ',')) AS t WHERE TRIM(t)<>'')
+                        ) cx WHERE cx.cat IS NOT NULL AND TRIM(cx.cat) <> '') AS categories,
                        (SELECT COUNT(*) FROM action_logs av WHERE av.user_id = wu.id
                           AND av.source='web' AND av.action_type='view_tag') AS n_cat_click,
                        (SELECT COUNT(*) FROM direct_search ds WHERE ds.user_id = wu.id
