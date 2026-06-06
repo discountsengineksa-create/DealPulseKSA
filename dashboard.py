@@ -6270,14 +6270,15 @@ elif page == "تحليل المستخدمين":
                 # خلاصة
                 _by_act = df_trend_log["action_type"].value_counts().to_dict()
                 _by_det = df_trend_log["details"].value_counts().to_dict()
-                m1, m2, m3, m4, m5 = st.columns(5)
+                m1, m2, m3, m4, m5, m6 = st.columns(6)
                 m1.metric("إجمالي الأحداث", len(df_trend_log))
                 m2.metric("مستخدمون فريدون",
                           df_trend_log["user_id"].dropna().nunique())
                 m3.metric("متاجر مختلفة",
                           df_trend_log["store_id"].nunique())
-                m4.metric("🎟️ نسخ", int(_by_act.get("copy_coupon", 0)))
-                m5.metric("🖱️ نقرات", int(_by_act.get("click_link", 0)))
+                m4.metric("👁️ زيارات", int(_by_act.get("view_store", 0)))
+                m5.metric("🎟️ نسخ", int(_by_act.get("copy_coupon", 0)))
+                m6.metric("🖱️ نقرات", int(_by_act.get("click_link", 0)))
 
                 # توزيع يومي/أسبوعي لو نوع الترند = الكل/لا شيء
                 if gen_trend not in ("daily", "weekly"):
