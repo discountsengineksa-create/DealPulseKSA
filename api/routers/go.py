@@ -120,6 +120,7 @@ def cloaked_redirect(
     s: str = "web",
     h: str = "0",
     u: str = "",
+    ctx: str = "",
     conn=Depends(get_db),
 ):
     # 1) البحث عن المتجر — Redis cache أولاً، ثم DB
@@ -157,6 +158,10 @@ def cloaked_redirect(
 
     # 4) مسموح — سجّل النقرة (idempotent). العدّاد يرتفع للجودة العالية فقط.
     counted = quality >= QUALITY_THRESHOLD
+    # سياق الترند (من بطاقة الترند) — قائمة بيضاء، يُخزَّن في details لإسناد التحوّل
+    trend_ctx = ctx if ctx in ("trend:daily", "trend:weekly") else None
+    details_val = trend_ctx if trend_ctx else (
+        "via_cloak" if counted else "via_cloak_jschallenge")
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -179,7 +184,7 @@ def cloaked_redirect(
             """,
             (
                 click_user_id, store_id,
-                "via_cloak" if counted else "via_cloak_jschallenge", source,
+                details_val, source,
                 geo.event_id, geo.ip_hash, geo.ua_hash,
                 geo.country_code, geo.region_code, geo.city, geo.postal_code,
                 geo.lat, geo.lng, geo.isp, geo.asn,
