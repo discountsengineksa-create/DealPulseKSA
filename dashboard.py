@@ -4058,7 +4058,7 @@ elif page == "🎬 تحليلات الستوري":
                           "نسخ_الكود", "عدد_النسخ",
                           "آخر_مشاهدة"]
             journey = journey[cols_order]
-            st.dataframe(journey, use_container_width=True, hide_index=True)
+            st.dataframe(journey, width="stretch", hide_index=True)
             st.caption(f"📋 {len(journey)} صف — كل صف عميل × متجر شاف ستوريه. الحركات داخل الستوري فقط (story_view_id).")
 
             # ─── تحميل Excel ─────────────────────────────────────────────
@@ -4833,7 +4833,7 @@ elif page == "📣 بلاغات الأكواد":
                     "suspended_reason":  "سبب السحب",
                     "reports_24h":       "بلاغات آخر 24 سا",
                 }, inplace=True)
-                st.dataframe(susp, use_container_width=True, hide_index=True)
+                st.dataframe(susp, width="stretch", hide_index=True)
 
                 # إزالة سحب بمتجر محدّد
                 pick = st.selectbox("اختر متجراً لإزالة السحب:", options=susp["المتجر"].tolist(), key="unsusp_pick")
@@ -4953,7 +4953,7 @@ elif page == "📣 بلاغات الأكواد":
             shown_cols = ["ID","المتجر","المصدر","الحالة","سحب تلقائي؟","متجر مسحوب الآن؟",
                           "اسم المُبلِّغ","إيميل","جوال","تيليجرام",
                           "الكود لحظة البلاغ","ملاحظة العميل","وقت البلاغ"]
-            st.dataframe(disp[shown_cols], use_container_width=True, hide_index=True)
+            st.dataframe(disp[shown_cols], width="stretch", hide_index=True)
 
             # تحديث حالة بلاغ
             st.markdown("##### ✏️ تغيير حالة بلاغ")
@@ -4967,7 +4967,7 @@ elif page == "📣 بلاغات الأكواد":
                     format_func=lambda x: STATUS_AR.get(x, x), key="rpt_upd_status",
                 )
             with uc3:
-                if st.button("💾 تحديث", key="rpt_upd_btn", use_container_width=True):
+                if st.button("💾 تحديث", key="rpt_upd_btn", width="stretch"):
                     try:
                         with conn.cursor() as cur:
                             cur.execute("""
@@ -6183,7 +6183,7 @@ elif page == "تحليل المستخدمين":
                 "متاجر ترند أسبوعي", "نقر ترند أسبوعي", "نسخ ترند أسبوعي",
                 "مفضلة متاجر", "المتاجر المفضّلة",
                 "مفضلة أقسام", "الأقسام المفضّلة", "آخر ظهور"]]
-            st.dataframe(_disp, use_container_width=True, hide_index=True)
+            st.dataframe(_disp, width="stretch", hide_index=True)
             st.download_button(
                 "⬇️ تحميل الجدول (Excel/CSV)",
                 _disp.to_csv(index=False).encode("utf-8-sig"),
@@ -6391,7 +6391,7 @@ elif page == "تحليل المستخدمين":
                 })[["الوقت", "نوع الترند", "الحدث", "المتجر", "المعرّف",
                     "الاسم", "اليوزر", "المصدر", "المدينة", "الدولة"]]
 
-                st.dataframe(_disp_trend, use_container_width=True,
+                st.dataframe(_disp_trend, width="stretch",
                              hide_index=True)
                 st.download_button(
                     "⬇️ تحميل سجل الترند (Excel/CSV)",
@@ -6808,7 +6808,7 @@ elif page == "تحليل المستخدمين":
                                        "تفاصيل", "المدينة", "ملاحظة"]
                         st.dataframe(
                             disp[_final_cols],
-                            use_container_width=True, hide_index=True,
+                            width="stretch", hide_index=True,
                         )
                         st.download_button(
                             "⬇️ تحميل السيرة (Excel/CSV)",
@@ -6848,7 +6848,7 @@ elif page == "تحليل المستخدمين":
                         st.code(_msg["sql"], language="sql")
                 _df_hist = _msg.get("df")
                 if _df_hist is not None and not _df_hist.empty:
-                    st.dataframe(_df_hist, use_container_width=True, hide_index=True)
+                    st.dataframe(_df_hist, width="stretch", hide_index=True)
 
         if st.session_state["ai_users_history"]:
             if st.button("🗑️ مسح المحادثة", key="ai_users_clear"):
@@ -6896,7 +6896,9 @@ loyalty_history(id SERIAL PK, user_id BIGINT, points INT, reason TEXT, created_a
             """يطلب من Groq توليد SELECT آمن، ويرجّع (sql, error)."""
             key = os.getenv("GROQ_API_KEY")
             if not key:
-                return None, "GROQ_API_KEY غير مضبوط في .env"
+                return None, ("GROQ_API_KEY غير مضبوط في متغيرات البيئة. "
+                              "محلياً: أضفه في .env. على Railway: "
+                              "Service → Variables → New Variable.")
             model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
             system = (
                 "أنت محرّر SQL لقاعدة PostgreSQL لمنصة DealPulse KSA. "
@@ -7024,7 +7026,7 @@ loyalty_history(id SERIAL PK, user_id BIGINT, points INT, reason TEXT, created_a
                         with st.expander("🔍 الاستعلام المُستخدم"):
                             st.code(_ai_sql, language="sql")
                         if not _ai_df.empty:
-                            st.dataframe(_ai_df, use_container_width=True,
+                            st.dataframe(_ai_df, width="stretch",
                                          hide_index=True)
                         st.session_state["ai_users_history"].append({
                             "role": "assistant", "content": _ai_summary,
@@ -10028,7 +10030,7 @@ if page == "🛰️ متابعة المنصة":
     with tab_dir:
         c_a, c_b = st.columns([1, 3])
         with c_a:
-            if st.button("⚡ ولّد توجيهاً الآن", type="primary", use_container_width=True,
+            if st.button("⚡ ولّد توجيهاً الآن", type="primary", width="stretch",
                          help="يستدعي الـ API مباشرة لإنتاج توجيه فوري (بدون انتظار الجدولة)."):
                 with st.spinner("جارٍ توليد التوجيه عبر الـ API... (~30 ثانية)"):
                     data, err = _admin_post("/admin/trigger-directive")
