@@ -5915,7 +5915,10 @@ elif page == "تحليل المستخدمين":
                           AND ac.source IN ('bot','telegram_miniapp') AND ac.action_type='click_link') AS n_click,
                        (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = bu.telegram_id
                           AND ac.source IN ('bot','telegram_miniapp') AND ac.action_type='search') AS n_search,
-                       (SELECT COUNT(*) FROM story_views sv WHERE sv.tg_user_id = bu.telegram_id) AS n_story,
+                       -- الستوري عبر القنوات: tg/ميني عبر sv.tg_user_id + موقع عبر sv.web_user_id (للمربوط).
+                       (SELECT COUNT(*) FROM story_views sv WHERE (sv.tg_user_id = bu.telegram_id OR (w3.id IS NOT NULL AND sv.web_user_id = w3.id))) AS n_story,
+                       (SELECT COUNT(*) FROM story_views sv WHERE sv.was_trending = TRUE AND (sv.tg_user_id = bu.telegram_id OR (w3.id IS NOT NULL AND sv.web_user_id = w3.id))) AS n_story_trend,
+                       (SELECT COUNT(*) FROM story_views sv WHERE sv.was_trending IS NOT TRUE AND (sv.tg_user_id = bu.telegram_id OR (w3.id IS NOT NULL AND sv.web_user_id = w3.id))) AS n_story_normal,
                        -- المفضلة عبر القنوات: tg user يضيف من البوت/الميني عبر uf.telegram_id،
                        -- ومن الموقع عبر uf.web_user_id = w3.id (لو الحساب مربوط). نوسع للاثنين.
                        (SELECT COUNT(*) FROM user_favorites uf WHERE uf.kind='store' AND (uf.telegram_id = bu.telegram_id OR (w3.id IS NOT NULL AND uf.web_user_id = w3.id))) AS n_fav_store,
@@ -5985,6 +5988,8 @@ elif page == "تحليل المستخدمين":
                        (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = wu.id
                           AND ac.source='web' AND ac.action_type='search') AS n_search,
                        (SELECT COUNT(*) FROM story_views sv WHERE sv.web_user_id = wu.id) AS n_story,
+                       (SELECT COUNT(*) FROM story_views sv WHERE sv.web_user_id = wu.id AND sv.was_trending = TRUE) AS n_story_trend,
+                       (SELECT COUNT(*) FROM story_views sv WHERE sv.web_user_id = wu.id AND sv.was_trending IS NOT TRUE) AS n_story_normal,
                        (SELECT COUNT(*) FROM user_favorites uf WHERE uf.web_user_id = wu.id AND uf.kind='store') AS n_fav_store,
                        (SELECT COUNT(*) FROM user_favorites uf WHERE uf.web_user_id = wu.id AND uf.kind='category') AS n_fav_cat,
                        (SELECT string_agg(DISTINCT uf.store_id, ', ') FROM user_favorites uf WHERE uf.web_user_id = wu.id AND uf.kind='store') AS fav_stores,
@@ -6041,6 +6046,8 @@ elif page == "تحليل المستخدمين":
                        (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = wu.id
                           AND ac.source='web' AND ac.action_type='search') AS n_search,
                        (SELECT COUNT(*) FROM story_views sv WHERE sv.web_user_id = wu.id) AS n_story,
+                       (SELECT COUNT(*) FROM story_views sv WHERE sv.web_user_id = wu.id AND sv.was_trending = TRUE) AS n_story_trend,
+                       (SELECT COUNT(*) FROM story_views sv WHERE sv.web_user_id = wu.id AND sv.was_trending IS NOT TRUE) AS n_story_normal,
                        (SELECT COUNT(*) FROM user_favorites uf WHERE uf.web_user_id = wu.id AND uf.kind='store') AS n_fav_store,
                        (SELECT COUNT(*) FROM user_favorites uf WHERE uf.web_user_id = wu.id AND uf.kind='category') AS n_fav_cat,
                        (SELECT string_agg(DISTINCT uf.store_id, ', ') FROM user_favorites uf WHERE uf.web_user_id = wu.id AND uf.kind='store') AS fav_stores,
@@ -6114,7 +6121,10 @@ elif page == "تحليل المستخدمين":
                 "stores": "المتاجر", "categories": "الأقسام",
                 "n_cat_click": "ضغطات القسم", "n_cat_search": "بحث القسم",
                 "n_copy": "نسخ", "n_click": "نقرات",
-                "n_search": "بحث", "n_story": "ستوري",
+                "n_search": "بحث",
+                "n_story": "ستوري (إجمالي)",
+                "n_story_trend":  "ستوري ترند 🔥",
+                "n_story_normal": "ستوري عادي 🎬",
                 "n_fav_store": "مفضلة متاجر", "n_fav_cat": "مفضلة أقسام",
                 "fav_stores": "المتاجر المفضّلة", "fav_cats": "الأقسام المفضّلة",
                 "trend_d_stores": "متاجر ترند يومي", "n_td_click": "نقر ترند يومي",
@@ -6125,7 +6135,8 @@ elif page == "تحليل المستخدمين":
             })[["النوع", "الملف", "المعرّف", "اليوزر", "الاسم", "الإيميل",
                 "الجوال", "الجنس", "اللغة", "العمر", "تاريخ الميلاد", "المدينة",
                 "المتاجر", "الأقسام", "ضغطات القسم", "بحث القسم",
-                "نسخ", "نقرات", "بحث", "ستوري",
+                "نسخ", "نقرات", "بحث",
+                "ستوري (إجمالي)", "ستوري ترند 🔥", "ستوري عادي 🎬",
                 "متاجر ترند يومي", "نقر ترند يومي", "نسخ ترند يومي",
                 "متاجر ترند أسبوعي", "نقر ترند أسبوعي", "نسخ ترند أسبوعي",
                 "مفضلة متاجر", "المتاجر المفضّلة",
