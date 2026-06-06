@@ -6265,6 +6265,13 @@ elif page == "تحليل المستخدمين":
                 "مفضلة متاجر", "المتاجر المفضّلة",
                 "مفضلة أقسام", "الأقسام المفضّلة", "آخر ظهور"]]
             st.dataframe(_disp, use_container_width=True, hide_index=True)
+            st.download_button(
+                "⬇️ تحميل الجدول (Excel/CSV)",
+                _disp.to_csv(index=False).encode("utf-8-sig"),
+                file_name="users_analytics.csv",
+                mime="text/csv",
+                key="gen_dl",
+            )
 
     # ── القائمة الثانية: التحليل الفردي ─────────────────────────────────
     with tab_individual:
