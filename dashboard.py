@@ -1512,7 +1512,7 @@ _ANALYSIS_PAGES = [
 ]
 _OTHER_PAGES = [
 "📣 بلاغات الأكواد",  # ← Migration 029: بلاغات لا يعمل + إدارة المتاجر المسحوبة
-"مركز الإشعارات", "لوحة القيادة", "مركز الدعم",
+"🎯 بناء الشرائح", "مركز الإشعارات", "لوحة القيادة", "مركز الدعم",
 "مختبر النمو", "رادار المنافسين", "استوديو المحتوى",
 "ذكاء التنبؤ", "نظام الولاء", "التحكم الآلي", "التخصيص الفائق",
 "رادار المناسبات", "مركز التوسع", "درع الحماية",
@@ -7367,385 +7367,1223 @@ elif page == "تحليل المستخدمين":
                         "sql": _ai_sql, "df": _ai_df,
                     })
 
+# ════════════════════════════════════════════════════════════════════════════
+# صفحة 🎯 بناء الشرائح (Segment Builder)
+# قواعد Attribute/Event/Aggregate/Temporal، تركيب AND/OR على مجموعات،
+# عدّاد حي، معاينة، حفظ/تحميل شرائح. كامل عبر api.audience_engine.
+# ════════════════════════════════════════════════════════════════════════════
+elif page == "🎯 بناء الشرائح":
+    page_title("🎯", "محرّر الشرائح المتقدّم")
+
+    from api import audience_engine as _ae
+
+    # ── حالة الجلسة ────────────────────────────────────────────────────────
+    if "seg_rules" not in st.session_state:
+        st.session_state.seg_rules = {
+            "version": 1, "logic": "or",
+            "groups": [{"logic": "and", "rules": []}],
+        }
+    if "seg_meta" not in st.session_state:
+        st.session_state.seg_meta = {"id": None, "name": "", "description": "",
+                                     "channel": "both"}
+
+    @st.cache_data(ttl=300)
+    def _ae_stores():
+        with get_conn() as _c:
+            _c.autocommit = True
+            return _ae.list_stores(_c)
+
+    @st.cache_data(ttl=300)
+    def _ae_categories():
+        with get_conn() as _c:
+            _c.autocommit = True
+            return _ae.list_categories(_c)
+
+    @st.cache_data(ttl=300)
+    def _ae_cities():
+        with get_conn() as _c:
+            _c.autocommit = True
+            return _ae.list_cities(_c)
+
+    _STORES     = _ae_stores()
+    _CATEGORIES = _ae_categories()
+    _CITIES     = _ae_cities()
+
+    # ── شريط علوي: تحميل/جديد/حذف ─────────────────────────────────────────
+    try:
+        with get_conn() as _conn_top:
+            _conn_top.autocommit = True
+            _user_segs  = _ae.list_user_segments(_conn_top)
+            _templates  = _ae.list_templates(_conn_top)
+    except Exception as _e:
+        _user_segs = []
+        _templates = []
+        st.warning(f"تعذّر تحميل الشرائح: {_e}")
+
+    # ── القوالب الجاهزة ───────────────────────────────────────────────────
+    with st.expander(f"📋 ابدأ من قالب ({len(_templates)} قالب جاهز)",
+                     expanded=False):
+        st.caption("اضغط «تطبيق» → القالب يصير شريحتك الحالية. عدّلها واحفظها باسم جديد.")
+        for _tpl in _templates:
+            _tc1, _tc2, _tc3 = st.columns([3, 4, 1])
+            with _tc1:
+                st.markdown(f"**{_tpl['name']}**")
+            with _tc2:
+                st.caption(_tpl.get("description") or "—")
+            with _tc3:
+                if st.button("⚡ تطبيق", key=f"tpl_apply_{_tpl['id']}",
+                             width="stretch"):
+                    st.session_state.seg_rules = _tpl["rules_json"]
+                    st.session_state.seg_meta = {
+                        "id": None,    # قالب → شريحة جديدة بعد التطبيق
+                        "name": _tpl["name"].replace("[عدّل المتجر]","")
+                                            .replace("[عدّل القسم]","").strip(),
+                        "description": _tpl.get("description") or "",
+                        "channel": _tpl.get("channel") or "both",
+                    }
+                    st.rerun()
+
+    _col_load, _col_new, _col_del = st.columns([3, 1, 1])
+    with _col_load:
+        _opts = ["— شريحة جديدة —"] + [f"#{s['id']} · {s['name']}" for s in _user_segs]
+        _sel = st.selectbox("📚 شرائحي المحفوظة:", _opts, key="seg_load_sel")
+        if _sel != "— شريحة جديدة —" and st.button("📥 حمّل المختارة", key="seg_load_btn"):
+            _sid = int(_sel.split("·")[0].strip().lstrip("#"))
+            with get_conn() as _c:
+                _c.autocommit = True
+                _loaded = _ae.load_segment(_c, _sid)
+            if _loaded:
+                st.session_state.seg_rules = _loaded["rules_json"]
+                st.session_state.seg_meta = {
+                    "id": _loaded["id"], "name": _loaded["name"],
+                    "description": _loaded.get("description") or "",
+                    "channel": _loaded.get("channel") or "both",
+                }
+                st.rerun()
+    with _col_new:
+        if st.button("🆕 شريحة جديدة", key="seg_new_btn", width="stretch"):
+            st.session_state.seg_rules = {
+                "version": 1, "logic": "or",
+                "groups": [{"logic": "and", "rules": []}],
+            }
+            st.session_state.seg_meta = {"id": None, "name": "",
+                                         "description": "", "channel": "both"}
+            st.rerun()
+    with _col_del:
+        if (st.session_state.seg_meta.get("id")
+                and st.button("🗑️ احذف", key="seg_del_btn",
+                              width="stretch", type="secondary")):
+            with get_conn() as _c:
+                _c.autocommit = True
+                _ae.delete_segment(_c, st.session_state.seg_meta["id"])
+            st.success("حُذفت الشريحة.")
+            st.session_state.seg_rules = {"version": 1, "logic": "or",
+                                          "groups": [{"logic": "and", "rules": []}]}
+            st.session_state.seg_meta = {"id": None, "name": "",
+                                         "description": "", "channel": "both"}
+            st.rerun()
+
+    # ── بيانات الشريحة (اسم، وصف، قناة) ────────────────────────────────────
+    _meta_c1, _meta_c2, _meta_c3 = st.columns([2, 3, 1])
+    with _meta_c1:
+        st.session_state.seg_meta["name"] = st.text_input(
+            "📝 اسم الشريحة:", st.session_state.seg_meta.get("name", ""),
+            key="seg_name_in", placeholder="مثلاً: VIP نون")
+    with _meta_c2:
+        st.session_state.seg_meta["description"] = st.text_input(
+            "ℹ️ وصف مختصر:", st.session_state.seg_meta.get("description", ""),
+            key="seg_desc_in", placeholder="من نسخوا كوبون نون 3 مرات آخر شهر")
+    with _meta_c3:
+        _channels = ["both", "telegram", "email"]
+        _ch_labels = {"both": "📡 الكل", "telegram": "📱 تليجرام", "email": "📧 إيميل"}
+        _cur_ch = st.session_state.seg_meta.get("channel") or "both"
+        st.session_state.seg_meta["channel"] = st.selectbox(
+            "🎯 القناة:", _channels,
+            index=_channels.index(_cur_ch) if _cur_ch in _channels else 0,
+            format_func=lambda x: _ch_labels[x], key="seg_ch_in")
+
+    st.divider()
+
+    # ── ثوابت العرض ────────────────────────────────────────────────────────
+    _ATTR_FIELDS = {
+        "lang":              "🌐 اللغة",
+        "gender":            "⚧ الجنس",
+        "age":               "🎂 العمر",
+        "city":              "📍 المدينة",
+        "is_linked":         "🔗 ملف مربوط (موقع + تليجرام)",
+        "has_email":         "📧 له إيميل",
+        "has_phone":         "📱 له جوال",
+        "has_birth_date":    "🎂 له تاريخ ميلاد",
+        "favorite_store":    "❤️ مفضّل متجر محدد",
+        "favorite_category": "🏷️ مفضّل قسم محدد",
+        "fav_count":         "🔢 عدد مفضّلاته",
+    }
+    _ACTIONS_LABELS = {
+        "copy_coupon":    "🎟️ نسخ كوبون",
+        "click_link":     "🖱️ نقر رابط",
+        "search":         "🔍 بحث",
+        "view_store":     "👁️ زيارة بطاقة متجر",
+        "view_tag":       "🏷️ زيارة قسم",
+        "view_story":     "🎬 شاف ستوري (مستقل)",
+        "search_keyword": "🔎 بحث عن كلمة محددة",
+    }
+    _CONTEXT_LABELS = {
+        "any":          "أي سياق",
+        "trend_daily":  "🔥 من ترند يومي",
+        "trend_weekly": "🔥 من ترند أسبوعي",
+        "trend_any":    "🔥 من أي ترند",
+        "story":        "🎬 من سياق ستوري",
+        "card":         "🃏 من بطاقة عادية",
+    }
+    _OPS_LABELS = {
+        "=": "=", "!=": "≠", ">": ">", ">=": "≥", "<": "<", "<=": "≤",
+        "between": "بين", "in": "ضمن قائمة",
+    }
+    _THRESHOLD_LABELS = {
+        "absolute":         "مطلق (رقم)",
+        "percentile_top":   "أعلى N%",
+        "percentile_bot":   "أقل N%",
+        "top_n":            "أعلى N شخصاً",
+        "above_mean":       "أعلى من المتوسط",
+        "below_mean":       "أقل من المتوسط",
+    }
+
+    def _render_attribute_rule(rule: dict, key: str):
+        """يعرض ويحدّث قاعدة attribute في مكانها."""
+        c1, c2, c3 = st.columns([2, 2, 3])
+        with c1:
+            fld = st.selectbox("الحقل", list(_ATTR_FIELDS.keys()),
+                index=list(_ATTR_FIELDS.keys()).index(rule.get("field","lang"))
+                      if rule.get("field") in _ATTR_FIELDS else 0,
+                format_func=lambda x: _ATTR_FIELDS[x], key=f"{key}_f")
+            rule["field"] = fld
+
+        with c2:
+            if fld in ("is_linked","has_email","has_phone","has_birth_date"):
+                rule["op"] = "="
+                yn = st.selectbox("القيمة", ["نعم","لا"],
+                    index=0 if rule.get("value", True) else 1, key=f"{key}_v")
+                rule["value"] = (yn == "نعم")
+            elif fld == "age":
+                ops = ["=","!=","<",">","<=",">=","between"]
+                rule["op"] = st.selectbox("العملية", ops,
+                    index=ops.index(rule.get("op","between")) if rule.get("op") in ops else 6,
+                    format_func=lambda x: _OPS_LABELS[x], key=f"{key}_op")
+            elif fld == "fav_count":
+                ops = ["=","!=","<",">","<=",">="]
+                rule["op"] = st.selectbox("العملية", ops,
+                    index=ops.index(rule.get("op",">=")) if rule.get("op") in ops else 5,
+                    format_func=lambda x: _OPS_LABELS[x], key=f"{key}_op")
+            else:
+                ops = ["=","!="]
+                rule["op"] = st.selectbox("العملية", ops,
+                    index=ops.index(rule.get("op","=")) if rule.get("op") in ops else 0,
+                    format_func=lambda x: _OPS_LABELS[x], key=f"{key}_op")
+
+        with c3:
+            if fld in ("is_linked","has_email","has_phone","has_birth_date"):
+                st.caption("القيمة بوليانية أعلاه ☝️")
+            elif fld == "lang":
+                langs = ["ar","en"]
+                rule["value"] = st.selectbox("اللغة", langs,
+                    index=langs.index(rule.get("value","ar")) if rule.get("value") in langs else 0,
+                    key=f"{key}_v")
+            elif fld == "gender":
+                gs = ["male","female"]
+                rule["value"] = st.selectbox("الجنس", gs,
+                    index=gs.index(rule.get("value","male")) if rule.get("value") in gs else 0,
+                    format_func=lambda x: "♂️ ذكر" if x=="male" else "♀️ أنثى",
+                    key=f"{key}_v")
+            elif fld == "city":
+                opts = _CITIES or ["—"]
+                rule["value"] = st.selectbox("المدينة", opts,
+                    index=opts.index(rule["value"]) if rule.get("value") in opts else 0,
+                    key=f"{key}_v")
+            elif fld == "favorite_store":
+                opts = _STORES or ["—"]
+                rule["value"] = st.selectbox("المتجر", opts,
+                    index=opts.index(rule["value"]) if rule.get("value") in opts else 0,
+                    key=f"{key}_v")
+            elif fld == "favorite_category":
+                opts = _CATEGORIES or ["—"]
+                rule["value"] = st.selectbox("القسم", opts,
+                    index=opts.index(rule["value"]) if rule.get("value") in opts else 0,
+                    key=f"{key}_v")
+            elif fld == "age":
+                if rule.get("op") == "between":
+                    v1, v2 = (rule.get("value") if isinstance(rule.get("value"),
+                                                                (list,tuple)) else [18,34])
+                    cc1, cc2 = st.columns(2)
+                    v1 = cc1.number_input("من", min_value=0, max_value=120,
+                                          value=int(v1 or 18), key=f"{key}_v1")
+                    v2 = cc2.number_input("إلى", min_value=0, max_value=120,
+                                          value=int(v2 or 34), key=f"{key}_v2")
+                    rule["value"] = [int(v1), int(v2)]
+                else:
+                    rule["value"] = st.number_input("العمر", min_value=0,
+                        max_value=120, value=int(rule.get("value", 25) or 25),
+                        key=f"{key}_v")
+            elif fld == "fav_count":
+                rule["value"] = st.number_input("العدد", min_value=0,
+                    value=int(rule.get("value", 1) or 1), key=f"{key}_v")
+
+    def _render_event_rule(rule: dict, key: str):
+        """يعرض ويحدّث قاعدة event."""
+        c1, c2, c3 = st.columns([2, 2, 2])
+        with c1:
+            acts = list(_ACTIONS_LABELS.keys())
+            rule["action"] = st.selectbox("الحركة", acts,
+                index=acts.index(rule.get("action","copy_coupon")) if rule.get("action") in acts else 0,
+                format_func=lambda x: _ACTIONS_LABELS[x], key=f"{key}_act")
+        with c2:
+            if rule["action"] == "search_keyword":
+                rule["entity_type"] = "keyword"
+                rule["entity_value"] = st.text_input("الكلمة",
+                    value=rule.get("entity_value","") or "", key=f"{key}_kw")
+            elif rule["action"] == "view_story":
+                opts = ["الكل","ترند فقط","عادي فقط"]
+                cur_wt = rule.get("was_trending")
+                cur_idx = 0 if cur_wt is None else (1 if cur_wt else 2)
+                sel = st.selectbox("نوع الستوري", opts,
+                    index=cur_idx, key=f"{key}_wt")
+                rule["was_trending"] = None if sel=="الكل" else (sel=="ترند فقط")
+                rule["entity_type"] = "store"
+                opts_s = ["— أي متجر —"] + (_STORES or [])
+                cur_v = rule.get("entity_value") or "— أي متجر —"
+                sel_s = st.selectbox("المتجر", opts_s,
+                    index=opts_s.index(cur_v) if cur_v in opts_s else 0,
+                    key=f"{key}_st")
+                rule["entity_value"] = None if sel_s.startswith("— أي") else sel_s
+            else:
+                ent_opts = ["any","store","category"]
+                rule["entity_type"] = st.selectbox("الهدف", ent_opts,
+                    index=ent_opts.index(rule.get("entity_type","any"))
+                        if rule.get("entity_type") in ent_opts else 0,
+                    format_func=lambda x: {"any":"أي","store":"متجر محدد",
+                                           "category":"قسم محدد"}[x],
+                    key=f"{key}_ent")
+                if rule["entity_type"] == "store":
+                    opts = _STORES or ["—"]
+                    rule["entity_value"] = st.selectbox("المتجر", opts,
+                        index=opts.index(rule["entity_value"])
+                            if rule.get("entity_value") in opts else 0,
+                        key=f"{key}_ev")
+                elif rule["entity_type"] == "category":
+                    opts = _CATEGORIES or ["—"]
+                    rule["entity_value"] = st.selectbox("القسم", opts,
+                        index=opts.index(rule["entity_value"])
+                            if rule.get("entity_value") in opts else 0,
+                        key=f"{key}_ev")
+                else:
+                    rule["entity_value"] = None
+        with c3:
+            if rule["action"] != "view_story":
+                ctxs = list(_CONTEXT_LABELS.keys())
+                rule["context"] = st.selectbox("السياق", ctxs,
+                    index=ctxs.index(rule.get("context","any")) if rule.get("context") in ctxs else 0,
+                    format_func=lambda x: _CONTEXT_LABELS[x], key=f"{key}_ctx")
+            _render_window_picker(rule, f"{key}_w")
+
+    def _render_aggregate_rule(rule: dict, key: str):
+        """يعرض ويحدّث قاعدة aggregate."""
+        c1, c2, c3 = st.columns([2, 2, 2])
+        with c1:
+            acts = ["copy_coupon","click_link","search","view_store","view_tag"]
+            rule["action"] = st.selectbox("الحركة", acts,
+                index=acts.index(rule.get("action","copy_coupon")) if rule.get("action") in acts else 0,
+                format_func=lambda x: _ACTIONS_LABELS[x], key=f"{key}_act")
+            ent_opts = ["any","store","category"]
+            rule["entity_type"] = st.selectbox("الهدف", ent_opts,
+                index=ent_opts.index(rule.get("entity_type","any")) if rule.get("entity_type") in ent_opts else 0,
+                format_func=lambda x: {"any":"أي","store":"متجر محدد",
+                                       "category":"قسم محدد"}[x],
+                key=f"{key}_ent")
+            if rule["entity_type"] == "store":
+                opts = _STORES or ["—"]
+                rule["entity_value"] = st.selectbox("المتجر", opts,
+                    index=opts.index(rule["entity_value"]) if rule.get("entity_value") in opts else 0,
+                    key=f"{key}_ev")
+            elif rule["entity_type"] == "category":
+                opts = _CATEGORIES or ["—"]
+                rule["entity_value"] = st.selectbox("القسم", opts,
+                    index=opts.index(rule["entity_value"]) if rule.get("entity_value") in opts else 0,
+                    key=f"{key}_ev")
+            else:
+                rule["entity_value"] = None
+        with c2:
+            ctxs = list(_CONTEXT_LABELS.keys())
+            rule["context"] = st.selectbox("السياق", ctxs,
+                index=ctxs.index(rule.get("context","any")) if rule.get("context") in ctxs else 0,
+                format_func=lambda x: _CONTEXT_LABELS[x], key=f"{key}_ctx")
+            ths = list(_THRESHOLD_LABELS.keys())
+            rule["threshold_type"] = st.selectbox("نوع العتبة", ths,
+                index=ths.index(rule.get("threshold_type","absolute")) if rule.get("threshold_type") in ths else 0,
+                format_func=lambda x: _THRESHOLD_LABELS[x], key=f"{key}_tt")
+        with c3:
+            if rule["threshold_type"] == "absolute":
+                ops = ["=","!=","<",">","<=",">="]
+                rule["op"] = st.selectbox("العملية", ops,
+                    index=ops.index(rule.get("op",">=")) if rule.get("op") in ops else 5,
+                    format_func=lambda x: _OPS_LABELS[x], key=f"{key}_op")
+                rule["value"] = st.number_input("العدد", min_value=0,
+                    value=int(rule.get("value", 3) or 3), key=f"{key}_v")
+            elif rule["threshold_type"] in ("percentile_top","percentile_bot"):
+                rule["value"] = st.number_input("النسبة %", min_value=1, max_value=100,
+                    value=int(rule.get("value", 10) or 10), key=f"{key}_v")
+            elif rule["threshold_type"] == "top_n":
+                rule["value"] = st.number_input("عدد الأشخاص N", min_value=1,
+                    value=int(rule.get("value", 100) or 100), key=f"{key}_v")
+            else:
+                st.caption("بدون قيمة (المقارنة بالمتوسط)")
+            _render_window_picker(rule, f"{key}_w")
+
+    def _render_temporal_rule(rule: dict, key: str):
+        """يعرض ويحدّث قاعدة temporal."""
+        c1, c2, c3 = st.columns([2, 2, 2])
+        with c1:
+            flds = ["joined_at","last_seen"]
+            rule["field"] = st.selectbox("الحقل", flds,
+                index=flds.index(rule.get("field","last_seen")) if rule.get("field") in flds else 1,
+                format_func=lambda x: {"joined_at":"📅 تاريخ التسجيل",
+                                       "last_seen":"👁️ آخر ظهور"}[x],
+                key=f"{key}_f")
+        with c2:
+            ops = [">=","<="]
+            rule["op"] = st.selectbox("العلاقة", ops,
+                index=ops.index(rule.get("op",">=")) if rule.get("op") in ops else 0,
+                format_func=lambda x: "خلال آخر" if x==">=" else "قبل أكثر من",
+                key=f"{key}_op")
+        with c3:
+            rule["value_days"] = st.number_input("عدد الأيام", min_value=0, max_value=3650,
+                value=int(rule.get("value_days", 7) or 7), key=f"{key}_d")
+
+    def _render_window_picker(rule: dict, key: str):
+        """مختار النافذة الزمنية المشترك بين event و aggregate."""
+        win = rule.get("window") or {"type": "all"}
+        wtypes = ["all","last_days"]
+        wt = st.selectbox("النافذة الزمنية", wtypes,
+            index=wtypes.index(win.get("type","all")) if win.get("type") in wtypes else 0,
+            format_func=lambda x: "كل التاريخ" if x=="all" else "آخر N يوم",
+            key=f"{key}_t")
+        if wt == "last_days":
+            d = st.number_input("عدد الأيام", min_value=1, max_value=3650,
+                value=int(win.get("days", 30) or 30), key=f"{key}_d")
+            rule["window"] = {"type": "last_days", "days": int(d)}
+        else:
+            rule["window"] = {"type": "all"}
+
+    _RULE_TYPES = {
+        "attribute": ("🏷️ صفة", _render_attribute_rule),
+        "event":     ("⚡ حدث",  _render_event_rule),
+        "aggregate": ("📊 عدّاد", _render_aggregate_rule),
+        "temporal":  ("⏰ زمن", _render_temporal_rule),
+    }
+
+    # ── منطق التركيب بين المجموعات ────────────────────────────────────────
+    _logic_opts = ["or", "and"]
+    st.session_state.seg_rules["logic"] = st.radio(
+        "🔗 الربط بين المجموعات:", _logic_opts,
+        index=_logic_opts.index(st.session_state.seg_rules.get("logic","or")),
+        horizontal=True,
+        format_func=lambda x: "أو (أي مجموعة تكفي)" if x=="or" else "و (كل المجموعات معاً)",
+        key="seg_top_logic")
+
+    # ── العمودين: البناء + الإحصاء ─────────────────────────────────────────
+    _build_col, _stat_col = st.columns([3, 2])
+
+    with _build_col:
+        # ── عرض المجموعات والقواعد ────────────────────────────────────────
+        for g_idx, group in enumerate(st.session_state.seg_rules["groups"]):
+            with st.container(border=True):
+                _gh1, _gh2, _gh3 = st.columns([3, 1, 1])
+                with _gh1:
+                    st.markdown(f"#### 📦 المجموعة {g_idx+1}")
+                with _gh2:
+                    group["logic"] = st.selectbox(
+                        "منطق داخلي", ["and","or"],
+                        index=["and","or"].index(group.get("logic","and")),
+                        format_func=lambda x: "كل القواعد (AND)" if x=="and" else "أي قاعدة (OR)",
+                        key=f"g{g_idx}_logic", label_visibility="collapsed")
+                with _gh3:
+                    if (len(st.session_state.seg_rules["groups"]) > 1
+                            and st.button("🗑️ احذف المجموعة",
+                                          key=f"g{g_idx}_del",
+                                          width="stretch")):
+                        st.session_state.seg_rules["groups"].pop(g_idx)
+                        st.rerun()
+
+                # ── قواعد داخل المجموعة ──────────────────────────────────
+                for r_idx, rule in enumerate(group["rules"]):
+                    with st.expander(
+                        f"{_RULE_TYPES.get(rule.get('type','attribute'),(rule.get('type'),))[0]} "
+                        f"— قاعدة {r_idx+1}{'  🚫 (نفي)' if rule.get('negate') else ''}",
+                        expanded=True,
+                    ):
+                        # تغيير النوع
+                        types = list(_RULE_TYPES.keys())
+                        new_type = st.selectbox(
+                            "نوع القاعدة", types,
+                            index=types.index(rule.get("type","attribute")) if rule.get("type") in types else 0,
+                            format_func=lambda x: _RULE_TYPES[x][0],
+                            key=f"g{g_idx}_r{r_idx}_type")
+                        if new_type != rule.get("type"):
+                            # إعادة تهيئة عند تغيير النوع
+                            group["rules"][r_idx] = {"type": new_type}
+                            st.rerun()
+
+                        # render حسب النوع
+                        _RULE_TYPES[new_type][1](rule, f"g{g_idx}_r{r_idx}")
+
+                        # خيارات: نفي + حذف
+                        opt_c1, opt_c2 = st.columns([3, 1])
+                        with opt_c1:
+                            rule["negate"] = st.checkbox(
+                                "🚫 نفي (ينطبق على من *لا* يحقق)",
+                                value=bool(rule.get("negate")),
+                                key=f"g{g_idx}_r{r_idx}_neg")
+                        with opt_c2:
+                            if st.button("🗑️ احذف القاعدة",
+                                         key=f"g{g_idx}_r{r_idx}_del",
+                                         width="stretch"):
+                                group["rules"].pop(r_idx)
+                                st.rerun()
+
+                # ── إضافة قاعدة جديدة للمجموعة ────────────────────────────
+                _add_c1, _add_c2 = st.columns([3, 1])
+                with _add_c1:
+                    new_rule_type = st.selectbox(
+                        "نوع قاعدة جديدة:",
+                        list(_RULE_TYPES.keys()),
+                        format_func=lambda x: _RULE_TYPES[x][0],
+                        key=f"g{g_idx}_new_type",
+                        label_visibility="collapsed")
+                with _add_c2:
+                    if st.button("➕ أضف قاعدة", key=f"g{g_idx}_add_rule",
+                                 width="stretch"):
+                        group["rules"].append({"type": new_rule_type})
+                        st.rerun()
+
+        # ── إضافة مجموعة جديدة ────────────────────────────────────────────
+        st.write("")
+        if st.button("➕ أضف مجموعة جديدة", key="seg_add_group", width="stretch"):
+            st.session_state.seg_rules["groups"].append(
+                {"logic": "and", "rules": []})
+            st.rerun()
+
+    # ── العمود الإحصائي + الحفظ + الانتقال للإرسال ─────────────────────────
+    with _stat_col:
+        st.markdown("### 📊 الإحصاء الحي")
+        try:
+            with get_conn() as _conn_s:
+                _conn_s.autocommit = True
+                _bd = _ae.count_audience_breakdown(
+                    _conn_s, st.session_state.seg_rules)
+            st.metric("👥 إجمالي فريد (الكل)", _bd["total_unique"])
+            _m1, _m2 = st.columns(2)
+            _m1.metric("📱 تليجرام", _bd["telegram"])
+            _m2.metric("📧 إيميل",   _bd["email"])
+        except Exception as _e:
+            st.error(f"تعذّر العدّ: {_e}")
+
+        st.divider()
+        st.markdown("### 👁️ معاينة عيّنة")
+        _prev_ch = st.session_state.seg_meta.get("channel") or "both"
+        _prev_ch_for_sample = ("telegram" if _prev_ch == "telegram"
+                               else "email" if _prev_ch == "email" else "both")
+        try:
+            with get_conn() as _conn_p:
+                _conn_p.autocommit = True
+                _sample = _ae.sample_audience(
+                    _conn_p, _prev_ch_for_sample,
+                    st.session_state.seg_rules, n=5)
+            if _sample:
+                _df_s = pd.DataFrame(_sample)
+                _keep = [c for c in ["handle","name","email","lang","city","last_seen"]
+                         if c in _df_s.columns]
+                st.dataframe(_df_s[_keep] if _keep else _df_s,
+                             hide_index=True, width="stretch")
+            else:
+                st.info("لا مطابقين بعد. عدّل القواعد.")
+        except Exception as _e:
+            st.warning(f"تعذّرت المعاينة: {_e}")
+
+        st.divider()
+        st.markdown("### 💾 الحفظ")
+        if st.button("💾 احفظ الشريحة", key="seg_save_btn",
+                     width="stretch", type="primary"):
+            _name = (st.session_state.seg_meta.get("name") or "").strip()
+            if not _name:
+                st.error("أدخل اسماً للشريحة.")
+            else:
+                try:
+                    with get_conn() as _conn_save:
+                        _conn_save.autocommit = True
+                        _new_id = _ae.save_segment(
+                            _conn_save,
+                            name=_name,
+                            description=st.session_state.seg_meta.get("description",""),
+                            rules_json=st.session_state.seg_rules,
+                            channel=st.session_state.seg_meta.get("channel"),
+                            segment_id=st.session_state.seg_meta.get("id"))
+                    st.session_state.seg_meta["id"] = _new_id
+                    st.success(f"✅ حُفظت الشريحة #{_new_id}")
+                    st.cache_data.clear()
+                except Exception as _e:
+                    st.error(f"فشل الحفظ: {_e}")
+
+        if st.session_state.seg_meta.get("id"):
+            if st.button("🚀 افتح في مركز الإشعارات",
+                         key="seg_to_notif", width="stretch"):
+                st.session_state["nc_preset_segment_id"] = st.session_state.seg_meta["id"]
+                st.session_state["page"] = "مركز الإشعارات"
+                st.rerun()
+
+        # ── سجل التغييرات (rollback) ────────────────────────────────────
+        if st.session_state.seg_meta.get("id"):
+            with st.expander("📜 سجل التغييرات (آخر 10 نسخ)"):
+                try:
+                    with get_conn() as _conn_v:
+                        _conn_v.autocommit = True
+                        _versions = _ae.list_segment_versions(
+                            _conn_v, st.session_state.seg_meta["id"], limit=10)
+                    if not _versions:
+                        st.caption("لا تعديلات سابقة بعد.")
+                    else:
+                        for _v in _versions:
+                            _vc1, _vc2 = st.columns([4, 1])
+                            with _vc1:
+                                _ts = _v["saved_at"].strftime("%Y-%m-%d %H:%M")
+                                st.caption(f"🕐 {_ts} · {_v.get('change_note') or '—'}")
+                            with _vc2:
+                                if st.button("⏪ ارجع",
+                                             key=f"v_restore_{_v['id']}",
+                                             width="stretch"):
+                                    with get_conn() as _c2:
+                                        _c2.autocommit = True
+                                        _ae.restore_segment_version(
+                                            _c2,
+                                            st.session_state.seg_meta["id"],
+                                            _v["id"])
+                                        _refreshed = _ae.load_segment(
+                                            _c2, st.session_state.seg_meta["id"])
+                                    if _refreshed:
+                                        st.session_state.seg_rules = _refreshed["rules_json"]
+                                    st.success("استُرجعت النسخة.")
+                                    st.rerun()
+                except Exception as _e:
+                    st.warning(f"تعذّر تحميل السجل: {_e}")
+
+        # ── JSON للمطوّر (debug/تصدير) ─────────────────────────────────────
+        with st.expander("🔧 JSON للقواعد (متقدّم)"):
+            st.code(json.dumps(st.session_state.seg_rules,
+                               ensure_ascii=False, indent=2), language="json")
+
+
 elif page == "مركز الإشعارات":
     page_title("📢", "مركز البث والإشعارات الجماعية")
 
-    # ── دالة إرسال البريد الإلكتروني ─────────────────────────────────────────
-    def _send_campaign_email(to_email: str, subject: str, html_body: str) -> bool:
-        """Resend API أولاً، ثم SMTP احتياطياً."""
-        resend_key = os.getenv("RESEND_API_KEY")
-        smtp_user  = os.getenv("SMTP_USER")
-        smtp_pass  = (os.getenv("SMTP_PASS") or "").replace(" ", "")
-        smtp_host  = os.getenv("SMTP_HOST", "smtp.gmail.com")
-        smtp_port  = int(os.getenv("SMTP_PORT", "587"))
-        smtp_from  = os.getenv("SMTP_FROM", smtp_user or "onboarding@resend.dev")
-        from_name  = os.getenv("SMTP_FROM_NAME", "نبض الصفقات")
+    from api import audience_engine as _ae_nc
+    from api import audience_sender as _send_nc
 
-        if resend_key:
-            try:
-                resp = requests.post(
-                    "https://api.resend.com/emails",
-                    headers={"Authorization": f"Bearer {resend_key}",
-                             "Content-Type": "application/json"},
-                    json={"from": f"{from_name} <{smtp_from}>",
-                          "to": [to_email], "subject": subject, "html": html_body},
-                    timeout=15,
-                )
-                return resp.status_code in (200, 201, 202)
-            except Exception:
-                return False
+    # ── تحميل الشرائح المحفوظة ─────────────────────────────────────────────
+    @st.cache_data(ttl=60)
+    def _nc_load_segments():
+        with get_conn() as _c:
+            _c.autocommit = True
+            usegs = _ae_nc.list_user_segments(_c)
+            tmpls = _ae_nc.list_templates(_c)
+        return usegs, tmpls
 
-        if smtp_user and smtp_pass:
-            try:
-                msg = MIMEMultipart("alternative")
-                msg["Subject"] = subject
-                msg["From"]    = f"{from_name} <{smtp_from}>"
-                msg["To"]      = to_email
-                msg.attach(MIMEText(html_body, "html", "utf-8"))
-                ipv4 = socket.gethostbyname(smtp_host)
-                if smtp_port == 465:
-                    with smtplib.SMTP_SSL(ipv4, smtp_port, timeout=20) as srv:
-                        srv.login(smtp_user, smtp_pass)
-                        srv.send_message(msg)
-                else:
-                    with smtplib.SMTP(ipv4, smtp_port, timeout=20) as srv:
-                        srv.ehlo(); srv.starttls(); srv.ehlo()
-                        srv.login(smtp_user, smtp_pass)
-                        srv.send_message(msg)
-                return True
-            except Exception:
-                return False
-        return False
+    _user_segs_nc, _templates_nc = _nc_load_segments()
+    _all_segs_nc = _user_segs_nc + _templates_nc
 
-    # ── تبويبان رئيسيان ───────────────────────────────────────────────────────
-    tab_tg, tab_email = st.tabs(["📱 إشعارات تليجرام", "✉️ حملات البريد الإلكتروني"])
+    # شريحة معدّة سلفاً عبر زر «افتح في مركز الإشعارات» من بنّاء الشرائح
+    _preset_sid = st.session_state.pop("nc_preset_segment_id", None)
 
-    # ═══════════════════════════════════════════════════════════════════════════
+    def _seg_picker(key_prefix: str, default_id: int | None = None) -> int | None:
+        """مختار شريحة موحّد للتبويبين. يرجّع segment_id أو None."""
+        opts = [(None, "— بدون شريحة (الكل) —")] + [
+            (s["id"],
+             f"{'📋 ' if s.get('is_template') else '💾 '}{s['name']}"
+             + (f"  ({s['last_count']})" if s.get('last_count') is not None else ""))
+            for s in _all_segs_nc
+        ]
+        cur_idx = 0
+        if default_id:
+            for i, (sid, _) in enumerate(opts):
+                if sid == default_id:
+                    cur_idx = i
+                    break
+        sel = st.selectbox(
+            "🎯 الشريحة المستهدفة:",
+            opts, index=cur_idx,
+            format_func=lambda x: x[1],
+            key=f"{key_prefix}_seg",
+        )
+        return sel[0]
+
+    def _live_count(channel: str, sid: int | None) -> int:
+        try:
+            with get_conn() as _c:
+                _c.autocommit = True
+                if sid:
+                    seg = _ae_nc.load_segment(_c, sid)
+                    return _ae_nc.count_audience(_c, channel,
+                                                 seg["rules_json"] if seg else {})
+                return _ae_nc.count_audience(_c, channel, {})
+        except Exception:
+            return 0
+
+    tab_tg, tab_email, tab_sched, tab_reports, tab_excl = st.tabs(
+        ["📱 إشعارات تليجرام", "✉️ حملات البريد الإلكتروني",
+         "⏰ المجدولة", "📊 تقارير الحملات", "🚫 قائمة الاستثناء"])
+
+    # ═══════════════════════════════════════════════════════════════════════
     # تبويب 1 — إشعارات تليجرام
-    # ═══════════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════════════
     with tab_tg:
-        st.info("نصيحة: الرسائل التي تحتوي على صور تحقق تفاعلاً أعلى بنسبة 40%.")
-        try:
-            conn = get_conn()
-            users_df = pd.read_sql(
-                "SELECT telegram_id, username, user_status, last_seen FROM bot_users", conn)
-            total_users = len(users_df)
-            now = pd.Timestamp.now()
-            active_24h_df    = users_df[users_df['last_seen'] >= (now - pd.Timedelta(hours=24))]
-            inactive_week_df = users_df[users_df['last_seen'] <  (now - pd.Timedelta(days=7))]
-            active_normal_df = users_df[
-                (users_df['last_seen'] < (now - pd.Timedelta(hours=24))) &
-                (users_df['last_seen'] >= (now - pd.Timedelta(days=7)))]
+        col_input, col_preview = st.columns([1.5, 1])
 
-            col_input, col_preview = st.columns([1.5, 1])
-            with col_input:
-                st.subheader("🖋️ تجهيز المحتوى")
-                msg_text  = st.text_area("نص الرسالة:",
-                    placeholder="مثال: أقوى عروض اليوم في متجر نون 🔥.. استخدم كود (B4) لخصم إضافي!",
-                    height=150, key="tg_msg")
-                msg_image = st.text_input("رابط صورة العرض (اختياري):",
-                    placeholder="https://example.com/promo.jpg", key="tg_img")
-                audience  = st.selectbox("الفئة المستهدفة:",
-                    ["الكل","نشط (خلال 24 ساعة)","نشط (اعتيادي)","خامل (أكثر من أسبوع)"],
-                    key="tg_aud")
-                target_df = (users_df if audience == "الكل"
-                             else active_24h_df if audience == "نشط (خلال 24 ساعة)"
-                             else active_normal_df if audience == "نشط (اعتيادي)"
-                             else inactive_week_df)
-                st.divider()
-                if st.button("🚀 إرسال الرسالة الآن", width='stretch', key="tg_send"):
+        with col_input:
+            st.subheader("🖋️ تجهيز الرسالة")
+            sid_tg = _seg_picker("nc_tg", default_id=_preset_sid)
+
+            msg_text = st.text_area(
+                "✍️ نص الرسالة:",
+                placeholder="مثال: أقوى عروض اليوم في متجر نون 🔥",
+                height=140, key="nc_tg_msg")
+            msg_image = st.text_input(
+                "🖼️ رابط صورة (اختياري):",
+                placeholder="https://example.com/promo.jpg",
+                key="nc_tg_img")
+
+            with st.expander("⚙️ خيارات متقدّمة"):
+                use_ab = st.checkbox("اختبار A/B (نصّان، 50/50)",
+                                     key="nc_tg_ab")
+                variant_b = None
+                if use_ab:
+                    variant_b = st.text_area(
+                        "✍️ نص النسخة B:",
+                        placeholder="نسخة بديلة لاختبار التفاعل",
+                        height=120, key="nc_tg_msg_b")
+                rate_tg = st.slider("⏱️ معدّل الإرسال (رسالة/ثانية)",
+                                    1, 25, 20, key="nc_tg_rate",
+                                    help="حد تليجرام 30/ثانية — يفضّل 20 للأمان")
+                cap_tg = st.slider("🛡️ سقف الرسائل/يوم لكل مستخدم",
+                                   0, 10, 3, key="nc_tg_cap",
+                                   help="0 = بدون سقف")
+
+            n_tg = _live_count("telegram", sid_tg)
+            st.markdown(f"### 👥 سيستهدف: **{n_tg}** مستخدم تليجرام")
+
+            cc1, cc2 = st.columns(2)
+            with cc1:
+                if st.button("🧪 محاكاة (بدون إرسال)",
+                             key="nc_tg_dry", width="stretch"):
                     if not msg_text:
-                        st.error("يا برنس، ما يصير نرسل رسالة فاضية! اكتب شي.")
-                    elif len(target_df) == 0:
-                        st.warning(f"لا يوجد مستخدمين ضمن فئة ({audience}) حالياً.")
+                        st.error("اكتب نص الرسالة أولاً.")
                     else:
-                        cur = conn.cursor()
-                        cur.execute(
-                            "INSERT INTO broadcast_logs (message_text,image_url,target_audience,delivery_count) "
-                            "VALUES (%s,%s,%s,%s)",
-                            (msg_text, msg_image, audience, len(target_df)))
-                        conn.commit()
-                        st.success(f"✅ تمت جدولة إرسال {len(target_df)} رسالة لـ ({audience}) بنجاح!")
-                        st.balloons()
+                        with get_conn() as _c:
+                            _c.autocommit = True
+                            res = _send_nc.send_telegram_broadcast(
+                                _c, segment_id=sid_tg,
+                                message_text=msg_text, image_url=msg_image or None,
+                                variant_b_text=variant_b,
+                                rate_per_sec=rate_tg, freq_cap_per_day=cap_tg,
+                                dry_run=True)
+                        st.info(f"💡 ستُرسل لـ {res['would_send']} "
+                                f"(تم استبعاد {res['skipped_freq_cap']} بسبب السقف)")
 
-            with col_preview:
-                st.subheader("📱 معاينة في جوال العميل")
-                with st.container(border=True):
-                    if msg_image:
-                        st.image(msg_image, width='stretch')
-                    if msg_text:
-                        st.markdown("**المصدر:** [Tawfeer Intelligence Engine]")
-                        st.write(msg_text)
-                        st.caption("🕒 يُرسل الآن...")
+            with cc2:
+                if st.button("🚀 إرسال فعلي", key="nc_tg_send",
+                             width="stretch", type="primary"):
+                    if not msg_text:
+                        st.error("اكتب نص الرسالة أولاً.")
+                    elif n_tg == 0:
+                        st.warning("لا مستخدمين مطابقين للشريحة.")
                     else:
-                        st.caption("اكتب نص الرسالة لتظهر المعاينة هنا...")
-                st.divider()
-                st.markdown("### 📊 ملخص الجمهور")
-                st.write(f"👥 **العدد الكلي للمشتركين:** `{total_users}`")
-                with st.container(border=True):
-                    st.write(f"🟢 نشط (24 ساعة): `{len(active_24h_df)}`")
-                    st.write(f"🟡 نشط (اعتيادي): `{len(active_normal_df)}`")
-                    st.write(f"🔴 خامل (+أسبوع):  `{len(inactive_week_df)}`")
-                    st.divider()
-                    st.metric("🎯 المستهدفين حالياً", len(target_df))
-
-            st.divider()
-            with st.expander("📜 سجل الرسائل المرسلة (آخر 10 حملات)"):
-                history_df = pd.read_sql("""
-                    SELECT sent_at as "تاريخ الإرسال", target_audience as "الفئة",
-                           delivery_count as "العدد", message_text as "المحتوى"
-                    FROM broadcast_logs ORDER BY sent_at DESC LIMIT 10
-                """, conn)
-                if not history_df.empty:
-                    st.dataframe(history_df, width='stretch')
-                else:
-                    st.info("لا توجد حملات إرسال سابقة موثقة.")
-
-        except Exception as e:
-            st.error(f"حدث خطأ في إشعارات تليجرام: {e}")
-        finally:
-            if 'conn' in locals(): conn.close()
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # تبويب 2 — حملات البريد الإلكتروني
-    # ═══════════════════════════════════════════════════════════════════════════
-    with tab_email:
-        try:
-            conn = get_conn()
-            conn.autocommit = True
-
-            # إحصاءات مستخدمي الموقع
-            web_kpi = pd.read_sql("""
-                SELECT
-                    COUNT(*)                                                                           AS total,
-                    COUNT(*) FILTER (WHERE last_seen >= NOW()-INTERVAL '1 day')                       AS active_24h,
-                    COUNT(*) FILTER (WHERE last_seen <  NOW()-INTERVAL '1 day'
-                                      AND  last_seen >= NOW()-INTERVAL '7 days')                      AS active_normal,
-                    COUNT(*) FILTER (WHERE last_seen <  NOW()-INTERVAL '7 days' OR last_seen IS NULL) AS inactive,
-                    COUNT(email) FILTER (WHERE email IS NOT NULL AND email <> '')                      AS with_email
-                FROM web_users WHERE password_hash IS NOT NULL
-            """, conn)
-            kpi = web_kpi.iloc[0]
-
-            col_build, col_prev = st.columns([3, 2])
-
-            # ── عمود البناء ──────────────────────────────────────────────────
-            with col_build:
-                st.subheader("✉️ بناء الحملة البريدية")
-
-                em_subject = st.text_input(
-                    "📌 عنوان الإيميل (Subject):",
-                    placeholder="مثال: عروض حصرية لك اليوم 🔥 — نبض الصفقات",
-                    key="em_subject")
-                em_banner = st.text_input(
-                    "🖼️ رابط صورة البانر (اختياري):",
-                    placeholder="https://...", key="em_banner")
-
-                em_mode = st.radio(
-                    "نوع المحتوى:", ["نص بسيط", "HTML متقدم"],
-                    horizontal=True, key="em_mode")
-                if em_mode == "نص بسيط":
-                    em_body_raw = st.text_area(
-                        "نص الإيميل:",
-                        placeholder="اكتب محتوى الحملة هنا...\nيدعم الأسطر المتعددة.",
-                        height=200, key="em_body_plain")
-                    em_body_html = em_body_raw.replace("\n", "<br>") if em_body_raw else ""
-                else:
-                    em_body_html = st.text_area(
-                        "كود HTML:",
-                        placeholder="<h2>أهلاً بك!</h2>\n<p>اكتب HTML هنا...</p>",
-                        height=200, key="em_body_html")
-
-                em_audience = st.selectbox(
-                    "👥 الجمهور المستهدف:",
-                    ["الكل","نشط (خلال 24 ساعة)","نشط (اعتيادي)","خامل (أكثر من أسبوع)"],
-                    key="em_audience")
-
-                _aud_sql = {
-                    "الكل":
-                        "password_hash IS NOT NULL AND email IS NOT NULL AND email <> ''",
-                    "نشط (خلال 24 ساعة)":
-                        "password_hash IS NOT NULL AND email IS NOT NULL AND email <> '' "
-                        "AND last_seen >= NOW()-INTERVAL '1 day'",
-                    "نشط (اعتيادي)":
-                        "password_hash IS NOT NULL AND email IS NOT NULL AND email <> '' "
-                        "AND last_seen < NOW()-INTERVAL '1 day' "
-                        "AND last_seen >= NOW()-INTERVAL '7 days'",
-                    "خامل (أكثر من أسبوع)":
-                        "password_hash IS NOT NULL AND email IS NOT NULL AND email <> '' "
-                        "AND (last_seen < NOW()-INTERVAL '7 days' OR last_seen IS NULL)",
-                }
-                em_targets = pd.read_sql(
-                    f"SELECT email, display_name FROM web_users WHERE {_aud_sql[em_audience]}",
-                    conn)
-
-                st.divider()
-                mc1, mc2 = st.columns(2)
-                with mc1: st.metric("📧 إيميلات في الجمهور", len(em_targets))
-                with mc2: st.metric("👥 إجمالي مستخدمي الموقع", int(kpi['total']))
-                st.divider()
-
-                if st.button("🚀 إطلاق الحملة الآن",
-                             width='stretch', key="em_send", type="primary"):
-                    if not em_subject:
-                        st.error("⚠️ أدخل عنوان الإيميل أولاً.")
-                    elif not em_body_html:
-                        st.error("⚠️ أدخل محتوى الإيميل.")
-                    elif len(em_targets) == 0:
-                        st.warning(f"لا يوجد مستخدمون بإيميل في فئة ({em_audience}).")
-                    else:
-                        # بناء قالب HTML الكامل
-                        banner_tag = (
-                            f'<img src="{em_banner}" style="width:100%;border-radius:8px;'
-                            f'margin-bottom:24px;display:block;" />'
-                            if em_banner else "")
-                        full_html = f"""<!DOCTYPE html>
-<html dir="rtl" lang="ar">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#F5F5F0;font-family:Arial,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#F5F5F0;padding:32px 16px;">
-  <tr><td>
-    <table width="600" cellpadding="0" cellspacing="0" align="center"
-           style="background:#FFFFFF;border-radius:16px;overflow:hidden;
-                  box-shadow:0 4px 24px rgba(0,0,0,0.07);max-width:100%;">
-      <tr>
-        <td style="background:linear-gradient(135deg,#10B981,#059669);
-                   padding:28px 40px;text-align:center;">
-          <h1 style="color:white;margin:0;font-size:22px;font-weight:700;">نبض الصفقات 🌐</h1>
-          <p style="color:rgba(255,255,255,0.85);margin:6px 0 0;font-size:13px;">dealpulseksa.com</p>
-        </td>
-      </tr>
-      <tr>
-        <td style="padding:32px 40px;font-size:15px;color:#1F2937;line-height:1.7;">
-          {banner_tag}
-          {em_body_html}
-        </td>
-      </tr>
-      <tr>
-        <td style="background:#F5F5F0;padding:20px 40px;text-align:center;
-                   border-top:1px solid #E5E7EB;">
-          <p style="color:#9CA3AF;font-size:12px;margin:0;">
-            نبض الصفقات | Deal Pulse KSA<br>
-            <a href="https://dealpulseksa.com"
-               style="color:#10B981;text-decoration:none;">dealpulseksa.com</a>
-          </p>
-        </td>
-      </tr>
-    </table>
-  </td></tr>
-</table>
-</body></html>"""
-
-                        sent_ok = sent_fail = 0
-                        total_t = len(em_targets)
-                        prog = st.progress(0, text="جاري الإرسال...")
-
-                        for _, row in em_targets.iterrows():
-                            if _send_campaign_email(row['email'], em_subject, full_html):
-                                sent_ok += 1
+                        # مضاد التكرار
+                        with get_conn() as _c_dup:
+                            _c_dup.autocommit = True
+                            _is_dup = _send_nc.check_recent_duplicate(
+                                _c_dup, segment_id=sid_tg,
+                                message_text=msg_text, channel="telegram",
+                                within_hours=24)
+                        if _is_dup:
+                            st.error("🚫 نفس الرسالة أُرسلت لهذه الشريحة "
+                                     "خلال آخر 24 ساعة. عدّل النص أو غيّر الشريحة.")
+                            st.stop()
+                        prog = st.progress(0.0, text="بدء الإرسال...")
+                        def _cb(done, total):
+                            try:
+                                prog.progress(min(1.0, done/max(1,total)),
+                                              text=f"تم {done}/{total}")
+                            except Exception:
+                                pass
+                        try:
+                            with get_conn() as _c:
+                                _c.autocommit = True
+                                res = _send_nc.send_telegram_broadcast(
+                                    _c, segment_id=sid_tg,
+                                    message_text=msg_text,
+                                    image_url=msg_image or None,
+                                    variant_b_text=variant_b,
+                                    rate_per_sec=rate_tg,
+                                    freq_cap_per_day=cap_tg,
+                                    progress_cb=_cb)
+                            if res["failed"] == 0:
+                                st.success(f"✅ نجح إرسال {res['sent']} رسالة "
+                                           f"(حملة #{res['broadcast_id']})")
+                                st.balloons()
                             else:
-                                sent_fail += 1
-                            done = sent_ok + sent_fail
-                            prog.progress(done / total_t,
-                                          text=f"تم {done}/{total_t}...")
+                                st.warning(f"⚠️ نجح {res['sent']} ، فشل {res['failed']} "
+                                           f"(حملة #{res['broadcast_id']})")
+                            st.cache_data.clear()
+                        except Exception as _e:
+                            st.error(f"فشل الإرسال: {_e}")
 
-                        # تسجيل الحملة في email_logs
-                        cur = conn.cursor()
-                        conn.autocommit = False
-                        cur.execute("""
-                            INSERT INTO email_logs
-                                (subject, body_html, banner_url, target_audience,
-                                 delivery_count, sent_count, failed_count, status)
-                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-                        """, (em_subject, full_html, em_banner, em_audience,
-                              total_t, sent_ok, sent_fail,
-                              'completed' if sent_fail == 0 else 'partial'))
-                        conn.commit()
-                        conn.autocommit = True
+        with col_preview:
+            st.subheader("📱 معاينة")
+            with st.container(border=True):
+                if msg_image:
+                    st.image(msg_image, width="stretch")
+                if msg_text:
+                    st.markdown("**نبض الصفقات**")
+                    st.write(msg_text)
+                else:
+                    st.caption("اكتب نص الرسالة للمعاينة...")
 
-                        if sent_fail == 0:
-                            st.success(f"✅ أُرسلت الحملة بنجاح لـ {sent_ok} مستخدم!")
-                            st.balloons()
-                        else:
-                            st.warning(f"⚠️ انتهت الحملة — نجح {sent_ok} ، فشل {sent_fail}")
+        st.divider()
+        with st.expander("📜 آخر 10 حملات تليجرام"):
+            try:
+                with get_conn() as _c:
+                    _c.autocommit = True
+                    hist = pd.read_sql("""
+                        SELECT bl.id           AS "#",
+                               bl.sent_at      AS "وقت",
+                               s.name          AS "الشريحة",
+                               bl.delivery_count AS "المستهدفون",
+                               bl.sent_count   AS "نجح",
+                               bl.failed_count AS "فشل",
+                               bl.status       AS "الحالة",
+                               LEFT(bl.message_text, 60) AS "مقتطف"
+                        FROM broadcast_logs bl
+                        LEFT JOIN audience_segments s ON s.id = bl.segment_id
+                        ORDER BY bl.sent_at DESC LIMIT 10
+                    """, _c)
+                if hist.empty:
+                    st.info("لا حملات سابقة.")
+                else:
+                    st.dataframe(hist, width="stretch", hide_index=True)
+            except Exception as _e:
+                st.error(f"تعذّر تحميل السجل: {_e}")
 
-            # ── عمود المعاينة ─────────────────────────────────────────────────
-            with col_prev:
-                st.subheader("👁️ معاينة النشرة البريدية")
+    # ═══════════════════════════════════════════════════════════════════════
+    # تبويب 2 — حملات البريد الإلكتروني
+    # ═══════════════════════════════════════════════════════════════════════
+    with tab_email:
+        col_build, col_prev = st.columns([3, 2])
 
-                _prev_banner = (
-                    f'<img src="{em_banner}" style="width:100%;border-radius:6px;'
-                    f'margin-bottom:14px;display:block;" />'
-                    if em_banner else "")
-                _prev_body   = em_body_html if em_body_html else (
-                    '<p style="color:#9CA3AF;font-style:italic;">'
-                    'اكتب محتوى الحملة لتظهر المعاينة...</p>')
-                _prev_subj   = em_subject if em_subject else "عنوان الحملة"
+        with col_build:
+            st.subheader("✉️ بناء حملة بريدية")
+            sid_em = _seg_picker("nc_em", default_id=_preset_sid)
 
-                preview_html = f"""<!DOCTYPE html>
-<html dir="rtl" lang="ar">
-<head><meta charset="utf-8">
-<style>
-*{{box-sizing:border-box;margin:0;padding:0;}}
-body{{background:#ECEAE4;font-family:Arial,sans-serif;padding:12px;}}
-.wrap{{background:#fff;border-radius:12px;overflow:hidden;
-       box-shadow:0 2px 14px rgba(0,0,0,0.1);}}
-.hdr{{background:linear-gradient(135deg,#10B981,#059669);
-      padding:18px 24px;text-align:center;color:#fff;}}
-.hdr h1{{font-size:16px;margin:0;}}
-.hdr p{{font-size:11px;opacity:.85;margin:4px 0 0;}}
-.subj{{background:#E8F5E9;padding:8px 20px;font-size:12px;
-       color:#374151;border-bottom:1px solid #E5E7EB;}}
-.body{{padding:20px 24px;font-size:13px;color:#1F2937;line-height:1.65;}}
-.ftr{{background:#F5F5F0;padding:12px;text-align:center;
-      font-size:11px;color:#9CA3AF;border-top:1px solid #E5E7EB;}}
-.ftr a{{color:#10B981;text-decoration:none;}}
-</style></head>
-<body>
-<div class="wrap">
-  <div class="hdr"><h1>نبض الصفقات 🌐</h1><p>dealpulseksa.com</p></div>
-  <div class="subj"><strong>📌 الموضوع:</strong> {_prev_subj}</div>
-  <div class="body">{_prev_banner}{_prev_body}</div>
-  <div class="ftr">نبض الصفقات |
-    <a href="https://dealpulseksa.com">dealpulseksa.com</a>
-  </div>
-</div>
-</body></html>"""
-                components.html(preview_html, height=460, scrolling=True)
+            em_subject = st.text_input(
+                "📌 عنوان الإيميل:",
+                placeholder="مثال: عروض حصرية لك اليوم 🔥",
+                key="nc_em_subj")
+            em_banner = st.text_input(
+                "🖼️ رابط البانر (اختياري):",
+                placeholder="https://...", key="nc_em_banner")
+            em_mode = st.radio("نوع المحتوى:",
+                ["نص بسيط", "HTML متقدم"],
+                horizontal=True, key="nc_em_mode")
+            if em_mode == "نص بسيط":
+                _raw = st.text_area("✍️ نص الإيميل:",
+                    placeholder="اكتب محتوى الحملة...", height=200,
+                    key="nc_em_body_plain")
+                em_body_html = _raw.replace("\n","<br>") if _raw else ""
+            else:
+                em_body_html = st.text_area("كود HTML:",
+                    placeholder="<h2>أهلاً!</h2>...", height=200,
+                    key="nc_em_body_html")
 
-                st.divider()
-                st.markdown("### 📊 إحصاءات جمهور الموقع")
-                with st.container(border=True):
-                    st.write(f"🟢 نشط اليوم:   `{int(kpi['active_24h'])}`")
-                    st.write(f"🟡 نشط الأسبوع: `{int(kpi['active_normal'])}`")
-                    st.write(f"🔴 خامل:         `{int(kpi['inactive'])}`")
-                    st.write(f"📧 لديهم إيميل: `{int(kpi['with_email'])}`")
+            with st.expander("⚙️ خيارات متقدّمة"):
+                use_ab_em = st.checkbox("اختبار A/B (موضوع+نص بديل)",
+                                        key="nc_em_ab")
+                vb_subj = vb_html = None
+                if use_ab_em:
+                    vb_subj = st.text_input("📌 عنوان النسخة B:",
+                                            key="nc_em_subj_b")
+                    vb_html = st.text_area("📝 محتوى النسخة B:",
+                                           height=160, key="nc_em_body_b")
+                    if vb_html:
+                        vb_html = vb_html.replace("\n","<br>") if em_mode == "نص بسيط" else vb_html
+                rate_em = st.slider("⏱️ معدّل الإرسال (إيميل/ثانية)",
+                                    1, 20, 8, key="nc_em_rate")
+                cap_em = st.slider("🛡️ سقف الإيميلات/يوم لكل مستخدم",
+                                   0, 5, 3, key="nc_em_cap")
 
-            # ── سجل الحملات البريدية ──────────────────────────────────────────
-            st.divider()
-            with st.expander("📜 سجل الحملات البريدية (آخر 10)"):
-                try:
-                    em_hist = pd.read_sql("""
-                        SELECT sent_at         AS "تاريخ الإرسال",
-                               subject         AS "الموضوع",
-                               target_audience AS "الجمهور",
-                               delivery_count  AS "المستهدفون",
-                               sent_count      AS "نجح",
-                               failed_count    AS "فشل",
-                               status          AS "الحالة"
-                        FROM email_logs ORDER BY sent_at DESC LIMIT 10
-                    """, conn)
-                    if not em_hist.empty:
-                        st.dataframe(em_hist, width='stretch', hide_index=True)
+            n_em = _live_count("email", sid_em)
+            st.markdown(f"### 📧 سيستهدف: **{n_em}** مشترك ببريد")
+
+            ec1, ec2 = st.columns(2)
+            with ec1:
+                if st.button("🧪 محاكاة", key="nc_em_dry",
+                             width="stretch"):
+                    if not em_subject or not em_body_html:
+                        st.error("عنوان ومحتوى الإيميل مطلوبان.")
                     else:
-                        st.info("لا توجد حملات بريدية سابقة.")
-                except Exception:
-                    st.info("لا توجد حملات بريدية سابقة.")
+                        with get_conn() as _c:
+                            _c.autocommit = True
+                            res = _send_nc.send_email_broadcast(
+                                _c, segment_id=sid_em,
+                                subject=em_subject, body_html=em_body_html,
+                                banner_url=em_banner or "",
+                                variant_b_subject=vb_subj,
+                                variant_b_html=vb_html,
+                                rate_per_sec=rate_em,
+                                freq_cap_per_day=cap_em,
+                                dry_run=True)
+                        st.info(f"💡 ستُرسل لـ {res['would_send']} إيميل "
+                                f"(استبعد {res['skipped_freq_cap']} بسبب السقف)")
+            with ec2:
+                if st.button("🚀 إطلاق الحملة", key="nc_em_send",
+                             width="stretch", type="primary"):
+                    if not em_subject or not em_body_html:
+                        st.error("عنوان ومحتوى الإيميل مطلوبان.")
+                    elif n_em == 0:
+                        st.warning("لا مشتركين بإيميل للشريحة.")
+                    else:
+                        with get_conn() as _c_dup:
+                            _c_dup.autocommit = True
+                            _is_dup_em = _send_nc.check_recent_duplicate(
+                                _c_dup, segment_id=sid_em,
+                                message_text=em_subject, channel="email",
+                                within_hours=24)
+                        if _is_dup_em:
+                            st.error("🚫 إيميل بنفس العنوان أُرسل لهذه الشريحة "
+                                     "خلال آخر 24 ساعة. غيّر العنوان أو الشريحة.")
+                            st.stop()
+                        prog = st.progress(0.0, text="بدء الإرسال...")
+                        def _cbe(done, total):
+                            try:
+                                prog.progress(min(1.0, done/max(1,total)),
+                                              text=f"تم {done}/{total}")
+                            except Exception:
+                                pass
+                        try:
+                            with get_conn() as _c:
+                                _c.autocommit = True
+                                res = _send_nc.send_email_broadcast(
+                                    _c, segment_id=sid_em,
+                                    subject=em_subject, body_html=em_body_html,
+                                    banner_url=em_banner or "",
+                                    variant_b_subject=vb_subj,
+                                    variant_b_html=vb_html,
+                                    rate_per_sec=rate_em,
+                                    freq_cap_per_day=cap_em,
+                                    progress_cb=_cbe)
+                            if res["failed"] == 0:
+                                st.success(f"✅ نجح {res['sent']} إيميل "
+                                           f"(حملة #{res['broadcast_id']})")
+                                st.balloons()
+                            else:
+                                st.warning(f"⚠️ نجح {res['sent']} ، فشل {res['failed']} "
+                                           f"(حملة #{res['broadcast_id']})")
+                            st.cache_data.clear()
+                        except Exception as _e:
+                            st.error(f"فشل الإرسال: {_e}")
 
-        except Exception as e:
-            st.error(f"حدث خطأ في حملات البريد الإلكتروني: {e}")
-        finally:
-            if 'conn' in locals(): conn.close()
+        with col_prev:
+            st.subheader("👁️ معاينة")
+            _prev_banner = (
+                f'<img src="{em_banner}" style="width:100%;border-radius:6px;'
+                f'margin-bottom:14px;display:block;" />' if em_banner else "")
+            _prev_body = em_body_html or (
+                '<p style="color:#9CA3AF;font-style:italic;">'
+                'اكتب المحتوى للمعاينة...</p>')
+            _prev_subj = em_subject or "عنوان الحملة"
+            preview_html = f"""<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
+<style>*{{box-sizing:border-box;margin:0;padding:0;}}body{{background:#ECEAE4;font-family:Arial;padding:12px;}}
+.wrap{{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 14px rgba(0,0,0,0.1);}}
+.hdr{{background:linear-gradient(135deg,#10B981,#059669);padding:18px 24px;text-align:center;color:#fff;}}
+.hdr h1{{font-size:16px;margin:0;}}.subj{{background:#E8F5E9;padding:8px 20px;font-size:12px;color:#374151;border-bottom:1px solid #E5E7EB;}}
+.body{{padding:20px 24px;font-size:13px;color:#1F2937;line-height:1.65;}}
+.ftr{{background:#F5F5F0;padding:12px;text-align:center;font-size:11px;color:#9CA3AF;border-top:1px solid #E5E7EB;}}
+</style></head><body><div class="wrap"><div class="hdr"><h1>نبض الصفقات 🌐</h1></div>
+<div class="subj"><strong>📌 الموضوع:</strong> {_prev_subj}</div>
+<div class="body">{_prev_banner}{_prev_body}</div>
+<div class="ftr">نبض الصفقات | dealpulseksa.com</div></div></body></html>"""
+            components.html(preview_html, height=420, scrolling=True)
+
+        st.divider()
+        with st.expander("📜 آخر 10 حملات بريدية"):
+            try:
+                with get_conn() as _c:
+                    _c.autocommit = True
+                    em_hist = pd.read_sql("""
+                        SELECT el.id           AS "#",
+                               el.sent_at      AS "وقت",
+                               s.name          AS "الشريحة",
+                               el.subject      AS "العنوان",
+                               el.delivery_count AS "المستهدفون",
+                               el.sent_count   AS "نجح",
+                               el.failed_count AS "فشل",
+                               el.status       AS "الحالة"
+                        FROM email_logs el
+                        LEFT JOIN audience_segments s ON s.id = el.segment_id
+                        ORDER BY el.sent_at DESC LIMIT 10
+                    """, _c)
+                if em_hist.empty:
+                    st.info("لا حملات بريدية سابقة.")
+                else:
+                    st.dataframe(em_hist, width="stretch", hide_index=True)
+            except Exception as _e:
+                st.error(f"تعذّر تحميل السجل: {_e}")
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # تبويب 3 — الحملات المجدولة
+    # ═══════════════════════════════════════════════════════════════════════
+    with tab_sched:
+        st.subheader("⏰ الحملات المجدولة")
+        st.caption("أنشئ حملة تنطلق تلقائياً في وقت محدد، أو متكرّرة يومياً/أسبوعياً.")
+
+        with st.expander("➕ إنشاء جدولة جديدة", expanded=False):
+            sc_name = st.text_input("📝 اسم الجدولة:",
+                placeholder="مثلاً: تذكير صباحي يومي",
+                key="nc_sc_name")
+            sc_seg = _seg_picker("nc_sc")
+            sc_channel = st.radio("القناة", ["telegram","email"],
+                format_func=lambda x: "📱 تليجرام" if x=="telegram" else "📧 إيميل",
+                horizontal=True, key="nc_sc_ch")
+            if sc_channel == "telegram":
+                sc_text = st.text_area("✍️ نص الرسالة:", height=120, key="nc_sc_text")
+                sc_img  = st.text_input("🖼️ رابط صورة (اختياري):", key="nc_sc_img")
+                sc_payload = {"text": sc_text, "image_url": sc_img or None}
+            else:
+                sc_subj = st.text_input("📌 العنوان:", key="nc_sc_subj")
+                sc_html = st.text_area("📝 المحتوى (HTML/نص):", height=140, key="nc_sc_html")
+                sc_bnr  = st.text_input("🖼️ بانر (اختياري):", key="nc_sc_bnr")
+                sc_payload = {"subject": sc_subj,
+                              "body_html": sc_html.replace("\n","<br>") if sc_html else "",
+                              "banner_url": sc_bnr or ""}
+            sc_type = st.selectbox("التكرار", ["once","daily","weekly"],
+                format_func=lambda x: {"once":"مرة واحدة",
+                                       "daily":"يومياً",
+                                       "weekly":"أسبوعياً"}[x],
+                key="nc_sc_type")
+            sc_run_at = None
+            if sc_type == "once":
+                _d = st.date_input("📅 تاريخ الإطلاق", key="nc_sc_date")
+                _t = st.time_input("🕐 الساعة", key="nc_sc_time")
+                if _d and _t:
+                    sc_run_at = f"{_d} {_t}"
+            if st.button("💾 جدول الحملة", key="nc_sc_create",
+                         width="stretch", type="primary"):
+                if not sc_name:
+                    st.error("أدخل اسماً للجدولة.")
+                elif not sc_seg:
+                    st.error("اختر شريحة (إجبارية للجدولة).")
+                else:
+                    try:
+                        with get_conn() as _c:
+                            _c.autocommit = True
+                            new_sid = _send_nc.schedule_broadcast(
+                                _c, name=sc_name, segment_id=sc_seg,
+                                channel=sc_channel,
+                                message_payload=sc_payload,
+                                schedule_type=sc_type,
+                                run_at=sc_run_at)
+                        st.success(f"✅ أُنشئت جدولة #{new_sid}")
+                        st.rerun()
+                    except Exception as _e:
+                        st.error(f"فشل: {_e}")
+
+        st.divider()
+
+        # قائمة الجداول
+        try:
+            with get_conn() as _c:
+                _c.autocommit = True
+                schedules = _send_nc.list_schedules(_c)
+        except Exception as _e:
+            schedules = []
+            st.error(f"تعذّر التحميل: {_e}")
+
+        if not schedules:
+            st.info("لا حملات مجدولة.")
+        else:
+            for sch in schedules:
+                with st.container(border=True):
+                    sc1, sc2, sc3, sc4 = st.columns([3, 2, 1, 1])
+                    with sc1:
+                        _en_icon = "🟢" if sch["enabled"] else "⚪"
+                        st.markdown(f"{_en_icon} **{sch['name'] or '—'}** "
+                                    f"({sch['channel']})")
+                        st.caption(f"شريحة: {sch.get('segment_name') or '—'} · "
+                                   f"تكرار: {sch['schedule_type']} · "
+                                   f"تالي: {sch.get('next_run_at') or '—'}")
+                    with sc2:
+                        st.caption(f"آخر تشغيل: {sch.get('last_run_at') or 'لم يُشغّل بعد'}")
+                    with sc3:
+                        _btn_lbl = "⏸️ أوقف" if sch["enabled"] else "▶️ شغّل"
+                        if st.button(_btn_lbl, key=f"nc_sc_t_{sch['id']}",
+                                     width="stretch"):
+                            with get_conn() as _c:
+                                _c.autocommit = True
+                                _send_nc.toggle_schedule(_c, sch["id"],
+                                                          not sch["enabled"])
+                            st.rerun()
+                    with sc4:
+                        if st.button("🗑️", key=f"nc_sc_d_{sch['id']}",
+                                     width="stretch"):
+                            with get_conn() as _c:
+                                _c.autocommit = True
+                                _send_nc.delete_schedule(_c, sch["id"])
+                            st.rerun()
+
+        st.divider()
+        if st.button("🔄 شغّل المستحقّة الآن (يدوياً)",
+                     key="nc_sc_run_now", width="stretch"):
+            try:
+                with get_conn() as _c:
+                    _c.autocommit = True
+                    res = _send_nc.process_due_schedules(_c)
+                if res:
+                    st.success(f"✅ شُغّلت {len(res)} جدولة")
+                    st.json(res)
+                else:
+                    st.info("لا جداول مستحقّة حالياً.")
+            except Exception as _e:
+                st.error(f"فشل: {_e}")
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # تبويب 4 — تقارير الحملات المفصّلة
+    # ═══════════════════════════════════════════════════════════════════════
+    with tab_reports:
+        st.subheader("📊 تقرير مفصّل لحملة")
+        rp_ch = st.radio("القناة", ["telegram","email"],
+            format_func=lambda x: "📱 تليجرام" if x=="telegram" else "📧 إيميل",
+            horizontal=True, key="nc_rp_ch")
+        try:
+            with get_conn() as _c:
+                _c.autocommit = True
+                table = "broadcast_logs" if rp_ch == "telegram" else "email_logs"
+                msg_col = "message_text" if rp_ch == "telegram" else "subject"
+                rp_df = pd.read_sql(
+                    f"SELECT id, sent_at, {msg_col} AS title, "
+                    f"delivery_count, sent_count, failed_count, status "
+                    f"FROM {table} ORDER BY sent_at DESC LIMIT 50", _c)
+        except Exception as _e:
+            rp_df = pd.DataFrame()
+            st.error(f"تعذّر التحميل: {_e}")
+
+        if rp_df.empty:
+            st.info("لا حملات مسجّلة.")
+        else:
+            rp_opts = [(int(r["id"]),
+                        f"#{r['id']} · {str(r['sent_at'])[:16]} · "
+                        f"{(r['title'] or '')[:40]} · "
+                        f"{r['sent_count'] or 0}/{r['delivery_count'] or 0}")
+                       for _, r in rp_df.iterrows()]
+            rp_sel = st.selectbox("اختر حملة", rp_opts,
+                format_func=lambda x: x[1], key="nc_rp_sel")
+            if rp_sel and st.button("📊 اعرض التقرير", key="nc_rp_show",
+                                     width="stretch"):
+                with get_conn() as _c:
+                    _c.autocommit = True
+                    rep = _send_nc.broadcast_report(_c, rp_sel[0], rp_ch)
+                if rep.get("error"):
+                    st.error(rep["error"])
+                else:
+                    mc1, mc2, mc3, mc4 = st.columns(4)
+                    mc1.metric("👥 المستهدفون", rep.get("delivery_count") or 0)
+                    mc2.metric("✅ نجح", rep.get("sent_count") or 0)
+                    mc3.metric("❌ فشل", rep.get("failed_count") or 0)
+                    _total = (rep.get("sent_count") or 0) + (rep.get("failed_count") or 0)
+                    _rate = (rep.get("sent_count") or 0) / _total * 100 if _total else 0
+                    mc4.metric("📈 نسبة النجاح", f"{_rate:.1f}%")
+
+                    st.markdown("##### 📋 توزيع الحالة")
+                    if rep.get("by_status"):
+                        st.json(rep["by_status"])
+
+                    if rep.get("by_variant"):
+                        st.markdown("##### 🅰️🅱️ مقارنة A/B")
+                        _va = rep["by_variant"]
+                        st.json(_va)
+                        # حساب CTR لكل نسخة
+                        for _v, _stats in _va.items():
+                            _t = sum(_stats.values())
+                            _s = _stats.get("sent",0) + _stats.get("opened",0) + _stats.get("clicked",0)
+                            _r = _s / _t * 100 if _t else 0
+                            st.write(f"  - **النسخة {_v}**: نسبة وصول {_r:.1f}% ({_s}/{_t})")
+
+                    if rep.get("failure_samples"):
+                        st.markdown("##### 🔍 عيّنة من حالات الفشل")
+                        for _f in rep["failure_samples"]:
+                            st.caption(f"  - `{_f['user']}` → {_f['error']}")
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # تبويب 5 — قائمة الاستثناء (Don't-Send List)
+    # ═══════════════════════════════════════════════════════════════════════
+    with tab_excl:
+        st.subheader("🚫 قائمة الاستثناء (لن يستلموا أي إشعار)")
+        st.caption("مفيدة لـ: opt-out، شكاوى، اختبار، VIPs لا تزعجهم.")
+        try:
+            with get_conn() as _c:
+                _c.autocommit = True
+                excl_list = _send_nc.list_exclusions(_c)
+        except Exception as _e:
+            excl_list = []
+            st.error(f"تعذّر تحميل القائمة: {_e}")
+
+        with st.form("nc_excl_add", clear_on_submit=True):
+            ec1, ec2, ec3, ec4 = st.columns([2, 3, 4, 1])
+            with ec1:
+                _excl_ch = st.selectbox("القناة", ["telegram","email","both"],
+                    format_func=lambda x: {"telegram":"📱 تليجرام",
+                                           "email":"📧 إيميل", "both":"📡 الكل"}[x],
+                    key="nc_excl_ch")
+            with ec2:
+                _excl_id = st.text_input("المعرّف (telegram_id أو email):",
+                                         key="nc_excl_id")
+            with ec3:
+                _excl_reason = st.text_input("السبب (اختياري)", key="nc_excl_reason")
+            with ec4:
+                st.markdown("&nbsp;")
+                if st.form_submit_button("➕ أضف"):
+                    if not _excl_id:
+                        st.error("أدخل المعرّف.")
+                    else:
+                        with get_conn() as _c:
+                            _c.autocommit = True
+                            _send_nc.add_exclusion(_c, channel=_excl_ch,
+                                user_identifier=_excl_id.strip(),
+                                reason=_excl_reason or "")
+                        st.success("أُضيف للاستثناء.")
+                        st.rerun()
+
+        if excl_list:
+            df_excl = pd.DataFrame(excl_list)
+            df_excl["channel"] = df_excl["channel"].map(
+                {"telegram":"📱","email":"📧","both":"📡"}).fillna(df_excl["channel"])
+            st.dataframe(df_excl[["id","channel","user_identifier","reason","added_at"]],
+                         hide_index=True, width="stretch")
+            _rem_id = st.number_input("معرّف صف للحذف (id من الجدول):",
+                                      min_value=0, value=0, key="nc_excl_rem")
+            if _rem_id and st.button("🗑️ احذف من قائمة الاستثناء"):
+                with get_conn() as _c:
+                    _c.autocommit = True
+                    cur = _c.cursor()
+                    cur.execute("DELETE FROM broadcast_exclusions WHERE id=%s",
+                                (int(_rem_id),))
+                st.success("حُذف.")
+                st.rerun()
+        else:
+            st.info("لا استثناءات.")
+
 
 
 
