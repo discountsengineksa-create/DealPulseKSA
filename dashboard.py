@@ -6888,10 +6888,39 @@ elif page == "تحليل المستخدمين":
 - action_logs.action_type ∈ ('search','click_link','copy_coupon','view_store','view_trend').
 - لإجمالي المستخدمين عبر المنصة كاملة: اجمع bot_users + web_users بـ UNION.
 - لربط action_logs بالمتجر: al.store_id = m.store_id (نص = نص).
+- ⚠️ أرقام الجوال (web_users.phone) مخزّنة بصيغ مختلفة: '0534448900', '534448900',
+  '+966534448900', '966534448900'، وقد تحوي مسافات/شرطات. للبحث المرن دائماً:
+    WHERE REGEXP_REPLACE(COALESCE(phone,''), '\\D', '', 'g')
+          LIKE '%' || REGEXP_REPLACE('<الرقم المُدخل>', '\\D', '', 'g') || '%'
+  هذا يطابق بغضّ النظر عن الصيغة (يجرّد كل ما عدا الأرقام ثم يقارن).
+- ⚠️ «مدينة المستخدم» الفعلية تأتي من IP في action_logs.city وليس من web_users.city.
+  للجلب: آخر مدينة من action_logs مع استبعاد البروكسي/داتاسنتر:
+    SELECT city FROM action_logs
+    WHERE user_id = <id> AND city IS NOT NULL AND city <> ''
+      AND is_proxy IS NOT TRUE AND is_datacenter IS NOT TRUE
+    ORDER BY action_time DESC LIMIT 1
+  مع مراعاة ربط user_id بالـ source كما في القاعدة أعلاه.
+- لمعرفة مصدر المستخدم من رقم الجوال: ابحث في web_users (لأن bot_users لا يحوي phone)،
+  ثم استخدم web_users.id لربط action_logs بـ source='web'.
+- ⚠️ البحث عن متجر/كوبون بالاسم: استخدم دائماً ILIKE مع % من الجانبين، لأن المستخدم
+  قد يكتب جزء من الاسم فقط أو يخلط بين اسم المتجر ورقم/كود الكوبون.
+  مثال: «كوبون نمشي5» يعني المتجر «نمشي» وكوبون احتواؤه «5»، فابحث:
+    SELECT store_id, public_coupon, last_time, copy_clicks, link_clicks, is_trending
+    FROM master
+    WHERE (store_id ILIKE '%' || '<اسم>' || '%' OR name_en ILIKE '%' || '<اسم>' || '%'
+           OR public_coupon ILIKE '%' || '<كل المدخل>' || '%')
+    ORDER BY last_time DESC NULLS LAST
+    LIMIT 20
+  لو ما طلع نتائج بالأكواد، ابحث بالـ store_id فقط واعرض كل كوبونات المتجر.
+- ⚠️ «متى ينتهي الكوبون» = master.last_time (تاريخ آخر صلاحية للكوبون الحالي).
+- ⚠️ لتصنيف الكوبون (فعّال/منتهي/قريب الانتهاء):
+    'فعّال'         إذا last_time > CURRENT_DATE + 3
+    'قريب الانتهاء' إذا last_time BETWEEN CURRENT_DATE AND CURRENT_DATE + 3
+    'منتهي'         إذا last_time < CURRENT_DATE
 """
 
         # عرض سجل المحادثة
-        for _msg in st.session_state["ai_users_history"]:
+        for _idx, _msg in enumerate(st.session_state["ai_users_history"]):
             with st.chat_message(_msg["role"]):
                 st.markdown(_msg["content"])
                 if _msg.get("sql"):
@@ -6900,14 +6929,60 @@ elif page == "تحليل المستخدمين":
                 _df_hist = _msg.get("df")
                 if _df_hist is not None and not _df_hist.empty:
                     st.dataframe(_df_hist, width="stretch", hide_index=True)
+                    _dl1, _dl2 = st.columns(2)
+                    with _dl1:
+                        st.download_button(
+                            "⬇️ تحميل CSV",
+                            data=_df_hist.to_csv(index=False).encode("utf-8-sig"),
+                            file_name=f"ai_query_{_idx}.csv",
+                            mime="text/csv",
+                            key=f"ai_dl_csv_h_{_idx}",
+                            width="stretch",
+                        )
+                    with _dl2:
+                        _xbuf = BytesIO()
+                        with pd.ExcelWriter(_xbuf, engine="xlsxwriter") as _xw:
+                            _df_hist.to_excel(_xw, sheet_name="result", index=False)
+                        st.download_button(
+                            "⬇️ تحميل Excel",
+                            data=_xbuf.getvalue(),
+                            file_name=f"ai_query_{_idx}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key=f"ai_dl_xlsx_h_{_idx}",
+                            width="stretch",
+                        )
 
         if st.session_state["ai_users_history"]:
             if st.button("🗑️ مسح المحادثة", key="ai_users_clear"):
                 st.session_state["ai_users_history"] = []
                 st.rerun()
 
-        def _ai_users_gen_sql(question: str) -> tuple[str | None, str | None]:
-            """يطلب من Groq توليد SELECT آمن، ويرجّع (sql, error)."""
+        # ── ذاكرة الجلسة: أمثلة ناجحة + سجل أخطاء (تعليم ذاتي) ──────────
+        if "ai_success_examples" not in st.session_state:
+            st.session_state["ai_success_examples"] = []  # [{q, sql}]
+        if "ai_error_log" not in st.session_state:
+            st.session_state["ai_error_log"] = []  # [{sql, error}]
+
+        def _ai_build_few_shot() -> str:
+            """يبني أمثلة few-shot من الاستعلامات الناجحة في الجلسة."""
+            ex = st.session_state.get("ai_success_examples", [])
+            if not ex:
+                return ""
+            out = ["===== أمثلة ناجحة سابقة في هذه الجلسة (اقتدِ بها) ====="]
+            for i, e in enumerate(ex[-5:], 1):
+                out.append(f"\nمثال {i}:\nالسؤال: {e['q']}\n"
+                           f"```sql\n{e['sql']}\n```")
+            return "\n".join(out) + "\n"
+
+        def _ai_users_gen_sql(
+            question: str,
+            previous_attempts: list[dict] | None = None,
+        ) -> tuple[str | None, str | None]:
+            """
+            يطلب من Groq توليد SELECT آمن، ويرجّع (sql, error).
+            previous_attempts: لو فيه محاولات فاشلة سابقة، يمررها للنموذج
+            مع رسائل أخطاء PostgreSQL ليتعلم منها ويصحح.
+            """
             key = os.getenv("GROQ_API_KEY")
             if not key:
                 return None, ("GROQ_API_KEY غير مضبوط في متغيرات البيئة. "
@@ -6915,6 +6990,7 @@ elif page == "تحليل المستخدمين":
                               "Service → Variables → New Variable.")
             model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
             _live_schema = _ai_get_full_schema()
+            _few_shot = _ai_build_few_shot()
             system = (
                 "أنت محرّر SQL لقاعدة PostgreSQL لمنصة DealPulse KSA. "
                 "لديك صلاحية قراءة كاملة على كل جداول وأعمدة المخطط أدناه.\n"
@@ -6930,11 +7006,38 @@ elif page == "تحليل المستخدمين":
                 "- إذا كان السؤال واضحاً، أرجع الاستعلام داخل ```sql … ``` فقط.\n"
                 "- استخدم LIMIT 100 افتراضياً للنتائج الكبيرة.\n"
                 "- أسماء الـ aliases بالإنجليزية فقط.\n"
-                "- التواريخ بـ CURRENT_DATE / CURRENT_TIMESTAMP / INTERVAL.\n\n"
+                "- التواريخ بـ CURRENT_DATE / CURRENT_TIMESTAMP / INTERVAL.\n"
+                "- لو قُدّمت لك محاولات سابقة فاشلة مع أخطاء PostgreSQL، "
+                "حلّل الخطأ بدقة وصحّح الاستعلام (مثلاً: اسم عمود غير موجود → "
+                "استبدله بالعمود الصحيح من المخطط؛ نوع لا يطابق → استخدم CAST؛ "
+                "خطأ ربط → راجع شرط JOIN).\n\n"
                 "===== المخطط الكامل (من information_schema) =====\n"
                 f"{_live_schema}\n\n"
-                f"===== ملاحظات منطقية =====\n{_AI_DB_HINTS}"
+                f"===== ملاحظات منطقية =====\n{_AI_DB_HINTS}\n"
+                f"{_few_shot}"
             )
+            messages = [{"role": "system", "content": system}]
+            # دفع المحاولات السابقة كحوار: assistant=الاستعلام, user=الخطأ
+            if previous_attempts:
+                messages.append({"role": "user", "content": question})
+                for att in previous_attempts:
+                    messages.append({
+                        "role": "assistant",
+                        "content": f"```sql\n{att['sql']}\n```",
+                    })
+                    messages.append({
+                        "role": "user",
+                        "content": (
+                            f"❌ فشل تنفيذ الاستعلام أعلاه. خطأ PostgreSQL:\n"
+                            f"{att['error']}\n\n"
+                            f"حلّل الخطأ بدقة وأعد كتابة الاستعلام بشكل صحيح. "
+                            f"لا تكرر نفس الغلط. أرجع الاستعلام الجديد داخل "
+                            f"```sql … ``` فقط."
+                        ),
+                    })
+            else:
+                messages.append({"role": "user", "content": question})
+
             try:
                 resp = requests.post(
                     "https://api.groq.com/openai/v1/chat/completions",
@@ -6942,10 +7045,7 @@ elif page == "تحليل المستخدمين":
                              "Content-Type": "application/json"},
                     json={
                         "model": model,
-                        "messages": [
-                            {"role": "system", "content": system},
-                            {"role": "user", "content": question},
-                        ],
+                        "messages": messages,
                         "temperature": 0.1,
                         "max_tokens": 900,
                     },
@@ -7020,6 +7120,7 @@ elif page == "تحليل المستخدمين":
             except Exception as e:
                 return f"(تعذّر التلخيص — {e})"
 
+        _MAX_AI_RETRIES = 2  # محاولات إضافية بعد المحاولة الأولى = إجمالي 3
         _ai_q = st.chat_input("اكتب سؤالك عن المستخدمين…")
         if _ai_q:
             st.session_state["ai_users_history"].append(
@@ -7027,43 +7128,100 @@ elif page == "تحليل المستخدمين":
             with st.chat_message("user"):
                 st.markdown(_ai_q)
             with st.chat_message("assistant"):
-                with st.spinner("⌛ يكتب الاستعلام…"):
-                    _ai_sql, _ai_err = _ai_users_gen_sql(_ai_q)
-                if _ai_err:
-                    st.error(_ai_err)
-                    st.session_state["ai_users_history"].append(
-                        {"role": "assistant", "content": f"❌ {_ai_err}"})
-                else:
-                    _ai_df = None
-                    _ai_run_err = None
+                _attempts: list[dict] = []   # [{sql, error}] لتعليم النموذج
+                _ai_df = None
+                _ai_sql = None
+                _final_gen_err = None
+
+                for _retry in range(_MAX_AI_RETRIES + 1):
+                    _spinner_text = ("⌛ يكتب الاستعلام…" if _retry == 0
+                                     else f"🔧 يتعلّم من الخطأ ويصحّح (محاولة {_retry + 1})…")
+                    with st.spinner(_spinner_text):
+                        _ai_sql, _gen_err = _ai_users_gen_sql(
+                            _ai_q,
+                            previous_attempts=_attempts if _attempts else None,
+                        )
+                    if _gen_err:
+                        _final_gen_err = _gen_err
+                        break
                     try:
                         _conn_ai = get_conn()
                         _conn_ai.autocommit = True
                         _ai_df = pd.read_sql(_ai_sql, _conn_ai)
                         _conn_ai.close()
+                        break  # نجح
                     except Exception as e:
-                        _ai_run_err = f"❌ خطأ في تنفيذ الاستعلام: {e}"
-                    if _ai_run_err:
-                        st.error(_ai_run_err)
-                        with st.expander("🔍 الاستعلام المُستخدم"):
-                            st.code(_ai_sql, language="sql")
-                        st.session_state["ai_users_history"].append({
-                            "role": "assistant", "content": _ai_run_err,
-                            "sql": _ai_sql,
+                        _err_str = str(e)
+                        _attempts.append({"sql": _ai_sql, "error": _err_str})
+                        st.session_state["ai_error_log"].append({
+                            "q": _ai_q, "sql": _ai_sql, "error": _err_str,
                         })
-                    else:
-                        with st.spinner("📊 يحلّل النتائج…"):
-                            _ai_summary = _ai_users_summarize(_ai_q, _ai_sql, _ai_df)
-                        st.markdown(_ai_summary)
-                        with st.expander("🔍 الاستعلام المُستخدم"):
-                            st.code(_ai_sql, language="sql")
-                        if not _ai_df.empty:
-                            st.dataframe(_ai_df, width="stretch",
-                                         hide_index=True)
-                        st.session_state["ai_users_history"].append({
-                            "role": "assistant", "content": _ai_summary,
-                            "sql": _ai_sql, "df": _ai_df,
-                        })
+                        _ai_df = None  # نواصل للمحاولة التالية
+
+                if _final_gen_err:
+                    st.error(_final_gen_err)
+                    st.session_state["ai_users_history"].append(
+                        {"role": "assistant", "content": f"❌ {_final_gen_err}"})
+                elif _ai_df is None:
+                    # كل المحاولات فشلت
+                    _last = _attempts[-1] if _attempts else {"sql": "—", "error": "—"}
+                    _msg_fail = (
+                        f"❌ تعذّر تنفيذ الاستعلام بعد {len(_attempts)} محاولات. "
+                        f"آخر خطأ:\n`{_last['error']}`"
+                    )
+                    st.error(_msg_fail)
+                    with st.expander(f"🔍 المحاولات ({len(_attempts)})"):
+                        for _i, _att in enumerate(_attempts, 1):
+                            st.markdown(f"**المحاولة {_i}:**")
+                            st.code(_att["sql"], language="sql")
+                            st.caption(f"خطأ: {_att['error']}")
+                    st.session_state["ai_users_history"].append({
+                        "role": "assistant", "content": _msg_fail,
+                        "sql": _last["sql"],
+                    })
+                else:
+                    # نجاح → احفظ كمثال للجلسة، لخّص، اعرض
+                    st.session_state["ai_success_examples"].append(
+                        {"q": _ai_q, "sql": _ai_sql})
+                    if len(_attempts) > 0:
+                        st.success(f"✅ نجح بعد {len(_attempts) + 1} محاولات (تعلّم من الأخطاء).")
+                    with st.spinner("📊 يحلّل النتائج…"):
+                        _ai_summary = _ai_users_summarize(_ai_q, _ai_sql, _ai_df)
+                    st.markdown(_ai_summary)
+                    with st.expander("🔍 الاستعلام المُستخدم"):
+                        st.code(_ai_sql, language="sql")
+                        if _attempts:
+                            st.caption(f"تم تصحيح {len(_attempts)} محاولة قبل النجاح.")
+                    if not _ai_df.empty:
+                        st.dataframe(_ai_df, width="stretch",
+                                     hide_index=True)
+                        _live_idx = len(st.session_state["ai_users_history"])
+                        _ldl1, _ldl2 = st.columns(2)
+                        with _ldl1:
+                            st.download_button(
+                                "⬇️ تحميل CSV",
+                                data=_ai_df.to_csv(index=False).encode("utf-8-sig"),
+                                file_name=f"ai_query_{_live_idx}.csv",
+                                mime="text/csv",
+                                key=f"ai_dl_csv_live_{_live_idx}",
+                                width="stretch",
+                            )
+                        with _ldl2:
+                            _lxbuf = BytesIO()
+                            with pd.ExcelWriter(_lxbuf, engine="xlsxwriter") as _lxw:
+                                _ai_df.to_excel(_lxw, sheet_name="result", index=False)
+                            st.download_button(
+                                "⬇️ تحميل Excel",
+                                data=_lxbuf.getvalue(),
+                                file_name=f"ai_query_{_live_idx}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                key=f"ai_dl_xlsx_live_{_live_idx}",
+                                width="stretch",
+                            )
+                    st.session_state["ai_users_history"].append({
+                        "role": "assistant", "content": _ai_summary,
+                        "sql": _ai_sql, "df": _ai_df,
+                    })
 
 elif page == "مركز الإشعارات":
     page_title("📢", "مركز البث والإشعارات الجماعية")
