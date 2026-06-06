@@ -5482,7 +5482,9 @@ elif page == "تحليل المستخدمين":
     # ════════════════════════════════════════════════════════════════════
     page_title("📊", "تحليل المستخدمين")
 
-    tab_general, tab_individual = st.tabs(["🌍 التحليل العام", "👤 التحليل الفردي"])
+    tab_general, tab_individual, tab_ai = st.tabs(
+        ["🌍 التحليل العام", "👤 التحليل الفردي", "🤖 الذكاء الاصطناعي"]
+    )
 
     # ── القائمة الأولى: التحليل العام ───────────────────────────────────
     with tab_general:
@@ -6824,6 +6826,210 @@ elif page == "تحليل المستخدمين":
                 if 'conn_i' in locals():
                     try: conn_i.close()
                     except Exception: pass
+
+    # ── القائمة الثالثة: الذكاء الاصطناعي (Chat) ─────────────────────────
+    with tab_ai:
+        st.markdown("### 🤖 اسأل عن المستخدمين بلغة طبيعية")
+        st.caption(
+            "اكتب سؤالك بالعربي وراح يولّد استعلام SQL على قاعدة البيانات "
+            "ويلخّص النتائج. مثال: «مين أكثر 10 مستخدمين نشاطاً هذا الأسبوع؟» "
+            "أو «كم مستخدم جديد سجل هذا الشهر؟»"
+        )
+
+        if "ai_users_history" not in st.session_state:
+            st.session_state["ai_users_history"] = []
+
+        # عرض سجل المحادثة
+        for _msg in st.session_state["ai_users_history"]:
+            with st.chat_message(_msg["role"]):
+                st.markdown(_msg["content"])
+                if _msg.get("sql"):
+                    with st.expander("🔍 الاستعلام المُستخدم"):
+                        st.code(_msg["sql"], language="sql")
+                _df_hist = _msg.get("df")
+                if _df_hist is not None and not _df_hist.empty:
+                    st.dataframe(_df_hist, use_container_width=True, hide_index=True)
+
+        if st.session_state["ai_users_history"]:
+            if st.button("🗑️ مسح المحادثة", key="ai_users_clear"):
+                st.session_state["ai_users_history"] = []
+                st.rerun()
+
+        # وصف المخطط (Schema) للنموذج
+        _AI_USERS_SCHEMA = """
+PostgreSQL schema (جداول المستخدمين وما يرتبط بها):
+
+bot_users(telegram_id BIGINT PK, username TEXT, first_name TEXT, last_name TEXT,
+         language TEXT, city TEXT, created_at TIMESTAMP,
+         last_seen TIMESTAMP, last_active TIMESTAMP, is_blocked BOOLEAN)
+
+web_users(id SERIAL PK, email TEXT, phone TEXT, first_name TEXT, last_name TEXT,
+         gender TEXT,             -- 'male' / 'female'
+         birth_date DATE, telegram_username TEXT,
+         created_at TIMESTAMP, language TEXT, city TEXT)
+
+action_logs(id SERIAL PK, user_id BIGINT, source TEXT,
+           action_type TEXT,       -- 'search' | 'click_link' | 'copy_coupon' | 'view_store' | 'view_trend'
+           action_time TIMESTAMP, store_id TEXT, search_term TEXT,
+           city TEXT, country TEXT, is_proxy BOOLEAN, is_datacenter BOOLEAN,
+           story_view_id BIGINT)
+  -- ربط user_id:
+  --   source IN ('bot','telegram_miniapp','miniapp') → user_id = bot_users.telegram_id
+  --   source = 'web'                                 → user_id = web_users.id
+
+direct_search(id SERIAL PK, user_id BIGINT, search_term TEXT,
+             user_found BOOLEAN, search_date TIMESTAMP, source TEXT)
+
+master(id SERIAL PK, store_id TEXT, store_name TEXT, store_tags TEXT,
+      copy_clicks INT, link_clicks INT, is_trending TEXT, last_time DATE)
+  -- store_tags نص بصيغة '{tag1,tag2}' (ليس مصفوفة). للبحث استخدم: store_tags ILIKE '%tag%'
+  -- is_trending ∈ ('عادي', 'ترند 🔥')
+
+user_favorites(id SERIAL PK, user_id BIGINT, kind TEXT, value TEXT, source TEXT)
+  -- kind ∈ ('store','category')
+
+user_loyalty(user_id BIGINT PK, points INT, rank TEXT)
+loyalty_history(id SERIAL PK, user_id BIGINT, points INT, reason TEXT, created_at TIMESTAMP)
+"""
+
+        def _ai_users_gen_sql(question: str) -> tuple[str | None, str | None]:
+            """يطلب من Groq توليد SELECT آمن، ويرجّع (sql, error)."""
+            key = os.getenv("GROQ_API_KEY")
+            if not key:
+                return None, "GROQ_API_KEY غير مضبوط في .env"
+            model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+            system = (
+                "أنت محرّر SQL لقاعدة PostgreSQL لمنصة DealPulse KSA. "
+                "حوّل سؤال المستخدم إلى استعلام SELECT واحد فقط.\n"
+                "قواعد صارمة:\n"
+                "- SELECT فقط (ممنوع INSERT/UPDATE/DELETE/DROP/ALTER/TRUNCATE/CREATE).\n"
+                "- استعلام واحد فقط بدون ; في المنتصف.\n"
+                "- أرجع الاستعلام داخل بلوك ```sql … ``` بدون أي شرح إضافي.\n"
+                "- استخدم LIMIT 100 افتراضياً للنتائج الكبيرة.\n"
+                "- أسماء الأعمدة (الـ aliases) بالإنجليزية فقط.\n"
+                "- التواريخ بـ CURRENT_DATE / CURRENT_TIMESTAMP / INTERVAL.\n"
+                "- إذا كان السؤال عن «إجمالي مستخدمين» اجمع bot_users + web_users.\n\n"
+                f"{_AI_USERS_SCHEMA}"
+            )
+            try:
+                resp = requests.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {key}",
+                             "Content-Type": "application/json"},
+                    json={
+                        "model": model,
+                        "messages": [
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": question},
+                        ],
+                        "temperature": 0.1,
+                        "max_tokens": 900,
+                    },
+                    timeout=60,
+                )
+                if resp.status_code >= 400:
+                    return None, f"Groq HTTP {resp.status_code}: {resp.text[:200]}"
+                content = resp.json()["choices"][0]["message"]["content"]
+                import re as _re
+                m = _re.search(r"```sql\s*(.+?)\s*```", content,
+                               _re.DOTALL | _re.IGNORECASE)
+                sql = (m.group(1) if m else content).strip().rstrip(";").strip()
+                low = sql.lower().lstrip()
+                if not (low.startswith("select") or low.startswith("with")):
+                    return None, "النموذج رجّع استعلام غير SELECT — تم رفضه."
+                _forbidden = ("insert ", "update ", "delete ", "drop ", "alter ",
+                              "truncate ", "grant ", "revoke ", "create ", ";")
+                for f in _forbidden:
+                    if f in low:
+                        return None, f"الاستعلام يحتوي على كلمة محظورة: {f.strip()!r}"
+                return sql, None
+            except Exception as e:
+                return None, str(e)
+
+        def _ai_users_summarize(question: str, sql: str, df: pd.DataFrame) -> str:
+            """ملخص عربي بسيط للنتائج."""
+            key = os.getenv("GROQ_API_KEY")
+            if not key:
+                return "(لا يوجد تلخيص — GROQ_API_KEY غير مضبوط)"
+            model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+            preview = df.head(30).to_dict(orient="records")
+            system = (
+                "أنت محلّل بيانات لمنصة DealPulse KSA. تلخّص نتائج SQL "
+                "بإجابة عربية مختصرة ومباشرة (٢-٤ أسطر) مع ذكر الأرقام المهمة. "
+                "لا تُكرّر الجدول، فقط الخلاصة والرؤية."
+            )
+            user_msg = (
+                f"السؤال: {question}\n"
+                f"الاستعلام:\n```sql\n{sql}\n```\n"
+                f"النتائج ({len(df)} صف، عيّنة أول 30):\n```json\n"
+                f"{json.dumps(preview, ensure_ascii=False, default=str)}\n```"
+            )
+            try:
+                resp = requests.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {key}",
+                             "Content-Type": "application/json"},
+                    json={
+                        "model": model,
+                        "messages": [
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": user_msg},
+                        ],
+                        "temperature": 0.3,
+                        "max_tokens": 600,
+                    },
+                    timeout=60,
+                )
+                if resp.status_code >= 400:
+                    return f"(تعذّر التلخيص — HTTP {resp.status_code})"
+                return resp.json()["choices"][0]["message"]["content"]
+            except Exception as e:
+                return f"(تعذّر التلخيص — {e})"
+
+        _ai_q = st.chat_input("اكتب سؤالك عن المستخدمين…")
+        if _ai_q:
+            st.session_state["ai_users_history"].append(
+                {"role": "user", "content": _ai_q})
+            with st.chat_message("user"):
+                st.markdown(_ai_q)
+            with st.chat_message("assistant"):
+                with st.spinner("⌛ يكتب الاستعلام…"):
+                    _ai_sql, _ai_err = _ai_users_gen_sql(_ai_q)
+                if _ai_err:
+                    st.error(_ai_err)
+                    st.session_state["ai_users_history"].append(
+                        {"role": "assistant", "content": f"❌ {_ai_err}"})
+                else:
+                    _ai_df = None
+                    _ai_run_err = None
+                    try:
+                        _conn_ai = get_conn()
+                        _conn_ai.autocommit = True
+                        _ai_df = pd.read_sql(_ai_sql, _conn_ai)
+                        _conn_ai.close()
+                    except Exception as e:
+                        _ai_run_err = f"❌ خطأ في تنفيذ الاستعلام: {e}"
+                    if _ai_run_err:
+                        st.error(_ai_run_err)
+                        with st.expander("🔍 الاستعلام المُستخدم"):
+                            st.code(_ai_sql, language="sql")
+                        st.session_state["ai_users_history"].append({
+                            "role": "assistant", "content": _ai_run_err,
+                            "sql": _ai_sql,
+                        })
+                    else:
+                        with st.spinner("📊 يحلّل النتائج…"):
+                            _ai_summary = _ai_users_summarize(_ai_q, _ai_sql, _ai_df)
+                        st.markdown(_ai_summary)
+                        with st.expander("🔍 الاستعلام المُستخدم"):
+                            st.code(_ai_sql, language="sql")
+                        if not _ai_df.empty:
+                            st.dataframe(_ai_df, use_container_width=True,
+                                         hide_index=True)
+                        st.session_state["ai_users_history"].append({
+                            "role": "assistant", "content": _ai_summary,
+                            "sql": _ai_sql, "df": _ai_df,
+                        })
 
 elif page == "مركز الإشعارات":
     page_title("📢", "مركز البث والإشعارات الجماعية")
