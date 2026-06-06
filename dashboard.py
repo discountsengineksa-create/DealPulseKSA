@@ -5909,12 +5909,6 @@ elif page == "تحليل المستخدمين":
                        (SELECT COUNT(*) FROM user_favorites uf WHERE uf.telegram_id = bu.telegram_id AND uf.kind='category') AS n_fav_cat,
                        (SELECT string_agg(DISTINCT uf.store_id, ', ') FROM user_favorites uf WHERE uf.telegram_id = bu.telegram_id AND uf.kind='store') AS fav_stores,
                        (SELECT string_agg(DISTINCT uf.category_name, ', ') FROM user_favorites uf WHERE uf.telegram_id = bu.telegram_id AND uf.kind='category') AS fav_cats,
-                       (SELECT string_agg(DISTINCT at2.store_id, ', ') FROM action_logs at2 WHERE at2.user_id = bu.telegram_id AND at2.source IN ('bot','telegram_miniapp') AND at2.action_type IN ('click_link','copy_coupon') AND at2.details='trend:daily' AND at2.store_id IS NOT NULL) AS trend_d_stores,
-                       (SELECT COUNT(*) FROM action_logs at2 WHERE at2.user_id = bu.telegram_id AND at2.source IN ('bot','telegram_miniapp') AND at2.action_type='click_link' AND at2.details='trend:daily') AS n_td_click,
-                       (SELECT COUNT(*) FROM action_logs at2 WHERE at2.user_id = bu.telegram_id AND at2.source IN ('bot','telegram_miniapp') AND at2.action_type='copy_coupon' AND at2.details='trend:daily') AS n_td_copy,
-                       (SELECT string_agg(DISTINCT at2.store_id, ', ') FROM action_logs at2 WHERE at2.user_id = bu.telegram_id AND at2.source IN ('bot','telegram_miniapp') AND at2.action_type IN ('click_link','copy_coupon') AND at2.details='trend:weekly' AND at2.store_id IS NOT NULL) AS trend_w_stores,
-                       (SELECT COUNT(*) FROM action_logs at2 WHERE at2.user_id = bu.telegram_id AND at2.source IN ('bot','telegram_miniapp') AND at2.action_type='click_link' AND at2.details='trend:weekly') AS n_tw_click,
-                       (SELECT COUNT(*) FROM action_logs at2 WHERE at2.user_id = bu.telegram_id AND at2.source IN ('bot','telegram_miniapp') AND at2.action_type='copy_coupon' AND at2.details='trend:weekly') AS n_tw_copy
                 FROM bot_users bu
                 LEFT JOIN LATERAL (
                     SELECT id, display_name, email, phone_number, gender, birth_date
@@ -5972,12 +5966,6 @@ elif page == "تحليل المستخدمين":
                        (SELECT COUNT(*) FROM user_favorites uf WHERE uf.web_user_id = wu.id AND uf.kind='category') AS n_fav_cat,
                        (SELECT string_agg(DISTINCT uf.store_id, ', ') FROM user_favorites uf WHERE uf.web_user_id = wu.id AND uf.kind='store') AS fav_stores,
                        (SELECT string_agg(DISTINCT uf.category_name, ', ') FROM user_favorites uf WHERE uf.web_user_id = wu.id AND uf.kind='category') AS fav_cats,
-                       (SELECT string_agg(DISTINCT at2.store_id, ', ') FROM action_logs at2 WHERE at2.user_id = wu.id AND at2.source='web' AND at2.action_type IN ('click_link','copy_coupon') AND at2.details='trend:daily' AND at2.store_id IS NOT NULL) AS trend_d_stores,
-                       (SELECT COUNT(*) FROM action_logs at2 WHERE at2.user_id = wu.id AND at2.source='web' AND at2.action_type='click_link' AND at2.details='trend:daily') AS n_td_click,
-                       (SELECT COUNT(*) FROM action_logs at2 WHERE at2.user_id = wu.id AND at2.source='web' AND at2.action_type='copy_coupon' AND at2.details='trend:daily') AS n_td_copy,
-                       (SELECT string_agg(DISTINCT at2.store_id, ', ') FROM action_logs at2 WHERE at2.user_id = wu.id AND at2.source='web' AND at2.action_type IN ('click_link','copy_coupon') AND at2.details='trend:weekly' AND at2.store_id IS NOT NULL) AS trend_w_stores,
-                       (SELECT COUNT(*) FROM action_logs at2 WHERE at2.user_id = wu.id AND at2.source='web' AND at2.action_type='click_link' AND at2.details='trend:weekly') AS n_tw_click,
-                       (SELECT COUNT(*) FROM action_logs at2 WHERE at2.user_id = wu.id AND at2.source='web' AND at2.action_type='copy_coupon' AND at2.details='trend:weekly') AS n_tw_copy
                 FROM web_users wu
                 LEFT JOIN LATERAL (
                     SELECT city FROM action_logs al
@@ -6028,12 +6016,6 @@ elif page == "تحليل المستخدمين":
                        (SELECT COUNT(*) FROM user_favorites uf WHERE uf.web_user_id = wu.id AND uf.kind='category') AS n_fav_cat,
                        (SELECT string_agg(DISTINCT uf.store_id, ', ') FROM user_favorites uf WHERE uf.web_user_id = wu.id AND uf.kind='store') AS fav_stores,
                        (SELECT string_agg(DISTINCT uf.category_name, ', ') FROM user_favorites uf WHERE uf.web_user_id = wu.id AND uf.kind='category') AS fav_cats,
-                       (SELECT string_agg(DISTINCT at2.store_id, ', ') FROM action_logs at2 WHERE at2.user_id = wu.id AND at2.source='web' AND at2.action_type IN ('click_link','copy_coupon') AND at2.details='trend:daily' AND at2.store_id IS NOT NULL) AS trend_d_stores,
-                       (SELECT COUNT(*) FROM action_logs at2 WHERE at2.user_id = wu.id AND at2.source='web' AND at2.action_type='click_link' AND at2.details='trend:daily') AS n_td_click,
-                       (SELECT COUNT(*) FROM action_logs at2 WHERE at2.user_id = wu.id AND at2.source='web' AND at2.action_type='copy_coupon' AND at2.details='trend:daily') AS n_td_copy,
-                       (SELECT string_agg(DISTINCT at2.store_id, ', ') FROM action_logs at2 WHERE at2.user_id = wu.id AND at2.source='web' AND at2.action_type IN ('click_link','copy_coupon') AND at2.details='trend:weekly' AND at2.store_id IS NOT NULL) AS trend_w_stores,
-                       (SELECT COUNT(*) FROM action_logs at2 WHERE at2.user_id = wu.id AND at2.source='web' AND at2.action_type='click_link' AND at2.details='trend:weekly') AS n_tw_click,
-                       (SELECT COUNT(*) FROM action_logs at2 WHERE at2.user_id = wu.id AND at2.source='web' AND at2.action_type='copy_coupon' AND at2.details='trend:weekly') AS n_tw_copy
                 FROM web_users wu
                 LEFT JOIN LATERAL (
                     SELECT city FROM action_logs al
@@ -6100,17 +6082,11 @@ elif page == "تحليل المستخدمين":
                 "n_search": "بحث", "n_story": "ستوري",
                 "n_fav_store": "مفضلة متاجر", "n_fav_cat": "مفضلة أقسام",
                 "fav_stores": "المتاجر المفضّلة", "fav_cats": "الأقسام المفضّلة",
-                "trend_d_stores": "متاجر ترند يومي", "n_td_click": "نقر ترند يومي",
-                "n_td_copy": "نسخ ترند يومي",
-                "trend_w_stores": "متاجر ترند أسبوعي", "n_tw_click": "نقر ترند أسبوعي",
-                "n_tw_copy": "نسخ ترند أسبوعي",
                 "last_seen": "آخر ظهور",
             })[["النوع", "الملف", "المعرّف", "اليوزر", "الاسم", "الإيميل",
                 "الجوال", "الجنس", "اللغة", "العمر", "تاريخ الميلاد", "المدينة",
                 "المتاجر", "الأقسام", "ضغطات القسم", "بحث القسم",
                 "نسخ", "نقرات", "بحث", "ستوري",
-                "متاجر ترند يومي", "نقر ترند يومي", "نسخ ترند يومي",
-                "متاجر ترند أسبوعي", "نقر ترند أسبوعي", "نسخ ترند أسبوعي",
                 "مفضلة متاجر", "المتاجر المفضّلة",
                 "مفضلة أقسام", "الأقسام المفضّلة", "آخر ظهور"]]
             st.dataframe(_disp, use_container_width=True, hide_index=True)
