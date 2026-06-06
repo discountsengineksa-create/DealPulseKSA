@@ -5855,14 +5855,25 @@ elif page == "تحليل المستخدمين":
                         f"WHERE {key} AND {flag}) ")
 
             def _trend_clause(realm):
-                # إسناد حقيقي: تفاعل (نقر/نسخ) جاء من مسار الترند نفسه
-                # (details='trend:daily/weekly' — يُوسَم وقت النقر/النسخ من بطاقة الترند).
+                # إسناد حقيقي: تفاعل (نقر/نسخ/زيارة بطاقة) من مسار الترند.
+                # للمربوط (realm='tg' وله w3): نشاط الترند ممكن من البوت
+                # (bu.telegram_id, source='bot|telegram_miniapp') أو من الموقع
+                # (w3.id, source='web') — كلاهما لنفس الشخص. لو تجاهلنا web نُخفي
+                # الجدول كاملاً لمستخدم مربوط نسخ من بطاقة ترند على الموقع.
                 if trend not in ("daily", "weekly"):
                     return ""
-                uid, src = _realm_src(realm)
+                if realm == "tg":
+                    return (f" AND (EXISTS (SELECT 1 FROM action_logs alt "
+                            f"WHERE alt.user_id = bu.telegram_id AND alt.source IN ('bot','telegram_miniapp') "
+                            f"AND alt.action_type IN ('click_link','copy_coupon','view_store') "
+                            f"AND alt.details = 'trend:{trend}') "
+                            f"OR EXISTS (SELECT 1 FROM action_logs altw "
+                            f"WHERE w3.id IS NOT NULL AND altw.user_id = w3.id AND altw.source = 'web' "
+                            f"AND altw.action_type IN ('click_link','copy_coupon','view_store') "
+                            f"AND altw.details = 'trend:{trend}')) ")
                 return (f" AND EXISTS (SELECT 1 FROM action_logs alt "
-                        f"WHERE alt.user_id = {uid} AND alt.source IN {src} "
-                        f"AND alt.action_type IN ('click_link','copy_coupon') "
+                        f"WHERE alt.user_id = wu.id AND alt.source = 'web' "
+                        f"AND alt.action_type IN ('click_link','copy_coupon','view_store') "
                         f"AND alt.details = 'trend:{trend}') ")
 
             # المكتمل (المربوط) نملأ اسمه/إيميله/جواله من حساب الموقع المرتبط
@@ -6270,15 +6281,16 @@ elif page == "تحليل المستخدمين":
                 # خلاصة
                 _by_act = df_trend_log["action_type"].value_counts().to_dict()
                 _by_det = df_trend_log["details"].value_counts().to_dict()
-                m1, m2, m3, m4, m5, m6 = st.columns(6)
-                m1.metric("إجمالي الأحداث", len(df_trend_log))
-                m2.metric("مستخدمون فريدون",
-                          df_trend_log["user_id"].dropna().nunique())
-                m3.metric("متاجر مختلفة",
-                          df_trend_log["store_id"].nunique())
-                m4.metric("👁️ زيارات", int(_by_act.get("view_store", 0)))
-                m5.metric("🎟️ نسخ", int(_by_act.get("copy_coupon", 0)))
-                m6.metric("🖱️ نقرات", int(_by_act.get("click_link", 0)))
+                mc1, mc2, mc3 = st.columns(3)
+                mc1.metric("إجمالي الأحداث", len(df_trend_log))
+                mc2.metric("مستخدمون فريدون",
+                           df_trend_log["user_id"].dropna().nunique())
+                mc3.metric("متاجر مختلفة",
+                           df_trend_log["store_id"].nunique())
+                md1, md2, md3 = st.columns(3)
+                md1.metric("👁️ زيارات", int(_by_act.get("view_store", 0)))
+                md2.metric("🎟️ نسخ",   int(_by_act.get("copy_coupon", 0)))
+                md3.metric("🖱️ نقرات", int(_by_act.get("click_link", 0)))
 
                 # توزيع يومي/أسبوعي لو نوع الترند = الكل/لا شيء
                 if gen_trend not in ("daily", "weekly"):
@@ -6328,7 +6340,10 @@ elif page == "تحليل المستخدمين":
                     key="trend_log_dl",
                 )
         except Exception as e:
-            st.error(f"خطأ في سجل الترند: {e}")
+            import traceback as _tb
+            st.error(f"خطأ في سجل الترند: {type(e).__name__}: {e}")
+            with st.expander("تفاصيل تقنية (للمطوّر)"):
+                st.code(_tb.format_exc())
             if 'conn' in locals(): conn.close()
 
     # ── القائمة الثانية: التحليل الفردي ─────────────────────────────────
