@@ -6122,6 +6122,214 @@ elif page == "تحليل المستخدمين":
                 key="gen_dl",
             )
 
+        # ════════════════════════════════════════════════════════════════
+        # سجل الترند الحي (مستقل) — كل تفاعل من سياق بطاقة ترند، حدث-بحدث.
+        # يستخدم نفس فلاتر الجدول أعلاه (المصدر/التاريخ/الترند/الحركة/المدينة/
+        # المتجر/اللغة/الجنس/العمر/حالة المستخدم/الاكتمال). يتجاوز bug تجميع
+        # الأنشطة متعددة المصدر لمستخدم واحد مربوط، لأن كل صف = حدث منفصل.
+        # ════════════════════════════════════════════════════════════════
+        st.divider()
+        st.markdown("### 🔥 سجل الترند الحي — حدث بحدث")
+        st.caption(
+            "كل تفاعل صار من سياق بطاقات الترند (نسخ كود · نقر رابط · "
+            "زيارة بطاقة). يطبّق نفس الفلاتر أعلاه. مستقل عن الجدول الرئيسي."
+        )
+
+        # نوع الترند المختار: يحدد details المستهدف
+        _trend_detail_map = {
+            "daily":   "al.details = 'trend:daily'",
+            "weekly":  "al.details = 'trend:weekly'",
+        }
+        _tl_trend_where = _trend_detail_map.get(
+            gen_trend, "al.details LIKE 'trend:%'")
+
+        # المصدر event-level على al.source
+        if gen_src is None:
+            _tl_src_where = "TRUE"
+        else:
+            _src_list = ",".join(f"'{s}'" for s in gen_src)
+            _tl_src_where = f"al.source IN ({_src_list})"
+
+        # الحركة
+        if gen_action in ("copy_coupon", "click_link", "search"):
+            _tl_act_where = f"al.action_type = '{gen_action}'"
+        else:
+            # الترند فيه نسخ/نقر/زيارة فقط — البحث لا ينطبق
+            _tl_act_where = "al.action_type IN ('click_link','copy_coupon','view_store')"
+
+        # المتجر
+        _tl_store_where = ("TRUE" if not gen_store
+                           else f"al.store_id = '{gen_store.replace(chr(39), chr(39)*2)}'")
+
+        # المدينة
+        if not gen_city:
+            _tl_city_where = "TRUE"
+        elif gen_city == "غير معروف":
+            _tl_city_where = "al.city IS NULL"
+        else:
+            _tl_city_where = f"al.city = '{gen_city.replace(chr(39), chr(39)*2)}'"
+
+        # فلاتر شخصية: تطبق على web_users (wu) أو bot_users (bu) أو w3 (المربوط)
+        _tl_lang_where = ""
+        if gen_lang in ("ar", "en"):
+            _tl_lang_where = (f" AND (wu.lang = '{gen_lang}' "
+                              f"OR bu.lang = '{gen_lang}')")
+
+        _tl_gender_where = ""
+        if gen_gender in ("male", "female"):
+            _tl_gender_where = (f" AND (wu.gender = '{gen_gender}' "
+                                f"OR w3.gender = '{gen_gender}')")
+
+        _age_expr = lambda col: f"EXTRACT(YEAR FROM AGE({col}))::int"
+        _age_cond_for = {
+            "u18":   lambda c: f"{_age_expr(c)} < 18",
+            "18-24": lambda c: f"{_age_expr(c)} BETWEEN 18 AND 24",
+            "25-34": lambda c: f"{_age_expr(c)} BETWEEN 25 AND 34",
+            "35-44": lambda c: f"{_age_expr(c)} BETWEEN 35 AND 44",
+            "45-54": lambda c: f"{_age_expr(c)} BETWEEN 45 AND 54",
+            "55p":   lambda c: f"{_age_expr(c)} >= 55",
+        }
+        _tl_age_where = ""
+        if gen_age in _age_cond_for:
+            _fn = _age_cond_for[gen_age]
+            _tl_age_where = (f" AND ((wu.birth_date IS NOT NULL AND {_fn('wu.birth_date')}) "
+                             f"OR (w3.birth_date IS NOT NULL AND {_fn('w3.birth_date')}))")
+
+        _tl_status_where = ""
+        if gen_status == "active":
+            _tl_status_where = (" AND (wu.last_seen > NOW() - INTERVAL '20 days' "
+                                "OR bu.last_seen > NOW() - INTERVAL '20 days')")
+        elif gen_status == "idle":
+            _tl_status_where = (" AND (wu.last_seen <= NOW() - INTERVAL '20 days' "
+                                "OR bu.last_seen <= NOW() - INTERVAL '20 days')")
+
+        _tl_complete_where = ""
+        if gen_complete == "complete":
+            _tl_complete_where = " AND (w3.id IS NOT NULL OR wu.telegram_username IS NOT NULL)"
+        elif gen_complete == "partial":
+            _tl_complete_where = " AND (w3.id IS NULL AND (wu.telegram_username IS NULL OR wu.id IS NULL))"
+
+        # حالة المتجر (last_time)
+        _tl_storestat_where = ""
+        if gen_store_status in ("active", "expired", "expiring"):
+            _ms_cond = {
+                "active":   "m.last_time > CURRENT_DATE + 3",
+                "expired":  "m.last_time < CURRENT_DATE",
+                "expiring": "m.last_time BETWEEN CURRENT_DATE AND CURRENT_DATE + 3",
+            }[gen_store_status]
+            _tl_storestat_where = (f" AND EXISTS (SELECT 1 FROM master m "
+                                   f"WHERE m.store_id = al.store_id AND {_ms_cond})")
+
+        _trend_sql = f"""
+            SELECT
+                al.action_time   AS action_time,
+                al.action_type   AS action_type,
+                al.details       AS details,
+                al.store_id      AS store_id,
+                al.user_id       AS user_id,
+                COALESCE(wu.display_name, w3.display_name, bu.name_en) AS name,
+                COALESCE(wu.telegram_username, bu.username)            AS handle,
+                al.source        AS source,
+                al.city          AS city,
+                al.country_code  AS country_code
+            FROM action_logs al
+            LEFT JOIN web_users wu
+                ON wu.id = al.user_id AND al.source = 'web'
+            LEFT JOIN bot_users bu
+                ON bu.telegram_id = al.user_id
+                   AND al.source IN ('bot','telegram_miniapp')
+            LEFT JOIN web_users w3
+                ON LOWER(w3.telegram_username) = LOWER(bu.username)
+            WHERE {_tl_trend_where}
+              AND {_tl_src_where}
+              AND {_tl_act_where}
+              AND {_tl_store_where}
+              AND {_tl_city_where}
+              AND al.action_time >= %s
+              AND al.action_time <  %s
+              {_tl_lang_where}
+              {_tl_gender_where}
+              {_tl_age_where}
+              {_tl_status_where}
+              {_tl_complete_where}
+              {_tl_storestat_where}
+            ORDER BY al.action_time DESC
+        """
+
+        try:
+            conn = get_conn()
+            conn.autocommit = True
+            df_trend_log = pd.read_sql(_trend_sql, conn,
+                                       params=[_t_from, _t_to])
+            conn.close()
+
+            if df_trend_log.empty:
+                st.info("لا تفاعلات مسجلة في سياق الترند ضمن الفلاتر الحالية. "
+                        "(جرّب: نوع الترند = الكل، الحركات = الكل، المدى أوسع)")
+            else:
+                # خلاصة
+                _by_act = df_trend_log["action_type"].value_counts().to_dict()
+                _by_det = df_trend_log["details"].value_counts().to_dict()
+                m1, m2, m3, m4, m5 = st.columns(5)
+                m1.metric("إجمالي الأحداث", len(df_trend_log))
+                m2.metric("مستخدمون فريدون",
+                          df_trend_log["user_id"].dropna().nunique())
+                m3.metric("متاجر مختلفة",
+                          df_trend_log["store_id"].nunique())
+                m4.metric("🎟️ نسخ", int(_by_act.get("copy_coupon", 0)))
+                m5.metric("🖱️ نقرات", int(_by_act.get("click_link", 0)))
+
+                # توزيع يومي/أسبوعي لو نوع الترند = الكل/لا شيء
+                if gen_trend not in ("daily", "weekly"):
+                    n_d = int(_by_det.get("trend:daily", 0))
+                    n_w = int(_by_det.get("trend:weekly", 0))
+                    st.caption(f"🔥 يومي: **{n_d}** حدث  ·  🔥 أسبوعي: **{n_w}** حدث")
+
+                _disp_trend = df_trend_log.copy()
+                _disp_trend["action_type"] = _disp_trend["action_type"].map({
+                    "click_link":  "🖱️ نقر رابط",
+                    "copy_coupon": "🎟️ نسخ كود",
+                    "view_store":  "👁️ زيارة بطاقة",
+                }).fillna(_disp_trend["action_type"])
+                _disp_trend["details"] = _disp_trend["details"].map({
+                    "trend:daily":  "🔥 يومي",
+                    "trend:weekly": "🔥 أسبوعي",
+                }).fillna(_disp_trend["details"])
+                _disp_trend["source"] = _disp_trend["source"].map({
+                    "web": "🌐 موقع",
+                    "bot": "🤖 بوت",
+                    "telegram_miniapp": "🔹 ميني-ويب",
+                }).fillna(_disp_trend["source"])
+                _disp_trend["name"]   = _disp_trend["name"].fillna("زائر غير مسجّل")
+                _disp_trend["handle"] = _disp_trend["handle"].fillna("—")
+                _disp_trend["city"]   = _disp_trend["city"].fillna("—")
+                _disp_trend = _disp_trend.rename(columns={
+                    "action_time":  "الوقت",
+                    "action_type":  "الحدث",
+                    "details":      "نوع الترند",
+                    "store_id":     "المتجر",
+                    "user_id":      "المعرّف",
+                    "name":         "الاسم",
+                    "handle":       "اليوزر",
+                    "source":       "المصدر",
+                    "city":         "المدينة",
+                    "country_code": "الدولة",
+                })[["الوقت", "نوع الترند", "الحدث", "المتجر", "المعرّف",
+                    "الاسم", "اليوزر", "المصدر", "المدينة", "الدولة"]]
+
+                st.dataframe(_disp_trend, use_container_width=True,
+                             hide_index=True)
+                st.download_button(
+                    "⬇️ تحميل سجل الترند (Excel/CSV)",
+                    _disp_trend.to_csv(index=False).encode("utf-8-sig"),
+                    file_name="trend_log.csv",
+                    mime="text/csv",
+                    key="trend_log_dl",
+                )
+        except Exception as e:
+            st.error(f"خطأ في سجل الترند: {e}")
+            if 'conn' in locals(): conn.close()
+
     # ── القائمة الثانية: التحليل الفردي ─────────────────────────────────
     with tab_individual:
         pass  # نبدأ البناء هنا
