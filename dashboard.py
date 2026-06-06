@@ -6900,6 +6900,36 @@ elif page == "تحليل المستخدمين":
   مع مراعاة ربط user_id بالـ source كما في القاعدة أعلاه.
 - لمعرفة مصدر المستخدم من رقم الجوال: ابحث في web_users (لأن bot_users لا يحوي phone)،
   ثم استخدم web_users.id لربط action_logs بـ source='web'.
+
+- ⚠️⚠️ **التوقيت (مهم جداً)**: كل أعمدة الوقت في القاعدة (action_time, search_date,
+  created_at, last_seen, ...) مخزّنة بـ **UTC**. المستخدمون في **السعودية (UTC+3)**.
+  لذلك أي تحليل لساعة/يوم/شهر **يجب** أن يحوّل التوقيت أولاً:
+    EXTRACT(HOUR FROM action_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Riyadh')
+    DATE(action_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Riyadh')
+  للمقارنة مع CURRENT_DATE بتوقيت السعودية:
+    (action_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Riyadh')::date
+       >= (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date - INTERVAL '7 days'
+  ممنوع استخدام EXTRACT(HOUR FROM action_time) مباشرة، يعطي ساعة UTC وهي غلط.
+
+- ⚠️ **تحديد المستخدم بالاسم**: عند طلب «من بحث»، «من نسخ»، «اسم المستخدم»،
+  لا تكتفي بإرجاع user_id رقمي — يجب الربط مع جداول المستخدمين عبر LEFT JOIN
+  لإحضار اسم/يوزر/إيميل، مع التعامل مع source:
+    LEFT JOIN bot_users bu ON bu.telegram_id = al.user_id
+                          AND al.source IN ('bot','telegram_miniapp','miniapp')
+    LEFT JOIN web_users wu ON wu.id = al.user_id AND al.source = 'web'
+  ثم اعرض COALESCE معبّر، مثلاً:
+    COALESCE(bu.username, wu.email, wu.phone,
+             CASE WHEN bu.first_name IS NOT NULL
+                  THEN bu.first_name || ' ' || COALESCE(bu.last_name,'')
+                  ELSE NULL END,
+             'مجهول') AS user_identifier
+
+- ⚠️ **`direct_search.user_found` موجود وهو BOOLEAN**. للبحث عن الكلمات التي
+  لم يجد لها المستخدم نتيجة، استخدم: `WHERE user_found = false`.
+  لا تدّعِ أن العمود غير موجود — هو موجود ومُستخدم لتحليل الفجوات (gap analysis).
+
+- ⚠️ **عندما يكون user_id في direct_search NULL** (بحث مجهول من زائر بدون حساب)،
+  لا تحذف الصف بل اعرضه مع 'زائر مجهول' في عمود الاسم.
 - ⚠️ البحث عن متجر/كوبون بالاسم: استخدم دائماً ILIKE مع % من الجانبين، لأن المستخدم
   قد يكتب جزء من الاسم فقط أو يخلط بين اسم المتجر ورقم/كود الكوبون.
   مثال: «كوبون نمشي5» يعني المتجر «نمشي» وكوبون احتواؤه «5»، فابحث:
@@ -6961,7 +6991,7 @@ elif page == "تحليل المستخدمين":
         if "ai_error_log" not in st.session_state:
             st.session_state["ai_error_log"] = []  # [{sql, error}]
 
-        # ── دالة AI موحّدة: Gemini فقط مع إعادة محاولة عند 503/429 ──────
+        # ── دالة AI موحّدة: Groq أساسي + Gemini احتياطي (الاثنين مجاني) ──
         def _ai_chat(
             system: str,
             messages: list[dict],
@@ -6969,72 +6999,127 @@ elif page == "تحليل المستخدمين":
             max_tokens: int = 900,
         ) -> tuple[str | None, str | None]:
             """
-            يستدعي Gemini 2.5 Flash (مجاني، حدوده مرنة).
-            عند 503 (High Demand) أو 429 يعيد المحاولة تلقائياً مع تأخير
-            متزايد (1s, 2s, 4s). يرجّع (content, error).
+            يستدعي Groq أولاً (سريع وحدّه اليومي 100K توكن — يكفي مع ضغط المخطط).
+            احتياطياً Gemini عند فشل/تجاوز حد Groq.
             messages بصيغة OpenAI: [{role: 'user'|'assistant', content: str}, ...]
+            يرجّع (content, error).
             """
             import time as _time
+            groq_key = os.getenv("GROQ_API_KEY")
             gemini_key = os.getenv("GEMINI_API_KEY")
-            if not gemini_key:
-                return None, ("❌ GEMINI_API_KEY غير مضبوط.\n"
-                              "أضفه في Railway → Variables.\n"
-                              "احصل عليه مجاناً من https://aistudio.google.com/apikey")
-            model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-            # تحويل messages من صيغة OpenAI لـ Gemini contents
-            contents = []
-            for m in messages:
-                role = "user" if m["role"] == "user" else "model"
-                contents.append({"role": role,
-                                 "parts": [{"text": m["content"]}]})
-            # نطفّي Thinking mode لتفادي رد فارغ
-            _gen_cfg = {
-                "temperature": temperature,
-                "maxOutputTokens": max(max_tokens, 2048),
-                "thinkingConfig": {"thinkingBudget": 0},
-            }
-            _payload = {
-                "systemInstruction": {"parts": [{"text": system}]},
-                "contents": contents,
-                "generationConfig": _gen_cfg,
-            }
-            _url = (f"https://generativelanguage.googleapis.com/v1beta/"
-                    f"models/{model}:generateContent?key={gemini_key}")
-            _last_err = None
-            # إعادة محاولة مع تأخير متصاعد عند 503/429
-            for attempt, delay in enumerate([0, 1, 2, 4]):
-                if delay > 0:
-                    _time.sleep(delay)
-                try:
-                    r = requests.post(
-                        _url,
-                        headers={"Content-Type": "application/json"},
-                        json=_payload, timeout=60,
-                    )
-                except Exception as e:
-                    _last_err = f"Gemini شبكة: {e}"
-                    continue
-                if r.status_code in (429, 503):
-                    _last_err = (
-                        "🌐 سيرفرات Gemini مزدحمة الآن (High Demand). "
-                        if r.status_code == 503
-                        else "⏱️ تم تجاوز معدّل الطلبات المتاح للحظة. "
-                    ) + f"حاولت {attempt + 1} مرات — يرجى الإعادة بعد دقيقة."
-                    continue  # نعيد المحاولة
-                if r.status_code >= 400:
-                    return None, f"Gemini HTTP {r.status_code}: {r.text[:200]}"
-                data = r.json()
-                cands = data.get("candidates") or []
-                if not cands:
-                    return None, "Gemini رجّع رد فارغ (لا candidates)."
-                cand = cands[0]
-                parts = cand.get("content", {}).get("parts", []) or []
-                txt = "".join(p.get("text", "") for p in parts).strip()
-                if txt:
-                    return txt, None
-                finish = cand.get("finishReason", "UNKNOWN")
-                return None, f"Gemini نص فارغ (finishReason={finish})."
-            return None, _last_err or "Gemini فشل بعد عدة محاولات."
+
+            def _call_groq() -> tuple[str | None, str | None]:
+                model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+                _payload = {
+                    "model": model,
+                    "messages": [{"role": "system", "content": system}] + messages,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                }
+                _last = None
+                for attempt, delay in enumerate([0, 1, 2]):
+                    if delay > 0:
+                        _time.sleep(delay)
+                    try:
+                        r = requests.post(
+                            "https://api.groq.com/openai/v1/chat/completions",
+                            headers={"Authorization": f"Bearer {groq_key}",
+                                     "Content-Type": "application/json"},
+                            json=_payload, timeout=60,
+                        )
+                    except Exception as e:
+                        _last = f"Groq شبكة: {e}"
+                        continue
+                    if r.status_code == 429:
+                        return None, "GROQ_429"
+                    if r.status_code >= 400:
+                        return None, f"Groq HTTP {r.status_code}: {r.text[:200]}"
+                    try:
+                        return r.json()["choices"][0]["message"]["content"], None
+                    except Exception as e:
+                        return None, f"Groq parsing: {e}"
+                return None, _last or "Groq فشل."
+
+            def _call_gemini() -> tuple[str | None, str | None]:
+                model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+                contents = []
+                for m in messages:
+                    role = "user" if m["role"] == "user" else "model"
+                    contents.append({"role": role,
+                                     "parts": [{"text": m["content"]}]})
+                _payload = {
+                    "systemInstruction": {"parts": [{"text": system}]},
+                    "contents": contents,
+                    "generationConfig": {
+                        "temperature": temperature,
+                        "maxOutputTokens": max(max_tokens, 2048),
+                        "thinkingConfig": {"thinkingBudget": 0},
+                    },
+                }
+                _url = (f"https://generativelanguage.googleapis.com/v1beta/"
+                        f"models/{model}:generateContent?key={gemini_key}")
+                _last = None
+                for attempt, delay in enumerate([0, 1, 2, 4]):
+                    if delay > 0:
+                        _time.sleep(delay)
+                    try:
+                        r = requests.post(
+                            _url,
+                            headers={"Content-Type": "application/json"},
+                            json=_payload, timeout=60,
+                        )
+                    except Exception as e:
+                        _last = f"Gemini شبكة: {e}"
+                        continue
+                    if r.status_code in (429, 503):
+                        _last = ("🌐 سيرفرات Gemini مزدحمة. "
+                                 if r.status_code == 503
+                                 else "⏱️ Gemini Rate Limit. "
+                                 ) + f"محاولة {attempt + 1}."
+                        continue
+                    if r.status_code >= 400:
+                        return None, f"Gemini HTTP {r.status_code}: {r.text[:200]}"
+                    try:
+                        data = r.json()
+                        cands = data.get("candidates") or []
+                        if not cands:
+                            return None, "Gemini رد فارغ."
+                        parts = cands[0].get("content", {}).get("parts", []) or []
+                        txt = "".join(p.get("text", "") for p in parts).strip()
+                        if txt:
+                            return txt, None
+                        finish = cands[0].get("finishReason", "UNKNOWN")
+                        return None, f"Gemini نص فارغ ({finish})."
+                    except Exception as e:
+                        return None, f"Gemini parsing: {e}"
+                return None, _last or "Gemini فشل."
+
+            # محاولة Groq أولاً (سريع)
+            if groq_key:
+                content, err = _call_groq()
+                if content:
+                    return content, None
+                # عند تجاوز حد Groq اليومي → نتحوّل Gemini تلقائياً
+                if err == "GROQ_429" and gemini_key:
+                    return _call_gemini()
+                # أخطاء أخرى من Groq وفي Gemini → جرّب
+                if gemini_key:
+                    content2, err2 = _call_gemini()
+                    if content2:
+                        return content2, None
+                    return None, f"{err} | {err2}"
+                if err == "GROQ_429":
+                    return None, ("⏱️ تجاوزت حد Groq اليومي ولا يوجد GEMINI_API_KEY.\n"
+                                  "• ينتظر إعادة تعيين تلقائية خلال 24 ساعة.\n"
+                                  "• أو أضف GEMINI_API_KEY (مجاني) من https://aistudio.google.com/apikey")
+                return None, err
+            # ما عندنا Groq → Gemini فقط
+            if gemini_key:
+                return _call_gemini()
+            return None, ("❌ لا يوجد مفتاح AI مجاني مضبوط.\n"
+                          "أضف أحدهما (أو كليهما) في Railway → Variables:\n"
+                          "• `GROQ_API_KEY` (سريع) — https://console.groq.com\n"
+                          "• `GEMINI_API_KEY` (مرن) — https://aistudio.google.com/apikey")
 
         def _ai_build_few_shot() -> str:
             """يبني أمثلة few-shot من الاستعلامات الناجحة في الجلسة."""
