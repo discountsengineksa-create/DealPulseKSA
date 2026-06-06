@@ -8568,6 +8568,7 @@ elif page == "مركز الإشعارات":
                 if rep.get("error"):
                     st.error(rep["error"])
                 else:
+                    # ── سطر 1: إجماليات الإرسال ──
                     mc1, mc2, mc3, mc4 = st.columns(4)
                     mc1.metric("👥 المستهدفون", rep.get("delivery_count") or 0)
                     mc2.metric("✅ نجح", rep.get("sent_count") or 0)
@@ -8576,20 +8577,61 @@ elif page == "مركز الإشعارات":
                     _rate = (rep.get("sent_count") or 0) / _total * 100 if _total else 0
                     mc4.metric("📈 نسبة النجاح", f"{_rate:.1f}%")
 
+                    # ── سطر 2: التفاعل (Open + Click) ──
+                    eng = rep.get("engagement", {}) or {}
+                    ec1, ec2, ec3, ec4 = st.columns(4)
+                    if rp_ch == "email":
+                        _orate = eng.get("open_rate")
+                        ec1.metric("📬 فتح فريد", eng.get("unique_opens", 0))
+                        ec2.metric("📊 Open Rate",
+                                   f"{_orate:.1f}%" if _orate is not None else "—")
+                    else:
+                        ec1.metric("📬 فتح", "غير مدعوم",
+                                   help="تليجرام API لا يكشف فتح الرسائل")
+                        ec2.metric("📊 Open Rate", "—")
+                    _crate = eng.get("click_rate")
+                    ec3.metric("🖱️ نقرات فريدة", eng.get("unique_clicks", 0))
+                    ec4.metric("📊 CTR",
+                               f"{_crate:.1f}%" if _crate is not None else "—")
+
+                    # تحذير لو tracking معطّل
+                    if not eng.get("unique_clicks") and not eng.get("unique_opens"):
+                        from api.utils.broadcast_tracker import is_tracking_enabled
+                        if not is_tracking_enabled():
+                            st.warning("⚠️ TRACKING_BASE_URL غير معرّف في البيئة — "
+                                       "أرقام Open/Click لن تتجمّع. أضفه ثم أعد الإرسال.")
+
                     st.markdown("##### 📋 توزيع الحالة")
                     if rep.get("by_status"):
-                        st.json(rep["by_status"])
+                        _bs = rep["by_status"]
+                        _bs_labels = {
+                            "queued":"⏳ في الطابور","sending":"📤 يُرسَل",
+                            "sent":"✅ أُرسِل","failed":"❌ فشل",
+                            "opened":"📬 فُتح","clicked":"🖱️ نُقر",
+                            "skipped":"⏭️ مستبعد",
+                        }
+                        for _st_k, _st_v in _bs.items():
+                            st.write(f"  - {_bs_labels.get(_st_k, _st_k)}: **{_st_v}**")
 
                     if rep.get("by_variant"):
                         st.markdown("##### 🅰️🅱️ مقارنة A/B")
-                        _va = rep["by_variant"]
-                        st.json(_va)
-                        # حساب CTR لكل نسخة
-                        for _v, _stats in _va.items():
-                            _t = sum(_stats.values())
-                            _s = _stats.get("sent",0) + _stats.get("opened",0) + _stats.get("clicked",0)
-                            _r = _s / _t * 100 if _t else 0
-                            st.write(f"  - **النسخة {_v}**: نسبة وصول {_r:.1f}% ({_s}/{_t})")
+                        _vars = rep["by_variant"]
+                        if _vars:
+                            _ab_df = pd.DataFrame.from_dict(_vars, orient="index")
+                            _ab_df.index.name = "النسخة"
+                            _ab_df = _ab_df.reset_index()
+                            st.dataframe(_ab_df, hide_index=True, width="stretch")
+
+                    if rep.get("top_links"):
+                        st.markdown("##### 🔗 أعلى الروابط نقراً")
+                        _tl_df = pd.DataFrame(rep["top_links"])
+                        if not _tl_df.empty:
+                            _tl_df = _tl_df.rename(columns={
+                                "url":"الرابط","clicks":"إجمالي النقرات",
+                                "unique_clickers":"ناقرون فريدون"})
+                            st.dataframe(_tl_df, hide_index=True, width="stretch")
+                        else:
+                            st.caption("لا روابط مسجّلة في هذه الحملة.")
 
                     if rep.get("failure_samples"):
                         st.markdown("##### 🔍 عيّنة من حالات الفشل")

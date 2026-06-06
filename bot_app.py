@@ -56,7 +56,8 @@ from deal_pulse_bot import (
 )
 from telebot import ExceptionHandler
 
-from api.routers import admin, auth, coupons, go, seo, social, track, trend, users
+from api.routers import (admin, auth, broadcast_tracking, coupons, go,
+                          seo, social, track, trend, users)
 from api.utils.rate_limit import limiter
 from api.workers.scheduler import start_workers
 
@@ -223,6 +224,8 @@ app.include_router(social.router,  prefix="/api/v1")   # Week 7-8 — social lis
 app.include_router(trend.router,   prefix="/api/v1")   # ترند يومي/أسبوعي للموقع والميني-ويب
 # Week 4 — Affiliate cloaking: /go/{slug} (بدون /api/v1 — رابط عام قصير)
 app.include_router(go.router)
+# Broadcast tracking — /bt/o/{token}.gif + /bt/c/{token}/{lid} (مسارات قصيرة)
+app.include_router(broadcast_tracking.router)
 
 
 # ─── Lifecycle ────────────────────────────────────────────────────────────────

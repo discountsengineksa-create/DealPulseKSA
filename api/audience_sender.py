@@ -33,6 +33,7 @@ from typing import Any, Callable
 import requests
 
 from api import audience_engine as _ae
+from api.utils import broadcast_tracker as _bt
 
 _log = logging.getLogger("dp.audience_sender")
 
@@ -297,20 +298,31 @@ def send_telegram_broadcast(
         broadcast_id = cur.fetchone()[0]
         conn.commit()
 
-    # سجّل المستلمين كـ queued
+    # سجّل المستلمين كـ queued (مع tracking_token لكل واحد)
+    # نحفظ token لكل uid في dict لاستخدامه في إعادة كتابة الـURLs لاحقاً
+    tokens_by_uid: dict[str, str] = {}
     with conn.cursor() as cur:
         for grp, var in ((group_a, "A"), (group_b, "B")):
             for r in grp:
                 uid = str(r.get("user_id") or "")
                 if not uid:
                     continue
+                tok = _bt.generate_token()
+                tokens_by_uid[uid] = tok
                 cur.execute(
                     "INSERT INTO broadcast_recipients "
                     "(broadcast_id, broadcast_kind, user_identifier, user_db_id, "
-                    " variant) VALUES (%s,'telegram',%s,%s,%s)",
-                    (broadcast_id, uid, uid, var if variant_b_text else None),
+                    " variant, tracking_token) VALUES (%s,'telegram',%s,%s,%s,%s)",
+                    (broadcast_id, uid, uid, var if variant_b_text else None, tok),
                 )
         conn.commit()
+
+    # سجّل URLs الحملة (للنصّين A و B) → ترجع {url: link_id}
+    all_urls = set(_bt.extract_urls(message_text or ""))
+    if variant_b_text:
+        all_urls.update(_bt.extract_urls(variant_b_text))
+    url_to_id = _bt.register_links(conn, broadcast_id=broadcast_id,
+                                    broadcast_kind="telegram", urls=all_urls)
 
     # الإرسال الفعلي
     delay = max(0.01, 1.0 / max(1, rate_per_sec))
@@ -324,7 +336,15 @@ def send_telegram_broadcast(
             uid = str(r.get("user_id") or "")
             if not uid:
                 continue
-            ok, err = _send_one_telegram(uid, text, image_url=image_url)
+            # أعد كتابة الـURLs لتمر عبر tracker (لو tracking مفعّل)
+            tok = tokens_by_uid.get(uid)
+            personalized_text = (
+                _bt.rewrite_body_for_recipient(
+                    text, tracking_token=tok, url_to_id=url_to_id, is_html=False)
+                if tok and url_to_id and _bt.is_tracking_enabled()
+                else text
+            )
+            ok, err = _send_one_telegram(uid, personalized_text, image_url=image_url)
             with conn.cursor() as cur:
                 cur.execute(
                     "UPDATE broadcast_recipients "
@@ -454,20 +474,32 @@ def send_email_broadcast(
         email_log_id = cur.fetchone()[0]
         conn.commit()
 
+    # سجّل المستلمين مع tracking_token لكل واحد
+    tokens_by_email: dict[str, str] = {}
     with conn.cursor() as cur:
         for grp, var in ((group_a, "A"), (group_b, "B")):
             for r in grp:
                 email = r.get("email")
                 if not email:
                     continue
+                tok = _bt.generate_token()
+                tokens_by_email[email] = tok
                 cur.execute(
                     "INSERT INTO broadcast_recipients "
                     "(broadcast_id, broadcast_kind, user_identifier, user_db_id, "
-                    " variant) VALUES (%s,'email',%s,%s,%s)",
+                    " variant, tracking_token) VALUES (%s,'email',%s,%s,%s,%s)",
                     (email_log_id, email, str(r.get("user_id") or ""),
-                     var if variant_b_html else None),
+                     var if variant_b_html else None, tok),
                 )
         conn.commit()
+
+    # سجّل URLs في full_html_a + full_html_b للبحث السريع لاحقاً
+    all_urls = set(_bt.extract_urls(full_html_a or ""))
+    if full_html_b:
+        all_urls.update(_bt.extract_urls(full_html_b))
+    url_to_id = _bt.register_links(conn, broadcast_id=email_log_id,
+                                    broadcast_kind="email", urls=all_urls)
+    tracking_on = bool(url_to_id) and _bt.is_tracking_enabled()
 
     delay = max(0.01, 1.0 / max(1, rate_per_sec))
     sent_ok = sent_fail = 0
@@ -482,7 +514,19 @@ def send_email_broadcast(
             email = r.get("email")
             if not email:
                 continue
-            ok, err = _send_one_email(email, subj, html)
+            # شخصنة الـHTML: استبدل URLs بـ tracked + احقن pixel
+            tok = tokens_by_email.get(email)
+            if tok and _bt.is_tracking_enabled():
+                personalized_html = (
+                    _bt.rewrite_body_for_recipient(
+                        html, tracking_token=tok, url_to_id=url_to_id,
+                        is_html=True)
+                    if tracking_on else html
+                )
+                personalized_html = _bt.inject_open_pixel(personalized_html, tok)
+            else:
+                personalized_html = html
+            ok, err = _send_one_email(email, subj, personalized_html)
             with conn.cursor() as cur:
                 cur.execute(
                     "UPDATE broadcast_recipients "
@@ -701,7 +745,7 @@ def process_due_schedules(conn, *, now_utc=None) -> list[dict]:
 # ════════════════════════════════════════════════════════════════════════════
 
 def broadcast_report(conn, broadcast_id: int, channel: str) -> dict:
-    """تقرير مفصّل لحملة: إجماليات + توزيع حسب status + per-variant CTR (إن A/B)."""
+    """تقرير مفصّل لحملة: إجماليات + status + CTR + Open rate + top links."""
     table = "broadcast_logs" if channel == "telegram" else "email_logs"
     out: dict = {"broadcast_id": broadcast_id, "channel": channel}
     with conn.cursor() as cur:
@@ -717,23 +761,77 @@ def broadcast_report(conn, broadcast_id: int, channel: str) -> dict:
             "failed_count": row[2], "status": row[3],
             "sent_at": row[4], "segment_id": row[5],
         })
+
         # توزيع حسب status
         cur.execute(
             "SELECT status, COUNT(*) FROM broadcast_recipients "
             "WHERE broadcast_id = %s AND broadcast_kind = %s GROUP BY status",
             (broadcast_id, channel))
         out["by_status"] = dict(cur.fetchall())
-        # توزيع حسب variant (A/B)
+
+        # إحصاء فتح وكليك (الجديد)
         cur.execute(
-            "SELECT variant, status, COUNT(*) FROM broadcast_recipients "
+            "SELECT "
+            "  COUNT(*) FILTER (WHERE open_count > 0)        AS unique_opens, "
+            "  COUNT(*) FILTER (WHERE click_count > 0)       AS unique_clicks, "
+            "  COALESCE(SUM(open_count),0)                   AS total_opens, "
+            "  COALESCE(SUM(click_count),0)                  AS total_clicks "
+            "FROM broadcast_recipients "
+            "WHERE broadcast_id = %s AND broadcast_kind = %s",
+            (broadcast_id, channel))
+        eng = cur.fetchone()
+        out["engagement"] = {
+            "unique_opens":  int(eng[0] or 0),
+            "unique_clicks": int(eng[1] or 0),
+            "total_opens":   int(eng[2] or 0),
+            "total_clicks":  int(eng[3] or 0),
+        }
+        sent = int(out.get("sent_count") or 0) or 1
+        # القنوات: الإيميل وحده يدعم Open rate (pixel). التليجرام = N/A.
+        out["engagement"]["open_rate"]  = (
+            round(out["engagement"]["unique_opens"]  / sent * 100, 2)
+            if channel == "email" else None)
+        out["engagement"]["click_rate"] = round(
+            out["engagement"]["unique_clicks"] / sent * 100, 2)
+
+        # توزيع حسب variant (A/B) — مع CTR لكل نسخة
+        cur.execute(
+            "SELECT variant, "
+            "       COUNT(*)                                    AS total, "
+            "       COUNT(*) FILTER (WHERE status='sent' OR status='opened' OR status='clicked') AS sent, "
+            "       COUNT(*) FILTER (WHERE open_count > 0)      AS opens, "
+            "       COUNT(*) FILTER (WHERE click_count > 0)     AS clicks "
+            "FROM broadcast_recipients "
             "WHERE broadcast_id = %s AND broadcast_kind = %s "
-            "AND variant IS NOT NULL GROUP BY variant, status "
-            "ORDER BY variant, status",
+            "AND variant IS NOT NULL GROUP BY variant ORDER BY variant",
             (broadcast_id, channel))
         by_var: dict = {}
-        for v, s, n in cur.fetchall():
-            by_var.setdefault(v, {})[s] = n
+        for v, total, sent_v, opens, clicks in cur.fetchall():
+            sent_v = sent_v or 0
+            base = sent_v if sent_v else 1
+            by_var[v] = {
+                "total": int(total), "sent": int(sent_v),
+                "opens": int(opens), "clicks": int(clicks),
+                "open_rate":  round(opens/base*100, 2) if channel == "email" else None,
+                "click_rate": round(clicks/base*100, 2),
+            }
         out["by_variant"] = by_var
+
+        # أعلى الروابط نقراً (لو في tracking)
+        cur.execute(
+            "SELECT lt.original_url, COUNT(c.id) AS clicks, "
+            "       COUNT(DISTINCT c.recipient_id) AS unique_clickers "
+            "FROM broadcast_link_targets lt "
+            "LEFT JOIN broadcast_link_clicks c ON c.link_target_id = lt.id "
+            "WHERE lt.broadcast_id = %s AND lt.broadcast_kind = %s "
+            "GROUP BY lt.original_url ORDER BY clicks DESC LIMIT 10",
+            (broadcast_id, channel))
+        out["top_links"] = [
+            {"url": r[0], "clicks": int(r[1] or 0),
+             "unique_clickers": int(r[2] or 0)}
+            for r in cur.fetchall()
+        ]
+
         # عيّنة من الفاشلين مع أسباب الفشل
         cur.execute(
             "SELECT user_identifier, error_message FROM broadcast_recipients "

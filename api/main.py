@@ -29,7 +29,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from slowapi.errors import RateLimitExceeded
 
-from api.routers import admin, auth, coupons, go, seo, social, track, trend, users
+from api.routers import (admin, auth, broadcast_tracking, coupons, go,
+                          seo, social, track, trend, users)
 from api.utils.rate_limit import limiter
 
 # ─── النطاقات المسموح لها بالاتصال بالـ API ────────────────────────────────
@@ -103,6 +104,8 @@ app.include_router(social.router,  prefix="/api/v1")
 app.include_router(trend.router,   prefix="/api/v1")
 # /go/{slug} رابط عام قصير بدون /api/v1 prefix
 app.include_router(go.router)
+# /bt/o/{token}.gif + /bt/c/{token}/{lid} — tracking للبريد والروابط
+app.include_router(broadcast_tracking.router)
 
 
 @app.get("/health", tags=["system"])
