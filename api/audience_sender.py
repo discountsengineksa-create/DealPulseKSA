@@ -333,6 +333,29 @@ def send_telegram_broadcast(
                     "AND broadcast_kind='telegram'",
                     ("sent" if ok else "failed", err, broadcast_id, uid),
                 )
+                # تتبّع المحظورين: 403 = حظر دائم → علّم المستخدم
+                if not ok and err and ("403" in err or "user_blocked_bot" in err
+                                       or "chat not found" in err.lower()):
+                    cur.execute(
+                        "UPDATE bot_users SET telegram_blocked_at = COALESCE(telegram_blocked_at, NOW()), "
+                        "last_telegram_error = %s WHERE telegram_id::text = %s",
+                        (err[:500], uid),
+                    )
+                elif not ok and err:
+                    # خطأ غير حظر — سجّل آخر خطأ فقط (بدون رفع راية الحظر)
+                    cur.execute(
+                        "UPDATE bot_users SET last_telegram_error = %s "
+                        "WHERE telegram_id::text = %s",
+                        (err[:500], uid),
+                    )
+                elif ok:
+                    # نجاح بعد فشل سابق → امسح راية الحظر (مستخدم رجع)
+                    cur.execute(
+                        "UPDATE bot_users SET telegram_blocked_at = NULL, "
+                        "last_telegram_error = NULL "
+                        "WHERE telegram_id::text = %s AND telegram_blocked_at IS NOT NULL",
+                        (uid,),
+                    )
                 conn.commit()
             if ok:
                 sent_ok += 1
@@ -721,6 +744,34 @@ def broadcast_report(conn, broadcast_id: int, channel: str) -> dict:
     return out
 
 
+def list_blocked_telegram_users(conn, limit: int = 100) -> list[dict]:
+    """قائمة مستخدمي البوت اللي حُظروا تلقائياً (آخر 100)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT telegram_id::text AS telegram_id, username, "
+            "telegram_blocked_at, last_telegram_error "
+            "FROM bot_users WHERE telegram_blocked_at IS NOT NULL "
+            "AND deleted_at IS NULL "
+            "ORDER BY telegram_blocked_at DESC LIMIT %s",
+            (limit,),
+        )
+        cols = [c.name for c in cur.description]
+        return [dict(zip(cols, r)) for r in cur.fetchall()]
+
+
+def unblock_telegram_user(conn, telegram_id: str) -> bool:
+    """يُلغي وسم الحظر يدوياً (لو الأدمن يعتقد أن المستخدم رجع للبوت)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE bot_users SET telegram_blocked_at = NULL, "
+            "last_telegram_error = NULL "
+            "WHERE telegram_id::text = %s",
+            (telegram_id,),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
+
 def list_exclusions(conn, channel: str | None = None) -> list[dict]:
     with conn.cursor() as cur:
         if channel:
@@ -746,6 +797,8 @@ __all__ = [
     "add_exclusion",
     "remove_exclusion",
     "list_exclusions",
+    "list_blocked_telegram_users",
+    "unblock_telegram_user",
     "check_recent_duplicate",
     "schedule_broadcast",
     "list_schedules",

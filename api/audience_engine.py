@@ -284,6 +284,7 @@ LEFT JOIN LATERAL (
     ORDER BY al.action_time DESC LIMIT 1
 ) cty ON TRUE
 WHERE bu.deleted_at IS NULL
+  AND bu.telegram_blocked_at IS NULL   -- يستبعد محظورين البوت تلقائياً
 """
 
 _BASE_WEB_UNLINKED = """
@@ -305,8 +306,12 @@ LEFT JOIN LATERAL (
     ORDER BY al.action_time DESC LIMIT 1
 ) cty ON TRUE
 WHERE TRUE
+  -- "غير مربوط" = إما بلا حساب تليجرام، أو مربوط بحساب محظور/محذوف
+  -- (المحظورون يُعتبرون غير مربوطين هنا ليصلهم البريد بدل تليجرام المغلق)
   AND (wu.telegram_username IS NULL OR LOWER(wu.telegram_username) NOT IN (
-       SELECT LOWER(username) FROM bot_users WHERE username IS NOT NULL AND deleted_at IS NULL))
+       SELECT LOWER(username) FROM bot_users
+       WHERE username IS NOT NULL AND deleted_at IS NULL
+         AND telegram_blocked_at IS NULL))
 """
 
 _BASE_WEB_ALL = """
@@ -1045,6 +1050,75 @@ def clone_template(conn, template_id: int, new_name: str,
 # Reference data (لقوائم الـ UI)
 # ════════════════════════════════════════════════════════════════════════════
 
+def analytics_filters_to_rules(*, lang=None, gender=None, age=None, city=None,
+                                status=None, complete=None, fav_store=None,
+                                fav_cat=None, store=None, category=None,
+                                action=None, trend=None, story=None) -> dict:
+    """يحوّل فلاتر صفحة «تحليل المستخدمين» إلى rules_json متوافق مع المحرّك.
+
+    كل القيم اختيارية. ما يُمرّر = ما يُضاف كقاعدة. ينتج مجموعة AND واحدة.
+    """
+    rules: list[dict] = []
+
+    if lang in ("ar", "en"):
+        rules.append({"type":"attribute","field":"lang","op":"=","value":lang})
+
+    if gender in ("male", "female"):
+        rules.append({"type":"attribute","field":"gender","op":"=","value":gender})
+
+    if age and age != "none":
+        ranges = {"u18":[0,17],"18-24":[18,24],"25-34":[25,34],
+                  "35-44":[35,44],"45-54":[45,54],"55p":[55,120]}
+        if age in ranges:
+            rules.append({"type":"attribute","field":"age","op":"between",
+                          "value":ranges[age]})
+
+    if city and city not in (None, "none", "all", "الكل", "لا شيء"):
+        rules.append({"type":"attribute","field":"city","op":"=","value":city})
+
+    if status == "active":
+        rules.append({"type":"temporal","field":"last_seen","op":">=","value_days":20})
+    elif status == "idle":
+        rules.append({"type":"temporal","field":"last_seen","op":"<=","value_days":20})
+
+    if complete == "complete":
+        rules.append({"type":"attribute","field":"is_linked","op":"=","value":True})
+    elif complete == "partial":
+        rules.append({"type":"attribute","field":"is_linked","op":"=","value":False})
+
+    if fav_store == "has":
+        rules.append({"type":"attribute","field":"fav_count","op":">=","value":1})
+
+    if store:
+        rules.append({"type":"event","action":"view_store","entity_type":"store",
+                      "entity_value":store,"context":"any",
+                      "window":{"type":"all"}})
+
+    if category:
+        rules.append({"type":"event","action":"view_tag","entity_type":"category",
+                      "entity_value":category,"context":"any",
+                      "window":{"type":"all"}})
+
+    if action in ("copy_coupon", "click_link", "search"):
+        rules.append({"type":"event","action":action,"entity_type":"any",
+                      "context":"any","window":{"type":"all"}})
+
+    if trend in ("daily", "weekly"):
+        ctx = "trend_daily" if trend == "daily" else "trend_weekly"
+        rules.append({"type":"event","action":"click_link","entity_type":"any",
+                      "context":ctx,"window":{"type":"all"}})
+
+    if story in ("normal", "trend"):
+        rules.append({"type":"event","action":"view_story",
+                      "was_trending":(story == "trend"),
+                      "window":{"type":"all"}})
+
+    if not rules:
+        return {"version":1, "logic":"or", "groups":[]}
+    return {"version":1, "logic":"or",
+            "groups":[{"logic":"and", "rules":rules}]}
+
+
 def list_stores(conn) -> list[str]:
     """قائمة store_id من master للـ dropdown."""
     with conn.cursor() as cur:
@@ -1099,4 +1173,5 @@ __all__ = [
     "list_stores",
     "list_categories",
     "list_cities",
+    "analytics_filters_to_rules",
 ]

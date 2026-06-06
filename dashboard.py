@@ -418,10 +418,12 @@ display: none !important;
 [data-testid="stToolbar"] {{ display: none !important; }}
 header[data-testid="stHeader"] {{ display: none !important; }}
 
-/* ── إخفاء أيقونة Material Icons داخل القائمة الجانبية ──
-(تظهر كنص حرفي keyboard_arrow_down لأن قاعدة font-family: Cairo
-التالية تطغى على خط Material Symbols Rounded) */
-[data-testid="stSidebar"] span[data-testid="stIconMaterial"] {{
+/* ── إخفاء أيقونة Material Icons في كل الواجهة ──
+(تظهر كنص حرفي keyboard_arrow_down/keyboard_ar... لأن قاعدة
+font-family: Cairo العالمية تطغى على خط Material Symbols Rounded.
+المربع الأبيض يستخدم بدائل CSS (▼) من نفس Streamlit، فالإخفاء آمن.) */
+[data-testid="stSidebar"] span[data-testid="stIconMaterial"],
+span[data-testid="stIconMaterial"] {{
 display: none !important;
 }}
 
@@ -6184,13 +6186,58 @@ elif page == "تحليل المستخدمين":
                 "مفضلة متاجر", "المتاجر المفضّلة",
                 "مفضلة أقسام", "الأقسام المفضّلة", "آخر ظهور"]]
             st.dataframe(_disp, width="stretch", hide_index=True)
-            st.download_button(
-                "⬇️ تحميل الجدول (Excel/CSV)",
-                _disp.to_csv(index=False).encode("utf-8-sig"),
-                file_name="users_analytics.csv",
-                mime="text/csv",
-                key="gen_dl",
-            )
+            _bridge_c1, _bridge_c2 = st.columns(2)
+            with _bridge_c1:
+                st.download_button(
+                    "⬇️ تحميل الجدول (Excel/CSV)",
+                    _disp.to_csv(index=False).encode("utf-8-sig"),
+                    file_name="users_analytics.csv",
+                    mime="text/csv",
+                    key="gen_dl",
+                    width="stretch",
+                )
+            # ── الجسر إلى بنّاء الشرائح: تحويل الفلاتر الحالية → شريحة ──
+            with _bridge_c2:
+                if st.button("📢 احفظ هؤلاء كشريحة + افتح مركز الإشعارات",
+                             key="gen_to_segment", width="stretch",
+                             type="primary"):
+                    try:
+                        from api import audience_engine as _ae_bridge
+                        _rules_from_filters = _ae_bridge.analytics_filters_to_rules(
+                            lang=gen_lang if gen_lang != "none" else None,
+                            gender=gen_gender if gen_gender != "none" else None,
+                            age=gen_age if gen_age != "none" else None,
+                            city=gen_city,
+                            status=gen_status if gen_status != "all" else None,
+                            complete=gen_complete if gen_complete != "all" else None,
+                            fav_store=gen_fav_store if gen_fav_store != "none" else None,
+                            fav_cat=gen_fav_cat if gen_fav_cat != "none" else None,
+                            store=gen_store,
+                            category=gen_category,
+                            action=gen_action if gen_action != "none" else None,
+                            trend=gen_trend if gen_trend != "none" else None,
+                            story=gen_story if gen_story != "none" else None,
+                        )
+                        _auto_name = (
+                            f"من التحليل · {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}"
+                        )
+                        _filter_desc = (
+                            f"شريحة محوّلة من فلاتر تحليل المستخدمين "
+                            f"({len(_rules_from_filters.get('groups',[{}])[0].get('rules',[]))} قاعدة)"
+                        )
+                        with get_conn() as _c_save:
+                            _c_save.autocommit = True
+                            _new_sid = _ae_bridge.save_segment(
+                                _c_save, name=_auto_name,
+                                description=_filter_desc,
+                                rules_json=_rules_from_filters,
+                                channel="both")
+                        st.success(f"✅ حُفظت كشريحة #{_new_sid}: «{_auto_name}»")
+                        st.session_state["nc_preset_segment_id"] = _new_sid
+                        st.session_state["page"] = "مركز الإشعارات"
+                        st.rerun()
+                    except Exception as _e:
+                        st.error(f"تعذّر الحفظ: {_e}")
 
         # ════════════════════════════════════════════════════════════════
         # سجل الترند الحي (مستقل) — كل تفاعل من سياق بطاقة ترند، حدث-بحدث.
@@ -7795,14 +7842,14 @@ elif page == "🎯 بناء الشرائح":
         # ── عرض المجموعات والقواعد ────────────────────────────────────────
         for g_idx, group in enumerate(st.session_state.seg_rules["groups"]):
             with st.container(border=True):
-                _gh1, _gh2, _gh3 = st.columns([3, 1, 1])
+                _gh1, _gh2, _gh3 = st.columns([2, 2, 1])
                 with _gh1:
                     st.markdown(f"#### 📦 المجموعة {g_idx+1}")
                 with _gh2:
                     group["logic"] = st.selectbox(
                         "منطق داخلي", ["and","or"],
                         index=["and","or"].index(group.get("logic","and")),
-                        format_func=lambda x: "كل القواعد (AND)" if x=="and" else "أي قاعدة (OR)",
+                        format_func=lambda x: "🔗 كل القواعد" if x=="and" else "🔀 أي قاعدة",
                         key=f"g{g_idx}_logic", label_visibility="collapsed")
                 with _gh3:
                     if (len(st.session_state.seg_rules["groups"]) > 1
@@ -7898,10 +7945,25 @@ elif page == "🎯 بناء الشرائح":
                     st.session_state.seg_rules, n=5)
             if _sample:
                 _df_s = pd.DataFrame(_sample)
-                _keep = [c for c in ["handle","name","email","lang","city","last_seen"]
+                # نختصر الأعمدة لعرض مناسب في عمود ضيق + تسميات عربية
+                _rename = {"handle": "اليوزر", "name": "الاسم",
+                           "email": "الإيميل", "lang": "اللغة",
+                           "city": "المدينة"}
+                _keep = [c for c in ["handle","name","email","lang","city"]
                          if c in _df_s.columns]
-                st.dataframe(_df_s[_keep] if _keep else _df_s,
-                             hide_index=True, width="stretch")
+                _df_show = _df_s[_keep].rename(columns=_rename)
+                # نُختصر النصوص الطويلة لتفادي القص في عمود ضيق
+                for _c in _df_show.columns:
+                    if _df_show[_c].dtype == object:
+                        _df_show[_c] = _df_show[_c].astype(str).str.slice(0, 22)
+                st.dataframe(_df_show, hide_index=True, width="stretch",
+                             column_config={
+                                 "اليوزر":   st.column_config.TextColumn(width="small"),
+                                 "الاسم":    st.column_config.TextColumn(width="small"),
+                                 "الإيميل":  st.column_config.TextColumn(width="medium"),
+                                 "اللغة":    st.column_config.TextColumn(width="small"),
+                                 "المدينة":  st.column_config.TextColumn(width="small"),
+                             })
             else:
                 st.info("لا مطابقين بعد. عدّل القواعد.")
         except Exception as _e:
@@ -7975,8 +8037,17 @@ elif page == "🎯 بناء الشرائح":
 
         # ── JSON للمطوّر (debug/تصدير) ─────────────────────────────────────
         with st.expander("🔧 JSON للقواعد (متقدّم)"):
-            st.code(json.dumps(st.session_state.seg_rules,
-                               ensure_ascii=False, indent=2), language="json")
+            _json_str = json.dumps(st.session_state.seg_rules,
+                                   ensure_ascii=False, indent=2)
+            # نُجبر LTR لعرض الـJSON بشكل قابل للقراءة (الـRTL يقلبه)
+            st.markdown(
+                f'<div dir="ltr" style="text-align:left;direction:ltr;">'
+                f'<pre style="background:#0E1117;color:#E1E1E1;padding:12px;'
+                f'border-radius:6px;overflow-x:auto;font-family:monospace;'
+                f'font-size:12px;direction:ltr;text-align:left;white-space:pre;">'
+                f'{_json_str}</pre></div>',
+                unsafe_allow_html=True,
+            )
 
 
 elif page == "مركز الإشعارات":
@@ -8582,7 +8653,50 @@ elif page == "مركز الإشعارات":
                 st.success("حُذف.")
                 st.rerun()
         else:
-            st.info("لا استثناءات.")
+            st.info("لا استثناءات يدوية.")
+
+        # ── المحظورون تلقائياً (وُسموا بعد فشل 403) ───────────────────────
+        st.divider()
+        st.subheader("🛑 المحظورون تلقائياً من البوت")
+        st.caption("مستخدمو تليجرام رجع API لهم خطأ 403 → استُبعدوا تلقائياً "
+                   "من كل حملة. يرجعون تلقائياً لو نجح إرسال لهم لاحقاً، "
+                   "أو يدوياً بزر «أعد التفعيل».")
+        try:
+            with get_conn() as _c:
+                _c.autocommit = True
+                _blocked = _send_nc.list_blocked_telegram_users(_c, limit=200)
+        except Exception as _e:
+            _blocked = []
+            st.error(f"تعذّر التحميل: {_e}")
+
+        if not _blocked:
+            st.info("لا محظورين حالياً 🎉")
+        else:
+            st.warning(f"⚠️ {len(_blocked)} مستخدم محظور — مستبعدون من كل الحملات")
+            _df_blk = pd.DataFrame(_blocked)
+            _df_blk["telegram_blocked_at"] = pd.to_datetime(
+                _df_blk["telegram_blocked_at"]).dt.strftime("%Y-%m-%d %H:%M")
+            st.dataframe(
+                _df_blk[["telegram_id","username","telegram_blocked_at","last_telegram_error"]],
+                hide_index=True, width="stretch",
+                column_config={
+                    "telegram_id":         st.column_config.TextColumn("معرّف", width="small"),
+                    "username":            st.column_config.TextColumn("اليوزر", width="small"),
+                    "telegram_blocked_at": st.column_config.TextColumn("تاريخ الحظر", width="medium"),
+                    "last_telegram_error": st.column_config.TextColumn("آخر خطأ"),
+                })
+            _unblk = st.text_input(
+                "🔓 ألغِ الحظر يدوياً (أدخل telegram_id):",
+                key="nc_unblk_id",
+                help="مفيد لو تتوقّع أن المستخدم رجع للبوت بعد حذف.")
+            if _unblk and st.button("✅ أعد تفعيله", key="nc_unblk_btn"):
+                with get_conn() as _c:
+                    _c.autocommit = True
+                    if _send_nc.unblock_telegram_user(_c, _unblk.strip()):
+                        st.success(f"أُعيد تفعيل {_unblk}")
+                        st.rerun()
+                    else:
+                        st.error("لم يُعثر على المستخدم.")
 
 
 
