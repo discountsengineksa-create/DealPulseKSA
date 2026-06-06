@@ -6407,7 +6407,321 @@ elif page == "تحليل المستخدمين":
 
     # ── القائمة الثانية: التحليل الفردي ─────────────────────────────────
     with tab_individual:
-        pass  # نبدأ البناء هنا
+        # ════════════════════════════════════════════════════════════════════
+        # سيرة حياة المستخدم — كل تفاعل حصل، مرتباً بالوقت، عبر الموقع +
+        # البوت + الميني-ويب، من أول دخول لآخر خروج. مصدر الحقيقة:
+        #   • action_logs   : copy_coupon / click_link / search / view_tag / view_store
+        #   • direct_search : بحث كلمات (يتقاطع مع action_logs.search لكنه يحفظ الكلمة)
+        #   • story_views   : فتحات الستوري (مع was_trending snapshot)
+        #   • user_favorites: إضافات مفضلة (متاجر/أقسام)
+        # نوحّدها بـ UNION ALL ثم نرتّبها تنازلياً.
+        # ════════════════════════════════════════════════════════════════════
+        st.markdown("### 🔎 ابحث عن شخص")
+        st.caption(
+            "اكتب جزء من الاسم، يوزر تيليجرام، الإيميل، الجوال، أو معرّف موقع/تيليجرام. "
+            "ثم اختر الشخص من النتائج لعرض سيرته الكاملة عبر القنوات الثلاث."
+        )
+
+        q = st.text_input(
+            "🔎 الباحث",
+            placeholder="مثال: salahasiri  ·  user@gmail.com  ·  0501234567  ·  650035493",
+            key="ind_query",
+        )
+
+        if not q or len(q.strip()) < 2:
+            st.info("اكتب حرفين على الأقل لبدء البحث.")
+        else:
+            qn = q.strip()
+            qlike = f"%{qn}%"
+            qdigits = "".join(ch for ch in qn if ch.isdigit())
+
+            try:
+                conn_i = get_conn()
+                conn_i.autocommit = True
+                # نبحث في web_users و bot_users ثم نوحّد النتائج. كل صف = شخص محتمل
+                # مع person_key يميّز realm + person_id لاستعلام السيرة لاحقاً.
+                matches_sql = """
+                    SELECT 'web' AS realm,
+                           wu.id::text AS person_id,
+                           wu.display_name AS name,
+                           wu.telegram_username AS handle,
+                           wu.email, wu.phone_number AS phone,
+                           wu.last_seen,
+                           CASE
+                             WHEN wu.telegram_username IS NOT NULL
+                              AND LOWER(wu.telegram_username) IN
+                                  (SELECT LOWER(username) FROM bot_users WHERE username IS NOT NULL)
+                             THEN TRUE ELSE FALSE
+                           END AS is_linked
+                    FROM web_users wu
+                    WHERE COALESCE(wu.display_name,'')      ILIKE %s
+                       OR COALESCE(wu.telegram_username,'') ILIKE %s
+                       OR COALESCE(wu.email,'')             ILIKE %s
+                       OR COALESCE(wu.phone_number,'')      ILIKE %s
+                       OR (LENGTH(%s) > 0 AND wu.id::text = %s)
+                    UNION ALL
+                    SELECT 'tg'  AS realm,
+                           bu.telegram_id::text AS person_id,
+                           bu.name_en AS name,
+                           bu.username AS handle,
+                           NULL AS email, NULL AS phone,
+                           bu.last_seen,
+                           CASE
+                             WHEN bu.username IS NOT NULL
+                              AND LOWER(bu.username) IN
+                                  (SELECT LOWER(telegram_username) FROM web_users WHERE telegram_username IS NOT NULL)
+                             THEN TRUE ELSE FALSE
+                           END AS is_linked
+                    FROM bot_users bu
+                    WHERE bu.deleted_at IS NULL
+                      AND (COALESCE(bu.name_en,'')   ILIKE %s
+                       OR  COALESCE(bu.username,'')  ILIKE %s
+                       OR  (LENGTH(%s) > 0 AND bu.telegram_id::text = %s))
+                    ORDER BY last_seen DESC NULLS LAST
+                    LIMIT 50
+                """
+                matches = pd.read_sql(
+                    matches_sql, conn_i,
+                    params=[qlike, qlike, qlike, qlike, qdigits, qdigits,
+                            qlike, qlike, qdigits, qdigits],
+                )
+
+                if matches.empty:
+                    st.warning("لا نتائج. جرّب جزء مختلف من الاسم/اليوزر/الإيميل/الجوال.")
+                else:
+                    # نطوي صفوف نفس الشخص (web+tg مربوطين) إلى صف واحد
+                    # لأن البحث قد يصيب الاثنين بنفس الـ handle.
+                    matches["label"] = matches.apply(
+                        lambda r: (
+                            f"{'🌐' if r['realm']=='web' else '🤖'} "
+                            f"{r['name'] or '—'}  ·  "
+                            f"@{r['handle']}" if r['handle'] else
+                            (r['email'] or r['phone'] or r['person_id'])
+                            + (f"  ·  {r['email'] or ''}" if r['email'] else "")
+                            + ("  ·  🔗 مربوط" if r['is_linked'] else "")
+                        ),
+                        axis=1,
+                    )
+                    options = matches.apply(
+                        lambda r: f"{r['realm']}|{r['person_id']}", axis=1
+                    ).tolist()
+                    labels  = matches["label"].tolist()
+                    sel = st.selectbox(
+                        f"اختر شخصاً ({len(matches)} نتيجة):",
+                        options, format_func=lambda v: labels[options.index(v)],
+                        key="ind_pick",
+                    )
+                    sel_realm, sel_pid = sel.split("|", 1)
+                    sel_row = matches[(matches["realm"] == sel_realm)
+                                      & (matches["person_id"] == sel_pid)].iloc[0]
+
+                    # ── ملف مختصر ──────────────────────────────────────
+                    st.markdown("---")
+                    st.markdown(f"### 👤 ملف الشخص: **{sel_row['name'] or '—'}**")
+
+                    # لو مربوط: نسحب الـ web_users.id (w3) و bot_users.telegram_id (bu)
+                    # لربط كل الجداول لاحقاً. لو غير مربوط: واحد منهم فقط.
+                    if sel_realm == "tg":
+                        bu_tid = int(sel_pid)
+                        link_row = pd.read_sql("""
+                            SELECT w.id, w.display_name, w.email, w.phone_number,
+                                   w.gender, w.birth_date, w.lang AS web_lang
+                            FROM bot_users b
+                            LEFT JOIN web_users w
+                              ON w.telegram_username IS NOT NULL
+                             AND LOWER(w.telegram_username) = LOWER(b.username)
+                            WHERE b.telegram_id = %s LIMIT 1
+                        """, conn_i, params=[bu_tid])
+                        wu_id = (int(link_row.iloc[0]["id"])
+                                 if not link_row.empty and pd.notna(link_row.iloc[0]["id"])
+                                 else None)
+                    else:
+                        wu_id = int(sel_pid)
+                        link_row = pd.read_sql("""
+                            SELECT b.telegram_id, b.username, b.name_en, b.lang AS bot_lang
+                            FROM web_users w
+                            LEFT JOIN bot_users b
+                              ON b.username IS NOT NULL
+                             AND LOWER(b.username) = LOWER(w.telegram_username)
+                             AND b.deleted_at IS NULL
+                            WHERE w.id = %s LIMIT 1
+                        """, conn_i, params=[wu_id])
+                        bu_tid = (int(link_row.iloc[0]["telegram_id"])
+                                  if not link_row.empty and pd.notna(link_row.iloc[0]["telegram_id"])
+                                  else None)
+
+                    # عرض الملف
+                    pc1, pc2, pc3 = st.columns(3)
+                    with pc1:
+                        st.markdown(f"**🌐 يوزر تيليجرام:** {sel_row['handle'] or '—'}")
+                        st.markdown(f"**📧 إيميل:** {sel_row['email'] or '—'}")
+                        st.markdown(f"**📱 جوال:** {sel_row['phone'] or '—'}")
+                    with pc2:
+                        st.markdown(f"**🆔 web_users.id:** `{wu_id if wu_id else '—'}`")
+                        st.markdown(f"**🆔 telegram_id:** `{bu_tid if bu_tid else '—'}`")
+                        st.markdown(f"**🔗 الحالة:** "
+                                    + ("✅ مربوط (موقع ↔ تيليجرام)"
+                                       if wu_id and bu_tid else "⛔ قناة واحدة"))
+                    with pc3:
+                        st.markdown(f"**⏱️ آخر ظهور:** "
+                                    f"{pd.to_datetime(sel_row['last_seen']).strftime('%Y-%m-%d %H:%M') if pd.notna(sel_row['last_seen']) else '—'}")
+
+                    # ── سيرة الحياة (UNION ALL) ────────────────────────
+                    # UID list: نوحد رصد الأحداث من كل القنوات. للمربوط: bu.telegram_id
+                    # يلتقط البوت+الميني، wu.id يلتقط الموقع. لغير المربوط: واحد منهم.
+                    st.markdown("---")
+                    st.markdown("### 📜 سيرة الحياة — حدث بحدث")
+                    st.caption(
+                        "ترتيب تنازلي بالوقت. كل سطر = تفاعل حقيقي. القناة "
+                        "تأتي من source/platform في القاعدة."
+                    )
+
+                    # نبني شرط user_id لكل جدول مع التعامل مع NULL لو واحد منهم مفقود.
+                    bu_tid_sql = bu_tid if bu_tid is not None else -1
+                    wu_id_sql  = wu_id  if wu_id  is not None else -1
+
+                    timeline_sql = """
+                        -- action_logs: copy / click / search / view_tag / view_store
+                        SELECT
+                            al.action_time AS ts,
+                            al.source      AS channel,
+                            al.action_type AS event,
+                            al.store_id    AS store_id,
+                            COALESCE(al.details,'') AS details,
+                            COALESCE(al.city,'')    AS city,
+                            COALESCE(al.story_view_id::text,'') AS extra
+                        FROM action_logs al
+                        WHERE (al.user_id = %s AND al.source IN ('bot','telegram_miniapp'))
+                           OR (al.user_id = %s AND al.source = 'web')
+
+                        UNION ALL
+                        -- direct_search: سجل الكلمات
+                        SELECT
+                            ds.searched_at AS ts,
+                            CASE ds.platform
+                              WHEN 'TelegramBot' THEN 'bot'
+                              WHEN 'Miniapp'     THEN 'telegram_miniapp'
+                              WHEN 'Web'         THEN 'web'
+                              ELSE COALESCE(ds.platform,'?')
+                            END AS channel,
+                            'direct_search' AS event,
+                            COALESCE(ds.store_id,'') AS store_id,
+                            COALESCE(ds.search_keyword,'') AS details,
+                            '' AS city,
+                            CASE WHEN ds.user_found THEN 'وجد' ELSE 'لم يجد' END AS extra
+                        FROM direct_search ds
+                        WHERE (ds.user_id = %s AND ds.platform IN ('TelegramBot','Miniapp'))
+                           OR (ds.user_id = %s AND ds.platform = 'Web')
+
+                        UNION ALL
+                        -- story_views: فتحات الستوري
+                        SELECT
+                            sv.viewed_at  AS ts,
+                            sv.source     AS channel,
+                            'story_view'  AS event,
+                            COALESCE(sv.store_id,'') AS store_id,
+                            CASE WHEN sv.was_trending IS TRUE  THEN 'trend'
+                                 WHEN sv.was_trending IS FALSE THEN 'normal'
+                                 ELSE 'unknown' END AS details,
+                            '' AS city,
+                            COALESCE(sv.view_id::text,'') AS extra
+                        FROM story_views sv
+                        WHERE sv.tg_user_id = %s OR sv.web_user_id = %s
+
+                        UNION ALL
+                        -- user_favorites: إضافات المفضلة
+                        SELECT
+                            uf.created_at AS ts,
+                            COALESCE(uf.platform,'?') AS channel,
+                            'add_favorite' AS event,
+                            COALESCE(uf.store_id,'')      AS store_id,
+                            CASE uf.kind WHEN 'store' THEN 'store'
+                                         WHEN 'category' THEN COALESCE(uf.category_name,'category')
+                                         ELSE COALESCE(uf.kind,'?') END AS details,
+                            '' AS city,
+                            COALESCE(uf.kind,'') AS extra
+                        FROM user_favorites uf
+                        WHERE uf.telegram_id = %s OR uf.web_user_id = %s
+
+                        ORDER BY ts DESC
+                    """
+                    timeline = pd.read_sql(
+                        timeline_sql, conn_i,
+                        params=[bu_tid_sql, wu_id_sql,    # action_logs
+                                bu_tid_sql, wu_id_sql,    # direct_search
+                                bu_tid_sql, wu_id_sql,    # story_views
+                                bu_tid_sql, wu_id_sql],   # user_favorites
+                    )
+
+                    if timeline.empty:
+                        st.info("لا يوجد سجل تفاعلات لهذا الشخص.")
+                    else:
+                        # تنسيق العرض
+                        _ch_map = {
+                            "web": "🌐 موقع",
+                            "bot": "🤖 بوت",
+                            "telegram_miniapp": "🔹 ميني-ويب",
+                        }
+                        _ev_map = {
+                            "click_link":    "🖱️ نقر رابط",
+                            "copy_coupon":   "🎟️ نسخ كود",
+                            "search":        "🔎 بحث",
+                            "view_tag":      "🏷️ تصفّح قسم",
+                            "view_store":    "👁️ زيارة بطاقة متجر",
+                            "direct_search": "🔎 بحث كلمة",
+                            "story_view":    "🎬 فتحة ستوري",
+                            "add_favorite":  "❤️ إضافة مفضلة",
+                        }
+                        disp = timeline.copy()
+                        disp["ts"]     = pd.to_datetime(disp["ts"], errors="coerce")
+                        disp["channel"] = disp["channel"].map(_ch_map).fillna(disp["channel"])
+                        disp["event"]   = disp["event"].map(_ev_map).fillna(disp["event"])
+                        disp = disp.rename(columns={
+                            "ts": "الوقت", "channel": "القناة",
+                            "event": "الحدث", "store_id": "المتجر/القسم",
+                            "details": "تفاصيل", "city": "المدينة",
+                            "extra": "ملاحظة",
+                        })
+
+                        # خلاصة مختصرة
+                        n_total = len(disp)
+                        n_web   = (timeline["channel"] == "web").sum()
+                        n_bot   = (timeline["channel"] == "bot").sum()
+                        n_mini  = (timeline["channel"] == "telegram_miniapp").sum()
+                        first_ts = disp["الوقت"].min()
+                        last_ts  = disp["الوقت"].max()
+
+                        mc1, mc2, mc3, mc4 = st.columns(4)
+                        mc1.metric("إجمالي الأحداث", n_total)
+                        mc2.metric("🌐 موقع", int(n_web))
+                        mc3.metric("🤖 بوت", int(n_bot))
+                        mc4.metric("🔹 ميني-ويب", int(n_mini))
+                        st.caption(
+                            f"📅 أول تفاعل: **{first_ts.strftime('%Y-%m-%d %H:%M') if pd.notna(first_ts) else '—'}**  ·  "
+                            f"آخر تفاعل: **{last_ts.strftime('%Y-%m-%d %H:%M') if pd.notna(last_ts) else '—'}**"
+                        )
+
+                        st.dataframe(
+                            disp[["الوقت", "القناة", "الحدث", "المتجر/القسم",
+                                  "تفاصيل", "المدينة", "ملاحظة"]],
+                            use_container_width=True, hide_index=True,
+                        )
+                        st.download_button(
+                            "⬇️ تحميل السيرة (Excel/CSV)",
+                            disp.to_csv(index=False).encode("utf-8-sig"),
+                            file_name=f"user_timeline_{sel_realm}_{sel_pid}.csv",
+                            mime="text/csv",
+                            key="ind_dl",
+                        )
+                conn_i.close()
+            except Exception as e:
+                import traceback as _tb
+                st.error(f"خطأ في التحليل الفردي: {type(e).__name__}: {e}")
+                with st.expander("تفاصيل تقنية"):
+                    st.code(_tb.format_exc())
+                if 'conn_i' in locals():
+                    try: conn_i.close()
+                    except Exception: pass
 
 elif page == "مركز الإشعارات":
     page_title("📢", "مركز البث والإشعارات الجماعية")
