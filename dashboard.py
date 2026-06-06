@@ -5916,10 +5916,12 @@ elif page == "تحليل المستخدمين":
                        (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = bu.telegram_id
                           AND ac.source IN ('bot','telegram_miniapp') AND ac.action_type='search') AS n_search,
                        (SELECT COUNT(*) FROM story_views sv WHERE sv.tg_user_id = bu.telegram_id) AS n_story,
-                       (SELECT COUNT(*) FROM user_favorites uf WHERE uf.telegram_id = bu.telegram_id AND uf.kind='store') AS n_fav_store,
-                       (SELECT COUNT(*) FROM user_favorites uf WHERE uf.telegram_id = bu.telegram_id AND uf.kind='category') AS n_fav_cat,
-                       (SELECT string_agg(DISTINCT uf.store_id, ', ') FROM user_favorites uf WHERE uf.telegram_id = bu.telegram_id AND uf.kind='store') AS fav_stores,
-                       (SELECT string_agg(DISTINCT uf.category_name, ', ') FROM user_favorites uf WHERE uf.telegram_id = bu.telegram_id AND uf.kind='category') AS fav_cats,
+                       -- المفضلة عبر القنوات: tg user يضيف من البوت/الميني عبر uf.telegram_id،
+                       -- ومن الموقع عبر uf.web_user_id = w3.id (لو الحساب مربوط). نوسع للاثنين.
+                       (SELECT COUNT(*) FROM user_favorites uf WHERE uf.kind='store' AND (uf.telegram_id = bu.telegram_id OR (w3.id IS NOT NULL AND uf.web_user_id = w3.id))) AS n_fav_store,
+                       (SELECT COUNT(*) FROM user_favorites uf WHERE uf.kind='category' AND (uf.telegram_id = bu.telegram_id OR (w3.id IS NOT NULL AND uf.web_user_id = w3.id))) AS n_fav_cat,
+                       (SELECT string_agg(DISTINCT uf.store_id, ', ') FROM user_favorites uf WHERE uf.kind='store' AND (uf.telegram_id = bu.telegram_id OR (w3.id IS NOT NULL AND uf.web_user_id = w3.id))) AS fav_stores,
+                       (SELECT string_agg(DISTINCT uf.category_name, ', ') FROM user_favorites uf WHERE uf.kind='category' AND (uf.telegram_id = bu.telegram_id OR (w3.id IS NOT NULL AND uf.web_user_id = w3.id))) AS fav_cats,
                        -- أعمدة الترند للمستخدم المربوط: نشمل كل أحداثه عبر القنوات
                        -- (bot/miniapp بـ bu.telegram_id + web بـ w3.id لو الحساب موجود).
                        -- بدون هذا التوسع، نشاطه على الموقع يضيع من العدّ ويبدو الجدول
