@@ -5886,35 +5886,50 @@ elif page == "تحليل المستخدمين":
                        EXTRACT(YEAR FROM AGE(w3.birth_date))::int AS age,
                        w3.birth_date AS birth_date, cty.city AS city,
                        bu.last_seen, {tg_complete} AS is_complete,
+                       -- النشاط العام للمستخدم المربوط: نجمع عبر القنوات الثلاث
+                       --   بوت + ميني-ويب: action_logs.user_id = bu.telegram_id AND source IN ('bot','telegram_miniapp')
+                       --   موقع:          action_logs.user_id = w3.id          AND source = 'web' (لو الحساب مربوط)
+                       -- نفس الفلسفة على direct_search مع platform ('TelegramBot','Miniapp') مقابل 'Web'.
                        (SELECT string_agg(DISTINCT s.store_id, ', ')
                         FROM action_logs s
-                        WHERE s.user_id = bu.telegram_id
-                          AND s.source IN ('bot','telegram_miniapp')
-                          AND s.store_id IS NOT NULL) AS stores,
+                        WHERE s.store_id IS NOT NULL
+                          AND ((s.user_id = bu.telegram_id AND s.source IN ('bot','telegram_miniapp'))
+                               OR (w3.id IS NOT NULL AND s.user_id = w3.id AND s.source='web'))) AS stores,
                        (SELECT string_agg(DISTINCT cx.cat, ', ') FROM (
                           SELECT split_part(ad.details,'tag:',2) AS cat
-                          FROM action_logs ad WHERE ad.user_id = bu.telegram_id
-                            AND ad.source IN ('bot','telegram_miniapp') AND ad.action_type='view_tag'
+                          FROM action_logs ad
+                          WHERE ad.action_type='view_tag'
+                            AND ((ad.user_id = bu.telegram_id AND ad.source IN ('bot','telegram_miniapp'))
+                                 OR (w3.id IS NOT NULL AND ad.user_id = w3.id AND ad.source='web'))
                           UNION
                           SELECT TRIM(ds.search_keyword)
-                          FROM direct_search ds WHERE ds.user_id = bu.telegram_id
-                            AND ds.platform IN ('TelegramBot','Miniapp')
+                          FROM direct_search ds
+                          WHERE ((ds.user_id = bu.telegram_id AND ds.platform IN ('TelegramBot','Miniapp'))
+                                 OR (w3.id IS NOT NULL AND ds.user_id = w3.id AND ds.platform='Web'))
                             AND LOWER(TRIM(ds.search_keyword)) IN (SELECT LOWER(TRIM(t)) FROM master,
                                 unnest(string_to_array(trim(both '{{}}' from COALESCE(store_tags,'')), ',')) AS t WHERE TRIM(t)<>'')
                         ) cx WHERE cx.cat IS NOT NULL AND TRIM(cx.cat) <> '') AS categories,
-                       (SELECT COUNT(*) FROM action_logs av WHERE av.user_id = bu.telegram_id
-                          AND av.source IN ('bot','telegram_miniapp') AND av.action_type='view_tag') AS n_cat_click,
-                       (SELECT COUNT(*) FROM direct_search ds WHERE ds.user_id = bu.telegram_id
-                          AND ds.platform IN ('TelegramBot','Miniapp')
-                          AND LOWER(TRIM(ds.search_keyword)) IN (SELECT LOWER(TRIM(t)) FROM master,
-                              unnest(string_to_array(trim(both '{{}}' from COALESCE(store_tags,'')), ',')) AS t
-                              WHERE TRIM(t)<>'')) AS n_cat_search,
-                       (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = bu.telegram_id
-                          AND ac.source IN ('bot','telegram_miniapp') AND ac.action_type='copy_coupon') AS n_copy,
-                       (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = bu.telegram_id
-                          AND ac.source IN ('bot','telegram_miniapp') AND ac.action_type='click_link') AS n_click,
-                       (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = bu.telegram_id
-                          AND ac.source IN ('bot','telegram_miniapp') AND ac.action_type='search') AS n_search,
+                       (SELECT COUNT(*) FROM action_logs av
+                          WHERE av.action_type='view_tag'
+                            AND ((av.user_id = bu.telegram_id AND av.source IN ('bot','telegram_miniapp'))
+                                 OR (w3.id IS NOT NULL AND av.user_id = w3.id AND av.source='web'))) AS n_cat_click,
+                       (SELECT COUNT(*) FROM direct_search ds
+                          WHERE LOWER(TRIM(ds.search_keyword)) IN (SELECT LOWER(TRIM(t)) FROM master,
+                              unnest(string_to_array(trim(both '{{}}' from COALESCE(store_tags,'')), ',')) AS t WHERE TRIM(t)<>'')
+                            AND ((ds.user_id = bu.telegram_id AND ds.platform IN ('TelegramBot','Miniapp'))
+                                 OR (w3.id IS NOT NULL AND ds.user_id = w3.id AND ds.platform='Web'))) AS n_cat_search,
+                       (SELECT COUNT(*) FROM action_logs ac
+                          WHERE ac.action_type='copy_coupon'
+                            AND ((ac.user_id = bu.telegram_id AND ac.source IN ('bot','telegram_miniapp'))
+                                 OR (w3.id IS NOT NULL AND ac.user_id = w3.id AND ac.source='web'))) AS n_copy,
+                       (SELECT COUNT(*) FROM action_logs ac
+                          WHERE ac.action_type='click_link'
+                            AND ((ac.user_id = bu.telegram_id AND ac.source IN ('bot','telegram_miniapp'))
+                                 OR (w3.id IS NOT NULL AND ac.user_id = w3.id AND ac.source='web'))) AS n_click,
+                       (SELECT COUNT(*) FROM action_logs ac
+                          WHERE ac.action_type='search'
+                            AND ((ac.user_id = bu.telegram_id AND ac.source IN ('bot','telegram_miniapp'))
+                                 OR (w3.id IS NOT NULL AND ac.user_id = w3.id AND ac.source='web'))) AS n_search,
                        -- الستوري عبر القنوات: tg/ميني عبر sv.tg_user_id + موقع عبر sv.web_user_id (للمربوط).
                        -- الترند/العادي مبنيان على was_trending (snapshot من track.py الذي يطابق
                        -- /api/v1/trend الحي). NULL = سجل قبل migration 034 (لا تصنيف تاريخي) →
