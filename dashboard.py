@@ -5920,12 +5920,16 @@ elif page == "تحليل المستخدمين":
                        (SELECT COUNT(*) FROM user_favorites uf WHERE uf.telegram_id = bu.telegram_id AND uf.kind='category') AS n_fav_cat,
                        (SELECT string_agg(DISTINCT uf.store_id, ', ') FROM user_favorites uf WHERE uf.telegram_id = bu.telegram_id AND uf.kind='store') AS fav_stores,
                        (SELECT string_agg(DISTINCT uf.category_name, ', ') FROM user_favorites uf WHERE uf.telegram_id = bu.telegram_id AND uf.kind='category') AS fav_cats,
-                       (SELECT string_agg(DISTINCT at2.store_id, ', ') FROM action_logs at2 WHERE at2.user_id = bu.telegram_id AND at2.source IN ('bot','telegram_miniapp') AND at2.action_type IN ('click_link','copy_coupon') AND at2.details='trend:daily' AND at2.store_id IS NOT NULL) AS trend_d_stores,
-                       (SELECT COUNT(*) FROM action_logs at2 WHERE at2.user_id = bu.telegram_id AND at2.source IN ('bot','telegram_miniapp') AND at2.action_type='click_link' AND at2.details='trend:daily') AS n_td_click,
-                       (SELECT COUNT(*) FROM action_logs at2 WHERE at2.user_id = bu.telegram_id AND at2.source IN ('bot','telegram_miniapp') AND at2.action_type='copy_coupon' AND at2.details='trend:daily') AS n_td_copy,
-                       (SELECT string_agg(DISTINCT at2.store_id, ', ') FROM action_logs at2 WHERE at2.user_id = bu.telegram_id AND at2.source IN ('bot','telegram_miniapp') AND at2.action_type IN ('click_link','copy_coupon') AND at2.details='trend:weekly' AND at2.store_id IS NOT NULL) AS trend_w_stores,
-                       (SELECT COUNT(*) FROM action_logs at2 WHERE at2.user_id = bu.telegram_id AND at2.source IN ('bot','telegram_miniapp') AND at2.action_type='click_link' AND at2.details='trend:weekly') AS n_tw_click,
-                       (SELECT COUNT(*) FROM action_logs at2 WHERE at2.user_id = bu.telegram_id AND at2.source IN ('bot','telegram_miniapp') AND at2.action_type='copy_coupon' AND at2.details='trend:weekly') AS n_tw_copy
+                       -- أعمدة الترند للمستخدم المربوط: نشمل كل أحداثه عبر القنوات
+                       -- (bot/miniapp بـ bu.telegram_id + web بـ w3.id لو الحساب موجود).
+                       -- بدون هذا التوسع، نشاطه على الموقع يضيع من العدّ ويبدو الجدول
+                       -- كأنه ٠ مع وجود سجلات حية في القاعدة.
+                       (SELECT string_agg(DISTINCT at2.store_id, ', ') FROM action_logs at2 WHERE at2.action_type IN ('click_link','copy_coupon','view_store') AND at2.details='trend:daily' AND at2.store_id IS NOT NULL AND ((at2.user_id = bu.telegram_id AND at2.source IN ('bot','telegram_miniapp')) OR (w3.id IS NOT NULL AND at2.user_id = w3.id AND at2.source='web'))) AS trend_d_stores,
+                       (SELECT COUNT(*) FROM action_logs at2 WHERE at2.action_type='click_link' AND at2.details='trend:daily' AND ((at2.user_id = bu.telegram_id AND at2.source IN ('bot','telegram_miniapp')) OR (w3.id IS NOT NULL AND at2.user_id = w3.id AND at2.source='web'))) AS n_td_click,
+                       (SELECT COUNT(*) FROM action_logs at2 WHERE at2.action_type='copy_coupon' AND at2.details='trend:daily' AND ((at2.user_id = bu.telegram_id AND at2.source IN ('bot','telegram_miniapp')) OR (w3.id IS NOT NULL AND at2.user_id = w3.id AND at2.source='web'))) AS n_td_copy,
+                       (SELECT string_agg(DISTINCT at2.store_id, ', ') FROM action_logs at2 WHERE at2.action_type IN ('click_link','copy_coupon','view_store') AND at2.details='trend:weekly' AND at2.store_id IS NOT NULL AND ((at2.user_id = bu.telegram_id AND at2.source IN ('bot','telegram_miniapp')) OR (w3.id IS NOT NULL AND at2.user_id = w3.id AND at2.source='web'))) AS trend_w_stores,
+                       (SELECT COUNT(*) FROM action_logs at2 WHERE at2.action_type='click_link' AND at2.details='trend:weekly' AND ((at2.user_id = bu.telegram_id AND at2.source IN ('bot','telegram_miniapp')) OR (w3.id IS NOT NULL AND at2.user_id = w3.id AND at2.source='web'))) AS n_tw_click,
+                       (SELECT COUNT(*) FROM action_logs at2 WHERE at2.action_type='copy_coupon' AND at2.details='trend:weekly' AND ((at2.user_id = bu.telegram_id AND at2.source IN ('bot','telegram_miniapp')) OR (w3.id IS NOT NULL AND at2.user_id = w3.id AND at2.source='web'))) AS n_tw_copy
                 FROM bot_users bu
                 LEFT JOIN LATERAL (
                     SELECT id, display_name, email, phone_number, gender, birth_date
