@@ -6986,6 +6986,13 @@ elif page == "تحليل المستخدمين":
                     contents.append({"role": role,
                                      "parts": [{"text": m["content"]}]})
                 try:
+                    # نطفّي الـ thinking mode لـ 2.5 Flash لأنه يستهلك max_tokens
+                    # على التفكير الداخلي ويرجع parts فارغة. + رفع الحد للأمان.
+                    _gen_cfg = {
+                        "temperature": temperature,
+                        "maxOutputTokens": max(max_tokens, 2048),
+                        "thinkingConfig": {"thinkingBudget": 0},
+                    }
                     r = requests.post(
                         f"https://generativelanguage.googleapis.com/v1beta/"
                         f"models/{model}:generateContent?key={gemini_key}",
@@ -6993,10 +7000,7 @@ elif page == "تحليل المستخدمين":
                         json={
                             "systemInstruction": {"parts": [{"text": system}]},
                             "contents": contents,
-                            "generationConfig": {
-                                "temperature": temperature,
-                                "maxOutputTokens": max_tokens,
-                            },
+                            "generationConfig": _gen_cfg,
                         },
                         timeout=60,
                     )
@@ -7007,10 +7011,15 @@ elif page == "تحليل المستخدمين":
                     data = r.json()
                     cands = data.get("candidates") or []
                     if not cands:
-                        return None, "Gemini رجّع رد فارغ."
-                    parts = cands[0].get("content", {}).get("parts", [])
+                        return None, "Gemini رجّع رد فارغ (لا candidates)."
+                    cand = cands[0]
+                    parts = cand.get("content", {}).get("parts", []) or []
                     txt = "".join(p.get("text", "") for p in parts).strip()
-                    return txt or None, None if txt else "Gemini نص فارغ."
+                    if txt:
+                        return txt, None
+                    # تشخيص سبب الفراغ
+                    finish = cand.get("finishReason", "UNKNOWN")
+                    return None, f"Gemini نص فارغ (finishReason={finish})."
                 except Exception as e:
                     return None, f"Gemini: {e}"
 
@@ -7040,16 +7049,14 @@ elif page == "تحليل المستخدمين":
                 except Exception as e:
                     return None, f"Groq: {e}"
 
-            # Gemini أولاً
+            # Gemini هو الأساسي
             if gemini_key:
                 content, err = _call_gemini()
                 if content:
                     return content, None
-                # عند 429 من Gemini، نجرب Groq
+                # fallback لـ Groq فقط في حالة 429 (حدود Gemini) — حتى لا نستهلك
+                # حد Groq اليومي بسبب أخطاء عابرة من Gemini.
                 if err == "GEMINI_429" and groq_key:
-                    return _call_groq()
-                # خطأ آخر من Gemini وعندنا Groq → جرّب
-                if groq_key:
                     return _call_groq()
                 return None, err
             # ما عندنا Gemini → Groq فقط
@@ -7142,12 +7149,37 @@ elif page == "تحليل المستخدمين":
                               "• «أكثر 10 متاجر تم نسخ كوبوناتها هذا الشهر»\n"
                               "• «كم بحث ما لقى نتيجة بالأسبوع الماضي؟»")
             import re as _re
+            sql = None
+            # 1) نحاول استخراج بلوك ```sql ... ``` أولاً
             m = _re.search(r"```sql\s*(.+?)\s*```", content,
                            _re.DOTALL | _re.IGNORECASE)
-            sql = (m.group(1) if m else content).strip().rstrip(";").strip()
+            if m:
+                sql = m.group(1).strip()
+            else:
+                # 2) أو أي بلوك ``` ... ``` يحوي SELECT/WITH
+                m2 = _re.search(r"```\s*((?:SELECT|WITH)\b.+?)```", content,
+                                _re.DOTALL | _re.IGNORECASE)
+                if m2:
+                    sql = m2.group(1).strip()
+                else:
+                    # 3) آخر محاولة: نلتقط أول SELECT/WITH في النص حتى نهاية الكلام
+                    m3 = _re.search(r"(?:^|\n)\s*((?:SELECT|WITH)\b[\s\S]+)",
+                                    content, _re.IGNORECASE)
+                    if m3:
+                        sql = m3.group(1).strip()
+                        # نقطع عند backticks أو خطوط شرح بعد الاستعلام
+                        sql = _re.split(r"\n\s*(?:```|--\s*شرح|الشرح:|ملاحظة)",
+                                        sql, maxsplit=1)[0].strip()
+            if not sql:
+                # ما قدرنا نلقى أي SQL — لا داعي للرفض إذا الرد نفسه نص عادي
+                return None, ("النموذج ما رجّع استعلام SQL واضح. "
+                              "صياغ السؤال بصورة أوضح من فضلك.\n\n"
+                              f"رد النموذج: {content[:200]}")
+            sql = sql.rstrip(";").strip()
             low = sql.lower().lstrip()
             if not (low.startswith("select") or low.startswith("with")):
-                return None, "النموذج رجّع استعلام غير SELECT — تم رفضه."
+                return None, ("النموذج رجّع استعلام غير SELECT — تم رفضه.\n"
+                              f"بداية الاستعلام: {sql[:120]}")
             _forbidden = ("insert ", "update ", "delete ", "drop ", "alter ",
                           "truncate ", "grant ", "revoke ", "create ", ";")
             for f in _forbidden:
