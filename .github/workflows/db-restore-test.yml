@@ -140,8 +140,7 @@ jobs:
           declare -A min_rows=(
             [web_users]=0      # يبدأ من 0 وقت الإطلاق
             [bot_users]=0
-            [coupons]=1        # لازم يكون فيه كوبون واحد على الأقل
-            [stores]=1
+            [master]=1         # مصدر الحقيقة لكل المتاجر والكوبونات — لازم صف واحد على الأقل
             [user_favorites]=0
           )
 
