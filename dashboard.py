@@ -6595,9 +6595,9 @@ elif page == "تحليل المستخدمين":
                            OR (al.user_id = %s AND al.source = 'web')
 
                         UNION ALL
-                        -- direct_search: سجل الكلمات
+                        -- direct_search: سجل الكلمات (العمود الصحيح في production = search_date)
                         SELECT
-                            ds.searched_at AS ts,
+                            ds.search_date AS ts,
                             CASE ds.platform
                               WHEN 'TelegramBot' THEN 'bot'
                               WHEN 'Miniapp'     THEN 'telegram_miniapp'
