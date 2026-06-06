@@ -5916,9 +5916,17 @@ elif page == "تحليل المستخدمين":
                        (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = bu.telegram_id
                           AND ac.source IN ('bot','telegram_miniapp') AND ac.action_type='search') AS n_search,
                        -- الستوري عبر القنوات: tg/ميني عبر sv.tg_user_id + موقع عبر sv.web_user_id (للمربوط).
+                       -- الترند/العادي مبنيان على was_trending (snapshot من track.py الذي يطابق
+                       -- /api/v1/trend الحي). NULL = سجل قبل migration 034 (لا تصنيف تاريخي) →
+                       -- لا يدخل في "ترند" ولا "عادي" بل في "غير معروف" (يظهر في الإجمالي فقط).
                        (SELECT COUNT(*) FROM story_views sv WHERE (sv.tg_user_id = bu.telegram_id OR (w3.id IS NOT NULL AND sv.web_user_id = w3.id))) AS n_story,
-                       (SELECT COUNT(*) FROM story_views sv WHERE sv.was_trending = TRUE AND (sv.tg_user_id = bu.telegram_id OR (w3.id IS NOT NULL AND sv.web_user_id = w3.id))) AS n_story_trend,
-                       (SELECT COUNT(*) FROM story_views sv WHERE sv.was_trending IS NOT TRUE AND (sv.tg_user_id = bu.telegram_id OR (w3.id IS NOT NULL AND sv.web_user_id = w3.id))) AS n_story_normal,
+                       (SELECT COUNT(*) FROM story_views sv WHERE sv.was_trending = TRUE  AND (sv.tg_user_id = bu.telegram_id OR (w3.id IS NOT NULL AND sv.web_user_id = w3.id))) AS n_story_trend,
+                       (SELECT COUNT(*) FROM story_views sv WHERE sv.was_trending = FALSE AND (sv.tg_user_id = bu.telegram_id OR (w3.id IS NOT NULL AND sv.web_user_id = w3.id))) AS n_story_normal,
+                       -- زيارات/نسخ من داخل سياق الستوري: action_logs.story_view_id IS NOT NULL
+                       -- (track.py يكتبه عند ما العميل نسخ/نقر من فيوور الستوري). نفس فلسفة
+                       -- صفحة "🎬 تحليلات الستوري" — مطابق ١٠٠٪.
+                       (SELECT COUNT(*) FROM action_logs al WHERE al.story_view_id IS NOT NULL AND al.action_type='click_link'  AND ((al.user_id = bu.telegram_id AND al.source IN ('bot','telegram_miniapp')) OR (w3.id IS NOT NULL AND al.user_id = w3.id AND al.source='web'))) AS n_story_click,
+                       (SELECT COUNT(*) FROM action_logs al WHERE al.story_view_id IS NOT NULL AND al.action_type='copy_coupon' AND ((al.user_id = bu.telegram_id AND al.source IN ('bot','telegram_miniapp')) OR (w3.id IS NOT NULL AND al.user_id = w3.id AND al.source='web'))) AS n_story_copy,
                        -- المفضلة عبر القنوات: tg user يضيف من البوت/الميني عبر uf.telegram_id،
                        -- ومن الموقع عبر uf.web_user_id = w3.id (لو الحساب مربوط). نوسع للاثنين.
                        (SELECT COUNT(*) FROM user_favorites uf WHERE uf.kind='store' AND (uf.telegram_id = bu.telegram_id OR (w3.id IS NOT NULL AND uf.web_user_id = w3.id))) AS n_fav_store,
@@ -5988,8 +5996,10 @@ elif page == "تحليل المستخدمين":
                        (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = wu.id
                           AND ac.source='web' AND ac.action_type='search') AS n_search,
                        (SELECT COUNT(*) FROM story_views sv WHERE sv.web_user_id = wu.id) AS n_story,
-                       (SELECT COUNT(*) FROM story_views sv WHERE sv.web_user_id = wu.id AND sv.was_trending = TRUE) AS n_story_trend,
-                       (SELECT COUNT(*) FROM story_views sv WHERE sv.web_user_id = wu.id AND sv.was_trending IS NOT TRUE) AS n_story_normal,
+                       (SELECT COUNT(*) FROM story_views sv WHERE sv.web_user_id = wu.id AND sv.was_trending = TRUE)  AS n_story_trend,
+                       (SELECT COUNT(*) FROM story_views sv WHERE sv.web_user_id = wu.id AND sv.was_trending = FALSE) AS n_story_normal,
+                       (SELECT COUNT(*) FROM action_logs al WHERE al.story_view_id IS NOT NULL AND al.action_type='click_link'  AND al.user_id = wu.id AND al.source='web') AS n_story_click,
+                       (SELECT COUNT(*) FROM action_logs al WHERE al.story_view_id IS NOT NULL AND al.action_type='copy_coupon' AND al.user_id = wu.id AND al.source='web') AS n_story_copy,
                        (SELECT COUNT(*) FROM user_favorites uf WHERE uf.web_user_id = wu.id AND uf.kind='store') AS n_fav_store,
                        (SELECT COUNT(*) FROM user_favorites uf WHERE uf.web_user_id = wu.id AND uf.kind='category') AS n_fav_cat,
                        (SELECT string_agg(DISTINCT uf.store_id, ', ') FROM user_favorites uf WHERE uf.web_user_id = wu.id AND uf.kind='store') AS fav_stores,
@@ -6046,8 +6056,10 @@ elif page == "تحليل المستخدمين":
                        (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = wu.id
                           AND ac.source='web' AND ac.action_type='search') AS n_search,
                        (SELECT COUNT(*) FROM story_views sv WHERE sv.web_user_id = wu.id) AS n_story,
-                       (SELECT COUNT(*) FROM story_views sv WHERE sv.web_user_id = wu.id AND sv.was_trending = TRUE) AS n_story_trend,
-                       (SELECT COUNT(*) FROM story_views sv WHERE sv.web_user_id = wu.id AND sv.was_trending IS NOT TRUE) AS n_story_normal,
+                       (SELECT COUNT(*) FROM story_views sv WHERE sv.web_user_id = wu.id AND sv.was_trending = TRUE)  AS n_story_trend,
+                       (SELECT COUNT(*) FROM story_views sv WHERE sv.web_user_id = wu.id AND sv.was_trending = FALSE) AS n_story_normal,
+                       (SELECT COUNT(*) FROM action_logs al WHERE al.story_view_id IS NOT NULL AND al.action_type='click_link'  AND al.user_id = wu.id AND al.source='web') AS n_story_click,
+                       (SELECT COUNT(*) FROM action_logs al WHERE al.story_view_id IS NOT NULL AND al.action_type='copy_coupon' AND al.user_id = wu.id AND al.source='web') AS n_story_copy,
                        (SELECT COUNT(*) FROM user_favorites uf WHERE uf.web_user_id = wu.id AND uf.kind='store') AS n_fav_store,
                        (SELECT COUNT(*) FROM user_favorites uf WHERE uf.web_user_id = wu.id AND uf.kind='category') AS n_fav_cat,
                        (SELECT string_agg(DISTINCT uf.store_id, ', ') FROM user_favorites uf WHERE uf.web_user_id = wu.id AND uf.kind='store') AS fav_stores,
@@ -6122,9 +6134,11 @@ elif page == "تحليل المستخدمين":
                 "n_cat_click": "ضغطات القسم", "n_cat_search": "بحث القسم",
                 "n_copy": "نسخ", "n_click": "نقرات",
                 "n_search": "بحث",
-                "n_story": "ستوري (إجمالي)",
+                "n_story":        "ستوري (إجمالي)",
                 "n_story_trend":  "ستوري ترند 🔥",
                 "n_story_normal": "ستوري عادي 🎬",
+                "n_story_click":  "🖱️ زيارات من ستوري",
+                "n_story_copy":   "🎟️ نسخ من ستوري",
                 "n_fav_store": "مفضلة متاجر", "n_fav_cat": "مفضلة أقسام",
                 "fav_stores": "المتاجر المفضّلة", "fav_cats": "الأقسام المفضّلة",
                 "trend_d_stores": "متاجر ترند يومي", "n_td_click": "نقر ترند يومي",
@@ -6137,6 +6151,7 @@ elif page == "تحليل المستخدمين":
                 "المتاجر", "الأقسام", "ضغطات القسم", "بحث القسم",
                 "نسخ", "نقرات", "بحث",
                 "ستوري (إجمالي)", "ستوري ترند 🔥", "ستوري عادي 🎬",
+                "🖱️ زيارات من ستوري", "🎟️ نسخ من ستوري",
                 "متاجر ترند يومي", "نقر ترند يومي", "نسخ ترند يومي",
                 "متاجر ترند أسبوعي", "نقر ترند أسبوعي", "نسخ ترند أسبوعي",
                 "مفضلة متاجر", "المتاجر المفضّلة",
