@@ -6829,15 +6829,66 @@ elif page == "تحليل المستخدمين":
 
     # ── القائمة الثالثة: الذكاء الاصطناعي (Chat) ─────────────────────────
     with tab_ai:
-        st.markdown("### 🤖 اسأل عن المستخدمين بلغة طبيعية")
+        st.markdown("### 🤖 اسأل عن أي شيء في قاعدة البيانات")
         st.caption(
-            "اكتب سؤالك بالعربي وراح يولّد استعلام SQL على قاعدة البيانات "
-            "ويلخّص النتائج. مثال: «مين أكثر 10 مستخدمين نشاطاً هذا الأسبوع؟» "
-            "أو «كم مستخدم جديد سجل هذا الشهر؟»"
+            "وصول كامل لكل الجداول والأعمدة الفعلية في القاعدة (يقرأها من "
+            "information_schema لحظياً). اكتب سؤالك بالعربي — مثال: "
+            "«أكثر 10 متاجر نسخاً هذا الأسبوع»، «كم بحث ما لقى نتيجة؟»، "
+            "«مين أكثر 5 مستخدمين تفاعلاً مع متجر نون؟»"
         )
 
         if "ai_users_history" not in st.session_state:
             st.session_state["ai_users_history"] = []
+
+        # ── جلب المخطط الكامل من القاعدة (ديناميكي، مع كاش ساعة) ─────────
+        @st.cache_data(ttl=3600, show_spinner=False)
+        def _ai_get_full_schema() -> str:
+            """يقرأ كل جداول/أعمدة الـ public schema من information_schema."""
+            try:
+                _c = get_conn()
+                _c.autocommit = True
+                _cur = _c.cursor()
+                _cur.execute("""
+                    SELECT table_name, column_name, data_type, is_nullable
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                    ORDER BY table_name, ordinal_position
+                """)
+                _rows = _cur.fetchall()
+                # تجميع: { table: [(col, type, nullable), ...] }
+                _tables: dict[str, list[tuple]] = {}
+                for tbl, col, dtype, nullable in _rows:
+                    _tables.setdefault(tbl, []).append((col, dtype, nullable))
+                # تنسيق
+                _lines = []
+                for tbl in sorted(_tables.keys()):
+                    cols_txt = ", ".join(
+                        f"{c} {t.upper()}{'?' if n == 'YES' else ''}"
+                        for c, t, n in _tables[tbl]
+                    )
+                    _lines.append(f"{tbl}({cols_txt})")
+                _c.close()
+                return "\n\n".join(_lines)
+            except Exception as e:
+                return f"-- خطأ في جلب المخطط: {e}"
+
+        # ملاحظات لا تظهر في information_schema (تحذيرات منطقية للـ AI)
+        _AI_DB_HINTS = """
+ملاحظات منطقية مهمة (لا تظهر في information_schema):
+- master.store_id يحوي «اسم المتجر العربي» (مثل "نون", "شاهد")؛ لا يوجد عمود اسمه store_name.
+- master.name_en الاسم بالإنجليزي (قد يكون فارغاً).
+- master.store_tags و master.store_tags_en نوعهما TEXT (وليس مصفوفة) رغم أن البيانات بصيغة '{tag1,tag2}'.
+  للبحث استخدم: store_tags ILIKE '%tag%'. ممنوع unnest(store_tags) أو ANY(store_tags).
+  للتحويل لمصفوفة: string_to_array(trim(both '{}' from COALESCE(store_tags, '')), ',').
+- master.is_trending قيمها نصية: 'عادي' أو 'ترند 🔥'.
+- ربط جداول المستخدمين بـ action_logs حسب source:
+    source IN ('bot','telegram_miniapp','miniapp') → user_id = bot_users.telegram_id
+    source = 'web'                                  → user_id = web_users.id
+- direct_search جدول البحث المستقل (يحوي search_keyword و search_date).
+- action_logs.action_type ∈ ('search','click_link','copy_coupon','view_store','view_trend').
+- لإجمالي المستخدمين عبر المنصة كاملة: اجمع bot_users + web_users بـ UNION.
+- لربط action_logs بالمتجر: al.store_id = m.store_id (نص = نص).
+"""
 
         # عرض سجل المحادثة
         for _msg in st.session_state["ai_users_history"]:
@@ -6855,43 +6906,6 @@ elif page == "تحليل المستخدمين":
                 st.session_state["ai_users_history"] = []
                 st.rerun()
 
-        # وصف المخطط (Schema) للنموذج
-        _AI_USERS_SCHEMA = """
-PostgreSQL schema (جداول المستخدمين وما يرتبط بها):
-
-bot_users(telegram_id BIGINT PK, username TEXT, first_name TEXT, last_name TEXT,
-         language TEXT, city TEXT, created_at TIMESTAMP,
-         last_seen TIMESTAMP, last_active TIMESTAMP, is_blocked BOOLEAN)
-
-web_users(id SERIAL PK, email TEXT, phone TEXT, first_name TEXT, last_name TEXT,
-         gender TEXT,             -- 'male' / 'female'
-         birth_date DATE, telegram_username TEXT,
-         created_at TIMESTAMP, language TEXT, city TEXT)
-
-action_logs(id SERIAL PK, user_id BIGINT, source TEXT,
-           action_type TEXT,       -- 'search' | 'click_link' | 'copy_coupon' | 'view_store' | 'view_trend'
-           action_time TIMESTAMP, store_id TEXT, search_term TEXT,
-           city TEXT, country TEXT, is_proxy BOOLEAN, is_datacenter BOOLEAN,
-           story_view_id BIGINT)
-  -- ربط user_id:
-  --   source IN ('bot','telegram_miniapp','miniapp') → user_id = bot_users.telegram_id
-  --   source = 'web'                                 → user_id = web_users.id
-
-direct_search(id SERIAL PK, user_id BIGINT, search_term TEXT,
-             user_found BOOLEAN, search_date TIMESTAMP, source TEXT)
-
-master(id SERIAL PK, store_id TEXT, store_name TEXT, store_tags TEXT,
-      copy_clicks INT, link_clicks INT, is_trending TEXT, last_time DATE)
-  -- store_tags نص بصيغة '{tag1,tag2}' (ليس مصفوفة). للبحث استخدم: store_tags ILIKE '%tag%'
-  -- is_trending ∈ ('عادي', 'ترند 🔥')
-
-user_favorites(id SERIAL PK, user_id BIGINT, kind TEXT, value TEXT, source TEXT)
-  -- kind ∈ ('store','category')
-
-user_loyalty(user_id BIGINT PK, points INT, rank TEXT)
-loyalty_history(id SERIAL PK, user_id BIGINT, points INT, reason TEXT, created_at TIMESTAMP)
-"""
-
         def _ai_users_gen_sql(question: str) -> tuple[str | None, str | None]:
             """يطلب من Groq توليد SELECT آمن، ويرجّع (sql, error)."""
             key = os.getenv("GROQ_API_KEY")
@@ -6900,26 +6914,26 @@ loyalty_history(id SERIAL PK, user_id BIGINT, points INT, reason TEXT, created_a
                               "محلياً: أضفه في .env. على Railway: "
                               "Service → Variables → New Variable.")
             model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+            _live_schema = _ai_get_full_schema()
             system = (
                 "أنت محرّر SQL لقاعدة PostgreSQL لمنصة DealPulse KSA. "
-                "حوّل سؤال المستخدم إلى استعلام SELECT واحد فقط من المخطط أدناه.\n"
+                "لديك صلاحية قراءة كاملة على كل جداول وأعمدة المخطط أدناه.\n"
                 "قواعد صارمة (المخالفة = فشل):\n"
                 "- SELECT فقط (ممنوع INSERT/UPDATE/DELETE/DROP/ALTER/TRUNCATE/CREATE).\n"
                 "- استعلام واحد فقط بدون ; في المنتصف.\n"
-                "- ممنوع اختراع جداول أو أعمدة غير موجودة في المخطط. "
-                "استخدم فقط أسماء الجداول/الأعمدة المذكورة حرفياً.\n"
-                "- ممنوع إرجاع قيم نصية ثابتة كإجابة "
-                "(مثل SELECT 'جيد' AS x). يجب أن تأتي كل قيمة من الجداول.\n"
-                "- إذا كان السؤال غامضاً أو لا يمكن الإجابة عنه من المخطط "
-                "(مثل «قيّم المشروع» أو «وش ينقصه»)، "
-                "أرجع حرفياً السطر التالي بدون أي شيء آخر:\n"
+                "- ممنوع اختراع جداول أو أعمدة. استخدم فقط ما هو موجود حرفياً في المخطط.\n"
+                "- ممنوع إرجاع قيم نصية ثابتة كإجابة (مثل SELECT 'جيد'). "
+                "يجب أن تأتي كل قيمة من الجداول.\n"
+                "- إذا كان السؤال غامضاً (مثل «قيّم المشروع» أو «وش ينقصه») "
+                "أو لا يمكن الإجابة عنه من المخطط، أرجع حرفياً السطر التالي بدون شيء آخر:\n"
                 "  UNCLEAR: <سبب قصير بالعربي يوضّح اللازم من المستخدم>\n"
                 "- إذا كان السؤال واضحاً، أرجع الاستعلام داخل ```sql … ``` فقط.\n"
                 "- استخدم LIMIT 100 افتراضياً للنتائج الكبيرة.\n"
                 "- أسماء الـ aliases بالإنجليزية فقط.\n"
-                "- التواريخ بـ CURRENT_DATE / CURRENT_TIMESTAMP / INTERVAL.\n"
-                "- لإجمالي المستخدمين: اجمع bot_users + web_users بـ UNION.\n\n"
-                f"{_AI_USERS_SCHEMA}"
+                "- التواريخ بـ CURRENT_DATE / CURRENT_TIMESTAMP / INTERVAL.\n\n"
+                "===== المخطط الكامل (من information_schema) =====\n"
+                f"{_live_schema}\n\n"
+                f"===== ملاحظات منطقية =====\n{_AI_DB_HINTS}"
             )
             try:
                 resp = requests.post(
