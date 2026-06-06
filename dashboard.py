@@ -5983,15 +5983,14 @@ elif page == "تحليل المستخدمين":
             def _category_clause(realm):
                 if not category:
                     return ""
+                # نية صريحة: ضغط القسم (view_tag, details='tag:<اسم>')
+                # لا وراثة لوسوم المتجر — يعدّ فقط القسم اللي اختاره الشخص بنفسه.
                 uid, src = _realm_src(realm)
                 safe = category.replace("'", "''")
                 return (f" AND EXISTS (SELECT 1 FROM action_logs alc "
-                        f"JOIN master mc ON mc.store_id = alc.store_id "
                         f"WHERE alc.user_id = {uid} AND alc.source IN {src} "
-                        f"AND alc.store_id IS NOT NULL "
-                        f"AND '{safe}' IN (SELECT TRIM(t) FROM unnest("
-                        f"string_to_array(trim(both '{{}}' from "
-                        f"COALESCE(mc.store_tags,'')), ',')) AS t)) ")
+                        f"AND alc.action_type = 'view_tag' "
+                        f"AND alc.details = 'tag:{safe}') ")
 
             def _story_clause(realm):
                 if story not in ("normal", "trend"):
