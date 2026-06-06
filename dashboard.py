@@ -6028,6 +6028,17 @@ elif page == "تحليل المستخدمين":
                         WHERE s.user_id = bu.telegram_id
                           AND s.source IN ('bot','telegram_miniapp')
                           AND s.store_id IS NOT NULL) AS stores,
+                       (SELECT string_agg(DISTINCT replace(ad.details,'tag:',''), ', ')
+                        FROM action_logs ad WHERE ad.user_id = bu.telegram_id
+                          AND ad.source IN ('bot','telegram_miniapp')
+                          AND ad.action_type='view_tag') AS categories,
+                       (SELECT COUNT(*) FROM action_logs av WHERE av.user_id = bu.telegram_id
+                          AND av.source IN ('bot','telegram_miniapp') AND av.action_type='view_tag') AS n_cat_click,
+                       (SELECT COUNT(*) FROM direct_search ds WHERE ds.user_id = bu.telegram_id
+                          AND ds.platform IN ('TelegramBot','Miniapp')
+                          AND LOWER(TRIM(ds.search_keyword)) IN (SELECT LOWER(TRIM(t)) FROM master,
+                              unnest(string_to_array(trim(both '{{}}' from COALESCE(store_tags,'')), ',')) AS t
+                              WHERE TRIM(t)<>'')) AS n_cat_search,
                        (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = bu.telegram_id
                           AND ac.source IN ('bot','telegram_miniapp') AND ac.action_type='copy_coupon') AS n_copy,
                        (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = bu.telegram_id
@@ -6067,6 +6078,16 @@ elif page == "تحليل المستخدمين":
                         FROM action_logs s
                         WHERE s.user_id = wu.id AND s.source = 'web'
                           AND s.store_id IS NOT NULL) AS stores,
+                       (SELECT string_agg(DISTINCT replace(ad.details,'tag:',''), ', ')
+                        FROM action_logs ad WHERE ad.user_id = wu.id AND ad.source='web'
+                          AND ad.action_type='view_tag') AS categories,
+                       (SELECT COUNT(*) FROM action_logs av WHERE av.user_id = wu.id
+                          AND av.source='web' AND av.action_type='view_tag') AS n_cat_click,
+                       (SELECT COUNT(*) FROM direct_search ds WHERE ds.user_id = wu.id
+                          AND ds.platform = 'Web'
+                          AND LOWER(TRIM(ds.search_keyword)) IN (SELECT LOWER(TRIM(t)) FROM master,
+                              unnest(string_to_array(trim(both '{{}}' from COALESCE(store_tags,'')), ',')) AS t
+                              WHERE TRIM(t)<>'')) AS n_cat_search,
                        (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = wu.id
                           AND ac.source='web' AND ac.action_type='copy_coupon') AS n_copy,
                        (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = wu.id
@@ -6099,6 +6120,16 @@ elif page == "تحليل المستخدمين":
                         FROM action_logs s
                         WHERE s.user_id = wu.id AND s.source = 'web'
                           AND s.store_id IS NOT NULL) AS stores,
+                       (SELECT string_agg(DISTINCT replace(ad.details,'tag:',''), ', ')
+                        FROM action_logs ad WHERE ad.user_id = wu.id AND ad.source='web'
+                          AND ad.action_type='view_tag') AS categories,
+                       (SELECT COUNT(*) FROM action_logs av WHERE av.user_id = wu.id
+                          AND av.source='web' AND av.action_type='view_tag') AS n_cat_click,
+                       (SELECT COUNT(*) FROM direct_search ds WHERE ds.user_id = wu.id
+                          AND ds.platform = 'Web'
+                          AND LOWER(TRIM(ds.search_keyword)) IN (SELECT LOWER(TRIM(t)) FROM master,
+                              unnest(string_to_array(trim(both '{{}}' from COALESCE(store_tags,'')), ',')) AS t
+                              WHERE TRIM(t)<>'')) AS n_cat_search,
                        (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = wu.id
                           AND ac.source='web' AND ac.action_type='copy_coupon') AS n_copy,
                        (SELECT COUNT(*) FROM action_logs ac WHERE ac.user_id = wu.id
@@ -6168,14 +6199,17 @@ elif page == "تحليل المستخدمين":
                 "name": "الاسم", "email": "الإيميل",
                 "phone": "الجوال", "age": "العمر",
                 "birth_date": "تاريخ الميلاد", "city": "المدينة",
-                "stores": "المتاجر", "n_copy": "نسخ", "n_click": "نقرات",
+                "stores": "المتاجر", "categories": "الأقسام",
+                "n_cat_click": "ضغطات القسم", "n_cat_search": "بحث القسم",
+                "n_copy": "نسخ", "n_click": "نقرات",
                 "n_search": "بحث", "n_story": "ستوري",
                 "n_fav_store": "مفضلة متاجر", "n_fav_cat": "مفضلة أقسام",
                 "last_seen": "آخر ظهور",
             })[["النوع", "الملف", "المعرّف", "اليوزر", "الاسم", "الإيميل",
                 "الجوال", "الجنس", "اللغة", "العمر", "تاريخ الميلاد", "المدينة",
-                "المتاجر", "نسخ", "نقرات", "بحث", "ستوري",
-                "مفضلة متاجر", "مفضلة أقسام", "آخر ظهور"]]
+                "المتاجر", "الأقسام", "ضغطات القسم", "بحث القسم",
+                "نسخ", "نقرات", "بحث",
+                "ستوري", "مفضلة متاجر", "مفضلة أقسام", "آخر ظهور"]]
             st.dataframe(_disp, use_container_width=True, hide_index=True)
 
     # ── القائمة الثانية: التحليل الفردي ─────────────────────────────────
