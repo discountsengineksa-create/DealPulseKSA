@@ -15,7 +15,7 @@ class TrackRequest(BaseModel):
     """
     user_id: Optional[int] = Field(None, ge=0, description="ID المستخدم (telegram_id أو web_users.id)")
     store_id: str = Field(..., min_length=1, max_length=200)
-    action: Literal["click_link", "copy_coupon", "search"]
+    action: Literal["click_link", "copy_coupon", "search", "view_store"]
     details: Optional[str] = Field(None, max_length=500)
     source: Literal["bot", "web", "dashboard", "telegram_miniapp"] = "web"
     event_id: Optional[str] = Field(None, max_length=64, description="UUID اختياري لحماية الـ idempotency")
