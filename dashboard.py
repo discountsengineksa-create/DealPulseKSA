@@ -6840,35 +6840,33 @@ elif page == "تحليل المستخدمين":
         if "ai_users_history" not in st.session_state:
             st.session_state["ai_users_history"] = []
 
-        # ── جلب المخطط الكامل من القاعدة (ديناميكي، مع كاش ساعة) ─────────
+        # ── جلب المخطط من القاعدة (مضغوط لتوفير التوكنز) ────────────────
         @st.cache_data(ttl=3600, show_spinner=False)
         def _ai_get_full_schema() -> str:
-            """يقرأ كل جداول/أعمدة الـ public schema من information_schema."""
+            """
+            يقرأ جداول/أعمدة الـ public من information_schema.
+            صيغة مضغوطة: اسم العمود فقط (بدون النوع/nullable) لتوفير ~50%
+            من التوكنز. الـ AI يستنتج النوع من السياق أو الملاحظات.
+            """
             try:
                 _c = get_conn()
                 _c.autocommit = True
                 _cur = _c.cursor()
                 _cur.execute("""
-                    SELECT table_name, column_name, data_type, is_nullable
+                    SELECT table_name, column_name
                     FROM information_schema.columns
                     WHERE table_schema = 'public'
                     ORDER BY table_name, ordinal_position
                 """)
                 _rows = _cur.fetchall()
-                # تجميع: { table: [(col, type, nullable), ...] }
-                _tables: dict[str, list[tuple]] = {}
-                for tbl, col, dtype, nullable in _rows:
-                    _tables.setdefault(tbl, []).append((col, dtype, nullable))
-                # تنسيق
-                _lines = []
-                for tbl in sorted(_tables.keys()):
-                    cols_txt = ", ".join(
-                        f"{c} {t.upper()}{'?' if n == 'YES' else ''}"
-                        for c, t, n in _tables[tbl]
-                    )
-                    _lines.append(f"{tbl}({cols_txt})")
+                _tables: dict[str, list[str]] = {}
+                for tbl, col in _rows:
+                    _tables.setdefault(tbl, []).append(col)
                 _c.close()
-                return "\n\n".join(_lines)
+                # سطر واحد لكل جدول: table_name: col1, col2, col3, ...
+                _lines = [f"{tbl}: {', '.join(cols)}"
+                          for tbl, cols in sorted(_tables.items())]
+                return "\n".join(_lines)
             except Exception as e:
                 return f"-- خطأ في جلب المخطط: {e}"
 
@@ -6963,6 +6961,105 @@ elif page == "تحليل المستخدمين":
         if "ai_error_log" not in st.session_state:
             st.session_state["ai_error_log"] = []  # [{sql, error}]
 
+        # ── دالة موحّدة: Gemini أولاً، Groq احتياطياً ───────────────────
+        def _ai_chat(
+            system: str,
+            messages: list[dict],
+            temperature: float = 0.1,
+            max_tokens: int = 900,
+        ) -> tuple[str | None, str | None]:
+            """
+            يستدعي Gemini 2.5 Flash إذا توفّر GEMINI_API_KEY (مجاني وأقوى)،
+            ويرجع لـ Groq احتياطياً عند الفشل أو 429.
+            messages بصيغة OpenAI: [{role: 'user'|'assistant', content: str}, ...]
+            يرجّع (content, error).
+            """
+            gemini_key = os.getenv("GEMINI_API_KEY")
+            groq_key = os.getenv("GROQ_API_KEY")
+
+            def _call_gemini():
+                model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+                # تحويل messages من صيغة OpenAI لـ Gemini contents
+                contents = []
+                for m in messages:
+                    role = "user" if m["role"] == "user" else "model"
+                    contents.append({"role": role,
+                                     "parts": [{"text": m["content"]}]})
+                try:
+                    r = requests.post(
+                        f"https://generativelanguage.googleapis.com/v1beta/"
+                        f"models/{model}:generateContent?key={gemini_key}",
+                        headers={"Content-Type": "application/json"},
+                        json={
+                            "systemInstruction": {"parts": [{"text": system}]},
+                            "contents": contents,
+                            "generationConfig": {
+                                "temperature": temperature,
+                                "maxOutputTokens": max_tokens,
+                            },
+                        },
+                        timeout=60,
+                    )
+                    if r.status_code == 429:
+                        return None, "GEMINI_429"
+                    if r.status_code >= 400:
+                        return None, f"Gemini HTTP {r.status_code}: {r.text[:200]}"
+                    data = r.json()
+                    cands = data.get("candidates") or []
+                    if not cands:
+                        return None, "Gemini رجّع رد فارغ."
+                    parts = cands[0].get("content", {}).get("parts", [])
+                    txt = "".join(p.get("text", "") for p in parts).strip()
+                    return txt or None, None if txt else "Gemini نص فارغ."
+                except Exception as e:
+                    return None, f"Gemini: {e}"
+
+            def _call_groq():
+                model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+                try:
+                    r = requests.post(
+                        "https://api.groq.com/openai/v1/chat/completions",
+                        headers={"Authorization": f"Bearer {groq_key}",
+                                 "Content-Type": "application/json"},
+                        json={
+                            "model": model,
+                            "messages": [{"role": "system", "content": system}]
+                                        + messages,
+                            "temperature": temperature,
+                            "max_tokens": max_tokens,
+                        },
+                        timeout=60,
+                    )
+                    if r.status_code == 429:
+                        return None, ("⏱️ تجاوزت حد طلبات Groq اليومي (100,000 توكن للحساب المجاني).\n"
+                                      "• ينتظر إعادة تعيين تلقائية خلال 24 ساعة.\n"
+                                      "• أو رقّي خطّة Groq من https://console.groq.com")
+                    if r.status_code >= 400:
+                        return None, f"Groq HTTP {r.status_code}: {r.text[:200]}"
+                    return r.json()["choices"][0]["message"]["content"], None
+                except Exception as e:
+                    return None, f"Groq: {e}"
+
+            # Gemini أولاً
+            if gemini_key:
+                content, err = _call_gemini()
+                if content:
+                    return content, None
+                # عند 429 من Gemini، نجرب Groq
+                if err == "GEMINI_429" and groq_key:
+                    return _call_groq()
+                # خطأ آخر من Gemini وعندنا Groq → جرّب
+                if groq_key:
+                    return _call_groq()
+                return None, err
+            # ما عندنا Gemini → Groq فقط
+            if groq_key:
+                return _call_groq()
+            return None, ("❌ لا يوجد مفتاح AI.\n"
+                          "أضف أحدهما (أو كليهما) في Railway → Variables:\n"
+                          "• `GEMINI_API_KEY` (مجاني، أقوى) — اطلبه من https://aistudio.google.com/apikey\n"
+                          "• `GROQ_API_KEY` (مجاني، أسرع) — اطلبه من https://console.groq.com")
+
         def _ai_build_few_shot() -> str:
             """يبني أمثلة few-shot من الاستعلامات الناجحة في الجلسة."""
             ex = st.session_state.get("ai_success_examples", [])
@@ -6979,16 +7076,10 @@ elif page == "تحليل المستخدمين":
             previous_attempts: list[dict] | None = None,
         ) -> tuple[str | None, str | None]:
             """
-            يطلب من Groq توليد SELECT آمن، ويرجّع (sql, error).
+            يطلب من النموذج (Gemini → Groq) توليد SELECT آمن، ويرجّع (sql, error).
             previous_attempts: لو فيه محاولات فاشلة سابقة، يمررها للنموذج
             مع رسائل أخطاء PostgreSQL ليتعلم منها ويصحح.
             """
-            key = os.getenv("GROQ_API_KEY")
-            if not key:
-                return None, ("GROQ_API_KEY غير مضبوط في متغيرات البيئة. "
-                              "محلياً: أضفه في .env. على Railway: "
-                              "Service → Variables → New Variable.")
-            model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
             _live_schema = _ai_get_full_schema()
             _few_shot = _ai_build_few_shot()
             system = (
@@ -7016,8 +7107,7 @@ elif page == "تحليل المستخدمين":
                 f"===== ملاحظات منطقية =====\n{_AI_DB_HINTS}\n"
                 f"{_few_shot}"
             )
-            messages = [{"role": "system", "content": system}]
-            # دفع المحاولات السابقة كحوار: assistant=الاستعلام, user=الخطأ
+            messages: list[dict] = []
             if previous_attempts:
                 messages.append({"role": "user", "content": question})
                 for att in previous_attempts:
@@ -7038,54 +7128,35 @@ elif page == "تحليل المستخدمين":
             else:
                 messages.append({"role": "user", "content": question})
 
-            try:
-                resp = requests.post(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {key}",
-                             "Content-Type": "application/json"},
-                    json={
-                        "model": model,
-                        "messages": messages,
-                        "temperature": 0.1,
-                        "max_tokens": 900,
-                    },
-                    timeout=60,
-                )
-                if resp.status_code >= 400:
-                    return None, f"Groq HTTP {resp.status_code}: {resp.text[:200]}"
-                content = resp.json()["choices"][0]["message"]["content"]
-                # حالة عدم الوضوح: رسالة مهذبة للمستخدم
-                _stripped = content.strip()
-                if _stripped.upper().startswith("UNCLEAR"):
-                    _reason = _stripped.split(":", 1)[1].strip() if ":" in _stripped else ""
-                    return None, ("🤔 السؤال غير واضح. "
-                                  + (_reason or "صياغ السؤال بشكل أوضح من فضلك.")
-                                  + "\n\nأمثلة على أسئلة واضحة:\n"
-                                  "• «كم مستخدم سجّل في آخر 7 أيام؟»\n"
-                                  "• «أكثر 10 متاجر تم نسخ كوبوناتها هذا الشهر»\n"
-                                  "• «كم بحث ما لقى نتيجة بالأسبوع الماضي؟»")
-                import re as _re
-                m = _re.search(r"```sql\s*(.+?)\s*```", content,
-                               _re.DOTALL | _re.IGNORECASE)
-                sql = (m.group(1) if m else content).strip().rstrip(";").strip()
-                low = sql.lower().lstrip()
-                if not (low.startswith("select") or low.startswith("with")):
-                    return None, "النموذج رجّع استعلام غير SELECT — تم رفضه."
-                _forbidden = ("insert ", "update ", "delete ", "drop ", "alter ",
-                              "truncate ", "grant ", "revoke ", "create ", ";")
-                for f in _forbidden:
-                    if f in low:
-                        return None, f"الاستعلام يحتوي على كلمة محظورة: {f.strip()!r}"
-                return sql, None
-            except Exception as e:
-                return None, str(e)
+            content, err = _ai_chat(system, messages, temperature=0.1, max_tokens=900)
+            if err or not content:
+                return None, err or "النموذج رجّع رد فارغ."
+
+            _stripped = content.strip()
+            if _stripped.upper().startswith("UNCLEAR"):
+                _reason = _stripped.split(":", 1)[1].strip() if ":" in _stripped else ""
+                return None, ("🤔 السؤال غير واضح. "
+                              + (_reason or "صياغ السؤال بشكل أوضح من فضلك.")
+                              + "\n\nأمثلة على أسئلة واضحة:\n"
+                              "• «كم مستخدم سجّل في آخر 7 أيام؟»\n"
+                              "• «أكثر 10 متاجر تم نسخ كوبوناتها هذا الشهر»\n"
+                              "• «كم بحث ما لقى نتيجة بالأسبوع الماضي؟»")
+            import re as _re
+            m = _re.search(r"```sql\s*(.+?)\s*```", content,
+                           _re.DOTALL | _re.IGNORECASE)
+            sql = (m.group(1) if m else content).strip().rstrip(";").strip()
+            low = sql.lower().lstrip()
+            if not (low.startswith("select") or low.startswith("with")):
+                return None, "النموذج رجّع استعلام غير SELECT — تم رفضه."
+            _forbidden = ("insert ", "update ", "delete ", "drop ", "alter ",
+                          "truncate ", "grant ", "revoke ", "create ", ";")
+            for f in _forbidden:
+                if f in low:
+                    return None, f"الاستعلام يحتوي على كلمة محظورة: {f.strip()!r}"
+            return sql, None
 
         def _ai_users_summarize(question: str, sql: str, df: pd.DataFrame) -> str:
-            """ملخص عربي بسيط للنتائج."""
-            key = os.getenv("GROQ_API_KEY")
-            if not key:
-                return "(لا يوجد تلخيص — GROQ_API_KEY غير مضبوط)"
-            model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+            """ملخص عربي بسيط للنتائج عبر النموذج الموحّد (Gemini → Groq)."""
             preview = df.head(30).to_dict(orient="records")
             system = (
                 "أنت محلّل بيانات لمنصة DealPulse KSA. تلخّص نتائج SQL "
@@ -7098,27 +7169,14 @@ elif page == "تحليل المستخدمين":
                 f"النتائج ({len(df)} صف، عيّنة أول 30):\n```json\n"
                 f"{json.dumps(preview, ensure_ascii=False, default=str)}\n```"
             )
-            try:
-                resp = requests.post(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {key}",
-                             "Content-Type": "application/json"},
-                    json={
-                        "model": model,
-                        "messages": [
-                            {"role": "system", "content": system},
-                            {"role": "user", "content": user_msg},
-                        ],
-                        "temperature": 0.3,
-                        "max_tokens": 600,
-                    },
-                    timeout=60,
-                )
-                if resp.status_code >= 400:
-                    return f"(تعذّر التلخيص — HTTP {resp.status_code})"
-                return resp.json()["choices"][0]["message"]["content"]
-            except Exception as e:
-                return f"(تعذّر التلخيص — {e})"
+            content, err = _ai_chat(
+                system,
+                [{"role": "user", "content": user_msg}],
+                temperature=0.3, max_tokens=600,
+            )
+            if err or not content:
+                return f"(تعذّر التلخيص — {err or 'رد فارغ'})"
+            return content
 
         _MAX_AI_RETRIES = 2  # محاولات إضافية بعد المحاولة الأولى = إجمالي 3
         _ai_q = st.chat_input("اكتب سؤالك عن المستخدمين…")
