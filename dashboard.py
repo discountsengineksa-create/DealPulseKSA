@@ -6576,81 +6576,105 @@ elif page == "تحليل المستخدمين":
                         "تأتي من source/platform في القاعدة."
                     )
 
+                    # ── نطاق التاريخ (يفلتر كل الأحداث في الـ UNION) ──
+                    _ind_c1, _ind_c2 = st.columns(2)
+                    _ind_today = date.today()
+                    with _ind_c1:
+                        ind_date_from = st.date_input(
+                            "📅 من تاريخ",
+                            value=_ind_today - timedelta(days=90),
+                            max_value=_ind_today, key="ind_date_from",
+                        )
+                    with _ind_c2:
+                        ind_date_to = st.date_input(
+                            "📅 إلى تاريخ", value=_ind_today,
+                            min_value=ind_date_from,
+                            max_value=_ind_today, key="ind_date_to",
+                        )
+                    _ind_t_from = pd.Timestamp(ind_date_from).strftime("%Y-%m-%d 00:00:00")
+                    _ind_t_to   = (pd.Timestamp(ind_date_to) + pd.Timedelta(days=1)
+                                   ).strftime("%Y-%m-%d 00:00:00")
+
                     # نبني شرط user_id لكل جدول مع التعامل مع NULL لو واحد منهم مفقود.
                     bu_tid_sql = bu_tid if bu_tid is not None else -1
                     wu_id_sql  = wu_id  if wu_id  is not None else -1
 
+                    # نلفّ الـ UNION ALL في outer SELECT ليطبّق فلتر التاريخ
+                    # على كل الأحداث بصرف النظر عن مصدرها.
                     timeline_sql = """
-                        -- action_logs: copy / click / search / view_tag / view_store
-                        SELECT
-                            al.action_time AS ts,
-                            al.source      AS channel,
-                            al.action_type AS event,
-                            al.store_id    AS store_id,
-                            COALESCE(al.details,'') AS details,
-                            COALESCE(al.city,'')    AS city,
-                            COALESCE(al.story_view_id::text,'') AS extra
-                        FROM action_logs al
-                        WHERE (al.user_id = %s AND al.source IN ('bot','telegram_miniapp'))
-                           OR (al.user_id = %s AND al.source = 'web')
+                        SELECT * FROM (
+                          -- action_logs: copy / click / search / view_tag / view_store
+                          SELECT
+                              al.action_time AS ts,
+                              al.source      AS channel,
+                              al.action_type AS event,
+                              al.store_id    AS store_id,
+                              COALESCE(al.details,'') AS details,
+                              COALESCE(al.city,'')    AS city,
+                              COALESCE(al.story_view_id::text,'') AS extra
+                          FROM action_logs al
+                          WHERE (al.user_id = %s AND al.source IN ('bot','telegram_miniapp'))
+                             OR (al.user_id = %s AND al.source = 'web')
 
-                        UNION ALL
-                        -- direct_search: سجل الكلمات (العمود الصحيح في production = search_date)
-                        SELECT
-                            ds.search_date AS ts,
-                            CASE ds.platform
-                              WHEN 'TelegramBot' THEN 'bot'
-                              WHEN 'Miniapp'     THEN 'telegram_miniapp'
-                              WHEN 'Web'         THEN 'web'
-                              ELSE COALESCE(ds.platform,'?')
-                            END AS channel,
-                            'direct_search' AS event,
-                            COALESCE(ds.store_id,'') AS store_id,
-                            COALESCE(ds.search_keyword,'') AS details,
-                            '' AS city,
-                            CASE WHEN ds.user_found THEN 'وجد' ELSE 'لم يجد' END AS extra
-                        FROM direct_search ds
-                        WHERE (ds.user_id = %s AND ds.platform IN ('TelegramBot','Miniapp'))
-                           OR (ds.user_id = %s AND ds.platform = 'Web')
+                          UNION ALL
+                          -- direct_search: سجل الكلمات (العمود الصحيح في production = search_date)
+                          SELECT
+                              ds.search_date AS ts,
+                              CASE ds.platform
+                                WHEN 'TelegramBot' THEN 'bot'
+                                WHEN 'Miniapp'     THEN 'telegram_miniapp'
+                                WHEN 'Web'         THEN 'web'
+                                ELSE COALESCE(ds.platform,'?')
+                              END AS channel,
+                              'direct_search' AS event,
+                              COALESCE(ds.store_id,'') AS store_id,
+                              COALESCE(ds.search_keyword,'') AS details,
+                              '' AS city,
+                              CASE WHEN ds.user_found THEN 'وجد' ELSE 'لم يجد' END AS extra
+                          FROM direct_search ds
+                          WHERE (ds.user_id = %s AND ds.platform IN ('TelegramBot','Miniapp'))
+                             OR (ds.user_id = %s AND ds.platform = 'Web')
 
-                        UNION ALL
-                        -- story_views: فتحات الستوري
-                        SELECT
-                            sv.viewed_at  AS ts,
-                            sv.source     AS channel,
-                            'story_view'  AS event,
-                            COALESCE(sv.store_id,'') AS store_id,
-                            CASE WHEN sv.was_trending IS TRUE  THEN 'trend'
-                                 WHEN sv.was_trending IS FALSE THEN 'normal'
-                                 ELSE 'unknown' END AS details,
-                            '' AS city,
-                            COALESCE(sv.view_id::text,'') AS extra
-                        FROM story_views sv
-                        WHERE sv.tg_user_id = %s OR sv.web_user_id = %s
+                          UNION ALL
+                          -- story_views: فتحات الستوري
+                          SELECT
+                              sv.viewed_at  AS ts,
+                              sv.source     AS channel,
+                              'story_view'  AS event,
+                              COALESCE(sv.store_id,'') AS store_id,
+                              CASE WHEN sv.was_trending IS TRUE  THEN 'trend'
+                                   WHEN sv.was_trending IS FALSE THEN 'normal'
+                                   ELSE 'unknown' END AS details,
+                              '' AS city,
+                              COALESCE(sv.view_id::text,'') AS extra
+                          FROM story_views sv
+                          WHERE sv.tg_user_id = %s OR sv.web_user_id = %s
 
-                        UNION ALL
-                        -- user_favorites: إضافات المفضلة
-                        SELECT
-                            uf.created_at AS ts,
-                            COALESCE(uf.platform,'?') AS channel,
-                            'add_favorite' AS event,
-                            COALESCE(uf.store_id,'')      AS store_id,
-                            CASE uf.kind WHEN 'store' THEN 'store'
-                                         WHEN 'category' THEN COALESCE(uf.category_name,'category')
-                                         ELSE COALESCE(uf.kind,'?') END AS details,
-                            '' AS city,
-                            COALESCE(uf.kind,'') AS extra
-                        FROM user_favorites uf
-                        WHERE uf.telegram_id = %s OR uf.web_user_id = %s
-
-                        ORDER BY ts DESC
+                          UNION ALL
+                          -- user_favorites: إضافات المفضلة
+                          SELECT
+                              uf.created_at AS ts,
+                              COALESCE(uf.platform,'?') AS channel,
+                              'add_favorite' AS event,
+                              COALESCE(uf.store_id,'')      AS store_id,
+                              CASE uf.kind WHEN 'store' THEN 'store'
+                                           WHEN 'category' THEN COALESCE(uf.category_name,'category')
+                                           ELSE COALESCE(uf.kind,'?') END AS details,
+                              '' AS city,
+                              COALESCE(uf.kind,'') AS extra
+                          FROM user_favorites uf
+                          WHERE uf.telegram_id = %s OR uf.web_user_id = %s
+                        ) tl
+                        WHERE tl.ts >= %s AND tl.ts < %s
+                        ORDER BY tl.ts DESC
                     """
                     timeline = pd.read_sql(
                         timeline_sql, conn_i,
                         params=[bu_tid_sql, wu_id_sql,    # action_logs
                                 bu_tid_sql, wu_id_sql,    # direct_search
                                 bu_tid_sql, wu_id_sql,    # story_views
-                                bu_tid_sql, wu_id_sql],   # user_favorites
+                                bu_tid_sql, wu_id_sql,    # user_favorites
+                                _ind_t_from, _ind_t_to],  # نطاق التاريخ
                     )
 
                     if timeline.empty:
