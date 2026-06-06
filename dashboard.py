@@ -6147,12 +6147,14 @@ elif page == "تحليل المستخدمين":
         )
 
         # نوع الترند المختار: يحدد details المستهدف
+        # NOTE: نستخدم %% في LIKE لتفادي تفسير psycopg2 لـ % كـ placeholder
+        # (الـ params تحوي %s لـ action_time فقط).
         _trend_detail_map = {
             "daily":   "al.details = 'trend:daily'",
             "weekly":  "al.details = 'trend:weekly'",
         }
         _tl_trend_where = _trend_detail_map.get(
-            gen_trend, "al.details LIKE 'trend:%'")
+            gen_trend, "al.details LIKE 'trend:%%'")
 
         # المصدر event-level على al.source
         if gen_src is None:
