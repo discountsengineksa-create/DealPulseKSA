@@ -6729,10 +6729,55 @@ elif page == "تحليل المستخدمين":
                             "store":          "🏪 متجر",
                             "category":       "🏷️ قسم",
                         }
+                        # نحفظ القيم الخام قبل التحويل لاستخراج القسم/المتجر
+                        _raw_event   = timeline["event"].astype(str)
+                        _raw_details = timeline["details"].astype(str)
+                        _raw_extra   = timeline["extra"].astype(str)
+                        _raw_store   = timeline["store_id"].astype(str)
+
+                        def _split_store(i):
+                            ev = _raw_event.iat[i]
+                            sid = _raw_store.iat[i]
+                            ex = _raw_extra.iat[i]
+                            # add_favorite بـ category لا يحمل store_id
+                            if ev == "add_favorite" and ex == "category":
+                                return ""
+                            # category_favorite_add (بوت) كمان قسم
+                            if ev == "category_favorite_add":
+                                return ""
+                            # view_tag تصفّح قسم (لا متجر)
+                            if ev == "view_tag":
+                                return ""
+                            return sid
+
+                        def _split_category(i):
+                            ev = _raw_event.iat[i]
+                            d  = _raw_details.iat[i]
+                            ex = _raw_extra.iat[i]
+                            # تصفّح قسم: details = 'tag:اسم'
+                            if ev == "view_tag":
+                                return d[4:] if d.startswith("tag:") else d
+                            # category_favorite_add في البوت
+                            if ev == "category_favorite_add":
+                                return d[4:] if d.startswith("tag:") else d
+                            # add_favorite من user_favorites: لو category، details يحمل اسم القسم
+                            if ev == "add_favorite" and ex == "category":
+                                return d
+                            return ""
+
+                        disp["المتجر"] = [
+                            _split_store(i) for i in range(len(disp))
+                        ]
+                        disp["القسم"] = [
+                            _split_category(i) for i in range(len(disp))
+                        ]
                         disp["details"] = disp["details"].map(_det_map).fillna(disp["details"])
+                        # ملاحظة: نحوّل extra (store/category) للعربي إذا كان نوع مفضلة
+                        _extra_map = {"store": "🏪 متجر", "category": "🏷️ قسم"}
+                        disp["extra"] = disp["extra"].map(_extra_map).fillna(disp["extra"])
                         disp = disp.rename(columns={
                             "ts": "الوقت", "channel": "القناة",
-                            "event": "الحدث", "store_id": "المتجر/القسم",
+                            "event": "الحدث",
                             "details": "تفاصيل", "city": "المدينة",
                             "extra": "ملاحظة",
                         })
@@ -6755,14 +6800,16 @@ elif page == "تحليل المستخدمين":
                             f"آخر تفاعل: **{last_ts.strftime('%Y-%m-%d %H:%M') if pd.notna(last_ts) else '—'}**"
                         )
 
+                        _final_cols = ["الوقت", "القناة", "الحدث",
+                                       "القسم", "المتجر",
+                                       "تفاصيل", "المدينة", "ملاحظة"]
                         st.dataframe(
-                            disp[["الوقت", "القناة", "الحدث", "المتجر/القسم",
-                                  "تفاصيل", "المدينة", "ملاحظة"]],
+                            disp[_final_cols],
                             use_container_width=True, hide_index=True,
                         )
                         st.download_button(
                             "⬇️ تحميل السيرة (Excel/CSV)",
-                            disp.to_csv(index=False).encode("utf-8-sig"),
+                            disp[_final_cols].to_csv(index=False).encode("utf-8-sig"),
                             file_name=f"user_timeline_{sel_realm}_{sel_pid}.csv",
                             mime="text/csv",
                             key="ind_dl",
