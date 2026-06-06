@@ -6687,11 +6687,30 @@ elif page == "تحليل المستخدمين":
                             "telegram_miniapp": "🔹 ميني-ويب",
                         }
                         _ev_map = {
+                            # تفاعلات أساسية (action_logs)
                             "click_link":    "🖱️ نقر رابط",
                             "copy_coupon":   "🎟️ نسخ كود",
                             "search":        "🔎 بحث",
                             "view_tag":      "🏷️ تصفّح قسم",
                             "view_store":    "👁️ زيارة بطاقة متجر",
+                            # تنقل البوت
+                            "start":              "🚀 بدء البوت",
+                            "end_session":        "🏁 نهاية جلسة",
+                            "view_all":           "📋 عرض كل المتاجر",
+                            "view_sections":      "🗂️ عرض الأقسام",
+                            "view_favorites":     "❤️ فتح المفضلة",
+                            "back":               "↩️ رجوع",
+                            "lang_pick":          "🌐 اختيار لغة",
+                            "request_code":       "📝 طلب كود غير موجود",
+                            "reaction_heart":     "💖 إعجاب",
+                            "unknown_input":      "❓ نص غير معروف",
+                            "favorite_add":       "❤️ إضافة مفضلة (بوت)",
+                            "category_favorite_add": "❤️ إضافة قسم للمفضلة (بوت)",
+                            # خمول
+                            "idle_warn":   "💤 تنبيه خمول",
+                            "idle_kick":   "⏰ طرد بسبب خمول",
+                            "idle_alert":  "⚠️ تنبيه خمول",
+                            # مصادر أخرى
                             "direct_search": "🔎 بحث كلمة",
                             "story_view":    "🎬 فتحة ستوري",
                             "add_favorite":  "❤️ إضافة مفضلة",
@@ -6700,6 +6719,17 @@ elif page == "تحليل المستخدمين":
                         disp["ts"]     = pd.to_datetime(disp["ts"], errors="coerce")
                         disp["channel"] = disp["channel"].map(_ch_map).fillna(disp["channel"])
                         disp["event"]   = disp["event"].map(_ev_map).fillna(disp["event"])
+                        # توضيح details للستوري وللترند ولإضافة المفضلة
+                        _det_map = {
+                            "trend":          "🔥 ترند",
+                            "normal":         "🎬 عادي",
+                            "unknown":        "— غير معروف",
+                            "trend:daily":    "🔥 ترند يومي",
+                            "trend:weekly":   "🔥 ترند أسبوعي",
+                            "store":          "🏪 متجر",
+                            "category":       "🏷️ قسم",
+                        }
+                        disp["details"] = disp["details"].map(_det_map).fillna(disp["details"])
                         disp = disp.rename(columns={
                             "ts": "الوقت", "channel": "القناة",
                             "event": "الحدث", "store_id": "المتجر/القسم",
