@@ -720,6 +720,20 @@ function showStoreView(storeId) {
     if (activeSearch && _searchPending) flushSearchTrack();
     viewStack.push({ view: currentView, context: { ...viewContext } });
     viewContext = { storeId };
+
+    // إسناد الترند: إن جاء من بطاقة ترند (openTrendStore) نلتقط الـ pending
+    // ونحوّله للسياق الحي للصفحة + نُسجّل view_store. غير ذلك نمسح أي سياق سابق.
+    if (_pendingTrendCtx) {
+        _storeTrendCtx = _pendingTrendCtx;
+        _pendingTrendCtx = null;
+        const s = ALL.find(x => x.id === storeId);
+        if (s && s.store_id) {
+            trackEvent(s.store_id, 'view_store', null, `trend:${_storeTrendCtx}`);
+        }
+    } else {
+        _storeTrendCtx = null;
+    }
+
     renderStoreView(storeId);
     switchView('store');
 }
@@ -798,7 +812,7 @@ function renderTrendSections(daily, weekly) {
     // اللقب يُحسب من item.rank بحسب اللغة المختارة (لا نعتمد على API rank_title).
     // الاسم يُختار بحسب اللغة: name_en في EN لو متوفر، وإلا store_name العربي.
     const pickName = (item) => (LANG_CURRENT === 'en' && item.name_en) ? item.name_en : item.store_name;
-    const cardHTML = (item, small, badgeKey) => {
+    const cardHTML = (item, small, badgeKey, trendType) => {
         const sid = escAttr(item.store_id);
         const name = escHtml(pickName(item));
         const title = escHtml(localizedRankTitle(item.rank));
@@ -807,7 +821,7 @@ function renderTrendSections(daily, weekly) {
             ? `<div class="tc-badge">${escHtml(ST[badgeKey])}</div>`
             : '';
         return `
-        <div class="trend-card${small ? ' small' : ''}" onclick="showStoreByStoreId('${sid}')">
+        <div class="trend-card${small ? ' small' : ''}" onclick="openTrendStore('${sid}', '${trendType}')">
             ${badge}
             <div class="tc-title">${title}</div>
             <div class="tc-logo"><img src="${logo}" alt="${name}" onerror="this.onerror=null;this.src='logo.png'"></div>
@@ -824,7 +838,7 @@ function renderTrendSections(daily, weekly) {
         <section class="trend-section">
             <div class="trend-section-title">${ST.trendDaily}</div>
             ${dailyTop3.length
-                ? `<div class="trend-grid-3">${dailyTop3.map(it => cardHTML(it, false, 'trendBadgeToday')).join('')}</div>`
+                ? `<div class="trend-grid-3">${dailyTop3.map(it => cardHTML(it, false, 'trendBadgeToday', 'daily')).join('')}</div>`
                 : emptyHtml}
         </section>`;
 
@@ -833,8 +847,8 @@ function renderTrendSections(daily, weekly) {
         <section class="trend-section">
             <div class="trend-section-title">${ST.trendWeekly}</div>
             ${weeklyHasAny
-                ? `${weeklyTop3.length ? `<div class="trend-grid-3">${weeklyTop3.map(it => cardHTML(it, false, 'trendBadgeWeek')).join('')}</div>` : ''}
-                   ${weeklyRest.length ? `<div class="trend-grid-4">${weeklyRest.map(it => cardHTML(it, true, 'trendBadgeWeek')).join('')}</div>` : ''}`
+                ? `${weeklyTop3.length ? `<div class="trend-grid-3">${weeklyTop3.map(it => cardHTML(it, false, 'trendBadgeWeek', 'weekly')).join('')}</div>` : ''}
+                   ${weeklyRest.length ? `<div class="trend-grid-4">${weeklyRest.map(it => cardHTML(it, true, 'trendBadgeWeek', 'weekly')).join('')}</div>` : ''}`
                 : emptyHtml}
         </section>`;
 
@@ -882,7 +896,7 @@ function renderTrendOnHome(daily, weekly) {
     const escAttr = (v) => String(v || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
     const escHtml = (v) => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const pickName = (it) => (LANG_CURRENT === 'en' && it.name_en) ? it.name_en : it.store_name;
-    const cardHTML = (it, badgeKey) => {
+    const cardHTML = (it, badgeKey, trendType) => {
         const sid = escAttr(it.store_id);
         const name = escHtml(pickName(it));
         const title = escHtml(localizedRankTitle(it.rank));
@@ -891,7 +905,7 @@ function renderTrendOnHome(daily, weekly) {
             ? `<div class="tc-badge">${escHtml(ST[badgeKey])}</div>`
             : '';
         return `
-        <div class="trend-card" onclick="showStoreByStoreId('${sid}')">
+        <div class="trend-card" onclick="openTrendStore('${sid}', '${trendType}')">
             ${badge}
             <div class="tc-title">${title}</div>
             <div class="tc-logo"><img src="${logo}" alt="${name}" onerror="this.onerror=null;this.src='logo.png'"></div>
@@ -908,7 +922,7 @@ function renderTrendOnHome(daily, weekly) {
             <div class="trend-home-head">
                 <span class="trend-home-title">${ST.trendDaily}</span>
             </div>
-            <div class="trend-grid-3">${dailyTop3.map(it => cardHTML(it, 'trendBadgeToday')).join('')}</div>
+            <div class="trend-grid-3">${dailyTop3.map(it => cardHTML(it, 'trendBadgeToday', 'daily')).join('')}</div>
         </section>`;
     }
 
@@ -919,7 +933,7 @@ function renderTrendOnHome(daily, weekly) {
                 <span class="trend-home-title">${ST.trendWeekly}</span>
                 <button class="trend-home-more" onclick="showTrendView()">${moreLabel} ←</button>
             </div>
-            <div class="trend-grid-3">${weeklyTop3.map(it => cardHTML(it, 'trendBadgeWeek')).join('')}</div>
+            <div class="trend-grid-3">${weeklyTop3.map(it => cardHTML(it, 'trendBadgeWeek', 'weekly')).join('')}</div>
         </section>`;
     }
 
@@ -931,6 +945,8 @@ function showStoreByStoreId(storeId) {
     const s = ALL.find(x => x.store_id === storeId);
     if (s) { showStoreView(s.id); return; }
     // المتجر مو في ALL — حالة نادرة (مثلاً ALL لم يحمَّل بعد). أعلم المستخدم بهدوء.
+    // نمسح أي pending ترند ليلا يلوّث متجراً تالياً (لو فشلنا هنا بعد openTrendStore).
+    _pendingTrendCtx = null;
     showToast(LANG_CURRENT === 'en' ? 'Store not found' : 'لم نجد المتجر');
 }
 
@@ -1279,7 +1295,8 @@ async function loadData() {
 // يستدعي /api/v1/track عند نسخ كوبون أو نقر رابط — تُحقن مرّة واحدة لكل
 // حدث ولا تعطّل التجربة لو فشل التتبّع.
 // storyViewId اختياري — يُمرَّر لربط الحدث بفتحة ستوري في التحليلات.
-async function trackEvent(store_id, action, storyViewId) {
+// details اختياري — لإسناد التحوّل (مثل 'trend:daily' / 'trend:weekly').
+async function trackEvent(store_id, action, storyViewId, details) {
     try {
         const eventId = (crypto.randomUUID && crypto.randomUUID()) ||
                         (Date.now() + '-' + Math.random().toString(36).slice(2, 10));
@@ -1289,14 +1306,30 @@ async function trackEvent(store_id, action, storyViewId) {
             body: JSON.stringify({
                 user_id: tgUserId,
                 store_id: store_id,
-                action: action,                // 'click_link' | 'copy_coupon'
+                action: action,                // 'click_link' | 'copy_coupon' | 'view_store'
                 source: 'telegram_miniapp',
                 event_id: eventId,
-                story_view_id: storyViewId || null
+                story_view_id: storyViewId || null,
+                details: details || null
             }),
             keepalive: true                    // يُكمل الطلب حتى لو أُغلقت الواجهة
         }).catch(() => {});
     } catch (e) { /* silent */ }
+}
+
+// ── سياق الترند داخل الميني-ويب ────────────────────────────────────────
+// _pendingTrendCtx: نوع الترند المراد إسناده عند الدخول التالي لصفحة متجر.
+// _storeTrendCtx:   نوع الترند المرتبط بالصفحة المعروضة حالياً (يخدم
+//                    النسخ/النقر داخل الصفحة لإسنادهم لنفس الترند).
+// كلاهما يُمسح بمجرد المغادرة لصفحة متجر آخر بدون سياق ترند.
+let _pendingTrendCtx = null;   // 'daily' | 'weekly' | null
+let _storeTrendCtx   = null;
+
+// تستدعى من بطاقة ترند قبل التنقّل لصفحة المتجر.
+function openTrendStore(storeId, trendType) {
+    _pendingTrendCtx = (trendType === 'daily' || trendType === 'weekly')
+        ? trendType : null;
+    showStoreByStoreId(storeId);
 }
 
 // اهتمام صريح بقسم (view_tag) — تايل القسم / فلتر / تاق متجر. fire-and-forget.
@@ -1548,7 +1581,8 @@ function copyCurrent() {
     const s = window._activeStore;
     if (!s || !s.coupon) { showToast(S.noCoupon); return; }
     copyText(s.coupon);
-    trackEvent(s.store_id, 'copy_coupon');
+    const det = _storeTrendCtx ? `trend:${_storeTrendCtx}` : null;
+    trackEvent(s.store_id, 'copy_coupon', null, det);
 }
 
 function openLinkCurrent() {
@@ -1559,10 +1593,17 @@ function openLinkCurrent() {
         showToast(LANG_CURRENT === 'en' ? 'Link unavailable' : 'الرابط غير متوفّر');
         return;
     }
-    // نقرات /go تُسجَّل في السيرفر (مصدر telegram_miniapp + IP/مدينة)، فلا نكرّرها هنا.
-    // الرابط الخام (متجر بلا cloaked_slug) لا يمرّ على السيرفر → نسجّله هنا لتفادي ضياع النقرة.
+    const det = _storeTrendCtx ? `trend:${_storeTrendCtx}` : null;
+    // /go المتتبَّع: لو في سياق ترند نُضيف ?ctx=trend:* ليرتفع للسيرفر ويُكتب
+    // في action_logs.details من go.py. لو رابط خام نُسجّله هنا مع details.
+    if (s.link && s.link.includes('/go/') && det) {
+        const sep = s.link.includes('?') ? '&' : '?';
+        const url = `${s.link}${sep}ctx=${encodeURIComponent(det)}`;
+        if (tg && tg.openLink) { tg.openLink(url); } else { window.open(url, '_blank'); }
+        return;
+    }
     if (!s.link.includes('/go/')) {
-        trackEvent(s.store_id, 'click_link');
+        trackEvent(s.store_id, 'click_link', null, det);
     }
     if (tg && tg.openLink) {
         tg.openLink(s.link);
