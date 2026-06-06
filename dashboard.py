@@ -6902,15 +6902,23 @@ loyalty_history(id SERIAL PK, user_id BIGINT, points INT, reason TEXT, created_a
             model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
             system = (
                 "أنت محرّر SQL لقاعدة PostgreSQL لمنصة DealPulse KSA. "
-                "حوّل سؤال المستخدم إلى استعلام SELECT واحد فقط.\n"
-                "قواعد صارمة:\n"
+                "حوّل سؤال المستخدم إلى استعلام SELECT واحد فقط من المخطط أدناه.\n"
+                "قواعد صارمة (المخالفة = فشل):\n"
                 "- SELECT فقط (ممنوع INSERT/UPDATE/DELETE/DROP/ALTER/TRUNCATE/CREATE).\n"
                 "- استعلام واحد فقط بدون ; في المنتصف.\n"
-                "- أرجع الاستعلام داخل بلوك ```sql … ``` بدون أي شرح إضافي.\n"
+                "- ممنوع اختراع جداول أو أعمدة غير موجودة في المخطط. "
+                "استخدم فقط أسماء الجداول/الأعمدة المذكورة حرفياً.\n"
+                "- ممنوع إرجاع قيم نصية ثابتة كإجابة "
+                "(مثل SELECT 'جيد' AS x). يجب أن تأتي كل قيمة من الجداول.\n"
+                "- إذا كان السؤال غامضاً أو لا يمكن الإجابة عنه من المخطط "
+                "(مثل «قيّم المشروع» أو «وش ينقصه»)، "
+                "أرجع حرفياً السطر التالي بدون أي شيء آخر:\n"
+                "  UNCLEAR: <سبب قصير بالعربي يوضّح اللازم من المستخدم>\n"
+                "- إذا كان السؤال واضحاً، أرجع الاستعلام داخل ```sql … ``` فقط.\n"
                 "- استخدم LIMIT 100 افتراضياً للنتائج الكبيرة.\n"
-                "- أسماء الأعمدة (الـ aliases) بالإنجليزية فقط.\n"
+                "- أسماء الـ aliases بالإنجليزية فقط.\n"
                 "- التواريخ بـ CURRENT_DATE / CURRENT_TIMESTAMP / INTERVAL.\n"
-                "- إذا كان السؤال عن «إجمالي مستخدمين» اجمع bot_users + web_users.\n\n"
+                "- لإجمالي المستخدمين: اجمع bot_users + web_users بـ UNION.\n\n"
                 f"{_AI_USERS_SCHEMA}"
             )
             try:
@@ -6932,6 +6940,16 @@ loyalty_history(id SERIAL PK, user_id BIGINT, points INT, reason TEXT, created_a
                 if resp.status_code >= 400:
                     return None, f"Groq HTTP {resp.status_code}: {resp.text[:200]}"
                 content = resp.json()["choices"][0]["message"]["content"]
+                # حالة عدم الوضوح: رسالة مهذبة للمستخدم
+                _stripped = content.strip()
+                if _stripped.upper().startswith("UNCLEAR"):
+                    _reason = _stripped.split(":", 1)[1].strip() if ":" in _stripped else ""
+                    return None, ("🤔 السؤال غير واضح. "
+                                  + (_reason or "صياغ السؤال بشكل أوضح من فضلك.")
+                                  + "\n\nأمثلة على أسئلة واضحة:\n"
+                                  "• «كم مستخدم سجّل في آخر 7 أيام؟»\n"
+                                  "• «أكثر 10 متاجر تم نسخ كوبوناتها هذا الشهر»\n"
+                                  "• «كم بحث ما لقى نتيجة بالأسبوع الماضي؟»")
                 import re as _re
                 m = _re.search(r"```sql\s*(.+?)\s*```", content,
                                _re.DOTALL | _re.IGNORECASE)
