@@ -5635,7 +5635,7 @@ elif page == "تحليل المستخدمين":
             WHERE store_id IS NOT NULL AND store_id <> '' {_store_cond}
             ORDER BY store_id""")
         _store_sel = st.segmented_control(
-            "🏪 متاجر مختارة", _store_opts, default="لا شيء", key="gen_stores")
+            "🏪 متاجر متفاعل معها (نسخ/نقر/زيارة)", _store_opts, default="لا شيء", key="gen_stores")
         gen_store = None if _store_sel in (None, "لا شيء", "الكل") else _store_sel
 
         # ── الأقسام (من master.store_tags) ────────────────────────────────
