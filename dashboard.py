@@ -7658,21 +7658,28 @@ elif page == "🎯 بناء الشرائح":
                     key=f"{key}_v")
             elif fld == "age":
                 if rule.get("op") == "between":
-                    v1, v2 = (rule.get("value") if isinstance(rule.get("value"),
-                                                                (list,tuple)) else [18,34])
+                    _raw = rule.get("value") if isinstance(rule.get("value"),
+                                                            (list,tuple)) else [18,34]
+                    try: v1 = int(_raw[0])
+                    except (ValueError, TypeError, IndexError): v1 = 18
+                    try: v2 = int(_raw[1])
+                    except (ValueError, TypeError, IndexError): v2 = 34
                     cc1, cc2 = st.columns(2)
                     v1 = cc1.number_input("من", min_value=0, max_value=120,
-                                          value=int(v1 or 18), key=f"{key}_v1")
+                                          value=v1, key=f"{key}_v1")
                     v2 = cc2.number_input("إلى", min_value=0, max_value=120,
-                                          value=int(v2 or 34), key=f"{key}_v2")
+                                          value=v2, key=f"{key}_v2")
                     rule["value"] = [int(v1), int(v2)]
                 else:
+                    try: _age = int(rule.get("value", 25) or 25)
+                    except (ValueError, TypeError): _age = 25
                     rule["value"] = st.number_input("العمر", min_value=0,
-                        max_value=120, value=int(rule.get("value", 25) or 25),
-                        key=f"{key}_v")
+                        max_value=120, value=_age, key=f"{key}_v")
             elif fld == "fav_count":
+                try: _cnt = int(rule.get("value", 1) or 1)
+                except (ValueError, TypeError): _cnt = 1
                 rule["value"] = st.number_input("العدد", min_value=0,
-                    value=int(rule.get("value", 1) or 1), key=f"{key}_v")
+                    value=_cnt, key=f"{key}_v")
 
     def _render_event_rule(rule: dict, key: str):
         """يعرض ويحدّث قاعدة event."""
