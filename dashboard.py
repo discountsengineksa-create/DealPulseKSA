@@ -8097,9 +8097,11 @@ elif page == "مركز الإشعارات":
                             or s.get("channel") is None)]
         else:
             filtered = _all_segs_nc
+        _ch_badge = {"telegram":"📱", "email":"📧", "both":"📡"}
         opts = [(None, "— بدون شريحة (الكل) —")] + [
             (s["id"],
-             f"{'📋 ' if s.get('is_template') else '💾 '}{s['name']}"
+             f"{'📋' if s.get('is_template') else '💾'} "
+             f"{_ch_badge.get(s.get('channel') or '', '⬜')} {s['name']}"
              + (f"  ({s['last_count']})" if s.get('last_count') is not None else ""))
             for s in filtered
         ]
