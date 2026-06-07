@@ -7682,8 +7682,55 @@ elif page == "🎯 بناء الشرائح":
                 rule["value"] = st.number_input("العدد", min_value=0,
                     value=_cnt, key=f"{key}_v")
 
+    # ── أنماط الترند والستوري الجاهزة (مفاتيح ↔ (action, context, was_trending)) ─
+    # عند اختيار نمط، نُملي الحقول المعنية تلقائياً، لكن باقي الحقول (النافذة،
+    # المتجر، القسم، الساعة...) تبقى ظاهرة وقابلة للتعديل اليدوي. الـpreset
+    # ما يُحفظ في الـDB — يُستنتج عند إعادة العرض من تركيبة action+context+was_trending.
+    _EVENT_PRESETS = {
+        "custom":              ("— مخصّص (يدوي) —",       None,             None,           None),
+        "copy_trend_daily":    ("🎟️🔥 نسخ كوبون من ترند يومي",  "copy_coupon",  "trend_daily",  None),
+        "copy_trend_weekly":   ("🎟️🔥 نسخ كوبون من ترند أسبوعي", "copy_coupon",  "trend_weekly", None),
+        "copy_trend_any":      ("🎟️🔥 نسخ كوبون من أي ترند",    "copy_coupon",  "trend_any",    None),
+        "click_trend_daily":   ("🖱️🔥 نقر رابط من ترند يومي",   "click_link",   "trend_daily",  None),
+        "click_trend_weekly":  ("🖱️🔥 نقر رابط من ترند أسبوعي",  "click_link",   "trend_weekly", None),
+        "click_trend_any":     ("🖱️🔥 نقر رابط من أي ترند",     "click_link",   "trend_any",    None),
+        "story_trend":         ("🎬🔥 شاف ستوري لمتجر ترند",    "view_story",   None,           True),
+        "story_normal":        ("🎬 شاف ستوري لمتجر عادي",     "view_story",   None,           False),
+        "story_any":           ("🎬 شاف أي ستوري",            "view_story",   None,           None),
+    }
+
+    def _detect_event_preset(rule: dict) -> str:
+        """يستنتج النمط من حالة الـrule الحالية لاختيار الـoption الصحيح في الـselectbox."""
+        act = rule.get("action")
+        ctx = rule.get("context")
+        wt  = rule.get("was_trending")
+        for key, (_, p_act, p_ctx, p_wt) in _EVENT_PRESETS.items():
+            if key == "custom":
+                continue
+            if p_act == act and p_ctx == ctx and p_wt == wt:
+                return key
+        return "custom"
+
     def _render_event_rule(rule: dict, key: str):
         """يعرض ويحدّث قاعدة event."""
+        # ── النمط الجاهز (اختياري) — يعبّي الحركة/السياق/نوع الستوري ────────
+        preset_keys = list(_EVENT_PRESETS.keys())
+        cur_preset = _detect_event_preset(rule)
+        new_preset = st.selectbox(
+            "🎯 نمط جاهز (اختياري — كل التفاصيل تبقى قابلة للتعديل تحت)",
+            preset_keys,
+            index=preset_keys.index(cur_preset),
+            format_func=lambda x: _EVENT_PRESETS[x][0],
+            key=f"{key}_preset",
+        )
+        if new_preset != cur_preset and new_preset != "custom":
+            _, p_act, p_ctx, p_wt = _EVENT_PRESETS[new_preset]
+            if p_act is not None: rule["action"] = p_act
+            if p_ctx is not None: rule["context"] = p_ctx
+            if p_wt is not None or new_preset.startswith("story_"):
+                rule["was_trending"] = p_wt
+            st.rerun()
+
         c1, c2, c3 = st.columns([2, 2, 2])
         with c1:
             acts = list(_ACTIONS_LABELS.keys())
