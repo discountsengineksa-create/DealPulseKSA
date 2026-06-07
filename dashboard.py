@@ -7785,10 +7785,73 @@ elif page == "🎯 بناء الشرائح":
                 rule["context"] = st.selectbox("السياق", ctxs,
                     index=ctxs.index(rule.get("context","any")) if rule.get("context") in ctxs else 0,
                     format_func=lambda x: _CONTEXT_LABELS[x], key=f"{key}_ctx")
+            # حالة المتاجر (اختياري)
+            _ss_opts_ev = ["any", "active", "expiring", "expired"]
+            _ss_labels_ev = {"any":"🌐 الكل", "active":"🟢 فعّالة",
+                             "expiring":"⏳ قربت تنتهي (≤3 أيام)",
+                             "expired":"⛔ منتهية"}
+            _ev_ss = rule.get("store_status") or "any"
+            _new_ev_ss = st.selectbox("🏪 حالة المتاجر",
+                _ss_opts_ev,
+                index=_ss_opts_ev.index(_ev_ss) if _ev_ss in _ss_opts_ev else 0,
+                format_func=lambda x: _ss_labels_ev[x], key=f"{key}_ss")
+            rule["store_status"] = None if _new_ev_ss == "any" else _new_ev_ss
             _render_window_picker(rule, f"{key}_w")
+
+    # ── أنماط العداد الجاهزة: (label, action, context, threshold_type, op, value, days) ─
+    # value=None → ما يُلمس (للأنماط اللي ما تحتاج رقم مثل above_mean)
+    _AGG_PRESETS = {
+        "custom":         ("— مخصّص (يدوي) —",                None,           None,    None,           None, None, None),
+        "all":            ("🌐 الكل (أي حركة، بدون عتبة)",       "copy_coupon",  "any",   "absolute",     ">=", 1,    None),
+        "vip_10_30d":     ("👑 VIP — نسخوا ≥ 10 آخر شهر",         "copy_coupon",  "any",   "absolute",     ">=", 10,   30),
+        "active_5_30d":   ("🥇 جمهور نشط — نسخوا ≥ 5 آخر شهر",    "copy_coupon",  "any",   "absolute",     ">=", 5,    30),
+        "top_10_pct":     ("💎 أعلى 10% نسخاً (نخبة)",            "copy_coupon",  "any",   "percentile_top",None, 10,  30),
+        "top_50_users":   ("🎯 أعلى 50 شخصاً نسخاً",              "copy_coupon",  "any",   "top_n",        None, 50,   30),
+        "above_mean":     ("📈 فوق المتوسط",                       "copy_coupon",  "any",   "above_mean",   None, None, 30),
+        "below_mean":     ("📉 تحت المتوسط (مرشّحون لإعادة تنشيط)", "copy_coupon",  "any",   "below_mean",   None, None, 30),
+        "click_5_30d":    ("🖱️ نقرات نشطة — ≥ 5 آخر شهر",          "click_link",   "any",   "absolute",     ">=", 5,    30),
+        "trend_copy_3":   ("🔥 نسخوا ترند ≥ 3 آخر أسبوعين",        "copy_coupon",  "trend_any", "absolute", ">=", 3,    14),
+    }
+
+    def _detect_agg_preset(rule: dict) -> str:
+        for k, (_, p_act, p_ctx, p_tt, p_op, p_v, p_d) in _AGG_PRESETS.items():
+            if k == "custom":
+                continue
+            if (p_act == rule.get("action")
+                and p_ctx == rule.get("context")
+                and p_tt == rule.get("threshold_type")
+                and (p_op is None or p_op == rule.get("op"))
+                and (p_v is None or p_v == rule.get("value"))):
+                w = rule.get("window") or {}
+                if p_d is None or (w.get("type") == "last_days" and w.get("days") == p_d):
+                    return k
+        return "custom"
 
     def _render_aggregate_rule(rule: dict, key: str):
         """يعرض ويحدّث قاعدة aggregate."""
+        # نمط جاهز
+        preset_keys = list(_AGG_PRESETS.keys())
+        cur_preset = _detect_agg_preset(rule)
+        new_preset = st.selectbox(
+            "🎯 نمط جاهز (اختياري — كل التفاصيل تبقى قابلة للتعديل تحت)",
+            preset_keys,
+            index=preset_keys.index(cur_preset),
+            format_func=lambda x: _AGG_PRESETS[x][0],
+            key=f"{key}_preset",
+        )
+        if new_preset != cur_preset and new_preset != "custom":
+            _, p_act, p_ctx, p_tt, p_op, p_v, p_d = _AGG_PRESETS[new_preset]
+            if p_act is not None: rule["action"] = p_act
+            if p_ctx is not None: rule["context"] = p_ctx
+            if p_tt  is not None: rule["threshold_type"] = p_tt
+            if p_op  is not None: rule["op"] = p_op
+            if p_v   is not None: rule["value"] = p_v
+            if p_d   is not None: rule["window"] = {"type":"last_days","days":p_d}
+            # entity_type يبقى "any" ما لم يحدّده المستخدم
+            rule.setdefault("entity_type", "any")
+            rule.setdefault("entity_value", None)
+            st.rerun()
+
         c1, c2, c3 = st.columns([2, 2, 2])
         with c1:
             acts = ["copy_coupon","click_link","search","view_store","view_tag"]
@@ -7822,6 +7885,17 @@ elif page == "🎯 بناء الشرائح":
             rule["threshold_type"] = st.selectbox("نوع العتبة", ths,
                 index=ths.index(rule.get("threshold_type","absolute")) if rule.get("threshold_type") in ths else 0,
                 format_func=lambda x: _THRESHOLD_LABELS[x], key=f"{key}_tt")
+            # حالة المتاجر (اختياري)
+            _ss_opts_ag = ["any", "active", "expiring", "expired"]
+            _ss_labels_ag = {"any":"🌐 الكل", "active":"🟢 فعّالة",
+                             "expiring":"⏳ قربت تنتهي (≤3 أيام)",
+                             "expired":"⛔ منتهية"}
+            _ag_ss = rule.get("store_status") or "any"
+            _new_ag_ss = st.selectbox("🏪 حالة المتاجر",
+                _ss_opts_ag,
+                index=_ss_opts_ag.index(_ag_ss) if _ag_ss in _ss_opts_ag else 0,
+                format_func=lambda x: _ss_labels_ag[x], key=f"{key}_ss")
+            rule["store_status"] = None if _new_ag_ss == "any" else _new_ag_ss
         with c3:
             def _safe_int(v, default):
                 try: return int(v if v not in (None, "") else default)

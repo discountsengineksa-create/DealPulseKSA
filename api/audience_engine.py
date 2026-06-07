@@ -533,6 +533,22 @@ def _action_filter_clauses(rule: dict, channel: str) -> tuple[list[str], list]:
     if ctx_clause:
         clauses.append(ctx_clause)
 
+    # ── فلتر حالة المتجر (اختياري) ─────────────────────────────────────
+    # store_status: "active" / "expiring" / "expired" — يفلتر على master.last_time
+    store_status = rule.get("store_status")
+    if store_status:
+        if store_status not in ("active", "expiring", "expired"):
+            raise ValueError(f"store_status غير مدعوم: {store_status!r}")
+        status_sql = {
+            "active":   "m_ss.last_time > CURRENT_DATE + 3",
+            "expiring": "m_ss.last_time BETWEEN CURRENT_DATE AND CURRENT_DATE + 3",
+            "expired":  "m_ss.last_time < CURRENT_DATE",
+        }[store_status]
+        clauses.append(
+            f"EXISTS (SELECT 1 FROM master m_ss WHERE m_ss.store_id = al.store_id "
+            f"AND {status_sql})"
+        )
+
     return (clauses, params)
 
 
