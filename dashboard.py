@@ -8474,32 +8474,9 @@ elif page == "مركز الإشعارات":
                 key="nc_sc_type")
             sc_run_at = None
             if sc_type == "once":
-                # ── معالجة الـ«ضبط سريع» قبل إنشاء الـwidgets ────────────
-                # Streamlit يمنع تعديل session_state بعد ما الـwidget اتخلق.
-                # الحل: نلتقط الـflag في رحلة السكربت التالية ونضبط القيمة
-                # قبل ما نُنشئ الـwidget، فيلتقطها كقيمة افتراضية.
-                _quick = st.session_state.pop("_nc_sc_quick", None)
-                if _quick:
-                    import datetime as _dt
-                    _t_target = _dt.datetime.now() + _dt.timedelta(minutes=_quick)
-                    st.session_state["nc_sc_date"] = _t_target.date()
-                    st.session_state["nc_sc_time"] = _t_target.time().replace(
-                        microsecond=0, second=0)
-
-                _qcol1, _qcol2, _qcol3, _qcol4 = st.columns(4)
-                for _m, _col in zip((1, 2, 5, 15), (_qcol1, _qcol2, _qcol3, _qcol4)):
-                    with _col:
-                        if st.button(f"⚡ بعد {_m} د", key=f"nc_sc_q_{_m}m",
-                                     width="stretch",
-                                     help="يضبط التاريخ والساعة تلقائياً"):
-                            st.session_state["_nc_sc_quick"] = _m
-                            st.rerun()
-
                 _d = st.date_input("📅 تاريخ الإطلاق (KSA)", key="nc_sc_date")
-                # step=60 = خطوة دقيقة واحدة (بدلاً من الافتراضي 15)
                 _t = st.time_input("🕐 الساعة (KSA)", key="nc_sc_time", step=60)
                 if _d and _t:
-                    # نُلحق التوقيت السعودي صراحةً عشان PostgreSQL يحفظها صح
                     sc_run_at = f"{_d} {_t} Asia/Riyadh"
             if st.button("💾 جدول الحملة", key="nc_sc_create",
                          width="stretch", type="primary"):
