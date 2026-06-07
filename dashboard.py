@@ -7688,6 +7688,7 @@ elif page == "🎯 بناء الشرائح":
     # ما يُحفظ في الـDB — يُستنتج عند إعادة العرض من تركيبة action+context+was_trending.
     _EVENT_PRESETS = {
         "custom":              ("— مخصّص (يدوي) —",       None,             None,           None),
+        "all":                 ("🌐 الكل (أي تفاعل · أي سياق)", "copy_coupon", "any",         None),
         "copy_trend_daily":    ("🎟️🔥 نسخ كوبون من ترند يومي",  "copy_coupon",  "trend_daily",  None),
         "copy_trend_weekly":   ("🎟️🔥 نسخ كوبون من ترند أسبوعي", "copy_coupon",  "trend_weekly", None),
         "copy_trend_any":      ("🎟️🔥 نسخ كوبون من أي ترند",    "copy_coupon",  "trend_any",    None),
@@ -7842,8 +7843,51 @@ elif page == "🎯 بناء الشرائح":
                 st.caption("بدون قيمة (المقارنة بالمتوسط)")
             _render_window_picker(rule, f"{key}_w")
 
+    # ── أنماط الزمن الجاهزة (مفتاح ↔ (label, field, op, value_days)) ────
+    # يعبّي الحقول الثلاث تلقائياً ويظلّ المستخدم قادر على تعديل أي شيء بعدها.
+    _TEMPORAL_PRESETS = {
+        "custom":       ("— مخصّص (يدوي) —",                      None,        None,   None),
+        "all":          ("🌐 الكل (بدون قيد زمني)",                "last_seen", ">=",   3650),
+        "active":       ("🟢 نشط (شُوهد آخر 20 يوم)",              "last_seen", ">=",   20),
+        "active_7":     ("🟢 نشط جداً (شُوهد آخر 7 أيام)",         "last_seen", ">=",   7),
+        "idle":         ("😴 خامل (لم يُشاهد منذ 20+ يوم)",        "last_seen", "<=",   20),
+        "idle_60":      ("😴 خامل بعيد (لم يُشاهد منذ 60+ يوم)",   "last_seen", "<=",   60),
+        "new_7":        ("🆕 جديد (انضم آخر 7 أيام)",             "joined_at", ">=",   7),
+        "new_30":       ("🆕 جديد (انضم آخر 30 يوم)",             "joined_at", ">=",   30),
+        "veteran_90":   ("🌟 قديم (انضم قبل 90+ يوم)",            "joined_at", "<=",   90),
+    }
+
+    def _detect_temporal_preset(rule: dict) -> str:
+        fld = rule.get("field")
+        op  = rule.get("op")
+        try: vd = int(rule.get("value_days") or 0)
+        except (ValueError, TypeError): vd = 0
+        for k, (_, p_f, p_o, p_v) in _TEMPORAL_PRESETS.items():
+            if k == "custom":
+                continue
+            if p_f == fld and p_o == op and p_v == vd:
+                return k
+        return "custom"
+
     def _render_temporal_rule(rule: dict, key: str):
         """يعرض ويحدّث قاعدة temporal."""
+        # نمط جاهز (اختياري) — يعبّي الحقول الثلاث ويبقى كل شيء قابل للتعديل
+        preset_keys = list(_TEMPORAL_PRESETS.keys())
+        cur_preset = _detect_temporal_preset(rule)
+        new_preset = st.selectbox(
+            "🎯 نمط جاهز (اختياري — كل الحقول تبقى قابلة للتعديل تحت)",
+            preset_keys,
+            index=preset_keys.index(cur_preset),
+            format_func=lambda x: _TEMPORAL_PRESETS[x][0],
+            key=f"{key}_preset",
+        )
+        if new_preset != cur_preset and new_preset != "custom":
+            _, p_f, p_o, p_v = _TEMPORAL_PRESETS[new_preset]
+            rule["field"]      = p_f
+            rule["op"]         = p_o
+            rule["value_days"] = p_v
+            st.rerun()
+
         c1, c2, c3 = st.columns([2, 2, 2])
         with c1:
             flds = ["joined_at","last_seen"]
