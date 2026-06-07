@@ -7817,7 +7817,10 @@ elif page == "🎯 بناء الشرائح":
                 value=_days, key=f"{key}_d")
 
     def _render_window_picker(rule: dict, key: str):
-        """مختار النافذة الزمنية المشترك بين event و aggregate."""
+        """مختار النافذة الزمنية المشترك بين event و aggregate.
+
+        يدعم: كل التاريخ / آخر N يوم / بين تاريخين + فلتر ساعات اليوم اختياري.
+        """
         import datetime as _dt
         win = rule.get("window") or {"type": "all"}
         wtypes = ["all", "last_days", "between"]
@@ -7827,12 +7830,13 @@ elif page == "🎯 بناء الشرائح":
             index=wtypes.index(win.get("type","all")) if win.get("type") in wtypes else 0,
             format_func=lambda x: _wlabels.get(x, x),
             key=f"{key}_t")
+        new_win: dict = {}
         if wt == "last_days":
             try: _days_def = int(win.get("days", 30) or 30)
             except (ValueError, TypeError): _days_def = 30
             d = st.number_input("عدد الأيام", min_value=1, max_value=3650,
                 value=_days_def, key=f"{key}_d")
-            rule["window"] = {"type": "last_days", "days": int(d)}
+            new_win = {"type": "last_days", "days": int(d)}
         elif wt == "between":
             _today = _dt.date.today()
             def _parse_date(s, fallback):
@@ -7843,11 +7847,33 @@ elif page == "🎯 بناء الشرائح":
             cc1, cc2 = st.columns(2)
             _f = cc1.date_input("من تاريخ", value=_from_def, key=f"{key}_from")
             _t = cc2.date_input("إلى تاريخ", value=_to_def, key=f"{key}_to")
-            rule["window"] = {"type": "between",
-                              "from": _f.isoformat(),
-                              "to": (_t + _dt.timedelta(days=1)).isoformat()}
+            new_win = {"type": "between",
+                       "from": _f.isoformat(),
+                       "to": (_t + _dt.timedelta(days=1)).isoformat()}
         else:
-            rule["window"] = {"type": "all"}
+            new_win = {"type": "all"}
+
+        # ── فلتر ساعات اليوم (اختياري — يُدمج فوق أي نوع نافذة) ─────────────
+        _h_on_default = bool(win.get("hour_from") is not None
+                             and win.get("hour_to") is not None)
+        _h_on = st.checkbox("🕐 قيّد بساعات معيّنة من اليوم (بتوقيت الرياض)",
+                            value=_h_on_default, key=f"{key}_h_on")
+        if _h_on:
+            def _safe_h(v, default):
+                try: return max(0, min(23, int(v)))
+                except (ValueError, TypeError): return default
+            hf_def = _safe_h(win.get("hour_from"), 8)
+            ht_def = _safe_h(win.get("hour_to"), 22)
+            hc1, hc2 = st.columns(2)
+            hf = hc1.number_input("من ساعة", min_value=0, max_value=23,
+                                  value=hf_def, key=f"{key}_hf",
+                                  help="0-23 (مثلاً 18 = 6 مساءً)")
+            ht = hc2.number_input("إلى ساعة", min_value=0, max_value=23,
+                                  value=ht_def, key=f"{key}_ht",
+                                  help="لو أصغر من «من» يلتف عبر منتصف الليل")
+            new_win["hour_from"] = int(hf)
+            new_win["hour_to"]   = int(ht)
+        rule["window"] = new_win
 
     _RULE_TYPES = {
         "attribute": ("🏷️ صفة", _render_attribute_rule),

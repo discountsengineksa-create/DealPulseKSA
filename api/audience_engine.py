@@ -354,20 +354,53 @@ def _window_clause(window: dict | None, time_col: str = "al.action_time") -> tup
       - None / {"type":"all"} → بدون قيد
       - {"type":"last_days","days":N} → time_col >= NOW() - INTERVAL 'N days'
       - {"type":"between","from":"YYYY-MM-DD","to":"YYYY-MM-DD"} → بين تاريخين
+
+    إضافات مشتركة (يمكن دمجها مع أي نوع أعلاه):
+      - hour_from / hour_to (0..23) → فلتر ساعات اليوم بتوقيت الرياض
     """
-    if not window or window.get("type") == "all":
+    if not window:
         return "", []
-    wtype = window.get("type")
+    wtype = window.get("type", "all")
+    clauses: list[str] = []
+    params: list = []
+
+    # الجزء الأول: نطاق التاريخ
     if wtype == "last_days":
         days = int(window.get("days", 30))
         if days < 0 or days > 3650:
             raise ValueError(f"days out of range: {days}")
-        return f" AND {time_col} >= NOW() - (%s || ' days')::INTERVAL", [str(days)]
-    if wtype == "between":
-        return f" AND {time_col} >= %s AND {time_col} < %s", [
-            window.get("from"), window.get("to"),
-        ]
-    raise ValueError(f"نوع نافذة غير مدعوم: {wtype!r}")
+        clauses.append(f"{time_col} >= NOW() - (%s || ' days')::INTERVAL")
+        params.append(str(days))
+    elif wtype == "between":
+        clauses.append(f"{time_col} >= %s")
+        clauses.append(f"{time_col} < %s")
+        params.append(window.get("from"))
+        params.append(window.get("to"))
+    elif wtype != "all":
+        raise ValueError(f"نوع نافذة غير مدعوم: {wtype!r}")
+
+    # الجزء الثاني: نطاق الساعات (اختياري، يُضاف فوق أي نوع)
+    h_from = window.get("hour_from")
+    h_to   = window.get("hour_to")
+    if h_from is not None and h_to is not None:
+        try:
+            hf = max(0, min(23, int(h_from)))
+            ht = max(0, min(23, int(h_to)))
+        except (ValueError, TypeError):
+            hf = ht = None
+        if hf is not None and ht is not None:
+            hour_expr = (f"EXTRACT(HOUR FROM ({time_col}) "
+                         f"AT TIME ZONE 'Asia/Riyadh')")
+            if hf <= ht:
+                clauses.append(f"{hour_expr} BETWEEN %s AND %s")
+                params += [hf, ht]
+            else:  # يلتف عبر منتصف الليل (مثلاً 22 → 06)
+                clauses.append(f"({hour_expr} >= %s OR {hour_expr} <= %s)")
+                params += [hf, ht]
+
+    if not clauses:
+        return "", []
+    return " AND " + " AND ".join(clauses), params
 
 
 # ════════════════════════════════════════════════════════════════════════════
