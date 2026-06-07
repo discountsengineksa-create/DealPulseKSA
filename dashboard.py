@@ -7813,16 +7813,34 @@ elif page == "🎯 بناء الشرائح":
 
     def _render_window_picker(rule: dict, key: str):
         """مختار النافذة الزمنية المشترك بين event و aggregate."""
+        import datetime as _dt
         win = rule.get("window") or {"type": "all"}
-        wtypes = ["all","last_days"]
+        wtypes = ["all", "last_days", "between"]
+        _wlabels = {"all": "كل التاريخ", "last_days": "آخر N يوم",
+                    "between": "📅 من تاريخ ↔ إلى تاريخ"}
         wt = st.selectbox("النافذة الزمنية", wtypes,
             index=wtypes.index(win.get("type","all")) if win.get("type") in wtypes else 0,
-            format_func=lambda x: "كل التاريخ" if x=="all" else "آخر N يوم",
+            format_func=lambda x: _wlabels.get(x, x),
             key=f"{key}_t")
         if wt == "last_days":
+            try: _days_def = int(win.get("days", 30) or 30)
+            except (ValueError, TypeError): _days_def = 30
             d = st.number_input("عدد الأيام", min_value=1, max_value=3650,
-                value=int(win.get("days", 30) or 30), key=f"{key}_d")
+                value=_days_def, key=f"{key}_d")
             rule["window"] = {"type": "last_days", "days": int(d)}
+        elif wt == "between":
+            _today = _dt.date.today()
+            def _parse_date(s, fallback):
+                try: return _dt.date.fromisoformat(str(s)[:10])
+                except (ValueError, TypeError): return fallback
+            _from_def = _parse_date(win.get("from"), _today - _dt.timedelta(days=30))
+            _to_def   = _parse_date(win.get("to"),   _today + _dt.timedelta(days=1))
+            cc1, cc2 = st.columns(2)
+            _f = cc1.date_input("من تاريخ", value=_from_def, key=f"{key}_from")
+            _t = cc2.date_input("إلى تاريخ", value=_to_def, key=f"{key}_to")
+            rule["window"] = {"type": "between",
+                              "from": _f.isoformat(),
+                              "to": (_t + _dt.timedelta(days=1)).isoformat()}
         else:
             rule["window"] = {"type": "all"}
 
