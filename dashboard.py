@@ -8474,10 +8474,20 @@ elif page == "مركز الإشعارات":
                 key="nc_sc_type")
             sc_run_at = None
             if sc_type == "once":
-                _d = st.date_input("📅 تاريخ الإطلاق", key="nc_sc_date")
-                _t = st.time_input("🕐 الساعة", key="nc_sc_time")
+                _d = st.date_input("📅 تاريخ الإطلاق (KSA)", key="nc_sc_date")
+                _t = st.time_input("🕐 الساعة (KSA)", key="nc_sc_time")
                 if _d and _t:
-                    sc_run_at = f"{_d} {_t}"
+                    # نُلحق التوقيت السعودي صراحةً عشان PostgreSQL يحفظها صح
+                    sc_run_at = f"{_d} {_t} Asia/Riyadh"
+                # زر سريع: شغّل بعد دقيقة (للاختبار)
+                if st.button("⚡ اضبط على «بعد دقيقتين» من الآن",
+                             key="nc_sc_quick_2m", help="مفيد للاختبار"):
+                    import datetime as _dt
+                    _now = _dt.datetime.now()
+                    _target = _now + _dt.timedelta(minutes=2)
+                    st.session_state["nc_sc_date"] = _target.date()
+                    st.session_state["nc_sc_time"] = _target.time().replace(microsecond=0)
+                    st.rerun()
             if st.button("💾 جدول الحملة", key="nc_sc_create",
                          width="stretch", type="primary"):
                 if not sc_name:
