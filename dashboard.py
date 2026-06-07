@@ -7557,6 +7557,7 @@ elif page == "🎯 بناء الشرائح":
         "gender":            "⚧ الجنس",
         "age":               "🎂 العمر",
         "city":              "📍 المدينة",
+        "profile_complete":  "✅ اكتمال الملف (يوزر + إيميل + جوال + ميلاد + جنس)",
         "is_linked":         "🔗 ملف مربوط (موقع + تليجرام)",
         "has_email":         "📧 له إيميل",
         "has_phone":         "📱 له جوال",
@@ -7606,7 +7607,7 @@ elif page == "🎯 بناء الشرائح":
             rule["field"] = fld
 
         with c2:
-            if fld in ("is_linked","has_email","has_phone","has_birth_date"):
+            if fld in ("is_linked","has_email","has_phone","has_birth_date","profile_complete"):
                 rule["op"] = "="
                 yn = st.selectbox("القيمة", ["نعم","لا"],
                     index=0 if rule.get("value", True) else 1, key=f"{key}_v")
@@ -7628,7 +7629,7 @@ elif page == "🎯 بناء الشرائح":
                     format_func=lambda x: _OPS_LABELS[x], key=f"{key}_op")
 
         with c3:
-            if fld in ("is_linked","has_email","has_phone","has_birth_date"):
+            if fld in ("is_linked","has_email","has_phone","has_birth_date","profile_complete"):
                 st.caption("القيمة بوليانية أعلاه ☝️")
             elif fld == "lang":
                 langs = ["ar","en"]

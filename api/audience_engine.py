@@ -176,6 +176,22 @@ _ATTRIBUTE_FIELDS_BOOL = {
         "tg":  "(w3.birth_date IS NOT NULL)",
         "web": "(wu.birth_date IS NOT NULL)",
     },
+    # ── الملف المكتمل ─────────────────────────────────────────────────────
+    # مكتمل = يوزر تيليجرام (الربط أساسي) + إيميل + جوال + تاريخ ميلاد + جنس
+    # ناقص = أي واحد من الخمسة فاضي
+    "profile_complete": {
+        "tg":  ("(bu.username IS NOT NULL AND bu.username <> '' "
+                " AND w3.id IS NOT NULL "
+                " AND w3.email IS NOT NULL AND w3.email <> '' "
+                " AND w3.phone_number IS NOT NULL AND w3.phone_number <> '' "
+                " AND w3.birth_date IS NOT NULL "
+                " AND w3.gender IS NOT NULL AND w3.gender <> '')"),
+        "web": ("(wu.telegram_username IS NOT NULL AND wu.telegram_username <> '' "
+                " AND wu.email IS NOT NULL AND wu.email <> '' "
+                " AND wu.phone_number IS NOT NULL AND wu.phone_number <> '' "
+                " AND wu.birth_date IS NOT NULL "
+                " AND wu.gender IS NOT NULL AND wu.gender <> '')"),
+    },
 }
 
 # attribute fields special (تتحوّل لـ EXISTS أو subquery)
