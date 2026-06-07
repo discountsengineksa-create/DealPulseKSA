@@ -26,18 +26,33 @@ from api.db import get_db
 
 _log = logging.getLogger("dp.broadcast_tracking")
 
-# ─── كاشف البوتات الـpre-fetching ──────────────────────────────────────────
-# Telegram/WhatsApp/Slack/Discord/Gmail-proxy يفتحون كل URL تلقائياً قبل أن
-# يضغطه المستخدم (لتوليد link preview أو cache صور البريد). بدون استبعادهم
-# تظهر CTR وهمية ٪١٠٠. نُسجّل عدّاد منفصل (preview_count) لو احتيج لاحقاً.
-_BOT_UA_PATTERN = re.compile(
+# ─── كاشف البوتات — نوعان مختلفان ─────────────────────────────────────────
+# (1) كاشف بوتات النقر (CLICK): صارم — يستبعد Telegram/WhatsApp/Slack
+#     لأنهم يفتحون الروابط تلقائياً لتوليد preview قبل أن يضغط المستخدم.
+# (2) كاشف بوتات الفتح (OPEN): متساهل — يسمح بوكلاء البريد (Gmail/Yahoo/Outlook)
+#     لأنهم الطريقة الصحيحة لاحتساب الفتح في كل أنظمة البريد التسويقية
+#     (Mailchimp/SendGrid/Klaviyo يحتسبونهم opens). يستبعد فقط zحف الفهرسة.
+
+_CLICK_BOT_PATTERN = re.compile(
     r"("
     r"TelegramBot|WhatsApp|facebookexternalhit|Facebot|LinkedInBot|"
     r"Slackbot|DiscordBot|SkypeUriPreview|TwitterBot|Twitterbot|"
-    r"GoogleImageProxy|YahooMailProxy|Outlook|MSOffice|"
     r"vkShare|W3C_Validator|Pingdom|googleweblight|Mediapartners-Google|"
     r"Googlebot|bingbot|Baiduspider|YandexBot|DuckDuckBot|"
-    r"Applebot|PetalBot|SeznamBot|"
+    r"Applebot|PetalBot|SeznamBot|AhrefsBot|SemrushBot|"
+    r"HeadlessChrome|PhantomJS|Lighthouse|Chrome-Lighthouse|"
+    r"\bspider\b|\bcrawler\b|\bscraper\b"
+    r")",
+    re.IGNORECASE,
+)
+
+# OPEN: نستبعد فقط زحف فهرسة/تحقّق صحة — وكلاء البريد مسموحون
+_OPEN_BOT_PATTERN = re.compile(
+    r"("
+    r"Googlebot|bingbot|Baiduspider|YandexBot|DuckDuckBot|"
+    r"Applebot|PetalBot|SeznamBot|AhrefsBot|SemrushBot|"
+    r"facebookexternalhit|Facebot|LinkedInBot|TelegramBot|"
+    r"W3C_Validator|Pingdom|Mediapartners-Google|"
     r"HeadlessChrome|PhantomJS|Lighthouse|Chrome-Lighthouse|"
     r"\bspider\b|\bcrawler\b|\bscraper\b"
     r")",
@@ -45,11 +60,18 @@ _BOT_UA_PATTERN = re.compile(
 )
 
 
-def _is_bot_user_agent(ua: str | None) -> bool:
-    """يرجّع True لو الـUser-Agent يبدو لبوت/preview/proxy."""
+def _is_click_bot(ua: str | None) -> bool:
+    """True لو الـUA لـpreview/scanner — لا يُحتسب كنقرة حقيقية."""
     if not ua:
-        return True   # طلب بدون UA = على الأغلب بوت/سكربت
-    return bool(_BOT_UA_PATTERN.search(ua))
+        return True
+    return bool(_CLICK_BOT_PATTERN.search(ua))
+
+
+def _is_open_scanner_bot(ua: str | None) -> bool:
+    """True فقط لو الـUA لزحف فهرسة. Gmail/Outlook proxies = ليست بوت."""
+    if not ua:
+        return False   # طلب بدون UA من صورة = نعتبره فتحاً (Gmail Cache أحياناً)
+    return bool(_OPEN_BOT_PATTERN.search(ua))
 
 router = APIRouter(prefix="/bt", tags=["broadcast-tracking"])
 
@@ -91,7 +113,7 @@ async def track_open(token: str, request: Request, conn=Depends(get_db)) -> Resp
             ip = _client_ip(request)
             ip_h = _hash_ip(ip)
             ua = (request.headers.get("user-agent") or "")[:300]
-            is_bot = _is_bot_user_agent(ua)
+            is_bot = _is_open_scanner_bot(ua)
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute(
                     "SELECT id, broadcast_kind FROM broadcast_recipients "
@@ -183,7 +205,7 @@ async def track_click(token: str, link_id: int, request: Request,
                     ip_h = _hash_ip(ip)
                     ua = (request.headers.get("user-agent") or "")[:300]
                     referer = (request.headers.get("referer") or "")[:500]
-                    is_bot = _is_bot_user_agent(ua)
+                    is_bot = _is_click_bot(ua)
 
                     if is_bot:
                         # Telegram/WhatsApp/etc. preview bot — لا نحسبه كنقرة

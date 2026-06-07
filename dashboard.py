@@ -8082,13 +8082,26 @@ elif page == "مركز الإشعارات":
     # شريحة معدّة سلفاً عبر زر «افتح في مركز الإشعارات» من بنّاء الشرائح
     _preset_sid = st.session_state.pop("nc_preset_segment_id", None)
 
-    def _seg_picker(key_prefix: str, default_id: int | None = None) -> int | None:
-        """مختار شريحة موحّد للتبويبين. يرجّع segment_id أو None."""
+    def _seg_picker(key_prefix: str, default_id: int | None = None,
+                    channel_filter: str | None = None) -> int | None:
+        """مختار شريحة موحّد للتبويبين.
+
+        channel_filter: 'telegram' | 'email' | None
+          - 'telegram' → يعرض شرائح channel='telegram' أو 'both' أو NULL
+          - 'email'    → يعرض شرائح channel='email'    أو 'both' أو NULL
+          - None       → كل الشرائح
+        """
+        if channel_filter in ("telegram", "email"):
+            filtered = [s for s in _all_segs_nc
+                        if (s.get("channel") in (channel_filter, "both")
+                            or s.get("channel") is None)]
+        else:
+            filtered = _all_segs_nc
         opts = [(None, "— بدون شريحة (الكل) —")] + [
             (s["id"],
              f"{'📋 ' if s.get('is_template') else '💾 '}{s['name']}"
              + (f"  ({s['last_count']})" if s.get('last_count') is not None else ""))
-            for s in _all_segs_nc
+            for s in filtered
         ]
         cur_idx = 0
         if default_id:
@@ -8128,7 +8141,8 @@ elif page == "مركز الإشعارات":
 
         with col_input:
             st.subheader("🖋️ تجهيز الرسالة")
-            sid_tg = _seg_picker("nc_tg", default_id=_preset_sid)
+            sid_tg = _seg_picker("nc_tg", default_id=_preset_sid,
+                                 channel_filter="telegram")
 
             msg_text = st.text_area(
                 "✍️ نص الرسالة:",
@@ -8268,7 +8282,8 @@ elif page == "مركز الإشعارات":
 
         with col_build:
             st.subheader("✉️ بناء حملة بريدية")
-            sid_em = _seg_picker("nc_em", default_id=_preset_sid)
+            sid_em = _seg_picker("nc_em", default_id=_preset_sid,
+                                 channel_filter="email")
 
             em_subject = st.text_input(
                 "📌 عنوان الإيميل:",
@@ -8435,10 +8450,10 @@ elif page == "مركز الإشعارات":
             sc_name = st.text_input("📝 اسم الجدولة:",
                 placeholder="مثلاً: تذكير صباحي يومي",
                 key="nc_sc_name")
-            sc_seg = _seg_picker("nc_sc")
             sc_channel = st.radio("القناة", ["telegram","email"],
                 format_func=lambda x: "📱 تليجرام" if x=="telegram" else "📧 إيميل",
                 horizontal=True, key="nc_sc_ch")
+            sc_seg = _seg_picker("nc_sc", channel_filter=sc_channel)
             if sc_channel == "telegram":
                 sc_text = st.text_area("✍️ نص الرسالة:", height=120, key="nc_sc_text")
                 sc_img  = st.text_input("🖼️ رابط صورة (اختياري):", key="nc_sc_img")
