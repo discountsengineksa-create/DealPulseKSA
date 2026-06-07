@@ -8056,6 +8056,17 @@ elif page == "مركز الإشعارات":
     from api import audience_engine as _ae_nc
     from api import audience_sender as _send_nc
 
+    # ── زر تحديث الصفحة (مسح كاش + إعادة تحميل) ──────────────────────────
+    _refresh_c1, _refresh_c2 = st.columns([5, 1])
+    with _refresh_c2:
+        if st.button("🔄 تحديث", key="nc_refresh", width="stretch",
+                     help="مسح الكاش وإعادة تحميل الشرائح والحملات"):
+            try:
+                st.cache_data.clear()
+            except Exception:
+                pass
+            st.rerun()
+
     # ── تحميل الشرائح المحفوظة ─────────────────────────────────────────────
     @st.cache_data(ttl=60)
     def _nc_load_segments():
