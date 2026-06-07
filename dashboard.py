@@ -8048,6 +8048,343 @@ elif page == "🎯 بناء الشرائح":
         "temporal":  ("⏰ زمن", _render_temporal_rule),
     }
 
+    # ════════════════════════════════════════════════════════════════════
+    # ✨ الواجهة المسطّحة — Picker مباشر لـ 17 أصل
+    # ════════════════════════════════════════════════════════════════════
+    # بدل ما المستخدم يختار "نوع شرط" مجرّد ثم "حقل/حركة"، يختار الأصل
+    # المطلوب مباشرة من قائمة واحدة (مثل فلاتر صفحة تحليل المستخدمين).
+    # الـ backend يبقى كما هو — الـpicker يحوّل الاختيار إلى الـtype/field
+    # المناسب خلف الكواليس، فالشرائح المحفوظة قديماً تشتغل بدون تغيير.
+    _PICKER_OPTIONS = [
+        # ── الملف الشخصي ──────────────────────────────────────────────
+        ("lang",              "🌐 اللغة"),
+        ("gender",            "⚧ الجنس"),
+        ("age",               "🎂 العمر"),
+        ("city",              "🏙 المدينة"),
+        ("is_linked",         "🔗 ملف مربوط (بوت + موقع)"),
+        ("has_email",         "📧 له إيميل"),
+        ("has_phone",         "📱 له جوال"),
+        ("profile_complete",  "✅ اكتمال الملف الكامل"),
+        # ── المفضلات ────────────────────────────────────────────────
+        ("favorite_store",    "❤️ متجر مفضّل عنده"),
+        ("favorite_category", "🏷️ قسم مفضّل عنده"),
+        ("fav_count",         "🔢 عدد مفضّلاته"),
+        # ── السلوك (أحداث) ──────────────────────────────────────────
+        ("evt_copy",          "🗒️ نسخ كوبون"),
+        ("evt_click",         "🖱️ نقر رابط متجر"),
+        ("evt_view",          "👁️ زيارة متجر / قسم"),
+        ("evt_search",        "🔍 بحث بكلمة"),
+        ("evt_story",         "🎬 مشاهدة ستوري"),
+        # ── العداد ─────────────────────────────────────────────────
+        ("aggregate",         "📊 عدّاد (كم مرة فعل…)"),
+        # ── الزمن ──────────────────────────────────────────────────
+        ("temporal",          "📅 الانضمام / آخر ظهور"),
+    ]
+    _PICKER_KEYS   = [k for k, _ in _PICKER_OPTIONS]
+    _PICKER_LABELS = dict(_PICKER_OPTIONS)
+    _ATTR_PICKERS  = {"lang","gender","age","city","is_linked","has_email",
+                      "has_phone","profile_complete","favorite_store",
+                      "favorite_category","fav_count"}
+    _EVT_PICKERS   = {"evt_copy","evt_click","evt_view","evt_search","evt_story"}
+
+    def _detect_picker_key(rule: dict) -> str:
+        """يستنتج خيار الـpicker من حالة الـrule المحفوظة (backward-compat)."""
+        t = rule.get("type", "attribute")
+        if t == "attribute":
+            f = rule.get("field", "lang")
+            return f if f in _ATTR_PICKERS else "lang"
+        if t == "event":
+            a = rule.get("action", "copy_coupon")
+            if a == "copy_coupon":                 return "evt_copy"
+            if a == "click_link":                  return "evt_click"
+            if a in ("view_store", "view_tag"):    return "evt_view"
+            if a in ("search", "search_keyword"):  return "evt_search"
+            if a == "view_story":                  return "evt_story"
+            return "evt_copy"
+        if t == "aggregate": return "aggregate"
+        if t == "temporal":  return "temporal"
+        return "lang"
+
+    def _init_rule_for_picker(picker_key: str) -> dict:
+        """قاعدة جديدة بقيم افتراضية مناسبة لكل أصل."""
+        if picker_key in ("is_linked","has_email","has_phone","profile_complete"):
+            return {"type":"attribute","field":picker_key,"op":"=","value":True}
+        if picker_key == "lang":
+            return {"type":"attribute","field":"lang","op":"=","value":"ar"}
+        if picker_key == "gender":
+            return {"type":"attribute","field":"gender","op":"=","value":"male"}
+        if picker_key == "age":
+            return {"type":"attribute","field":"age","op":"between","value":[18,34]}
+        if picker_key == "city":
+            return {"type":"attribute","field":"city","op":"=",
+                    "value":(_CITIES[0] if _CITIES else "")}
+        if picker_key == "favorite_store":
+            return {"type":"attribute","field":"favorite_store","op":"=",
+                    "value":(_STORES[0] if _STORES else "")}
+        if picker_key == "favorite_category":
+            return {"type":"attribute","field":"favorite_category","op":"=",
+                    "value":(_CATEGORIES[0] if _CATEGORIES else "")}
+        if picker_key == "fav_count":
+            return {"type":"attribute","field":"fav_count","op":">=","value":1}
+        if picker_key == "evt_copy":
+            return {"type":"event","action":"copy_coupon","entity_type":"any",
+                    "context":"any","window":{"type":"last_days","days":30}}
+        if picker_key == "evt_click":
+            return {"type":"event","action":"click_link","entity_type":"any",
+                    "context":"any","window":{"type":"last_days","days":30}}
+        if picker_key == "evt_view":
+            return {"type":"event","action":"view_store","entity_type":"any",
+                    "context":"any","window":{"type":"last_days","days":30}}
+        if picker_key == "evt_search":
+            return {"type":"event","action":"search_keyword","entity_type":"keyword",
+                    "entity_value":"","context":"any",
+                    "window":{"type":"last_days","days":30}}
+        if picker_key == "evt_story":
+            return {"type":"event","action":"view_story","entity_type":"any",
+                    "entity_value":None,"was_trending":None,
+                    "window":{"type":"last_days","days":30}}
+        if picker_key == "aggregate":
+            return {"type":"aggregate","action":"copy_coupon","entity_type":"any",
+                    "context":"any","threshold_type":"absolute","op":">=",
+                    "value":3,"window":{"type":"last_days","days":30}}
+        if picker_key == "temporal":
+            return {"type":"temporal","field":"last_seen","op":">=","value_days":7}
+        return {"type":"attribute","field":"lang","op":"=","value":"ar"}
+
+    def _render_evt_target_context(rule: dict, key: str):
+        """يعرض الهدف+السياق+حالة المتاجر لأحداث copy/click."""
+        c1, c2 = st.columns(2)
+        with c1:
+            ent_opts = ["any","store","category"]
+            rule["entity_type"] = st.selectbox(
+                "🎯 الهدف", ent_opts,
+                index=ent_opts.index(rule.get("entity_type","any"))
+                      if rule.get("entity_type") in ent_opts else 0,
+                format_func=lambda x: {"any":"أي شيء","store":"متجر محدد",
+                                       "category":"قسم محدد"}[x],
+                key=f"{key}_ent")
+            if rule["entity_type"] == "store":
+                opts = _STORES or ["—"]
+                cur = rule.get("entity_value") or opts[0]
+                rule["entity_value"] = st.selectbox("اسم المتجر", opts,
+                    index=opts.index(cur) if cur in opts else 0, key=f"{key}_ev")
+            elif rule["entity_type"] == "category":
+                opts = _CATEGORIES or ["—"]
+                cur = rule.get("entity_value") or opts[0]
+                rule["entity_value"] = st.selectbox("اسم القسم", opts,
+                    index=opts.index(cur) if cur in opts else 0, key=f"{key}_ev")
+            else:
+                rule["entity_value"] = None
+        with c2:
+            ctxs = list(_CONTEXT_LABELS.keys())
+            rule["context"] = st.selectbox("🔥 السياق", ctxs,
+                index=ctxs.index(rule.get("context","any"))
+                      if rule.get("context") in ctxs else 0,
+                format_func=lambda x: _CONTEXT_LABELS[x], key=f"{key}_ctx")
+            _ss_opts = ["any","active","expiring","expired"]
+            _ss_labels = {"any":"🌐 الكل","active":"🟢 فعّالة",
+                         "expiring":"⏳ قربت تنتهي (≤3 أيام)",
+                         "expired":"⛔ منتهية"}
+            cur_ss = rule.get("store_status") or "any"
+            new_ss = st.selectbox("🏪 حالة المتاجر", _ss_opts,
+                index=_ss_opts.index(cur_ss) if cur_ss in _ss_opts else 0,
+                format_func=lambda x: _ss_labels[x], key=f"{key}_ss")
+            rule["store_status"] = None if new_ss == "any" else new_ss
+
+    def _render_picker_rule(picker_key: str, rule: dict, key: str):
+        """يرسم الواجهة المختصرة لكل أصل (بدون تكرار اختيار الحقل/الحركة)."""
+        # ── Boolean attributes ───────────────────────────────────────
+        if picker_key in ("is_linked","has_email","has_phone","profile_complete"):
+            rule["type"] = "attribute"; rule["field"] = picker_key; rule["op"] = "="
+            yn = st.radio("القيمة", ["نعم","لا"], horizontal=True,
+                index=0 if rule.get("value", True) else 1, key=f"{key}_v")
+            rule["value"] = (yn == "نعم")
+            return
+
+        if picker_key == "lang":
+            rule["type"] = "attribute"; rule["field"] = "lang"; rule["op"] = "="
+            langs = ["ar","en"]
+            rule["value"] = st.selectbox("اللغة", langs,
+                index=langs.index(rule.get("value","ar"))
+                      if rule.get("value") in langs else 0,
+                format_func=lambda x: "🇸🇦 العربية" if x == "ar" else "🌍 الإنجليزية",
+                key=f"{key}_v")
+            return
+
+        if picker_key == "gender":
+            rule["type"] = "attribute"; rule["field"] = "gender"; rule["op"] = "="
+            gs = ["male","female"]
+            rule["value"] = st.radio("الجنس", gs, horizontal=True,
+                index=gs.index(rule.get("value","male"))
+                      if rule.get("value") in gs else 0,
+                format_func=lambda x: "♂️ ذكر" if x == "male" else "♀️ أنثى",
+                key=f"{key}_v")
+            return
+
+        if picker_key == "city":
+            rule["type"] = "attribute"; rule["field"] = "city"; rule["op"] = "="
+            opts = _CITIES or ["—"]
+            cur = rule.get("value") or opts[0]
+            rule["value"] = st.selectbox("المدينة", opts,
+                index=opts.index(cur) if cur in opts else 0, key=f"{key}_v")
+            return
+
+        if picker_key == "age":
+            rule["type"] = "attribute"; rule["field"] = "age"
+            c1, c2 = st.columns([1, 2])
+            with c1:
+                ops = ["between","=",">",">=","<","<="]
+                rule["op"] = st.selectbox("العملية", ops,
+                    index=ops.index(rule.get("op","between"))
+                          if rule.get("op") in ops else 0,
+                    format_func=lambda x: _OPS_LABELS.get(x, x), key=f"{key}_op")
+            with c2:
+                if rule["op"] == "between":
+                    _raw = rule.get("value") if isinstance(rule.get("value"),
+                                                            (list,tuple)) else [18,34]
+                    try: v1 = int(_raw[0])
+                    except (ValueError, TypeError, IndexError): v1 = 18
+                    try: v2 = int(_raw[1])
+                    except (ValueError, TypeError, IndexError): v2 = 34
+                    cc1, cc2 = st.columns(2)
+                    v1 = cc1.number_input("من عمر", min_value=0, max_value=120,
+                                          value=v1, key=f"{key}_v1")
+                    v2 = cc2.number_input("إلى عمر", min_value=0, max_value=120,
+                                          value=v2, key=f"{key}_v2")
+                    rule["value"] = [int(v1), int(v2)]
+                else:
+                    try: a = int(rule.get("value", 25) or 25)
+                    except (ValueError, TypeError): a = 25
+                    rule["value"] = st.number_input("العمر", min_value=0,
+                        max_value=120, value=a, key=f"{key}_v")
+            return
+
+        if picker_key == "favorite_store":
+            rule["type"] = "attribute"; rule["field"] = "favorite_store"; rule["op"] = "="
+            opts = _STORES or ["—"]
+            cur = rule.get("value") or opts[0]
+            rule["value"] = st.selectbox("اسم المتجر المفضّل", opts,
+                index=opts.index(cur) if cur in opts else 0, key=f"{key}_v")
+            return
+
+        if picker_key == "favorite_category":
+            rule["type"] = "attribute"; rule["field"] = "favorite_category"; rule["op"] = "="
+            opts = _CATEGORIES or ["—"]
+            cur = rule.get("value") or opts[0]
+            rule["value"] = st.selectbox("اسم القسم المفضّل", opts,
+                index=opts.index(cur) if cur in opts else 0, key=f"{key}_v")
+            return
+
+        if picker_key == "fav_count":
+            rule["type"] = "attribute"; rule["field"] = "fav_count"
+            c1, c2 = st.columns([1, 2])
+            with c1:
+                ops = [">=",">","=","<=","<","!="]
+                rule["op"] = st.selectbox("العملية", ops,
+                    index=ops.index(rule.get("op",">="))
+                          if rule.get("op") in ops else 0,
+                    format_func=lambda x: _OPS_LABELS.get(x, x), key=f"{key}_op")
+            with c2:
+                try: cnt = int(rule.get("value", 1) or 1)
+                except (ValueError, TypeError): cnt = 1
+                rule["value"] = st.number_input("عدد المفضّلات", min_value=0,
+                    value=cnt, key=f"{key}_v")
+            return
+
+        # ── Events ───────────────────────────────────────────────────
+        if picker_key == "evt_copy":
+            rule["type"] = "event"; rule["action"] = "copy_coupon"
+            _render_evt_target_context(rule, key)
+            _render_window_picker(rule, f"{key}_w")
+            return
+
+        if picker_key == "evt_click":
+            rule["type"] = "event"; rule["action"] = "click_link"
+            _render_evt_target_context(rule, key)
+            _render_window_picker(rule, f"{key}_w")
+            return
+
+        if picker_key == "evt_view":
+            rule["type"] = "event"
+            c1, c2 = st.columns(2)
+            with c1:
+                view_opts = ["store", "category"]
+                cur_act = rule.get("action", "view_store")
+                cur_idx = 0 if cur_act != "view_tag" else 1
+                sel = st.selectbox("🎯 نوع الزيارة", view_opts,
+                    index=cur_idx,
+                    format_func=lambda x: "👁️ متجر" if x == "store" else "🏷️ قسم",
+                    key=f"{key}_vt")
+                rule["action"] = "view_store" if sel == "store" else "view_tag"
+            with c2:
+                if rule["action"] == "view_store":
+                    opts = ["— أي متجر —"] + (_STORES or [])
+                    cur = rule.get("entity_value") or "— أي متجر —"
+                    _sel = st.selectbox("اسم المتجر", opts,
+                        index=opts.index(cur) if cur in opts else 0, key=f"{key}_ev")
+                    if _sel.startswith("— أي"):
+                        rule["entity_type"] = "any"; rule["entity_value"] = None
+                    else:
+                        rule["entity_type"] = "store"; rule["entity_value"] = _sel
+                else:
+                    opts = ["— أي قسم —"] + (_CATEGORIES or [])
+                    cur = rule.get("entity_value") or "— أي قسم —"
+                    _sel = st.selectbox("اسم القسم", opts,
+                        index=opts.index(cur) if cur in opts else 0, key=f"{key}_ev")
+                    if _sel.startswith("— أي"):
+                        rule["entity_type"] = "any"; rule["entity_value"] = None
+                    else:
+                        rule["entity_type"] = "category"; rule["entity_value"] = _sel
+            _render_window_picker(rule, f"{key}_w")
+            return
+
+        if picker_key == "evt_search":
+            rule["type"] = "event"; rule["action"] = "search_keyword"
+            rule["entity_type"] = "keyword"
+            rule["entity_value"] = st.text_input(
+                "🔎 الكلمة المبحوث عنها",
+                value=rule.get("entity_value", "") or "",
+                placeholder="مثلاً: نون، أزياء، عطور…",
+                key=f"{key}_kw")
+            _render_window_picker(rule, f"{key}_w")
+            return
+
+        if picker_key == "evt_story":
+            rule["type"] = "event"; rule["action"] = "view_story"
+            c1, c2 = st.columns(2)
+            with c1:
+                opts = ["all","trend","normal"]
+                cur_wt = rule.get("was_trending")
+                cur_idx = 0 if cur_wt is None else (1 if cur_wt else 2)
+                sel = st.selectbox("🎬 نوع الستوري", opts, index=cur_idx,
+                    format_func=lambda x: {"all":"🌐 الكل","trend":"🔥 ترند فقط",
+                                           "normal":"📌 عادي فقط"}[x],
+                    key=f"{key}_wt")
+                rule["was_trending"] = None if sel == "all" else (sel == "trend")
+            with c2:
+                opts_s = ["— أي متجر —"] + (_STORES or [])
+                cur = rule.get("entity_value") or "— أي متجر —"
+                sel_s = st.selectbox("اسم المتجر", opts_s,
+                    index=opts_s.index(cur) if cur in opts_s else 0, key=f"{key}_st")
+                if sel_s.startswith("— أي"):
+                    rule["entity_type"] = "any"; rule["entity_value"] = None
+                else:
+                    rule["entity_type"] = "store"; rule["entity_value"] = sel_s
+            _render_window_picker(rule, f"{key}_w")
+            return
+
+        # ── Aggregate ────────────────────────────────────────────────
+        if picker_key == "aggregate":
+            rule["type"] = "aggregate"
+            _render_aggregate_rule(rule, key)
+            return
+
+        # ── Temporal ─────────────────────────────────────────────────
+        if picker_key == "temporal":
+            rule["type"] = "temporal"
+            _render_temporal_rule(rule, key)
+            return
+
     # ── منطق التركيب بين المجموعات ────────────────────────────────────────
     _logic_opts = ["or", "and"]
     st.session_state.seg_rules["logic"] = st.radio(
@@ -8083,25 +8420,29 @@ elif page == "🎯 بناء الشرائح":
 
                 # ── قواعد داخل المجموعة ──────────────────────────────────
                 for r_idx, rule in enumerate(group["rules"]):
+                    _cur_pk = _detect_picker_key(rule)
+                    _pk_lbl = _PICKER_LABELS.get(_cur_pk, "شرط")
                     with st.expander(
-                        f"{_RULE_TYPES.get(rule.get('type','attribute'),(rule.get('type'),))[0]} "
-                        f"— شرط {r_idx+1}{'  🚫 (نفي)' if rule.get('negate') else ''}",
+                        f"{_pk_lbl}  —  شرط {r_idx+1}"
+                        + ("  🚫 (نفي)" if rule.get('negate') else ''),
                         expanded=True,
                     ):
-                        # تغيير النوع
-                        types = list(_RULE_TYPES.keys())
-                        new_type = st.selectbox(
-                            "نوع الشرط", types,
-                            index=types.index(rule.get("type","attribute")) if rule.get("type") in types else 0,
-                            format_func=lambda x: _RULE_TYPES[x][0],
-                            key=f"g{g_idx}_r{r_idx}_type")
-                        if new_type != rule.get("type"):
-                            # إعادة تهيئة عند تغيير النوع
-                            group["rules"][r_idx] = {"type": new_type}
+                        # ── اختيار الأصل (قائمة مسطّحة من 17 خيار) ─────
+                        new_pk = st.selectbox(
+                            "✨ الأصل:",
+                            _PICKER_KEYS,
+                            index=_PICKER_KEYS.index(_cur_pk),
+                            format_func=lambda x: _PICKER_LABELS[x],
+                            key=f"g{g_idx}_r{r_idx}_pk",
+                            help="اختر ما تريد التصفية به مباشرة "
+                                 "(اللغة، الجنس، نسخ كوبون، …).")
+                        if new_pk != _cur_pk:
+                            # إعادة تهيئة بقيم افتراضية مناسبة للأصل الجديد
+                            group["rules"][r_idx] = _init_rule_for_picker(new_pk)
                             st.rerun()
 
-                        # render حسب النوع
-                        _RULE_TYPES[new_type][1](rule, f"g{g_idx}_r{r_idx}")
+                        # ── الواجهة المختصرة لهذا الأصل ────────────────
+                        _render_picker_rule(new_pk, rule, f"g{g_idx}_r{r_idx}")
 
                         # خيارات: نفي + حذف
                         opt_c1, opt_c2 = st.columns([3, 1])
@@ -8120,16 +8461,16 @@ elif page == "🎯 بناء الشرائح":
                 # ── إضافة شرط جديد للمجموعة ───────────────────────────────
                 _add_c1, _add_c2 = st.columns([3, 1])
                 with _add_c1:
-                    new_rule_type = st.selectbox(
-                        "نوع شرط جديد:",
-                        list(_RULE_TYPES.keys()),
-                        format_func=lambda x: _RULE_TYPES[x][0],
-                        key=f"g{g_idx}_new_type",
+                    _new_pk_add = st.selectbox(
+                        "أصل الشرط الجديد:",
+                        _PICKER_KEYS,
+                        format_func=lambda x: _PICKER_LABELS[x],
+                        key=f"g{g_idx}_new_pk",
                         label_visibility="collapsed")
                 with _add_c2:
                     if st.button("➕ أضف شرط", key=f"g{g_idx}_add_rule",
                                  width="stretch"):
-                        group["rules"].append({"type": new_rule_type})
+                        group["rules"].append(_init_rule_for_picker(_new_pk_add))
                         st.rerun()
 
         # ── إضافة مجموعة جديدة ────────────────────────────────────────────
