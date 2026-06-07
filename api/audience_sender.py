@@ -744,6 +744,50 @@ def process_due_schedules(conn, *, now_utc=None) -> list[dict]:
 # Post-send detailed reports
 # ════════════════════════════════════════════════════════════════════════════
 
+def broadcast_recipients_detail(conn, broadcast_id: int, channel: str,
+                                 limit: int = 500) -> list[dict]:
+    """تفاصيل كل مستلم على حدة — للجدول المفصّل في التقرير.
+
+    يرجّع per-recipient: اسم/يوزر/إيميل، الحالة، عدد المرات، التوقيتات بالـKSA.
+    التوقيتات تُحوَّل من UTC إلى Asia/Riyadh للعرض.
+    """
+    if channel == "telegram":
+        join_clause = (
+            "LEFT JOIN bot_users bu ON bu.telegram_id::text = br.user_identifier"
+        )
+        name_expr = "COALESCE(bu.name_en, bu.username, br.user_identifier)"
+        handle_expr = "bu.username"
+    else:
+        join_clause = (
+            "LEFT JOIN web_users wu ON wu.id::text = br.user_db_id"
+        )
+        name_expr = "COALESCE(wu.display_name, wu.email)"
+        handle_expr = "wu.telegram_username"
+
+    with conn.cursor() as cur:
+        cur.execute(
+            f"SELECT br.user_identifier AS user_id, "
+            f"       {name_expr} AS name, "
+            f"       {handle_expr} AS handle, "
+            f"       br.status, "
+            f"       br.variant, "
+            f"       br.sent_at    AT TIME ZONE 'Asia/Riyadh' AS sent_at, "
+            f"       br.opened_at  AT TIME ZONE 'Asia/Riyadh' AS opened_at, "
+            f"       br.clicked_at AT TIME ZONE 'Asia/Riyadh' AS clicked_at, "
+            f"       COALESCE(br.open_count, 0)  AS open_count, "
+            f"       COALESCE(br.click_count, 0) AS click_count, "
+            f"       br.error_message "
+            f"FROM broadcast_recipients br "
+            f"{join_clause} "
+            f"WHERE br.broadcast_id = %s AND br.broadcast_kind = %s "
+            f"ORDER BY br.click_count DESC, br.open_count DESC, br.sent_at "
+            f"LIMIT %s",
+            (broadcast_id, channel, limit),
+        )
+        cols = [c.name for c in cur.description]
+        return [dict(zip(cols, r)) for r in cur.fetchall()]
+
+
 def broadcast_report(conn, broadcast_id: int, channel: str) -> dict:
     """تقرير مفصّل لحملة: إجماليات + status + CTR + Open rate + top links."""
     table = "broadcast_logs" if channel == "telegram" else "email_logs"
@@ -817,12 +861,13 @@ def broadcast_report(conn, broadcast_id: int, channel: str) -> dict:
             }
         out["by_variant"] = by_var
 
-        # أعلى الروابط نقراً (لو في tracking)
+        # أعلى الروابط نقراً — نستبعد البوتات (user_agent يبدأ بـ[BOT])
         cur.execute(
             "SELECT lt.original_url, COUNT(c.id) AS clicks, "
             "       COUNT(DISTINCT c.recipient_id) AS unique_clickers "
             "FROM broadcast_link_targets lt "
             "LEFT JOIN broadcast_link_clicks c ON c.link_target_id = lt.id "
+            "  AND (c.user_agent IS NULL OR c.user_agent NOT LIKE '[BOT]%%') "
             "WHERE lt.broadcast_id = %s AND lt.broadcast_kind = %s "
             "GROUP BY lt.original_url ORDER BY clicks DESC LIMIT 10",
             (broadcast_id, channel))
@@ -904,4 +949,5 @@ __all__ = [
     "delete_schedule",
     "process_due_schedules",
     "broadcast_report",
+    "broadcast_recipients_detail",
 ]

@@ -8231,7 +8231,7 @@ elif page == "مركز الإشعارات":
                     _c.autocommit = True
                     hist = pd.read_sql("""
                         SELECT bl.id           AS "#",
-                               bl.sent_at      AS "وقت",
+                               (bl.sent_at AT TIME ZONE 'Asia/Riyadh')::text AS "وقت (KSA)",
                                s.name          AS "الشريحة",
                                bl.delivery_count AS "المستهدفون",
                                bl.sent_count   AS "نجح",
@@ -8395,7 +8395,7 @@ elif page == "مركز الإشعارات":
                     _c.autocommit = True
                     em_hist = pd.read_sql("""
                         SELECT el.id           AS "#",
-                               el.sent_at      AS "وقت",
+                               (el.sent_at AT TIME ZONE 'Asia/Riyadh')::text AS "وقت (KSA)",
                                s.name          AS "الشريحة",
                                el.subject      AS "العنوان",
                                el.delivery_count AS "المستهدفون",
@@ -8543,8 +8543,10 @@ elif page == "مركز الإشعارات":
                 table = "broadcast_logs" if rp_ch == "telegram" else "email_logs"
                 msg_col = "message_text" if rp_ch == "telegram" else "subject"
                 rp_df = pd.read_sql(
-                    f"SELECT id, sent_at, {msg_col} AS title, "
-                    f"delivery_count, sent_count, failed_count, status "
+                    f"SELECT id, "
+                    f"  (sent_at AT TIME ZONE 'Asia/Riyadh')::text AS sent_at, "
+                    f"  {msg_col} AS title, "
+                    f"  delivery_count, sent_count, failed_count, status "
                     f"FROM {table} ORDER BY sent_at DESC LIMIT 50", _c)
         except Exception as _e:
             rp_df = pd.DataFrame()
@@ -8637,6 +8639,53 @@ elif page == "مركز الإشعارات":
                         st.markdown("##### 🔍 عيّنة من حالات الفشل")
                         for _f in rep["failure_samples"]:
                             st.caption(f"  - `{_f['user']}` → {_f['error']}")
+
+                    # ── الجدول المفصّل: كل مستلم على حدة ──
+                    st.markdown("##### 👥 من شاف/نقر — تفاصيل كل مستلم")
+                    st.caption("لمطابقة الأحداث مع المستخدمين الحقيقيين. "
+                               "التوقيتات بتوقيت الرياض. النقرات الوهمية "
+                               "(Telegram preview bot) مُستبعدة تلقائياً.")
+                    try:
+                        with get_conn() as _c_det:
+                            _c_det.autocommit = True
+                            details = _send_nc.broadcast_recipients_detail(
+                                _c_det, rp_sel[0], rp_ch, limit=500)
+                        if details:
+                            _df = pd.DataFrame(details)
+                            # تنسيق التوقيتات
+                            for _tc in ("sent_at", "opened_at", "clicked_at"):
+                                if _tc in _df.columns:
+                                    _df[_tc] = pd.to_datetime(_df[_tc]).dt.strftime(
+                                        "%Y-%m-%d %H:%M:%S")
+                                    _df[_tc] = _df[_tc].replace("NaT", "—").fillna("—")
+                            _stat_map = {"queued":"⏳","sending":"📤","sent":"✅",
+                                         "failed":"❌","opened":"📬","clicked":"🖱️",
+                                         "skipped":"⏭️"}
+                            _df["status"] = _df["status"].map(_stat_map).fillna(
+                                _df["status"])
+                            _df = _df.rename(columns={
+                                "user_id":"المعرّف", "name":"الاسم",
+                                "handle":"اليوزر", "status":"الحالة",
+                                "variant":"النسخة",
+                                "sent_at":"وقت الإرسال (KSA)",
+                                "opened_at":"وقت الفتح (KSA)",
+                                "clicked_at":"وقت النقر (KSA)",
+                                "open_count":"مرّات فتح", "click_count":"مرّات نقر",
+                                "error_message":"خطأ",
+                            })
+                            # نخفي أعمدة فارغة (variant لو ما في A/B)
+                            _drop = []
+                            if "النسخة" in _df.columns and _df["النسخة"].isna().all():
+                                _drop.append("النسخة")
+                            if "خطأ" in _df.columns and _df["خطأ"].isna().all():
+                                _drop.append("خطأ")
+                            if _drop:
+                                _df = _df.drop(columns=_drop)
+                            st.dataframe(_df, hide_index=True, width="stretch")
+                        else:
+                            st.info("لا مستلمين بعد.")
+                    except Exception as _e:
+                        st.error(f"تعذّر تحميل التفاصيل: {_e}")
 
     # ═══════════════════════════════════════════════════════════════════════
     # تبويب 5 — قائمة الاستثناء (Don't-Send List)
