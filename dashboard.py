@@ -6223,7 +6223,7 @@ elif page == "تحليل المستخدمين":
                         )
                         _filter_desc = (
                             f"شريحة محوّلة من فلاتر تحليل المستخدمين "
-                            f"({len(_rules_from_filters.get('groups',[{}])[0].get('rules',[]))} قاعدة)"
+                            f"({len(_rules_from_filters.get('groups',[{}])[0].get('rules',[]))} شرط)"
                         )
                         with get_conn() as _c_save:
                             _c_save.autocommit = True
@@ -7774,19 +7774,22 @@ elif page == "🎯 بناء الشرائح":
                 index=ths.index(rule.get("threshold_type","absolute")) if rule.get("threshold_type") in ths else 0,
                 format_func=lambda x: _THRESHOLD_LABELS[x], key=f"{key}_tt")
         with c3:
+            def _safe_int(v, default):
+                try: return int(v if v not in (None, "") else default)
+                except (ValueError, TypeError): return default
             if rule["threshold_type"] == "absolute":
                 ops = ["=","!=","<",">","<=",">="]
                 rule["op"] = st.selectbox("العملية", ops,
                     index=ops.index(rule.get("op",">=")) if rule.get("op") in ops else 5,
                     format_func=lambda x: _OPS_LABELS[x], key=f"{key}_op")
                 rule["value"] = st.number_input("العدد", min_value=0,
-                    value=int(rule.get("value", 3) or 3), key=f"{key}_v")
+                    value=_safe_int(rule.get("value"), 3), key=f"{key}_v")
             elif rule["threshold_type"] in ("percentile_top","percentile_bot"):
                 rule["value"] = st.number_input("النسبة %", min_value=1, max_value=100,
-                    value=int(rule.get("value", 10) or 10), key=f"{key}_v")
+                    value=_safe_int(rule.get("value"), 10), key=f"{key}_v")
             elif rule["threshold_type"] == "top_n":
                 rule["value"] = st.number_input("عدد الأشخاص N", min_value=1,
-                    value=int(rule.get("value", 100) or 100), key=f"{key}_v")
+                    value=_safe_int(rule.get("value"), 100), key=f"{key}_v")
             else:
                 st.caption("بدون قيمة (المقارنة بالمتوسط)")
             _render_window_picker(rule, f"{key}_w")
@@ -7808,8 +7811,10 @@ elif page == "🎯 بناء الشرائح":
                 format_func=lambda x: "خلال آخر" if x==">=" else "قبل أكثر من",
                 key=f"{key}_op")
         with c3:
+            try: _days = int(rule.get("value_days") or 7)
+            except (ValueError, TypeError): _days = 7
             rule["value_days"] = st.number_input("عدد الأيام", min_value=0, max_value=3650,
-                value=int(rule.get("value_days", 7) or 7), key=f"{key}_d")
+                value=_days, key=f"{key}_d")
 
     def _render_window_picker(rule: dict, key: str):
         """مختار النافذة الزمنية المشترك بين event و aggregate."""
@@ -7874,7 +7879,7 @@ elif page == "🎯 بناء الشرائح":
                     group["logic"] = st.selectbox(
                         "منطق داخلي", ["and","or"],
                         index=["and","or"].index(group.get("logic","and")),
-                        format_func=lambda x: "🔗 كل القواعد" if x=="and" else "🔀 أي قاعدة",
+                        format_func=lambda x: "🔗 كل الشروط" if x=="and" else "🔀 أي شرط",
                         key=f"g{g_idx}_logic", label_visibility="collapsed")
                 with _gh3:
                     if (len(st.session_state.seg_rules["groups"]) > 1
@@ -7888,13 +7893,13 @@ elif page == "🎯 بناء الشرائح":
                 for r_idx, rule in enumerate(group["rules"]):
                     with st.expander(
                         f"{_RULE_TYPES.get(rule.get('type','attribute'),(rule.get('type'),))[0]} "
-                        f"— قاعدة {r_idx+1}{'  🚫 (نفي)' if rule.get('negate') else ''}",
+                        f"— شرط {r_idx+1}{'  🚫 (نفي)' if rule.get('negate') else ''}",
                         expanded=True,
                     ):
                         # تغيير النوع
                         types = list(_RULE_TYPES.keys())
                         new_type = st.selectbox(
-                            "نوع القاعدة", types,
+                            "نوع الشرط", types,
                             index=types.index(rule.get("type","attribute")) if rule.get("type") in types else 0,
                             format_func=lambda x: _RULE_TYPES[x][0],
                             key=f"g{g_idx}_r{r_idx}_type")
@@ -7914,23 +7919,23 @@ elif page == "🎯 بناء الشرائح":
                                 value=bool(rule.get("negate")),
                                 key=f"g{g_idx}_r{r_idx}_neg")
                         with opt_c2:
-                            if st.button("🗑️ احذف القاعدة",
+                            if st.button("🗑️ احذف الشرط",
                                          key=f"g{g_idx}_r{r_idx}_del",
                                          width="stretch"):
                                 group["rules"].pop(r_idx)
                                 st.rerun()
 
-                # ── إضافة قاعدة جديدة للمجموعة ────────────────────────────
+                # ── إضافة شرط جديد للمجموعة ───────────────────────────────
                 _add_c1, _add_c2 = st.columns([3, 1])
                 with _add_c1:
                     new_rule_type = st.selectbox(
-                        "نوع قاعدة جديدة:",
+                        "نوع شرط جديد:",
                         list(_RULE_TYPES.keys()),
                         format_func=lambda x: _RULE_TYPES[x][0],
                         key=f"g{g_idx}_new_type",
                         label_visibility="collapsed")
                 with _add_c2:
-                    if st.button("➕ أضف قاعدة", key=f"g{g_idx}_add_rule",
+                    if st.button("➕ أضف شرط", key=f"g{g_idx}_add_rule",
                                  width="stretch"):
                         group["rules"].append({"type": new_rule_type})
                         st.rerun()
@@ -7990,7 +7995,7 @@ elif page == "🎯 بناء الشرائح":
                                  "المدينة":  st.column_config.TextColumn(width="small"),
                              })
             else:
-                st.info("لا مطابقين بعد. عدّل القواعد.")
+                st.info("لا مطابقين بعد. عدّل الشروط.")
         except Exception as _e:
             st.warning(f"تعذّرت المعاينة: {_e}")
 
@@ -8061,7 +8066,7 @@ elif page == "🎯 بناء الشرائح":
                     st.warning(f"تعذّر تحميل السجل: {_e}")
 
         # ── JSON للمطوّر (debug/تصدير) ─────────────────────────────────────
-        with st.expander("🔧 JSON للقواعد (متقدّم)"):
+        with st.expander("🔧 JSON للشروط (متقدّم)"):
             _json_str = json.dumps(st.session_state.seg_rules,
                                    ensure_ascii=False, indent=2)
             # نُجبر LTR لعرض الـJSON بشكل قابل للقراءة (الـRTL يقلبه)
