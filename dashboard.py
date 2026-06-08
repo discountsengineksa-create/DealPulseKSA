@@ -9554,7 +9554,7 @@ elif page == "لوحة القيادة":
     interval = _c2.selectbox("التحديث", [5, 10, 30],
                              format_func=lambda x: f"كل {x} ثانية",
                              index=1, key="cmd_interval")
-    limit = _c3.slider("عدد الأحداث", 50, 1000, 200, step=50, key="cmd_limit")
+    limit = _c3.slider("عدد الأحداث (للعرض)", 50, 1000, 200, step=50, key="cmd_limit")
     show_sys = _c4.checkbox("إظهار أحداث النظام (خمول/جلسات)",
                             value=False, key="cmd_show_sys")
 
@@ -9656,8 +9656,8 @@ elif page == "لوحة القيادة":
                         WHERE r.source IN ('bot','telegram_miniapp')
                           AND (r.created_at {_KSA})::date BETWEEN %s AND %s
                     ) q
-                    ORDER BY ts DESC LIMIT %s
-                """, conn, params=(acts, d_from, d_to, d_from, d_to, limit))
+                    ORDER BY ts DESC LIMIT 50000
+                """, conn, params=(acts, d_from, d_to, d_from, d_to))
 
                 if df.empty:
                     st.info("📭 لا توجد حركات في هذه الفترة.")
@@ -9679,13 +9679,14 @@ elif page == "لوحة القيادة":
                         "المتجر / القسم": df.apply(lambda r: _target(r["store_id"], r["details"]), axis=1),
                         "التفاصيل": df["details"].map(_clean_detail),
                     })
-                    st.caption(f"عدد الأحداث المعروضة: {len(show)}")
-                    st.dataframe(show, width="stretch", hide_index=True, height=460)
+                    st.caption(f"📊 المعروض على الشاشة: {min(len(show), limit)} من {len(show)} "
+                               f"حدث في الفترة · زر التحميل يشمل كامل الفترة")
+                    st.dataframe(show.head(limit), width="stretch", hide_index=True, height=460)
                     _xl = BytesIO()
                     with pd.ExcelWriter(_xl, engine="xlsxwriter") as _w:
                         show.to_excel(_w, index=False, sheet_name="Bot_Live")
                     st.download_button(
-                        "📥 تحميل الفترة (Excel)", _xl.getvalue(),
+                        f"📥 تحميل كامل الفترة ({len(show)} حدث) — Excel", _xl.getvalue(),
                         f"LiveFeed_Bot_{d_from}_to_{d_to}.xlsx", key="dl_bot_live")
 
             # ════════════════ تبويب الموقع ════════════════
@@ -9737,8 +9738,8 @@ elif page == "لوحة القيادة":
                         WHERE r.source='web'
                           AND (r.created_at {_KSA})::date BETWEEN %s AND %s
                     ) q
-                    ORDER BY ts DESC LIMIT %s
-                """, conn, params=(acts, d_from, d_to, d_from, d_to, limit))
+                    ORDER BY ts DESC LIMIT 50000
+                """, conn, params=(acts, d_from, d_to, d_from, d_to))
 
                 if dfw.empty:
                     st.info("📭 لا توجد حركات في هذه الفترة.")
@@ -9753,17 +9754,18 @@ elif page == "لوحة القيادة":
                         "المتجر / القسم": dfw.apply(lambda r: _target(r["store_id"], r["details"]), axis=1),
                         "التفاصيل": dfw["details"].map(_clean_detail),
                     })
-                    st.caption(f"عدد الأحداث المعروضة: {len(showw)}")
-                    st.dataframe(showw, width="stretch", hide_index=True, height=460)
+                    st.caption(f"📊 المعروض على الشاشة: {min(len(showw), limit)} من {len(showw)} "
+                               f"حدث في الفترة · زر التحميل يشمل كامل الفترة")
+                    st.dataframe(showw.head(limit), width="stretch", hide_index=True, height=460)
                     _xlw = BytesIO()
                     with pd.ExcelWriter(_xlw, engine="xlsxwriter") as _w:
                         showw.to_excel(_w, index=False, sheet_name="Web_Live")
                     st.download_button(
-                        "📥 تحميل الفترة (Excel)", _xlw.getvalue(),
+                        f"📥 تحميل كامل الفترة ({len(showw)} حدث) — Excel", _xlw.getvalue(),
                         f"LiveFeed_Web_{d_from}_to_{d_to}.xlsx", key="dl_web_live")
 
-            _stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            st.caption(f"⏱️ آخر تحديث: {_stamp}"
+            _stamp = (datetime.datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d %H:%M:%S")
+            st.caption(f"⏱️ آخر تحديث: {_stamp} (توقيت السعودية)"
                        + ("  ·  🔴 بث مباشر" if live else "  ·  ⏸️ متوقف"))
         except Exception as e:
             st.error(f"حدث خطأ فني: {e}")
