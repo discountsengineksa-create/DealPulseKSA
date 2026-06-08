@@ -10040,10 +10040,35 @@ elif page == "استوديو المحتوى":
         sh = sh.filter(ImageFilter.GaussianBlur(blur))
         img.paste(sh, (0, 0), sh)
 
+    def _smart_crop_logo(img: Image.Image, white_threshold: int = 245) -> Image.Image:
+        """يقص الـ whitespace/الشفافية حول اللوقو — يخلّيه يملأ الكارت."""
+        img = img.convert("RGBA")
+        # محاولة 1: bbox للـ alpha (PNG شفاف)
+        alpha = img.split()[-1]
+        bbox = alpha.getbbox()
+        full = (
+            bbox is not None
+            and bbox[2] - bbox[0] >= img.width * 0.97
+            and bbox[3] - bbox[1] >= img.height * 0.97
+        )
+        if bbox is not None and not full:
+            return img.crop(bbox)
+        # محاولة 2: خلفية بيضاء/فاتحة — نقص حسب البكسلات غير البيضاء
+        try:
+            gray = img.convert("RGB").convert("L")
+            mask = gray.point(lambda p: 255 if p < white_threshold else 0)
+            bbox2 = mask.getbbox()
+            if bbox2 is not None:
+                return img.crop(bbox2)
+        except Exception:
+            pass
+        return img
+
     def _fit_logo(logo_bytes: bytes, box_w: int, box_h: int) -> Image.Image | None:
-        """يفتح اللوقو ويصغّره/يكبّره ليناسب الصندوق مع الحفاظ على النسبة + شفافية."""
+        """يفتح اللوقو، يقص حوافه الفارغة، ويصغّره ليملأ الصندوق."""
         try:
             lg = Image.open(io.BytesIO(logo_bytes)).convert("RGBA")
+            lg = _smart_crop_logo(lg)
             lg.thumbnail((box_w, box_h), Image.LANCZOS)
             return lg
         except Exception:
@@ -10101,9 +10126,10 @@ elif page == "استوديو المحتوى":
             radius=40, outline=(225, 230, 225, 255), width=2,
         )
 
-        # لوقو المتجر داخل الكارت (إن وُجد) — يملأ المستطيل الداخلي بأكبر حجم
+        # لوقو المتجر داخل الكارت — حجم موحّد لكل المتاجر، الكارت يبقى أبيض
+        # حتى لو اللوقو خلفيته ملوّنة (نون أصفر، مثلاً) يبقى padding حول اللوقو
         if store_logo_bytes:
-            inner_pad = 40  # padding بسيط فقط — اللوقو هو البطل
+            inner_pad = 90  # padding كبير = حجم لوقو ثابت ≈ 260×260 لكل المتاجر
             logo = _fit_logo(store_logo_bytes, card_w - 2 * inner_pad, card_h - 2 * inner_pad)
             if logo is not None:
                 lx = card_x + (card_w - logo.width) // 2
