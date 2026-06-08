@@ -119,6 +119,29 @@ class ReportCodeResponse(BaseModel):
     )
 
 
+# ─── رسائل الدعم الفني (Migration 039) ──────────────────────────────────────
+class SupportRequest(BaseModel):
+    """رسالة دعم من العميل (الميني-ويب/الموقع/البوت).
+
+    شروط الهوية:
+      - telegram_miniapp / bot : tg_user_id ملزم.
+      - web                    : web_user_id أو contact_email (أحدهما على الأقل).
+    """
+    source:        Literal["web", "telegram_miniapp", "bot"]
+    message:       str = Field(..., min_length=1, max_length=2000)
+    tg_user_id:    Optional[int] = Field(None, ge=1, description="telegram_id للبوت/الميني")
+    username:      Optional[str] = Field(None, max_length=100)
+    web_user_id:   Optional[int] = Field(None, ge=1, description="web_users.id للموقع")
+    contact_name:  Optional[str] = Field(None, max_length=200)
+    contact_email: Optional[str] = Field(None, max_length=200)
+    contact_phone: Optional[str] = Field(None, max_length=40)
+
+
+class SupportResponse(BaseModel):
+    ok: bool
+    ticket_id: int
+
+
 # ─── فتح ستوري (Migration 029) ─────────────────────────────────────────────
 class StoryViewRequest(BaseModel):
     """تسجيل فتحة ستوري لمسجّل فقط.

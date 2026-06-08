@@ -310,6 +310,16 @@ TEXTS = {
                           'en': '✅ Your request has been saved! We will try to provide the code soon.'},
     'request_err':       {'ar': '⚠️ تعذّر تسجيل الطلب الآن. حاول مرة ثانية.',
                           'en': '⚠️ Could not save the request now. Please try again.'},
+    'menu_support':      {'ar': '🆘 الدعم الفني',       'en': '🆘 Support'},
+    'support_prompt':    {'ar': '🆘 اكتب رسالتك للدعم (مشكلتك أو استفسارك)، وفريقنا بيرد عليك هنا في أقرب وقت.',
+                          'en': '🆘 Write your message to support (your issue or question), and our team will reply to you here soon.'},
+    'support_empty':     {'ar': '⚠️ ما استلمت رسالتك. اكتب مشكلتك وحاول مرة ثانية.',
+                          'en': '⚠️ No message received. Please type your issue and try again.'},
+    'support_saved':     {'ar': '✅ وصلتنا رسالتك! فريق الدعم بيتواصل معك هنا قريباً. 🙏',
+                          'en': '✅ We received your message! Support will get back to you here soon. 🙏'},
+    'support_err':       {'ar': '⚠️ تعذّر إرسال رسالتك الآن. حاول مرة ثانية بعد لحظات.',
+                          'en': '⚠️ Could not send your message now. Please try again shortly.'},
+    'support_reply_hdr': {'ar': '🆘 *رد فريق الدعم:*',  'en': '🆘 *Support team reply:*'},
     'back_msg':          {'ar': '🏠 رجعناك للقائمة الرئيسية.',
                           'en': '🏠 Back to the main menu.'},
     'tag_header':        {'ar': '📂 متاجر قسم: *{tag}*',
@@ -722,6 +732,7 @@ def _kb_main(lang):
         types.InlineKeyboardButton(TEXTS['menu_request'][lang], callback_data='nav:request'),
     )
     kb.add(types.InlineKeyboardButton(TEXTS['menu_favorites'][lang], callback_data='nav:favs'))
+    kb.add(types.InlineKeyboardButton(TEXTS['menu_support'][lang], callback_data='nav:support'))
     kb.add(types.InlineKeyboardButton(TEXTS['menu_end'][lang], callback_data='nav:end'))
     return kb
 
@@ -1252,6 +1263,38 @@ def _process_request(message):
         _edit_nav(user_id, t(user_id, 'request_err'), _kb_cancel(lang))
 
 
+def _process_support(message):
+    """يلتقط رسالة الدعم من المستخدم ويحفظها في support_tickets (source='bot').
+    الأدمن يرى الرسالة في «مركز الدعم» بالداشبورد ويرد، ويُسلَّم الرد عبر البوت."""
+    user_id  = message.from_user.id
+    lang     = get_lang(user_id)
+    username = message.from_user.username or ""
+    text     = (message.text or "").strip()
+    try:
+        bot.delete_message(message.chat.id, message.message_id)
+    except Exception:
+        pass
+    if not text:
+        _edit_nav(user_id, t(user_id, 'support_empty'), _kb_cancel(lang))
+        return
+    try:
+        conn = get_db_connection()
+        cur  = conn.cursor()
+        cur.execute("""
+            INSERT INTO support_tickets
+                (source, telegram_id, username, message, status, created_at)
+            VALUES ('bot', %s, %s, %s, 'open', NOW())
+        """, (user_id, username, text))
+        conn.commit()
+        release_conn(conn)
+        log_action(None, 'support_msg', user_id=user_id, details=text[:120])
+        _update_nav(user_id, state='menu')
+        _edit_nav(user_id, t(user_id, 'support_saved'), _kb_main(lang))
+    except Exception as e:
+        print(f"⚠️ _process_support: {e}")
+        _edit_nav(user_id, t(user_id, 'support_err'), _kb_cancel(lang))
+
+
 # ============================================================
 #  Lang Picker + Welcome Image
 # ============================================================
@@ -1442,6 +1485,8 @@ def handle_text(message):
         _process_search(message)
     elif state == 'request':
         _process_request(message)
+    elif state == 'support':
+        _process_support(message)
     elif message.text.strip():
         # نص عادي بدون حالة بحث → بحث مباشر تلقائي
         if not nav.get('msg_id'):
@@ -1561,6 +1606,10 @@ def handle_nav(call):
     elif action == 'request':
         _update_nav(user_id, state='request')
         _edit_nav(user_id, t(user_id, 'request_prompt'), _kb_cancel(lang))
+
+    elif action == 'support':
+        _update_nav(user_id, state='support')
+        _edit_nav(user_id, t(user_id, 'support_prompt'), _kb_cancel(lang))
 
     elif action == 'favs':
         _load_favorites(user_id, lang)

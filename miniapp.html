@@ -166,6 +166,7 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
     </div>
     <div style="display:flex;gap:6px;align-items:center">
       <button class="glass" id="langBtn" title="Language" style="padding:8px 10px; border-radius:10px; color:var(--em); border:none; font-weight:800; font-size:11px;" onclick="toggleLang()">EN</button>
+      <button class="glass" id="supportBtn" title="الدعم" style="padding:8px 10px; border-radius:10px; color:var(--t2); border:none; font-size:14px;" onclick="openSupport()">🆘</button>
       <button class="glass" id="refreshBtn" style="padding:8px 12px; border-radius:10px; color:var(--t2); border:none;" onclick="refreshData()">تحديث</button>
     </div>
   </div>
@@ -427,6 +428,16 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
   </div>
 </div>
 
+<!-- ═══ نافذة الدعم الفني (bottom sheet) ═══ -->
+<div id="supOverlay" class="overlay" role="dialog" aria-modal="true" onclick="if(event.target===this)closeSupport()">
+  <div class="sheet">
+    <h2 id="supTitle" style="font-size:18px;font-weight:800;margin:0 0 4px;color:var(--t1)">🆘 الدعم الفني</h2>
+    <p id="supSub" style="font-size:13px;color:var(--t2);margin:0 0 14px">اكتب مشكلتك أو استفسارك وفريقنا بيرد عليك هنا.</p>
+    <textarea id="supText" rows="4" placeholder="اكتب رسالتك..." style="width:100%;padding:14px;border-radius:14px;background:var(--bg);color:var(--t1);border:1px solid var(--border);font-size:15px;font-family:inherit;resize:vertical;box-sizing:border-box"></textarea>
+    <button id="supSend" class="btn-p" style="margin-top:12px" onclick="submitSupport()">إرسال</button>
+  </div>
+</div>
+
 <script>
 // ── Telegram WebApp integration (ready/expand/theme) ─────────────────────
 const tg = window.Telegram && window.Telegram.WebApp;
@@ -504,6 +515,14 @@ const STRINGS = {
     reportCodeSent:  '✅ تم الإبلاغ بنجاح — سنراجع الكود فوراً',
     reportCodeFail:  '❌ تعذّر إرسال البلاغ، حاول لاحقاً',
     reportCodeAuth:  'افتح البوت أولاً ثم ارجع للإبلاغ',
+    supTitle:        '🆘 الدعم الفني',
+    supSub:          'اكتب مشكلتك أو استفسارك وفريقنا بيرد عليك هنا.',
+    supPlaceholder:  'اكتب رسالتك...',
+    supSend:         'إرسال',
+    supSent:         '✅ وصلتنا رسالتك — بنتواصل معك قريباً',
+    supFail:         '❌ تعذّر الإرسال، حاول لاحقاً',
+    supEmpty:        'اكتب رسالتك أولاً',
+    supAuth:         'افتح البوت أولاً ثم ارجع للدعم',
   },
   en: {
     brand:           'Deal Pulse',
@@ -562,6 +581,14 @@ const STRINGS = {
     reportCodeSent:  '✅ Reported — we will review the code right away',
     reportCodeFail:  '❌ Could not send the report, try again later',
     reportCodeAuth:  'Open the bot first then come back to report',
+    supTitle:        '🆘 Support',
+    supSub:          'Write your issue or question and our team will reply to you here.',
+    supPlaceholder:  'Type your message...',
+    supSend:         'Send',
+    supSent:         '✅ We got your message — we will reach out soon',
+    supFail:         '❌ Could not send, try again later',
+    supEmpty:        'Write your message first',
+    supAuth:         'Open the bot first then come back to support',
   }
 };
 // LANG_OVERRIDE من localStorage يهيمن على Telegram language_code
@@ -1398,6 +1425,48 @@ async function reportCodeMiniapp(store_id, ev) {
         showToast(res.ok ? ST.reportCodeSent : ST.reportCodeFail);
     } catch (e) {
         showToast(ST.reportCodeFail);
+    }
+}
+
+// ═══ الدعم الفني — يفتح bottom sheet ويرسل لـ /track/support ═══
+function openSupport() {
+    const ST = STRINGS[LANG_CURRENT];
+    document.getElementById('supTitle').textContent = ST.supTitle;
+    document.getElementById('supSub').textContent = ST.supSub;
+    const ta = document.getElementById('supText');
+    ta.placeholder = ST.supPlaceholder;
+    ta.value = '';
+    document.getElementById('supSend').textContent = ST.supSend;
+    document.getElementById('supOverlay').classList.add('on');
+    setTimeout(() => ta.focus(), 300);
+}
+function closeSupport() {
+    document.getElementById('supOverlay').classList.remove('on');
+}
+async function submitSupport() {
+    const ST = STRINGS[LANG_CURRENT];
+    if (!tgUserId) { showToast(ST.supAuth); return; }
+    const msg = (document.getElementById('supText').value || '').trim();
+    if (!msg) { showToast(ST.supEmpty); return; }
+    const btn = document.getElementById('supSend');
+    btn.disabled = true;
+    try {
+        const res = await fetch(`${API_BASE}/track/support`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                source: 'telegram_miniapp',
+                message: msg,
+                tg_user_id: tgUserId,
+                username: (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.username) || null
+            })
+        });
+        if (res.ok) { closeSupport(); showToast(ST.supSent); }
+        else showToast(ST.supFail);
+    } catch (e) {
+        showToast(ST.supFail);
+    } finally {
+        btn.disabled = false;
     }
 }
 

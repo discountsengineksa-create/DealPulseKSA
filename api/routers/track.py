@@ -12,6 +12,7 @@ from api.schemas.track import (
     ReportCodeRequest, ReportCodeResponse,
     StoryViewRequest, StoryViewResponse,
     SetLangRequest, SetLangResponse,
+    SupportRequest, SupportResponse,
 )
 from api.utils.geo_extractor import extract as extract_geo
 from api.utils.fraud_scoring import compute_quality_score
@@ -368,6 +369,57 @@ def report_code_issue(payload: ReportCodeRequest, request: Request, conn=Depends
     return ReportCodeResponse(
         ok=True, report_id=result["report_id"], auto_suspended=result["auto_suspended"],
     )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# رسالة دعم فني (Migration 039) — من الميني-ويب/الموقع. الردّ يُسلَّم من الداشبورد.
+# ════════════════════════════════════════════════════════════════════════════
+@router.post("/support", response_model=SupportResponse, status_code=201)
+@limiter.limit(LIMIT_TRACK_REQUEST_CODE)
+def submit_support(payload: SupportRequest, request: Request, conn=Depends(get_db)):
+    """يحفظ رسالة دعم في support_tickets (status='open').
+
+    يظهر للأدمن في «مركز الدعم» بالداشبورد، ويرد عبر تلجرام.
+    للموقع: نملأ snapshot الاسم/الإيميل/الجوال من web_users إن لم تُرسَل.
+    """
+    msg = payload.message.strip()
+    if not msg:
+        raise HTTPException(400, "message cannot be empty")
+    if payload.source in ("telegram_miniapp", "bot") and not payload.tg_user_id:
+        raise HTTPException(400, f"tg_user_id is required for source='{payload.source}'")
+    if payload.source == "web" and not (payload.web_user_id or payload.contact_email):
+        raise HTTPException(400, "web requires web_user_id or contact_email")
+
+    name  = payload.contact_name
+    email = payload.contact_email
+    phone = payload.contact_phone
+    with conn.cursor() as cur:
+        # snapshot هوية الموقع من web_users لو ما وصلت من الواجهة
+        if payload.source == "web" and payload.web_user_id:
+            cur.execute(
+                "SELECT display_name, email, phone_number FROM web_users WHERE id=%s",
+                (payload.web_user_id,))
+            wu = cur.fetchone()
+            if wu:
+                name  = name  or wu[0]
+                email = email or wu[1]
+                phone = phone or wu[2]
+
+        cur.execute(
+            """
+            INSERT INTO support_tickets
+                (source, telegram_id, username, web_user_id,
+                 contact_name, contact_email, contact_phone,
+                 message, status, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'open', NOW())
+            RETURNING id
+            """,
+            (payload.source, payload.tg_user_id, payload.username, payload.web_user_id,
+             name, email, phone, msg),
+        )
+        ticket_id = cur.fetchone()[0]
+
+    return SupportResponse(ok=True, ticket_id=ticket_id)
 
 
 # ════════════════════════════════════════════════════════════════════════════

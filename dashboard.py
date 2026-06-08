@@ -9783,8 +9783,27 @@ elif page == "لوحة القيادة":
 
 # --- الصفحة الثامنة عشرة: مركز الدعم الفني ---
 elif page == "مركز الدعم":
-    page_title("🎧", "مركز إدارة الدعم الفني")
-    st.info("استقبل رسائل العملاء من البوت ورد عليهم مباشرة لتحسين تجربة المستخدم.")
+    page_title("🎧", "مركز إدارة الدعم الفني",
+               "رسائل العملاء من البوت والميني والموقع — ردّك يُسلَّم لهم عبر تلجرام")
+
+    _SUP_SRC = {"bot": "📱 بوت", "telegram_miniapp": "🔹 ميني", "web": "🌐 موقع"}
+    _BOT_TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
+
+    def _tg_send(chat_id, text):
+        """يسلّم رد الدعم للمستخدم عبر Telegram Bot API مباشرة."""
+        if not _BOT_TOKEN:
+            return False, "BOT_TOKEN غير مضبوط في بيئة الداشبورد"
+        try:
+            r = requests.post(
+                f"https://api.telegram.org/bot{_BOT_TOKEN}/sendMessage",
+                json={"chat_id": int(chat_id),
+                      "text": f"🆘 *رد فريق الدعم:*\n\n{text}",
+                      "parse_mode": "Markdown"},
+                timeout=10)
+            j = r.json()
+            return (True, "تم") if j.get("ok") else (False, j.get("description", "فشل"))
+        except Exception as ex:
+            return False, str(ex)
 
     tab_inbox, tab_resolved = st.tabs(["📥 الرسائل الواردة", "✅ رسائل تم حلها"])
 
@@ -9792,57 +9811,120 @@ elif page == "مركز الدعم":
     try:
         conn = get_conn()
         cur = conn.cursor()
-        # التنظيف لضمان عدم وجود عمليات معلقة
         cur.execute("ROLLBACK")
 
         with tab_inbox:
-            st.subheader("📬 طلبات المساعدة الجديدة")
-            
-            # جلب البيانات بأسماء أعمدة إنجليزية لتجنب أخطاء PostgreSQL
-            query_open = "SELECT id, created_at, username, message FROM support_tickets WHERE status = 'open' ORDER BY created_at DESC"
-            df_open = pd.read_sql(query_open, conn)
-            
-            if not df_open.empty:
-                # تعريب الأعمدة هنا
-                df_display = df_open.copy()
-                df_display.columns = ['المعرف', 'التاريخ', 'المستخدم', 'الرسالة']
-                st.dataframe(df_display.drop(columns=['المعرف']), width='stretch')
-                
-                st.divider()
-                st.subheader("💬 الرد وإغلاق التذكرة")
-                
-                col_sel, col_btn = st.columns([2, 1])
-                with col_sel:
-                    # نستخدم قائمة المستخدمين من البيانات المجلوبة
-                    ticket_to_solve = st.selectbox("اختر تذكرة للرد عليها:", df_open["username"], key="open_tickets")
-                    reply_text = st.text_area(f"اكتب ردك لـ {ticket_to_solve}:", placeholder="أهلاً بك، تم تحديث الكود...")
-                
-                with col_btn:
-                    st.write("##") # موازنة المسافة
-                    if st.button("📧 إرسال الرد وإغلاق الطلب", width='stretch'):
-                        if reply_text:
-                            # تحديث حالة الرسالة في القاعدة
-                            cur.execute("UPDATE support_tickets SET status = 'resolved' WHERE username = %s AND status = 'open'", (ticket_to_solve,))
-                            conn.commit()
-                            st.success(f"تم الرد على {ticket_to_solve} ونقل الرسالة للأرشيف.")
-                            st.balloons()
-                            st.rerun()
-                        else:
-                            st.error("يا برنس اكتب الرد أولاً!")
+            df_open = pd.read_sql("""
+                SELECT id,
+                       (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Riyadh') AS ts,
+                       COALESCE(source,'bot') AS source, telegram_id, username,
+                       contact_name, contact_email, contact_phone, message
+                FROM support_tickets
+                WHERE status = 'open'
+                ORDER BY created_at DESC
+            """, conn)
+
+            st.subheader(f"📬 طلبات مفتوحة ({len(df_open)})")
+            if df_open.empty:
+                st.success("🎉 لا توجد طلبات دعم معلقة.")
             else:
-                st.success("🎉 مبروك! لا توجد طلبات مساعدة معلقة.")
+                def _ident(r):
+                    if isinstance(r["username"], str) and r["username"].strip():
+                        return "@" + r["username"]
+                    if isinstance(r["contact_name"], str) and r["contact_name"].strip():
+                        return r["contact_name"]
+                    if isinstance(r["contact_email"], str) and r["contact_email"].strip():
+                        return r["contact_email"]
+                    if pd.notna(r["telegram_id"]):
+                        return f"تيليجرام #{int(r['telegram_id'])}"
+                    return "— مجهول —"
+
+                _view = pd.DataFrame({
+                    "#": df_open["id"],
+                    "الوقت": pd.to_datetime(df_open["ts"]).dt.strftime("%Y-%m-%d %H:%M"),
+                    "المصدر": df_open["source"].map(_SUP_SRC).fillna(df_open["source"]),
+                    "المُرسِل": df_open.apply(_ident, axis=1),
+                    "الإيميل": df_open["contact_email"].fillna("—"),
+                    "الجوال": df_open["contact_phone"].fillna("—"),
+                    "الرسالة": df_open["message"],
+                })
+                st.dataframe(_view, width="stretch", hide_index=True, height=300)
+
+                st.divider()
+                st.subheader("💬 الرد على تذكرة")
+                _ids = df_open["id"].tolist()
+                sel_id = st.selectbox(
+                    "اختر تذكرة (بالرقم):", _ids, key="sup_pick",
+                    format_func=lambda i: f"#{i} · "
+                        + _ident(df_open[df_open['id'] == i].iloc[0]))
+                row = df_open[df_open["id"] == sel_id].iloc[0]
+
+                # بطاقة هوية المُرسِل — أهم شي: يوزره/إيميله للتدقيق على عملياته
+                ic1, ic2, ic3 = st.columns(3)
+                ic1.metric("المصدر", _SUP_SRC.get(row["source"], row["source"]))
+                ic2.metric("اليوزر/الاسم", _ident(row))
+                _tgid = int(row["telegram_id"]) if pd.notna(row["telegram_id"]) else None
+                ic3.metric("Telegram ID", str(_tgid) if _tgid else "—")
+                _em = row["contact_email"] if isinstance(row["contact_email"], str) else None
+                if _em:
+                    st.caption(f"📧 {_em}" + (f"  ·  📱 {row['contact_phone']}"
+                               if isinstance(row['contact_phone'], str) else ""))
+                st.info(f"**رسالة العميل:**\n\n{row['message']}")
+
+                reply_text = st.text_area("اكتب ردك:", key="sup_reply",
+                                          placeholder="أهلاً بك، بخصوص استفسارك...")
+                can_tg = _tgid is not None
+                if not can_tg:
+                    st.warning("⚠️ هذه التذكرة من الموقع بلا حساب تلجرام — "
+                               "الرد لن يُسلَّم تلقائياً؛ تواصل عبر الإيميل أعلاه، "
+                               "وسيُحفظ ردك ويُغلق الطلب.")
+
+                if st.button("📨 إرسال الرد وإغلاق الطلب", width="stretch", key="sup_send"):
+                    if not reply_text.strip():
+                        st.error("اكتب الرد أولاً.")
+                    else:
+                        delivered, msg = (False, "—")
+                        if can_tg:
+                            delivered, msg = _tg_send(_tgid, reply_text.strip())
+                        cur.execute("""
+                            UPDATE support_tickets
+                            SET reply_text=%s, replied_at=NOW(),
+                                status='resolved', delivered=%s
+                            WHERE id=%s
+                        """, (reply_text.strip(), delivered, int(sel_id)))
+                        conn.commit()
+                        if can_tg and delivered:
+                            st.success("✅ تم تسليم الرد عبر تلجرام وإغلاق الطلب.")
+                            st.balloons()
+                        elif can_tg and not delivered:
+                            st.error(f"⚠️ حُفظ الرد وأُغلق الطلب، لكن تعذّر التسليم عبر تلجرام: {msg}")
+                        else:
+                            st.success("✅ حُفظ الرد وأُغلق الطلب (تواصل بالإيميل يدوياً).")
+                        st.rerun()
 
         with tab_resolved:
-            st.subheader("📚 أرشيف المساعدة")
-            # جلب الرسائل المحلولة
-            query_res = "SELECT created_at, username, message FROM support_tickets WHERE status = 'resolved' ORDER BY created_at DESC"
-            df_resolved = pd.read_sql(query_res, conn)
-            
-            if not df_resolved.empty:
-                df_resolved.columns = ['التاريخ', 'المستخدم', 'الرسالة']
-                st.table(df_resolved)
-            else:
+            st.subheader("📚 أرشيف الدعم")
+            df_res = pd.read_sql("""
+                SELECT (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Riyadh') AS ts,
+                       COALESCE(source,'bot') AS source, username, contact_email,
+                       message, reply_text,
+                       CASE WHEN delivered THEN '✅ سُلّم' ELSE '—' END AS deliv
+                FROM support_tickets
+                WHERE status = 'resolved'
+                ORDER BY replied_at DESC NULLS LAST, created_at DESC
+            """, conn)
+            if df_res.empty:
                 st.caption("الأرشيف فارغ حالياً.")
+            else:
+                _resv = pd.DataFrame({
+                    "الوقت": pd.to_datetime(df_res["ts"]).dt.strftime("%Y-%m-%d %H:%M"),
+                    "المصدر": df_res["source"].map(_SUP_SRC).fillna(df_res["source"]),
+                    "المُرسِل": df_res["username"].fillna(df_res["contact_email"]).fillna("—"),
+                    "الرسالة": df_res["message"],
+                    "الرد": df_res["reply_text"].fillna("—"),
+                    "التسليم": df_res["deliv"],
+                })
+                st.dataframe(_resv, width="stretch", hide_index=True, height=400)
 
     except Exception as e:
         if conn:
