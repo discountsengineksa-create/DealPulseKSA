@@ -10143,9 +10143,9 @@ elif page == "استوديو المحتوى":
             radius=2, fill=_STUDIO_EMERALD,
         )
 
-        # كارت موحّد: مربع أبيض + إطار رمادي ثابت = نمط واحد لكل المتاجر
+        # كارت موحّد: مستطيل أبيض عريض + إطار زمردي ثابت = نمط واحد لكل المتاجر
         # اللوقو يملأ الكارت بالكامل (padding 20 فقط من الإطار)
-        card_w, card_h = 440, 440
+        card_w, card_h = 540, 400
         card_x = (W - card_w) // 2
         card_y = 150
         _drop_shadow(img, card_x, card_y, card_w, card_h, radius=36, blur=35, alpha=55)
