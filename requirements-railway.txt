@@ -39,6 +39,7 @@ urllib3==2.3.0
 uvicorn==0.46.0
 websockets==16.0
 google-auth==2.40.1
+google-api-python-client>=2.100,<3
 # محرك الفرص — Google Trends keyword tracking
 pytrends==4.9.2
 # pandas مطلوب لـ pytrends (يرجع DataFrame)
