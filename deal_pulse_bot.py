@@ -1439,8 +1439,36 @@ def _start_session(message):
 #  Message Handlers
 # ============================================================
 
+def _start_support_deeplink(message):
+    """دخول من زر دعم الموقع (deep-link ?start=support) → يضع المستخدم بوضع الدعم
+    مباشرة. هكذا «يصير مكتمل» (نلتقط هويته) ويقدر فريق الدعم يرد عليه عبر البوت."""
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    try:
+        register_or_update_user(message)
+        log_action(None, 'start', user_id=user_id, details='via:web_support')
+    except Exception as e:
+        print(f"⚠️ support deeplink register: {e}")
+    try:
+        lang = get_lang(user_id)
+    except Exception:
+        lang = 'ar'
+    try:
+        sent = bot.send_message(chat_id, t(user_id, 'support_prompt'),
+                                reply_markup=_kb_cancel(lang))
+        _update_nav(user_id, chat_id=chat_id, msg_id=sent.message_id, state='support')
+    except Exception as e:
+        print(f"⚠️ support deeplink prompt: {e}")
+        _start_session(message)  # fallback للقائمة العادية
+
+
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
+    # deep-link: «/start support» (من زر دعم الموقع) → دخول مباشر لوضع الدعم
+    _parts = (message.text or "").split(maxsplit=1)
+    if len(_parts) > 1 and _parts[1].strip().startswith("support"):
+        _start_support_deeplink(message)
+        return
     _start_session(message)
 
 
