@@ -10850,15 +10850,73 @@ elif page == "📈 أداء SEO":
                        "`PAGESPEED_API_KEY` (مجاني من Google Cloud) على خدمة الداشبورد.")
 
     with _gsc_tab:
-        st.info(
-            "🔍 **Google Search Console — يُربط قُبيل الإطلاق**\n\n"
-            "يرصد الظهور/النقرات/الترتيب الفعلي لصفحاتك في Google. يحتاج:\n"
-            "1. توثيق ملكية الموقع في Search Console (search.google.com/search-console)\n"
-            "2. مشروع Google Cloud + **service account** (ملف JSON)\n"
-            "3. منح الـ service account صلاحية قراءة داخل GSC\n"
-            "4. صفحات منشورة فعلاً (بعد الإطلاق)\n\n"
-            "جهّز الخطوات 1-3 ونربطه برمجياً. لا يعطي بيانات قبل وجود صفحات حية + توثيق."
-        )
+        _gsc_json = os.getenv("GSC_SA_JSON")
+        _gsc_site = os.getenv("GSC_SITE", "https://www.dealpulseksa.com/")
+        if not _gsc_json:
+            st.info(
+                "🔍 **GSC غير مربوط بعد.** أضف على خدمة الداشبورد:\n"
+                "- `GSC_SA_JSON` = محتوى ملف service account (JSON كامل)\n"
+                "- `GSC_SITE` = رابط الخاصية (مثل https://www.dealpulseksa.com/)\n\n"
+                "وامنح الـ service account صلاحية في Search Console (المستخدمون والأذونات)."
+            )
+        else:
+            st.caption(f"الخاصية: {_gsc_site}")
+            _gd1, _gd2 = st.columns(2)
+            _g_from = _gd1.date_input(
+                "من", value=(datetime.datetime.utcnow() - timedelta(days=28)).date(),
+                key="gsc_from", format="YYYY-MM-DD")
+            _g_to = _gd2.date_input(
+                "إلى", value=datetime.datetime.utcnow().date(), key="gsc_to", format="YYYY-MM-DD")
+            if st.button("📊 اجلب بيانات Search Console", type="primary", key="gsc_run"):
+                with st.spinner("جارٍ الجلب من Google Search Console..."):
+                    _gerr = None
+                    _tot = _byq = _byp = None
+                    try:
+                        from google.oauth2 import service_account
+                        from googleapiclient.discovery import build
+                        _creds = service_account.Credentials.from_service_account_info(
+                            json.loads(_gsc_json),
+                            scopes=["https://www.googleapis.com/auth/webmasters.readonly"])
+                        _svc = build("searchconsole", "v1", credentials=_creds,
+                                     cache_discovery=False)
+
+                        def _gq(dims):
+                            return _svc.searchanalytics().query(
+                                siteUrl=_gsc_site,
+                                body={"startDate": str(_g_from), "endDate": str(_g_to),
+                                      "dimensions": dims, "rowLimit": 25}).execute()
+                        _tot = _gq([])
+                        _byq = _gq(["query"])
+                        _byp = _gq(["page"])
+                    except Exception as _ge:
+                        _gerr = str(_ge)
+                if _gerr:
+                    st.error(f"تعذّر الجلب: {_gerr[:400]}")
+                else:
+                    _agg = (_tot.get("rows") or [{}])[0]
+                    _gk1, _gk2, _gk3, _gk4 = st.columns(4)
+                    _gk1.metric("👆 نقرات", int(_agg.get("clicks", 0)))
+                    _gk2.metric("👁️ ظهور", int(_agg.get("impressions", 0)))
+                    _gk3.metric("📈 CTR", f"{_agg.get('ctr', 0) * 100:.1f}%")
+                    _gk4.metric("📊 متوسط الترتيب", f"{_agg.get('position', 0):.1f}")
+                    st.divider()
+
+                    def _gtbl(resp, header):
+                        _rs = resp.get("rows") or []
+                        if not _rs:
+                            st.caption("لا بيانات في هذه الفترة.")
+                            return
+                        st.dataframe(pd.DataFrame([{
+                            header: r["keys"][0],
+                            "نقرات": int(r.get("clicks", 0)),
+                            "ظهور": int(r.get("impressions", 0)),
+                            "CTR": f"{r.get('ctr', 0) * 100:.1f}%",
+                            "ترتيب": f"{r.get('position', 0):.1f}",
+                        } for r in _rs]), width="stretch", hide_index=True)
+                    st.subheader("🔑 أهم كلمات البحث")
+                    _gtbl(_byq, "الكلمة")
+                    st.subheader("📄 أهم الصفحات")
+                    _gtbl(_byp, "الصفحة")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
