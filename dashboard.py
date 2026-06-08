@@ -139,15 +139,16 @@ def _admin_get(path: str, params: dict | None = None):
         return None, str(e)
 
 
-def _admin_post(path: str, params: dict | None = None, json_body: dict | None = None):
-    """POST على /api/v1{path}. يرجّع (data, error)."""
+def _admin_post(path: str, params: dict | None = None, json_body: dict | None = None,
+                timeout: int = 90):
+    """POST على /api/v1{path}. يرجّع (data, error). timeout أطول لعمليات LLM الثقيلة."""
     base, secret = _admin_api()
     if not secret:
         return None, "ADMIN_SHARED_SECRET غير مضبوط في بيئة الداشبورد"
     try:
         r = requests.post(f"{base}/api/v1{path}",
                           headers={"X-Admin-Secret": secret},
-                          params=params or {}, json=json_body, timeout=90)
+                          params=params or {}, json=json_body, timeout=timeout)
         if r.status_code >= 400:
             return None, f"HTTP {r.status_code}: {r.text[:200]}"
         return r.json(), None
@@ -10465,7 +10466,7 @@ elif page == "محرّك SEO":
                "**نشر تلقائي حقيقي** للموقع. استخدمه لاختبار دورة كاملة بأمان.")
     if st.button("🚀 شغّل دورة SEO الآن", type="primary", key="seo_auto_run_btn"):
         with st.spinner("جارٍ تشغيل الدورة الكاملة عبر الـ LLM... (قد تأخذ دقيقة)"):
-            _ar_data, _ar_err = _admin_post("/admin/seo-auto-run")
+            _ar_data, _ar_err = _admin_post("/admin/seo-auto-run", timeout=280)
         if _ar_err:
             st.error(f"تعذّر التشغيل: {_ar_err}")
         elif _ar_data and not _ar_data.get("enabled", True):
@@ -10559,7 +10560,7 @@ elif page == "محرّك SEO":
     with cta2:
         if st.button("⚙️ توليد الآن", width='stretch', type="primary"):
             with st.spinner(f"جارٍ توليد {batch_size} متجر عبر الـ LLM... (~{batch_size * 30} ثانية)"):
-                data, err = _admin_post("/admin/seo-run", params={"batch": int(batch_size)})
+                data, err = _admin_post("/admin/seo-run", params={"batch": int(batch_size)}, timeout=280)
             if err:
                 st.error(f"تعذّر التشغيل: {err}")
             else:
