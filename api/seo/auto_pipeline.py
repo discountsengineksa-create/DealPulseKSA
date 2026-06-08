@@ -124,9 +124,9 @@ def auto_publish(cur, cap: int) -> list[dict]:
     return drafts
 
 
-def run_daily_seo_cycle() -> dict:
-    """الدورة اليومية الكاملة (يستدعيها المجدول 3 صباحاً)."""
-    if os.getenv("SEO_AUTO_PUBLISH_ENABLED", "false").lower() not in ("1", "true", "yes"):
+def run_daily_seo_cycle(force: bool = False) -> dict:
+    """الدورة اليومية الكاملة (المجدول 3ص، أو يدوياً بـ force=True من الداشبورد)."""
+    if not force and os.getenv("SEO_AUTO_PUBLISH_ENABLED", "false").lower() not in ("1", "true", "yes"):
         _log.info("seo auto-publish disabled (SEO_AUTO_PUBLISH_ENABLED!=true) — skip")
         return {"enabled": False}
 

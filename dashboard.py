@@ -10459,6 +10459,26 @@ elif page == "محرّك SEO":
         finally:
             _oc.close()
 
+    # ═══ تشغيل المحرّك الأوتوماتيكي يدوياً (نفس دورة 3 صباحاً — تجربة حقيقية) ═══
+    st.subheader("🚀 تشغيل دورة المحرّك الآن")
+    st.caption("نفس ما يحدث 3 صباحاً: أكثر المتاجر طلباً → ربط مناسبة → توليد → "
+               "**نشر تلقائي حقيقي** للموقع. استخدمه لاختبار دورة كاملة بأمان.")
+    if st.button("🚀 شغّل دورة SEO الآن", type="primary", key="seo_auto_run_btn"):
+        with st.spinner("جارٍ تشغيل الدورة الكاملة عبر الـ LLM... (قد تأخذ دقيقة)"):
+            _ar_data, _ar_err = _admin_post("/admin/seo-auto-run")
+        if _ar_err:
+            st.error(f"تعذّر التشغيل: {_ar_err}")
+        elif _ar_data and not _ar_data.get("enabled", True):
+            st.warning("المحرّك معطّل (SEO_AUTO_PUBLISH_ENABLED ليست true على خدمة الـ API).")
+        else:
+            d = _ar_data or {}
+            st.success(
+                f"✅ تمّت الدورة — متاجر: {d.get('top_stores', 0)} · "
+                f"مناسبة: {d.get('occasion') or '—'} · وظائف: {d.get('enqueued', 0)} · "
+                f"مُولَّد: {d.get('generated', 0)} · **منشور: {d.get('published', 0)}**"
+            )
+            st.balloons()
+
     # ═════════════════════════════════════════════════════════════════════════
     # القسم 1 — صندوق التوليد بموضوع مخصّص
     # ═════════════════════════════════════════════════════════════════════════

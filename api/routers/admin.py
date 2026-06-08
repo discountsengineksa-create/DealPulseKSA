@@ -330,6 +330,16 @@ def seo_run(
     return {"trends_upserted": trends, "jobs_enqueued": enqueued, "generation": gen}
 
 
+@router.post("/seo-auto-run")
+def seo_auto_run(x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
+    """تشغيل يدوي لدورة محرّك SEO الأوتوماتيكية الكاملة (نفس دورة 3 صباحاً):
+    أكثر المتاجر طلباً → ربط مناسبة → توليد → نشر مُبوّب. force=True يتجاوز
+    مفتاح SEO_AUTO_PUBLISH_ENABLED (التشغيل هنا قرار صريح من المالك)."""
+    _verify_admin(x_admin_secret)
+    from api.seo.auto_pipeline import run_daily_seo_cycle
+    return run_daily_seo_cycle(force=True)
+
+
 @router.post("/seo-publish/{page_id}")
 def seo_publish(
     page_id: int,
