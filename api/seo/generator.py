@@ -59,8 +59,12 @@ SYSTEM_PROMPT_AR = """أنت كاتب محتوى SEO محترف لمنصة DealP
 4. title_meta: ≤ 60 محرفاً، جذّاب، يحوي الكلمة المستهدفة + اسم المتجر
    + كلمة جذب (أحدث/حصري/2026/خصم).
 5. description_meta: 140-155 محرفاً، يلخّص العرض ويحثّ على النقر بـ CTA واضح.
-6. لا تخترع نِسَب خصم غير معطاة؛ استخدم المعطيات فقط.
+6. لا تخترع نِسَب خصم غير معطاة؛ استخدم المعطيات فقط (الكود/العرض/العرض الإضافي).
 7. لا تذكر منافسين أو منصّات أخرى.
+8. **التزم بفئة المتجر الفعلية**: اكتب فقط عن المنتجات/الفئات التي يبيعها المتجر
+   فعلاً حسب (store_tags و store_bio) المعطاة. لا تخترع فئات أو منتجات لا يبيعها
+   — متجر قهوة لا تكتب عنه عبايات، ومتجر إلكترونيات لا تكتب عنه عطور. إن كانت
+   الفئة غير واضحة، اكتب عاماً عن «عروض المتجر وكوبوناته» دون ذكر منتجات محددة.
 
 أعد ردك كـ JSON صالح فقط بهذا الشكل بالضبط:
 {
@@ -90,8 +94,15 @@ Writing rules:
 4. title_meta: ≤ 60 chars, catchy, includes target keyword + store name
    + a hook word (latest / exclusive / 2026 / discount).
 5. description_meta: 140-155 chars, summarizes the offer with clear CTA.
-6. Do not invent discount percentages not provided; use only the given data.
+6. Do not invent discount percentages not provided; use only the given data
+   (the code / offer / extra offer).
 7. Do not name competitors or other platforms.
+8. **Stay strictly within the store's real category**: write only about products/
+   categories the store actually sells per the given store_tags and store_bio.
+   Never invent categories/products it doesn't sell — a coffee store must NOT get
+   abaya content, an electronics store must NOT get perfume content. If the category
+   is unclear, write generically about "the store's offers and coupons" without
+   naming specific products.
 
 Return your response as valid JSON only, exactly in this shape:
 {

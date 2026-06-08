@@ -10480,22 +10480,25 @@ elif page == "محرّك SEO":
             )
             st.balloons()
 
-    # ═══ تنظيف: حذف المسودّات القديمة (قبل التوليد الجديد) ═══
-    with st.expander("🗑️ حذف المسودّات القديمة (تنظيف White-Hat)", expanded=False):
-        st.caption("يحذف كل الصفحات بحالة draft + المكررة المرفوضة. الصفحات المنشورة لا تُمسّ.")
-        _purge_ok = st.checkbox("أؤكّد حذف كل المسودّات القديمة", key="seo_purge_confirm")
-        if st.button("🗑️ احذف المسودّات الآن", disabled=not _purge_ok, key="seo_purge_btn"):
+    # ═══ مسح كامل: كل صفحات SEO (مسودّات+منشورة+أرشيف) + الفهرسة + الوظائف ═══
+    with st.expander("🧨 مسح كل صفحات SEO نهائياً (تصفير قبل الإطلاق)", expanded=False):
+        st.warning("يحذف **كل** صفحات SEO (مسودّات + منشورة + مكررة) + سجل الفهرسة "
+                   "+ وظائف التوليد. لا تراجع — لتصفير النظام بالكامل قبل الإطلاق الفعلي.")
+        _purge_ok = st.checkbox("أؤكّد المسح الكامل لكل صفحات SEO", key="seo_purge_confirm")
+        if st.button("🧨 امسح كل شي الآن", disabled=not _purge_ok, key="seo_purge_btn"):
             _pc = get_conn(); _pc.rollback()
             try:
                 _pcur = _pc.cursor()
-                _pcur.execute(
-                    "DELETE FROM seo_landing_pages WHERE status IN ('draft','rejected_dup')")
-                _pn = _pcur.rowcount
+                _pcur.execute("DELETE FROM seo_index_submissions")
+                _pcur.execute("DELETE FROM seo_landing_pages")
+                _np = _pcur.rowcount
+                _pcur.execute("DELETE FROM seo_generation_jobs")
+                _nj = _pcur.rowcount
                 _pc.commit()
-                st.success(f"تم حذف {_pn} مسودّة. النظام نظيف للتوليد الجديد.")
+                st.success(f"تم المسح الكامل: {_np} صفحة + {_nj} وظيفة. النظام صفر.")
                 st.rerun()
             except Exception as _pe:
-                st.error(f"تعذّر الحذف: {_pe}")
+                st.error(f"تعذّر المسح: {_pe}")
             finally:
                 _pc.close()
 
