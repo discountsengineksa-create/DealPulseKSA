@@ -9575,16 +9575,16 @@ elif page == "لوحة القيادة":
 
     # الهدف الحقيقي للحركة: متجر (store_id) أو قسم (tag: داخل details) أو لا شيء
     def _target(store_id, details):
-        if store_id is not None and str(store_id).strip() and store_id != "—":
+        if isinstance(store_id, str) and store_id.strip() and store_id != "—":
             return store_id
-        d = (details or "").strip()
+        d = details.strip() if isinstance(details, str) else ""
         if d.startswith("tag:"):
             return "🏷️ " + d[4:]
         return "—"
 
     # تنظيف التفاصيل من العلامات الداخلية وتعريب سياق الترند
     def _clean_detail(details):
-        d = (details or "").strip()
+        d = details.strip() if isinstance(details, str) else ""
         if d.startswith("tag:") or d.startswith("user:") or d.startswith("via_cloak"):
             return ""
         if d == "trend:daily":
@@ -9663,10 +9663,12 @@ elif page == "لوحة القيادة":
                     st.info("📭 لا توجد حركات في هذه الفترة.")
                 else:
                     def _who(r):
-                        if r["username"]:
-                            return "@" + r["username"]
-                        if pd.notna(r["name_en"]) and r["name_en"]:
-                            return r["name_en"]
+                        u = r["username"]
+                        if isinstance(u, str) and u.strip():
+                            return "@" + u
+                        ne = r["name_en"]
+                        if isinstance(ne, str) and ne.strip():
+                            return ne
                         if pd.notna(r["user_id"]):
                             return f"زائر #{int(r['user_id'])}"
                         return "— مجهول —"
