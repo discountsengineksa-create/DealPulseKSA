@@ -1444,6 +1444,20 @@ def send_welcome(message):
     _start_session(message)
 
 
+@bot.message_handler(commands=['chatid'])
+def send_chatid(message):
+    """يعطي رقم المحادثة الحالية — لإعداد قروب الدعم (ADMIN_CHAT_ID).
+    استخدمه داخل قروب الدعم (بعد إضافة البوت) للحصول على رقم القروب."""
+    cid = message.chat.id
+    ctype = message.chat.type  # private / group / supergroup
+    bot.reply_to(
+        message,
+        f"🆔 *رقم هذه المحادثة:*\n`{cid}`\n\nالنوع: {ctype}\n\n"
+        f"ضع هذا الرقم في متغيّر البيئة *ADMIN\\_CHAT\\_ID* لخدمة البوت على Railway "
+        f"حتى تصل تذاكر الدعم هنا.",
+        parse_mode="Markdown")
+
+
 @bot.message_handler(commands=['help'])
 def send_help(message):
     register_or_update_user(message)
