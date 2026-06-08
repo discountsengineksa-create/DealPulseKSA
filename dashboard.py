@@ -10121,6 +10121,30 @@ elif page == "استوديو المحتوى":
         except Exception:
             return None
 
+    def _remove_bg_api(image_bytes: bytes):
+        """يشيل خلفية الصورة عبر remove.bg API → PNG شفاف.
+        يرجع (bytes, None) عند النجاح أو (None, رسالة الخطأ)."""
+        api_key = os.getenv("REMOVEBG_API_KEY")
+        if not api_key:
+            return None, "لم يُضبط REMOVEBG_API_KEY في بيئة الداشبورد"
+        try:
+            r = requests.post(
+                "https://api.remove.bg/v1.0/removebg",
+                headers={"X-Api-Key": api_key},
+                files={"image_file": ("logo.png", image_bytes)},
+                data={"size": "auto"},
+                timeout=30,
+            )
+            if r.status_code == 200:
+                return r.content, None
+            try:
+                err = r.json().get("errors", [{}])[0].get("title", f"HTTP {r.status_code}")
+            except Exception:
+                err = f"HTTP {r.status_code}"
+            return None, err
+        except Exception as ex:
+            return None, str(ex)
+
     def _center_text(draw: ImageDraw.ImageDraw, text: str, y: int, font, fill, canvas_w: int = _CANVAS):
         bbox = draw.textbbox((0, 0), text, font=font)
         tw = bbox[2] - bbox[0]
@@ -10265,6 +10289,10 @@ elif page == "استوديو المحتوى":
                 type=["png", "jpg", "jpeg", "webp"],
                 help="نوصي بـ PNG شفاف لأفضل نتيجة. الصورة تملأ الكارت تلقائياً (cover).",
             )
+            auto_rmbg = st.checkbox(
+                "🪄 إزالة خلفية اللوقو تلقائياً (remove.bg)", value=False,
+                key="studio_auto_rmbg",
+                help="يحوّل اللوقو لخلفية شفافة قبل وضعه. يحتاج ضبط REMOVEBG_API_KEY.")
             logo_scale = st.number_input(
                 "📐 حجم اللوقو داخل الكارت (%) — اكتب الرقم", min_value=20, max_value=100,
                 value=100, step=1, key="studio_logo_scale",
@@ -10284,6 +10312,14 @@ elif page == "استوديو المحتوى":
             st.markdown("##### 🖼️ المعاينة")
             if generate:
                 store_logo_bytes = store_logo_file.read() if store_logo_file else None
+                if auto_rmbg and store_logo_bytes:
+                    with st.spinner("جاري إزالة الخلفية…"):
+                        _clean, _rmbg_err = _remove_bg_api(store_logo_bytes)
+                    if _clean:
+                        store_logo_bytes = _clean
+                        st.caption("🪄 تمت إزالة الخلفية بنجاح.")
+                    else:
+                        st.warning(f"تعذّر إزالة الخلفية: {_rmbg_err} — سنستخدم الصورة كما هي.")
                 dp_logo_bytes = None
                 if os.path.exists(_logo_path):
                     with open(_logo_path, "rb") as _f:
