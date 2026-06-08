@@ -1515,7 +1515,7 @@ _ANALYSIS_PAGES = [
 _OTHER_PAGES = [
 "📣 بلاغات الأكواد",  # ← Migration 029: بلاغات لا يعمل + إدارة المتاجر المسحوبة
 "🎯 بناء الشرائح", "مركز الإشعارات", "لوحة القيادة", "مركز الدعم",
-"مختبر النمو", "رادار المنافسين", "استوديو المحتوى",
+"رادار المنافسين", "استوديو المحتوى",
 "ذكاء التنبؤ", "نظام الولاء", "التحكم الآلي", "التخصيص الفائق",
 "رادار المناسبات", "مركز التوسع", "درع الحماية",
 "مركز الصيانة", "مدير القناة", "المحفز الفوري",
@@ -9941,83 +9941,6 @@ elif page == "مركز الدعم":
 
 
 
-
-
-# --- الصفحة التاسعة عشرة: مختبر النمو والانتشار --- # البداية
-elif page == "مختبر النمو":
-    page_title("🚀", "مختبر النمو والانتشار (Growth Lab)")
-    st.info("حلل الفجوات في سوق الكوبونات واكتشف الكلمات المفتاحية الأكثر ربحاً لتوسيع نشاطك.")
-
-    conn = None
-    try:
-        conn = get_conn()
-        # --- تعديل أمني: تنظيف أي عمليات معلقة قبل البدء ---
-        conn.rollback() 
-        # -----------------------------------------------
-        
-        col_seo, col_gap = st.columns([1, 1])
-
-        with col_seo:
-            st.subheader("🔍 الكلمات الأكثر بحثاً")
-            # استعلام SQL سادة بدون أي تعريب داخل الاستعلام لتجنب Syntax Error
-            query_seo = "SELECT search_query, search_count FROM search_analytics ORDER BY search_count DESC LIMIT 5"
-            df_seo = pd.read_sql(query_seo, conn)
-            
-            if not df_seo.empty:
-                # تعريب الأعمدة داخل الباندا (Pandas) فقط للعرض
-                df_seo.columns = ['الكلمة', 'عدد البحث']
-                st.dataframe(df_seo, width='stretch')
-            else:
-                st.write("لا توجد بيانات بحث كافية حالياً.")
-
-        with col_gap:
-            st.subheader("🕳️ تحليل الفجوات (Gap Analysis)")
-            st.write("أقسام مطلوبة وغير متوفرة:")
-            
-            # مصفوفة الفجوات (يمكنك ربطها بجدول لاحقاً)
-            gaps = ["قطع غيار سيارات", "اشتراكات رقمية", "مستلزمات حيوانات"]
-            for gap in gaps:
-                st.warning(f"⚠️ نقص: قسم **({gap})** مطلوب بشدة.")
-            
-            if st.button("➕ إرسال المقترحات للتنفيذ"):
-                st.success("تم إرسال القائمة لـ فهد وعبدالله للبدء في توفير الكوبونات.")
-
-        st.divider()
-        
-        # --- قسم الحملات الإعلانية ---
-        st.subheader("🎯 مخطط الحملات الإعلانية")
-        with st.expander("📝 صياغة إعلان تسويقي ذكي"):
-            promo_type = st.radio("المنصة المستهدفة:", ["تيك توك", "تويتر (X)", "سناب شات"], horizontal=True)
-            target_item = st.text_input("المنتج المراد الترويج له:", "بوت توفير")
-            
-            if st.button("🪄 توليد نص إعلاني"):
-                if "تيك توك" in promo_type:
-                    st.code(f"محتار بين الأسعار؟ 🧐 {target_item} صار أسهل مع بوت 'توفير'! يجيب لك الخصم من المصدر. الرابط في البايو! ✨", language="text")
-                else:
-                    st.code(f"وفر قروشك مع محرك التوفير الذكي 🚀 أقوى خصومات على {target_item} حصرية لمشتركينا. جربه الآن! 👇", language="text")
-
-        # --- إحصائيات الزيارات الحقيقية ---
-        st.divider()
-        st.subheader("🔗 مصادر الزيارات (Traffic Sources)")
-        # جلب البيانات بالإنجليزية
-        try:
-            query_traffic = "SELECT source_name, visit_count FROM traffic_sources"
-            df_traffic = pd.read_sql(query_traffic, conn)
-            
-            if not df_traffic.empty:
-                df_traffic.columns = ['المصدر', 'الزيارات']
-                st.bar_chart(df_traffic.set_index("المصدر"))
-            else:
-                st.info("لا توجد بيانات لمصادر الزيارات حالياً.")
-        except:
-            st.warning("⚠️ جدول مصادر الزيارات غير متوفر حالياً في قاعدة البيانات.")
-        
-    except Exception as e:
-        if conn: conn.rollback()
-        st.error(f"حدث خطأ في جلب بيانات النمو: {e}")
-    finally:
-        if conn: conn.close()
-# --- نهاية الصفحة التاسعة عشرة --- # النهاية
 
 
 
