@@ -10179,7 +10179,7 @@ elif page == "استوديو المحتوى":
         #   100% → cover يملأ الكارت بالكامل (قص مركزي بسيط)
         #   أقل  → contain (اللوقو كامل بلا قص) مصغّر ومتوسّط بهوامش بيضاء
         if store_logo_bytes:
-            _pct = max(50, min(int(logo_scale), 100)) / 100.0
+            _pct = max(20, min(int(logo_scale), 100)) / 100.0
             if _pct >= 0.98:
                 cover = _cover_logo(store_logo_bytes, card_w, card_h)
                 if cover is not None:
@@ -10276,11 +10276,11 @@ elif page == "استوديو المحتوى":
                 type=["png", "jpg", "jpeg", "webp"],
                 help="نوصي بـ PNG شفاف لأفضل نتيجة. الصورة تملأ الكارت تلقائياً (cover).",
             )
-            logo_scale = st.slider(
-                "📐 حجم اللوقو داخل الكارت (%)", min_value=50, max_value=100,
-                value=100, step=5, key="studio_logo_scale",
+            logo_scale = st.number_input(
+                "📐 حجم اللوقو داخل الكارت (%) — اكتب الرقم", min_value=20, max_value=100,
+                value=100, step=1, key="studio_logo_scale",
                 help="الكارت ثابت 540×400. 100% = اللوقو يملأ الكارت بالكامل · "
-                     "أقل = اللوقو أصغر وبهوامش بيضاء حوله.")
+                     "أقل = اللوقو أصغر وبهوامش بيضاء حوله. اكتب أي رقم من 20 إلى 100.")
             c1, c2 = st.columns(2)
             with c1:
                 discount_label_in = st.text_input("سطر فوق الرقم", value="خصم يصل إلى")
