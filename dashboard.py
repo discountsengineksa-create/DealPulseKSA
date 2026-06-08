@@ -10110,26 +10110,22 @@ elif page == "استوديو المحتوى":
             radius=2, fill=_STUDIO_EMERALD,
         )
 
-        # كارت اللوقو الزجاجي — مربع كبير ليبلع أي لوقو بحجم بطل
+        # كارت موحّد: مربع أبيض + إطار رمادي ثابت = نمط واحد لكل المتاجر
+        # اللوقو يملأ الكارت بالكامل (padding 20 فقط من الإطار)
         card_w, card_h = 440, 440
         card_x = (W - card_w) // 2
         card_y = 150
-        _drop_shadow(img, card_x, card_y, card_w, card_h, radius=40, blur=35, alpha=45)
+        _drop_shadow(img, card_x, card_y, card_w, card_h, radius=36, blur=35, alpha=55)
 
-        glass = Image.new("RGBA", (card_w, card_h), (255, 255, 255, 240))
+        # خلفية الكارت الأبيض
+        glass = Image.new("RGBA", (card_w, card_h), (255, 255, 255, 255))
         mask = Image.new("L", (card_w, card_h), 0)
-        ImageDraw.Draw(mask).rounded_rectangle([0, 0, card_w, card_h], radius=40, fill=255)
+        ImageDraw.Draw(mask).rounded_rectangle([0, 0, card_w, card_h], radius=36, fill=255)
         img.paste(glass, (card_x, card_y), mask)
-        # حدّ ناعم
-        ImageDraw.Draw(img).rounded_rectangle(
-            [card_x, card_y, card_x + card_w, card_y + card_h],
-            radius=40, outline=(225, 230, 225, 255), width=2,
-        )
 
-        # لوقو المتجر داخل الكارت — حجم موحّد لكل المتاجر، الكارت يبقى أبيض
-        # حتى لو اللوقو خلفيته ملوّنة (نون أصفر، مثلاً) يبقى padding حول اللوقو
+        # لوقو المتجر — يملأ المربع كاملاً (padding 20 من الإطار فقط)
         if store_logo_bytes:
-            inner_pad = 90  # padding كبير = حجم لوقو ثابت ≈ 260×260 لكل المتاجر
+            inner_pad = 20
             logo = _fit_logo(store_logo_bytes, card_w - 2 * inner_pad, card_h - 2 * inner_pad)
             if logo is not None:
                 lx = card_x + (card_w - logo.width) // 2
@@ -10138,6 +10134,12 @@ elif page == "استوديو المحتوى":
         if not store_logo_bytes:
             f_store = _font(96, weight=800)
             _center_text(draw, _ar(store_name or "متجرك"), card_y + card_h // 2 - 50, f_store, _STUDIO_INK)
+
+        # إطار موحّد ثابت — يطبع فوق كل شيء = نفس الـ frame لكل المتاجر بغض النظر عن اللوقو
+        ImageDraw.Draw(img).rounded_rectangle(
+            [card_x, card_y, card_x + card_w, card_y + card_h],
+            radius=36, outline=_STUDIO_EMERALD_DK, width=5,
+        )
 
         # اسم المتجر تحت الكارت (لو فيه لوقو)
         if store_logo_bytes and store_name:
