@@ -1517,7 +1517,7 @@ _OTHER_PAGES = [
 "📣 بلاغات الأكواد",  # ← Migration 029: بلاغات لا يعمل + إدارة المتاجر المسحوبة
 "🎯 بناء الشرائح", "مركز الإشعارات", "لوحة القيادة", "مركز الدعم",
 "استوديو المحتوى",
-"محرّك SEO", "📤 الصفحات المنشورة", "🎯 محرك الفرص", "الرصد الاجتماعي", "🎯 رادار الصفقات الفوري", "التدقيق والتجارب",
+"محرّك SEO", "📈 أداء SEO", "📤 الصفحات المنشورة", "🎯 محرك الفرص", "الرصد الاجتماعي", "🎯 رادار الصفقات الفوري", "التدقيق والتجارب",
 "🛰️ متابعة المنصة",
 "🩺 تشخيص النشر",
 ]
@@ -10788,6 +10788,78 @@ elif page == "محرّك SEO":
                     st.markdown(f"**#{j['id']}** · 🔑 {j.get('target_keyword', '')}")
                     st.caption(f"📅 {j.get('completed_at', '—')}")
                     st.code((j.get("error_message") or "")[:500], language=None)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 📈 أداء SEO — PageSpeed (يشتغل الآن) + Search Console (يُربط قُبيل الإطلاق)
+# ─────────────────────────────────────────────────────────────────────────────
+elif page == "📈 أداء SEO":
+    page_title("📈", "قياس وأداء SEO",
+               "سرعة الموقع (PageSpeed) + نتائج البحث (Search Console)")
+    _ps_tab, _gsc_tab = st.tabs(["⚡ سرعة الموقع (PageSpeed)", "🔍 Search Console"])
+
+    with _ps_tab:
+        st.caption("فحص الأداء/SEO/الإتاحة عبر Google PageSpeed — يكشف نقاط الضعف وفرص التحسين.")
+        _pc1, _pc2 = st.columns([3, 1])
+        _ps_url = _pc1.text_input("رابط الصفحة", value="https://dealpulseksa.com", key="ps_url")
+        _ps_strat = _pc2.selectbox(
+            "الجهاز", ["mobile", "desktop"],
+            format_func=lambda x: "📱 جوال" if x == "mobile" else "💻 سطح مكتب", key="ps_strat")
+        if st.button("🔍 افحص الآن", type="primary", key="ps_run"):
+            with st.spinner("جارٍ الفحص عبر Google (~20-30 ثانية)..."):
+                try:
+                    _pp = [("url", _ps_url), ("strategy", _ps_strat)]
+                    for _cat in ("performance", "seo", "accessibility", "best-practices"):
+                        _pp.append(("category", _cat))
+                    _pk = os.getenv("PAGESPEED_API_KEY")
+                    if _pk:
+                        _pp.append(("key", _pk))
+                    _pr = requests.get(
+                        "https://www.googleapis.com/pagespeedonline/v5/runPagespeed",
+                        params=_pp, timeout=70)
+                    _pj = _pr.json()
+                except Exception as _pe:
+                    _pj = {"error": {"message": str(_pe)}}
+            if "error" in _pj:
+                st.error(f"تعذّر الفحص: {str(_pj['error'].get('message', ''))[:300]}")
+            else:
+                _lr = _pj.get("lighthouseResult", {})
+                _cats = _lr.get("categories", {})
+                _NAMES = [("performance", "⚡ الأداء"), ("seo", "🔍 SEO"),
+                          ("accessibility", "♿ الإتاحة"), ("best-practices", "✅ الممارسات")]
+                _cols = st.columns(4)
+                for _col, (_k, _lbl) in zip(_cols, _NAMES):
+                    _s = _cats.get(_k, {}).get("score")
+                    _sc = int(_s * 100) if _s is not None else None
+                    _ico = "🟢" if (_sc or 0) >= 90 else ("🟠" if (_sc or 0) >= 50 else "🔴")
+                    _col.metric(_lbl, f"{_ico} {_sc}" if _sc is not None else "—")
+                _audits = _lr.get("audits", {})
+                _opps = [a for a in _audits.values()
+                         if a.get("details", {}).get("type") == "opportunity"
+                         and (a.get("score") if a.get("score") is not None else 1) < 0.9]
+                _opps.sort(key=lambda a: a.get("score") if a.get("score") is not None else 1)
+                st.divider()
+                if _opps:
+                    st.subheader("🛠️ أهم فرص التحسين")
+                    for _a in _opps[:8]:
+                        _dv = _a.get("displayValue", "")
+                        st.markdown(f"- **{_a.get('title', '')}** {('— ' + _dv) if _dv else ''}")
+                else:
+                    st.success("✅ لا فرص تحسين كبيرة — الأداء جيد.")
+        if not os.getenv("PAGESPEED_API_KEY"):
+            st.caption("💡 يعمل الآن بلا مفتاح (محدود المعدّل). للاستخدام المكثّف أضف "
+                       "`PAGESPEED_API_KEY` (مجاني من Google Cloud) على خدمة الداشبورد.")
+
+    with _gsc_tab:
+        st.info(
+            "🔍 **Google Search Console — يُربط قُبيل الإطلاق**\n\n"
+            "يرصد الظهور/النقرات/الترتيب الفعلي لصفحاتك في Google. يحتاج:\n"
+            "1. توثيق ملكية الموقع في Search Console (search.google.com/search-console)\n"
+            "2. مشروع Google Cloud + **service account** (ملف JSON)\n"
+            "3. منح الـ service account صلاحية قراءة داخل GSC\n"
+            "4. صفحات منشورة فعلاً (بعد الإطلاق)\n\n"
+            "جهّز الخطوات 1-3 ونربطه برمجياً. لا يعطي بيانات قبل وجود صفحات حية + توثيق."
+        )
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 📤 الصفحات المنشورة — متابعة حالة صفحات SEO بعد النشر
