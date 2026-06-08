@@ -10076,66 +10076,67 @@ elif page == "استوديو المحتوى":
         # شريط علوي رفيع: "عرض حصري" بأسلوب Keynote
         small_label = _ar("عرض حصري")
         f_label = _font(28)
-        _center_text(draw, small_label, 110, f_label, _STUDIO_INK_SOFT)
+        _center_text(draw, small_label, 70, f_label, _STUDIO_INK_SOFT)
 
         # خط تحت العنوان الصغير
         line_w = 90
         draw.rounded_rectangle(
-            [W // 2 - line_w // 2, 158, W // 2 + line_w // 2, 162],
+            [W // 2 - line_w // 2, 118, W // 2 + line_w // 2, 122],
             radius=2, fill=_STUDIO_EMERALD,
         )
 
-        # كارت اللوقو الزجاجي
-        card_w, card_h = 520, 280
+        # كارت اللوقو الزجاجي — مربع كبير ليبلع أي لوقو بحجم بطل
+        card_w, card_h = 440, 440
         card_x = (W - card_w) // 2
-        card_y = 200
-        _drop_shadow(img, card_x, card_y, card_w, card_h, radius=32, blur=30, alpha=40)
+        card_y = 150
+        _drop_shadow(img, card_x, card_y, card_w, card_h, radius=40, blur=35, alpha=45)
 
-        glass = Image.new("RGBA", (card_w, card_h), (255, 255, 255, 235))
+        glass = Image.new("RGBA", (card_w, card_h), (255, 255, 255, 240))
         mask = Image.new("L", (card_w, card_h), 0)
-        ImageDraw.Draw(mask).rounded_rectangle([0, 0, card_w, card_h], radius=32, fill=255)
+        ImageDraw.Draw(mask).rounded_rectangle([0, 0, card_w, card_h], radius=40, fill=255)
         img.paste(glass, (card_x, card_y), mask)
         # حدّ ناعم
         ImageDraw.Draw(img).rounded_rectangle(
             [card_x, card_y, card_x + card_w, card_y + card_h],
-            radius=32, outline=(225, 230, 225, 255), width=2,
+            radius=40, outline=(225, 230, 225, 255), width=2,
         )
 
-        # لوقو المتجر داخل الكارت (إن وُجد) وإلا اسم المتجر
+        # لوقو المتجر داخل الكارت (إن وُجد) — يملأ المستطيل الداخلي بأكبر حجم
         if store_logo_bytes:
-            logo = _fit_logo(store_logo_bytes, card_w - 80, card_h - 80)
+            inner_pad = 40  # padding بسيط فقط — اللوقو هو البطل
+            logo = _fit_logo(store_logo_bytes, card_w - 2 * inner_pad, card_h - 2 * inner_pad)
             if logo is not None:
                 lx = card_x + (card_w - logo.width) // 2
                 ly = card_y + (card_h - logo.height) // 2
                 img.paste(logo, (lx, ly), logo)
         if not store_logo_bytes:
-            f_store = _font(72)
-            _center_text(draw, _ar(store_name or "متجرك"), card_y + card_h // 2 - 40, f_store, _STUDIO_INK)
+            f_store = _font(96, weight=800)
+            _center_text(draw, _ar(store_name or "متجرك"), card_y + card_h // 2 - 50, f_store, _STUDIO_INK)
 
         # اسم المتجر تحت الكارت (لو فيه لوقو)
         if store_logo_bytes and store_name:
-            f_store_sm = _font(34)
-            _center_text(draw, _ar(store_name), card_y + card_h + 30, f_store_sm, _STUDIO_INK)
-            block_y = card_y + card_h + 100
+            f_store_sm = _font(32)
+            _center_text(draw, _ar(store_name), card_y + card_h + 18, f_store_sm, _STUDIO_INK)
+            block_y = card_y + card_h + 75
         else:
-            block_y = card_y + card_h + 60
+            block_y = card_y + card_h + 40
 
         # كتلة الخصم — البطل
-        f_disc_lbl = _font(36, weight=600)
+        f_disc_lbl = _font(32, weight=600)
         _center_text(draw, _ar(discount_label or "خصم يصل إلى"), block_y, f_disc_lbl, _STUDIO_INK_SOFT)
 
-        f_disc_num = _font(200, weight=900)
-        _center_text(draw, str(discount_value or "70%"), block_y + 60, f_disc_num, _STUDIO_EMERALD_DK)
+        f_disc_num = _font(170, weight=900)
+        _center_text(draw, str(discount_value or "70%"), block_y + 50, f_disc_num, _STUDIO_EMERALD_DK)
 
         # Pill الكود
         code_text = (code or "SAVE50").upper()
-        f_code = _font(64, weight=800)
+        f_code = _font(60, weight=800)
         cb = draw.textbbox((0, 0), code_text, font=f_code)
         cw = cb[2] - cb[0]
-        pill_w = max(cw + 140, 380)
-        pill_h = 110
+        pill_w = max(cw + 130, 360)
+        pill_h = 100
         pill_x = (W - pill_w) // 2
-        pill_y = block_y + 290
+        pill_y = block_y + 250
         draw.rounded_rectangle(
             [pill_x, pill_y, pill_x + pill_w, pill_y + pill_h],
             radius=pill_h // 2, fill=_STUDIO_PILL_BG,
@@ -10147,7 +10148,7 @@ elif page == "استوديو المحتوى":
 
         # نص فرعي تحت الـ pill
         f_tag = _font(28)
-        _center_text(draw, _ar(tagline or "استخدم الكود عند الشراء"), pill_y + pill_h + 30, f_tag, _STUDIO_INK_SOFT)
+        _center_text(draw, _ar(tagline or "استخدم الكود عند الشراء"), pill_y + pill_h + 22, f_tag, _STUDIO_INK_SOFT)
 
         # ختم نبض الصفقات — زاوية يمين سفلى (صغير وأنيق)
         if deal_pulse_logo_bytes:
@@ -10211,29 +10212,40 @@ elif page == "استوديو المحتوى":
                         tagline=tagline_in,
                         deal_pulse_logo_bytes=dp_logo_bytes,
                     )
-                st.image(png_bytes, width='stretch')
-
-                # اسم ملف نظيف (slug)
+                # تخزين في الـ session ليبقى بعد إعادة التشغيل (rerun)
                 safe_store = "".join(c for c in (store_name_in or "store") if c.isalnum() or c in ("_", "-"))[:40] or "store"
                 safe_code = "".join(c for c in (code_in or "code") if c.isalnum())[:20] or "code"
-                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-                fname = f"{safe_store}_{safe_code}_{ts}.png"
+                ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                st.session_state["studio_last_png"] = png_bytes
+                st.session_state["studio_last_fname"] = f"{safe_store}_{safe_code}_{ts}.png"
+                st.session_state["studio_last_saved"] = False
 
-                # حفظ في الأرشيف
-                try:
-                    with open(os.path.join(_ARCHIVE_DIR, fname), "wb") as _af:
-                        _af.write(png_bytes)
-                except Exception:
-                    pass
+            last_png = st.session_state.get("studio_last_png")
+            last_fname = st.session_state.get("studio_last_fname")
 
-                st.download_button(
-                    "📥 تحميل PNG (1080×1080)",
-                    data=png_bytes,
-                    file_name=fname,
-                    mime="image/png",
-                    width='stretch',
-                )
-                st.success("تم. الملف محفوظ في الأرشيف ويمكن تحميله الآن.")
+            if last_png:
+                st.image(last_png, width='stretch')
+
+                bcol1, bcol2 = st.columns(2)
+                with bcol1:
+                    if st.button("💾 حفظ في الأرشيف", width='stretch', disabled=st.session_state.get("studio_last_saved", False)):
+                        try:
+                            with open(os.path.join(_ARCHIVE_DIR, last_fname), "wb") as _af:
+                                _af.write(last_png)
+                            st.session_state["studio_last_saved"] = True
+                            st.success(f"تم الحفظ: {last_fname}")
+                        except Exception as e:
+                            st.error(f"فشل الحفظ: {e}")
+                with bcol2:
+                    st.download_button(
+                        "📥 تحميل PNG",
+                        data=last_png,
+                        file_name=last_fname,
+                        mime="image/png",
+                        width='stretch',
+                    )
+                if st.session_state.get("studio_last_saved"):
+                    st.caption(f"✓ محفوظ في الأرشيف باسم {last_fname}")
             else:
                 st.info("اضغط «توليد البوستر» لرؤية المعاينة. الهوية مقفولة على ستايل نبض الصفقات — كل البوسترات تطلع بنفس الإحساس الفاخر.")
 
