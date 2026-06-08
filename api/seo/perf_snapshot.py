@@ -64,15 +64,18 @@ def _gsc_totals():
 
 def capture_snapshot() -> dict:
     """يلتقط لقطة اليوم ويخزّنها (upsert على تاريخ اليوم)."""
+    ps_error = gsc_error = None
     try:
         ps = _pagespeed_scores()
     except Exception as e:  # noqa: BLE001
-        _log.warning("pagespeed snapshot failed: %s", e)
+        ps_error = f"{type(e).__name__}: {e}"
+        _log.warning("pagespeed snapshot failed: %s", ps_error)
         ps = (None, None, None, None)
     try:
         g = _gsc_totals()
     except Exception as e:  # noqa: BLE001
-        _log.warning("gsc snapshot failed: %s", e)
+        gsc_error = f"{type(e).__name__}: {e}"
+        _log.warning("gsc snapshot failed: %s", gsc_error)
         g = (None, None, None, None)
 
     with get_db_context() as conn:
@@ -97,4 +100,4 @@ def capture_snapshot() -> dict:
             )
         conn.commit()
     _log.info("seo snapshot captured: ps=%s gsc=%s", ps, g)
-    return {"pagespeed": ps, "gsc": g}
+    return {"pagespeed": ps, "gsc": g, "ps_error": ps_error, "gsc_error": gsc_error}

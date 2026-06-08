@@ -10927,8 +10927,16 @@ elif page == "📈 أداء SEO":
             if _serr:
                 st.error(f"تعذّر: {_serr}")
             else:
-                st.success("✅ تم التقاط اللقطة.")
-                st.rerun()
+                _ge = (_sd or {}).get("gsc_error")
+                _pe = (_sd or {}).get("ps_error")
+                if _ge:
+                    st.warning(f"⚠️ GSC لم تُجلب: {_ge[:400]}")
+                if _pe:
+                    st.warning(f"⚠️ PageSpeed لم تُجلب: {_pe[:400]}")
+                if not _ge and not _pe:
+                    st.success("✅ تم التقاط اللقطة كاملة (PageSpeed + GSC).")
+                else:
+                    st.info("اللقطة حُفظت جزئياً. حدّث الصفحة لرؤية السجل.")
         _tc = get_conn(); _tc.rollback()
         try:
             _snap = pd.read_sql("""
