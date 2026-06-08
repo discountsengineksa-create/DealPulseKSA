@@ -9510,66 +9510,224 @@ elif page == "مركز الإشعارات":
 
 # --- الصفحة السادسة عشرة: لوحة القيادة الإستراتيجية (Fixed Version) ---
 elif page == "لوحة القيادة":
-    page_title("🏢", "غرفة العمليات والإستراتيجية")
+    page_title("🟢", "غرفة العمليات — متابعة لايف",
+               "كل حركة في البوت والميني والموقع، لحظة بلحظة (توقيت السعودية)")
 
-    try:
-        conn = get_conn()
-        cur = conn.cursor()
-        cur.execute("ROLLBACK")
+    # ── خرائط العرض ─────────────────────────────────────────────────────────
+    _SRC_LBL = {"bot": "🤖 بوت", "telegram_miniapp": "📱 ميني", "web": "🌐 موقع"}
+    _ACT_LBL = {
+        "search": "🔍 بحث", "start": "▶️ بدأ المحادثة",
+        "click_link": "🔗 فتح رابط المتجر", "copy_coupon": "📋 نسخ الكود",
+        "view_store": "🏬 دخل متجر", "view_tag": "🏷️ تصفّح قسم",
+        "view_sections": "📂 تصفّح الأقسام", "view_all": "📜 عرض الكل",
+        "view_favorites": "⭐ عرض المفضلة", "favorite_add": "❤️ أضاف للمفضلة",
+        "category_favorite_add": "❤️ أضاف قسماً للمفضلة",
+        "request_code": "🙋 طلب كود", "reaction_heart": "💖 تفاعل",
+        "lang_pick": "🌐 اختار اللغة",
+        "idle_warn": "⏰ تنبيه خمول", "idle_kick": "💤 إنهاء خمول",
+        "idle_alert": "⏰ تنبيه", "end_session": "⏹️ نهاية جلسة",
+        "unknown_input": "❓ إدخال غير مفهوم", "back": "↩️ رجوع",
+    }
+    # التصنيف — تمهيد لخطوة الألوان لاحقاً
+    _ACT_CAT = {
+        "copy_coupon": "💰 تحويل", "click_link": "💰 تحويل", "request_code": "💰 تحويل",
+        "favorite_add": "❤️ تفاعل", "category_favorite_add": "❤️ تفاعل",
+        "reaction_heart": "❤️ تفاعل", "view_favorites": "❤️ تفاعل",
+        "search": "🔍 بحث",
+        "view_store": "👀 تصفّح", "view_tag": "👀 تصفّح", "view_sections": "👀 تصفّح",
+        "view_all": "👀 تصفّح", "start": "👀 تصفّح", "lang_pick": "👀 تصفّح",
+    }
+    _MEANINGFUL = ["search", "start", "click_link", "copy_coupon", "view_store",
+                   "view_tag", "view_sections", "view_all", "view_favorites",
+                   "favorite_add", "category_favorite_add", "request_code",
+                   "reaction_heart", "lang_pick"]
+    _SYS_ACTS = ["idle_warn", "idle_kick", "idle_alert", "end_session",
+                 "unknown_input", "back"]
 
-        def get_stat(query):
-            try:
-                res = pd.read_sql(query, conn)
-                return res.iloc[0,0] if not res.empty else 0
-            except Exception:
-                return 0
+    # ── أدوات التحكم ────────────────────────────────────────────────────────
+    _c1, _c2, _c3, _c4 = st.columns([1, 1, 1.3, 1.6])
+    live = _c1.toggle("🔴 بث مباشر", value=True, key="cmd_live")
+    interval = _c2.selectbox("التحديث", [5, 10, 30],
+                             format_func=lambda x: f"كل {x} ثانية",
+                             index=1, key="cmd_interval")
+    limit = _c3.slider("عدد الأحداث", 50, 1000, 200, step=50, key="cmd_limit")
+    show_sys = _c4.checkbox("إظهار أحداث النظام (خمول/جلسات)",
+                            value=False, key="cmd_show_sys")
 
-        m_count = get_stat("SELECT COUNT(*) FROM master")
-        u_count = get_stat("SELECT COUNT(*) FROM bot_users")
-        b_count = get_stat("SELECT COUNT(*) FROM broadcast_logs")
-        idle_count = get_stat("""
-            SELECT COUNT(*) FROM bot_users
-            WHERE last_seen IS NULL OR last_seen < NOW() - INTERVAL '24 hours'
-        """)
-        beneficiaries = get_stat("""
-            SELECT COUNT(DISTINCT user_id) FROM action_logs
-            WHERE user_id IS NOT NULL
-              AND action_type IN ('copy_coupon','click_link')
-        """)
+    # ── فلتر الفترة (للعرض وللتحميل) ────────────────────────────────────────
+    _ksa_today = (datetime.datetime.utcnow() + timedelta(hours=3)).date()
+    _dr = st.date_input(
+        "📅 الفترة (من → إلى) — تُطبَّق على العرض وعلى تحميل الإكسل",
+        value=(_ksa_today - timedelta(days=7), _ksa_today),
+        max_value=_ksa_today, key="cmd_range", format="YYYY-MM-DD")
+    if isinstance(_dr, (list, tuple)) and len(_dr) == 2:
+        d_from, d_to = _dr
+    else:
+        _one = _dr[0] if isinstance(_dr, (list, tuple)) else _dr
+        d_from = d_to = _one
 
-        st.markdown("### 📈 مؤشرات الأداء الحية")
-        c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("📦 روابط الماستر", f"{m_count}")
-        c2.metric("👥 المشتركين", f"{u_count}")
-        c3.metric("📢 حملات مرسلة", f"{b_count}")
-        c4.metric("💤 خاملون (>24س)", f"{idle_count}")
-        c5.metric("🎁 المستفيدون", f"{beneficiaries}")
+    acts = _MEANINGFUL + (_SYS_ACTS if show_sys else [])
+    _KSA = "AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Riyadh'"
 
-        st.divider()
-        st.subheader("📜 سجل آخر الحركات")
+    def _render_live():
         try:
-            df_logs = pd.read_sql("""
-                SELECT
-                    TO_CHAR(a.action_time, 'YYYY-MM-DD HH24:MI:SS') AS "الوقت",
-                    a.action_type AS "الحركة",
-                    COALESCE(a.store_id, '—') AS "المتجر",
-                    COALESCE(NULLIF(b.username, ''), '— مجهول —') AS "المستخدم",
-                    COALESCE(a.details, '') AS "التفاصيل"
-                FROM action_logs a
-                LEFT JOIN bot_users b ON a.user_id = b.telegram_id
-                ORDER BY a.action_time DESC LIMIT 20
-            """, conn)
-            if not df_logs.empty:
-                st.dataframe(df_logs, width='stretch', hide_index=True, height=420)
-            else:
-                st.info("📭 لا توجد حركات مسجّلة بعد.")
-        except Exception as e:
-            st.warning(f"⚠️ تعذّر جلب سجل الحركات: {e}")
+            conn = get_conn()
+            conn.rollback()
 
-    except Exception as e:
-        st.error(f"حدث خطأ فني: {e}")
-    finally:
-        if 'conn' in locals(): conn.close()
+            def get_stat(q, p=None):
+                try:
+                    return int(pd.read_sql(q, conn, params=p).iloc[0, 0])
+                except Exception:
+                    return 0
+
+            tab_bot, tab_web = st.tabs(["🤖 بوت + ميني ويب", "🌐 الموقع"])
+
+            # ════════════════ تبويب البوت + الميني ════════════════
+            with tab_bot:
+                m_users = get_stat(
+                    "SELECT COUNT(*) FROM bot_users WHERE deleted_at IS NULL")
+                m_active = get_stat("""
+                    SELECT COUNT(DISTINCT user_id) FROM action_logs
+                    WHERE source IN ('bot','telegram_miniapp')
+                      AND action_time > NOW() - INTERVAL '1 hour'""")
+                m_today = get_stat(f"""
+                    SELECT COUNT(*) FROM action_logs
+                    WHERE source IN ('bot','telegram_miniapp')
+                      AND action_type = ANY(%s)
+                      AND (action_time {_KSA})::date
+                          = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date""",
+                                   (_MEANINGFUL,))
+                m_complete = get_stat("""
+                    SELECT COUNT(*) FROM bot_users b
+                    WHERE b.deleted_at IS NULL
+                      AND b.username IS NOT NULL AND b.username <> ''
+                      AND EXISTS (SELECT 1 FROM web_users w
+                                  WHERE LOWER(w.telegram_username)=LOWER(b.username))""")
+                k1, k2, k3, k4 = st.columns(4)
+                k1.metric("👥 مستخدمو البوت", f"{m_users}")
+                k2.metric("🟢 نشطون (آخر ساعة)", f"{m_active}")
+                k3.metric("⚡ أحداث اليوم", f"{m_today}")
+                k4.metric("✅ مكتملون (مربوطون بالموقع)", f"{m_complete}")
+                st.divider()
+
+                df = pd.read_sql(f"""
+                    SELECT (a.action_time {_KSA}) AS ts,
+                           a.source, a.action_type, a.user_id,
+                           NULLIF(b.username,'') AS username, b.name_en,
+                           COALESCE(a.store_id,'—') AS store_id,
+                           COALESCE(a.details,'') AS details
+                    FROM action_logs a
+                    LEFT JOIN bot_users b ON a.user_id = b.telegram_id
+                    WHERE a.source IN ('bot','telegram_miniapp')
+                      AND a.action_type = ANY(%s)
+                      AND (a.action_time {_KSA})::date BETWEEN %s AND %s
+                    ORDER BY a.action_time DESC LIMIT %s
+                """, conn, params=(acts, d_from, d_to, limit))
+
+                if df.empty:
+                    st.info("📭 لا توجد حركات في هذه الفترة.")
+                else:
+                    def _who(r):
+                        if r["username"]:
+                            return "@" + r["username"]
+                        if pd.notna(r["name_en"]) and r["name_en"]:
+                            return r["name_en"]
+                        if pd.notna(r["user_id"]):
+                            return f"زائر #{int(r['user_id'])}"
+                        return "— مجهول —"
+                    show = pd.DataFrame({
+                        "الوقت": pd.to_datetime(df["ts"]).dt.strftime("%Y-%m-%d %H:%M:%S"),
+                        "المنصة": df["source"].map(_SRC_LBL).fillna(df["source"]),
+                        "المستخدم": df.apply(_who, axis=1),
+                        "الحركة": df["action_type"].map(_ACT_LBL).fillna(df["action_type"]),
+                        "التصنيف": df["action_type"].map(_ACT_CAT).fillna("⚙️ نظام"),
+                        "المتجر": df["store_id"],
+                        "التفاصيل": df["details"],
+                    })
+                    st.caption(f"عدد الأحداث المعروضة: {len(show)}")
+                    st.dataframe(show, width="stretch", hide_index=True, height=460)
+                    _xl = BytesIO()
+                    with pd.ExcelWriter(_xl, engine="xlsxwriter") as _w:
+                        show.to_excel(_w, index=False, sheet_name="Bot_Live")
+                    st.download_button(
+                        "📥 تحميل الفترة (Excel)", _xl.getvalue(),
+                        f"LiveFeed_Bot_{d_from}_to_{d_to}.xlsx", key="dl_bot_live")
+
+            # ════════════════ تبويب الموقع ════════════════
+            with tab_web:
+                w_users = get_stat("SELECT COUNT(*) FROM web_users")
+                w_active = get_stat("""
+                    SELECT COUNT(DISTINCT user_id) FROM action_logs
+                    WHERE source='web' AND action_time > NOW() - INTERVAL '1 hour'""")
+                w_today = get_stat(f"""
+                    SELECT COUNT(*) FROM action_logs
+                    WHERE source='web' AND action_type = ANY(%s)
+                      AND (action_time {_KSA})::date
+                          = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Riyadh')::date""",
+                                   (_MEANINGFUL,))
+                w_complete = get_stat("""
+                    SELECT COUNT(*) FROM web_users
+                    WHERE display_name IS NOT NULL AND display_name <> ''
+                      AND email IS NOT NULL AND email <> ''
+                      AND phone_number IS NOT NULL AND phone_number <> ''
+                      AND gender IS NOT NULL AND birth_date IS NOT NULL""")
+                k1, k2, k3, k4 = st.columns(4)
+                k1.metric("🌐 مستخدمو الموقع", f"{w_users}")
+                k2.metric("🟢 نشطون (آخر ساعة)", f"{w_active}")
+                k3.metric("⚡ أحداث اليوم", f"{w_today}")
+                k4.metric("✅ مكتملون (ملف كامل)", f"{w_complete}")
+                st.caption("المكتمل = اسم + إيميل + جوال + ميلاد + جنس")
+                st.divider()
+
+                dfw = pd.read_sql(f"""
+                    SELECT (a.action_time {_KSA}) AS ts, a.action_type,
+                           COALESCE(NULLIF(w.display_name,''),'—') AS name,
+                           COALESCE(w.email,'—') AS email,
+                           COALESCE(w.phone_number,'—') AS phone,
+                           COALESCE(a.store_id,'—') AS store_id,
+                           COALESCE(a.details,'') AS details
+                    FROM action_logs a
+                    LEFT JOIN web_users w ON a.user_id = w.id
+                    WHERE a.source='web' AND a.action_type = ANY(%s)
+                      AND (a.action_time {_KSA})::date BETWEEN %s AND %s
+                    ORDER BY a.action_time DESC LIMIT %s
+                """, conn, params=(acts, d_from, d_to, limit))
+
+                if dfw.empty:
+                    st.info("📭 لا توجد حركات في هذه الفترة.")
+                else:
+                    showw = pd.DataFrame({
+                        "الوقت": pd.to_datetime(dfw["ts"]).dt.strftime("%Y-%m-%d %H:%M:%S"),
+                        "الاسم": dfw["name"],
+                        "الإيميل": dfw["email"],
+                        "الجوال": dfw["phone"],
+                        "الحركة": dfw["action_type"].map(_ACT_LBL).fillna(dfw["action_type"]),
+                        "التصنيف": dfw["action_type"].map(_ACT_CAT).fillna("⚙️ نظام"),
+                        "المتجر": dfw["store_id"],
+                        "التفاصيل": dfw["details"],
+                    })
+                    st.caption(f"عدد الأحداث المعروضة: {len(showw)}")
+                    st.dataframe(showw, width="stretch", hide_index=True, height=460)
+                    _xlw = BytesIO()
+                    with pd.ExcelWriter(_xlw, engine="xlsxwriter") as _w:
+                        showw.to_excel(_w, index=False, sheet_name="Web_Live")
+                    st.download_button(
+                        "📥 تحميل الفترة (Excel)", _xlw.getvalue(),
+                        f"LiveFeed_Web_{d_from}_to_{d_to}.xlsx", key="dl_web_live")
+
+            _stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            st.caption(f"⏱️ آخر تحديث: {_stamp}"
+                       + ("  ·  🔴 بث مباشر" if live else "  ·  ⏸️ متوقف"))
+        except Exception as e:
+            st.error(f"حدث خطأ فني: {e}")
+        finally:
+            if "conn" in locals():
+                conn.close()
+
+    _runner = st.fragment(run_every=(interval if live else None))(_render_live)
+    _runner()
+    if not live and st.button("🔄 تحديث الآن", key="cmd_manual_refresh"):
+        st.rerun()
 
 
 # --- الصفحة الثامنة عشرة: مركز الدعم الفني ---
