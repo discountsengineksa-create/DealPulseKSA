@@ -108,6 +108,15 @@ def _seo_auto_cycle() -> None:
         _log.warning("seo auto cycle failed (non-fatal): %s", exc)
 
 
+def _seo_snapshot_cycle() -> None:
+    """لقطة أداء SEO اليومية (4 صباحاً Riyadh): PageSpeed + Search Console → تخزين."""
+    from api.seo.perf_snapshot import capture_snapshot
+    try:
+        capture_snapshot()
+    except Exception as exc:
+        _log.warning("seo snapshot cycle failed (non-fatal): %s", exc)
+
+
 def _llm_cache_cleanup_cycle() -> None:
     """
     تنظيف صفوف llm_semantic_cache المنتهية الصلاحية (migration_022).
@@ -238,6 +247,15 @@ def start_workers() -> None:
         trigger="cron", hour=3, minute=0, timezone="Asia/Riyadh",
         id="seo_auto_daily",
         name="Daily autonomous SEO generate+publish (3AM Riyadh)",
+        replace_existing=True,
+    )
+
+    # لقطة أداء SEO اليومية — 4 صباحاً Riyadh (بعد دورة التوليد)
+    _scheduler.add_job(
+        _seo_snapshot_cycle,
+        trigger="cron", hour=4, minute=0, timezone="Asia/Riyadh",
+        id="seo_snapshot_daily",
+        name="Daily SEO performance snapshot (PageSpeed + GSC)",
         replace_existing=True,
     )
 

@@ -10795,7 +10795,8 @@ elif page == "محرّك SEO":
 elif page == "📈 أداء SEO":
     page_title("📈", "قياس وأداء SEO",
                "سرعة الموقع (PageSpeed) + نتائج البحث (Search Console)")
-    _ps_tab, _gsc_tab = st.tabs(["⚡ سرعة الموقع (PageSpeed)", "🔍 Search Console"])
+    _ps_tab, _gsc_tab, _trk_tab = st.tabs(
+        ["⚡ سرعة الموقع (PageSpeed)", "🔍 Search Console", "📅 التتبّع اليومي"])
 
     with _ps_tab:
         st.caption("فحص الأداء/SEO/الإتاحة عبر Google PageSpeed — يكشف نقاط الضعف وفرص التحسين.")
@@ -10917,6 +10918,37 @@ elif page == "📈 أداء SEO":
                     _gtbl(_byq, "الكلمة")
                     st.subheader("📄 أهم الصفحات")
                     _gtbl(_byp, "الصفحة")
+
+    with _trk_tab:
+        st.caption("تطوّر أدائك يوم بيوم — يُحدّث تلقائياً 4 صباحاً، أو اضغط لقطة فورية.")
+        if st.button("📸 التقط لقطة الآن", type="primary", key="snap_now"):
+            with st.spinner("جارٍ الالتقاط (PageSpeed + GSC)... ~دقيقة"):
+                _sd, _serr = _admin_post("/admin/seo-snapshot", timeout=120)
+            if _serr:
+                st.error(f"تعذّر: {_serr}")
+            else:
+                st.success("✅ تم التقاط اللقطة.")
+                st.rerun()
+        _tc = get_conn(); _tc.rollback()
+        try:
+            _snap = pd.read_sql("""
+                SELECT snapshot_date AS "التاريخ", ps_performance AS "الأداء",
+                       ps_seo AS "SEO", gsc_clicks AS "نقرات",
+                       gsc_impressions AS "ظهور", gsc_position AS "الترتيب"
+                FROM seo_perf_snapshots ORDER BY snapshot_date DESC LIMIT 90
+            """, _tc)
+        finally:
+            _tc.close()
+        if _snap.empty:
+            st.info("لا لقطات بعد — اضغط «التقط لقطة الآن» أو انتظر دورة 4 صباحاً.")
+        else:
+            _chart = _snap.sort_values("التاريخ")
+            st.markdown("##### ⚡ تطوّر الأداء (PageSpeed)")
+            st.line_chart(_chart.set_index("التاريخ")[["الأداء", "SEO"]])
+            st.markdown("##### 📊 تطوّر Search Console (إجمالي آخر 28 يوم لكل لقطة)")
+            st.line_chart(_chart.set_index("التاريخ")[["نقرات", "ظهور"]])
+            st.markdown("##### 📋 السجل")
+            st.dataframe(_snap, width="stretch", hide_index=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

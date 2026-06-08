@@ -330,6 +330,14 @@ def seo_run(
     return {"trends_upserted": trends, "jobs_enqueued": enqueued, "generation": gen}
 
 
+@router.post("/seo-snapshot")
+def seo_snapshot(x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
+    """يلتقط لقطة أداء SEO الآن (PageSpeed + GSC) ويخزّنها — يدوي أو من الكرون."""
+    _verify_admin(x_admin_secret)
+    from api.seo.perf_snapshot import capture_snapshot
+    return capture_snapshot()
+
+
 @router.post("/seo-auto-run")
 def seo_auto_run(x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
     """تشغيل يدوي لدورة محرّك SEO الأوتوماتيكية الكاملة (نفس دورة 3 صباحاً):
