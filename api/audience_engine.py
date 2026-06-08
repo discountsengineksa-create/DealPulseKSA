@@ -430,6 +430,12 @@ def _build_attribute(rule: dict, channel: str) -> tuple[str, list]:
     op = rule.get("op", "=")
     value = rule.get("value")
 
+    # ── "الكل" — قاعدة لا تُقيّد (tautology) ─────────────────────────────
+    # المستخدم اختار "الكل" في الواجهة → نُولّد TRUE بدل ما نُجبره يحذف
+    # القاعدة، عشان الـ UX يبقى متسق (يقدر يبدّل بين «الكل» وقيمة محددة).
+    if op == "is_any":
+        return "TRUE", []
+
     # ── Direct (column expression) ──────────────────────────────────────
     if field in _ATTRIBUTE_FIELDS_DIRECT:
         col_expr = _ATTRIBUTE_FIELDS_DIRECT[field][channel]
@@ -457,6 +463,19 @@ def _build_attribute(rule: dict, channel: str) -> tuple[str, list]:
     # ── Specials (EXISTS / subqueries) ──────────────────────────────────
     if field == "favorite_store":
         uf_user = _uf_user_clause(channel)
+        # has_any / has_none → "عنده مفضّل" / "ما عنده" بدون تحديد متجر
+        if op == "has_any":
+            return (
+                f"EXISTS (SELECT 1 FROM user_favorites uf "
+                f"WHERE {uf_user} AND uf.kind = 'store')",
+                [],
+            )
+        if op == "has_none":
+            return (
+                f"NOT EXISTS (SELECT 1 FROM user_favorites uf "
+                f"WHERE {uf_user} AND uf.kind = 'store')",
+                [],
+            )
         return (
             f"EXISTS (SELECT 1 FROM user_favorites uf "
             f"WHERE {uf_user} AND uf.kind = 'store' AND uf.store_id = %s)",
@@ -465,6 +484,18 @@ def _build_attribute(rule: dict, channel: str) -> tuple[str, list]:
 
     if field == "favorite_category":
         uf_user = _uf_user_clause(channel)
+        if op == "has_any":
+            return (
+                f"EXISTS (SELECT 1 FROM user_favorites uf "
+                f"WHERE {uf_user} AND uf.kind = 'category')",
+                [],
+            )
+        if op == "has_none":
+            return (
+                f"NOT EXISTS (SELECT 1 FROM user_favorites uf "
+                f"WHERE {uf_user} AND uf.kind = 'category')",
+                [],
+            )
         return (
             f"EXISTS (SELECT 1 FROM user_favorites uf "
             f"WHERE {uf_user} AND uf.kind = 'category' AND uf.category_name = %s)",
@@ -703,6 +734,10 @@ def _build_temporal(rule: dict, channel: str) -> tuple[str, list]:
         raise ValueError(f"حقل temporal غير معروف: {field!r}")
     col_expr = _TEMPORAL_FIELDS[field][channel]
     op = rule.get("op", ">=")
+
+    # "الكل" — لا قيد زمني
+    if op == "is_any":
+        return "TRUE", []
 
     value_days = rule.get("value_days")
     value_date = rule.get("value_date")

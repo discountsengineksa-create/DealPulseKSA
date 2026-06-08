@@ -8055,37 +8055,56 @@ elif page == "🎯 بناء الشرائح":
     # المطلوب مباشرة من قائمة واحدة (مثل فلاتر صفحة تحليل المستخدمين).
     # الـ backend يبقى كما هو — الـpicker يحوّل الاختيار إلى الـtype/field
     # المناسب خلف الكواليس، فالشرائح المحفوظة قديماً تشتغل بدون تغيير.
+    # ── الأصول الـ13 — مطابقة 1:1 لفلاتر صفحة «تحليل المستخدمين» ──────
+    # كل قيمة قابلة لاختيار "الكل" → الـbackend يستخدم op=is_any (يولّد TRUE).
     _PICKER_OPTIONS = [
-        # ── الملف الشخصي ──────────────────────────────────────────────
+        # الملف الشخصي
         ("lang",              "🌐 اللغة"),
         ("gender",            "⚧ الجنس"),
         ("age",               "🎂 العمر"),
         ("city",              "🏙 المدينة"),
-        ("is_linked",         "🔗 ملف مربوط (بوت + موقع)"),
-        ("has_email",         "📧 له إيميل"),
-        ("has_phone",         "📱 له جوال"),
-        ("profile_complete",  "✅ اكتمال الملف الكامل"),
-        # ── المفضلات ────────────────────────────────────────────────
-        ("favorite_store",    "❤️ متجر مفضّل عنده"),
-        ("favorite_category", "🏷️ قسم مفضّل عنده"),
-        ("fav_count",         "🔢 عدد مفضّلاته"),
-        # ── السلوك (أحداث) ──────────────────────────────────────────
+        ("profile_complete",  "✅ اكتمال الملف"),
+        ("status",            "⚡ الحالة (نشط/خامل)"),
+        # المفضلات
+        ("favorite_store",    "❤️ مفضّل متجر"),
+        ("favorite_category", "🏷️ مفضّل قسم"),
+        # السلوك (أحداث)
         ("evt_copy",          "🗒️ نسخ كوبون"),
         ("evt_click",         "🖱️ نقر رابط متجر"),
         ("evt_view",          "👁️ زيارة متجر / قسم"),
-        ("evt_search",        "🔍 بحث بكلمة"),
+        ("evt_search",        "🔍 بحث"),
         ("evt_story",         "🎬 مشاهدة ستوري"),
-        # ── العداد ─────────────────────────────────────────────────
-        ("aggregate",         "📊 عدّاد (كم مرة فعل…)"),
-        # ── الزمن ──────────────────────────────────────────────────
-        ("temporal",          "📅 الانضمام / آخر ظهور"),
     ]
     _PICKER_KEYS   = [k for k, _ in _PICKER_OPTIONS]
     _PICKER_LABELS = dict(_PICKER_OPTIONS)
-    _ATTR_PICKERS  = {"lang","gender","age","city","is_linked","has_email",
-                      "has_phone","profile_complete","favorite_store",
-                      "favorite_category","fav_count"}
+    _ATTR_PICKERS  = {"lang","gender","age","city","profile_complete",
+                      "favorite_store","favorite_category"}
     _EVT_PICKERS   = {"evt_copy","evt_click","evt_view","evt_search","evt_story"}
+
+    # نطاقات العمر — نفس صفحة تحليل المستخدمين
+    _AGE_RANGES = [
+        ("u18",   "أقل من 18", [0, 17]),
+        ("18-24", "18 – 24",   [18, 24]),
+        ("25-34", "25 – 34",   [25, 34]),
+        ("35-44", "35 – 44",   [35, 44]),
+        ("45-54", "45 – 54",   [45, 54]),
+        ("55+",   "+55",       [55, 200]),
+    ]
+    _AGE_RANGE_LABELS = {k: lbl for k, lbl, _ in _AGE_RANGES}
+    _AGE_RANGE_BOUNDS = {k: bounds for k, _, bounds in _AGE_RANGES}
+
+    def _detect_age_range(rule: dict) -> str:
+        """يستنتج النطاق المختار من قيم between المخزّنة."""
+        v = rule.get("value")
+        if isinstance(v, (list, tuple)) and len(v) == 2:
+            try:
+                lo, hi = int(v[0]), int(v[1])
+                for k, _, (b_lo, b_hi) in _AGE_RANGES:
+                    if lo == b_lo and hi == b_hi:
+                        return k
+            except (ValueError, TypeError):
+                pass
+        return "18-24"
 
     def _detect_picker_key(rule: dict) -> str:
         """يستنتج خيار الـpicker من حالة الـrule المحفوظة (backward-compat)."""
@@ -8101,31 +8120,22 @@ elif page == "🎯 بناء الشرائح":
             if a in ("search", "search_keyword"):  return "evt_search"
             if a == "view_story":                  return "evt_story"
             return "evt_copy"
-        if t == "aggregate": return "aggregate"
-        if t == "temporal":  return "temporal"
+        if t == "temporal":  return "status"
+        # aggregate/أصول قديمة محذوفة → fallback آمن
         return "lang"
 
     def _init_rule_for_picker(picker_key: str) -> dict:
-        """قاعدة جديدة بقيم افتراضية مناسبة لكل أصل."""
-        if picker_key in ("is_linked","has_email","has_phone","profile_complete"):
-            return {"type":"attribute","field":picker_key,"op":"=","value":True}
-        if picker_key == "lang":
-            return {"type":"attribute","field":"lang","op":"=","value":"ar"}
-        if picker_key == "gender":
-            return {"type":"attribute","field":"gender","op":"=","value":"male"}
+        """قاعدة جديدة افتراضية «الكل» (is_any) لكل أصل — مطابقة لتحليل المستخدمين."""
+        if picker_key in ("lang","gender","city","profile_complete",
+                          "favorite_store","favorite_category"):
+            return {"type":"attribute","field":picker_key,"op":"is_any","value":None}
         if picker_key == "age":
-            return {"type":"attribute","field":"age","op":"between","value":[18,34]}
-        if picker_key == "city":
-            return {"type":"attribute","field":"city","op":"=",
-                    "value":(_CITIES[0] if _CITIES else "")}
-        if picker_key == "favorite_store":
-            return {"type":"attribute","field":"favorite_store","op":"=",
-                    "value":(_STORES[0] if _STORES else "")}
-        if picker_key == "favorite_category":
-            return {"type":"attribute","field":"favorite_category","op":"=",
-                    "value":(_CATEGORIES[0] if _CATEGORIES else "")}
-        if picker_key == "fav_count":
-            return {"type":"attribute","field":"fav_count","op":">=","value":1}
+            # العمر يبدأ بـ"الكل" أيضاً
+            return {"type":"attribute","field":"age","op":"is_any","value":None}
+        if picker_key == "status":
+            # ⚡ الحالة (نشط/خامل) = temporal مغلّف بـradio بسيط
+            # افتراضياً "الكل" → نخزّن temporal مع op=is_any وlast_seen
+            return {"type":"temporal","field":"last_seen","op":"is_any","value_days":20}
         if picker_key == "evt_copy":
             return {"type":"event","action":"copy_coupon","entity_type":"any",
                     "context":"any","window":{"type":"last_days","days":30}}
@@ -8143,13 +8153,7 @@ elif page == "🎯 بناء الشرائح":
             return {"type":"event","action":"view_story","entity_type":"any",
                     "entity_value":None,"was_trending":None,
                     "window":{"type":"last_days","days":30}}
-        if picker_key == "aggregate":
-            return {"type":"aggregate","action":"copy_coupon","entity_type":"any",
-                    "context":"any","threshold_type":"absolute","op":">=",
-                    "value":3,"window":{"type":"last_days","days":30}}
-        if picker_key == "temporal":
-            return {"type":"temporal","field":"last_seen","op":">=","value_days":7}
-        return {"type":"attribute","field":"lang","op":"=","value":"ar"}
+        return {"type":"attribute","field":"lang","op":"is_any","value":None}
 
     def _render_evt_target_context(rule: dict, key: str):
         """يعرض الهدف+السياق+حالة المتاجر لأحداث copy/click."""
@@ -8191,119 +8195,173 @@ elif page == "🎯 بناء الشرائح":
                 format_func=lambda x: _ss_labels[x], key=f"{key}_ss")
             rule["store_status"] = None if new_ss == "any" else new_ss
 
+    # ── Helper: زر/راديو "الكل" يُحوّل الـrule لقاعدة tautology ─────
+    def _radio_with_any(label, options_dict, current_value, key,
+                        any_choice="__any__", default_specific=None):
+        """يعرض radio: «الكل» + قيم محددة. يرجّع (is_any, selected_value)."""
+        keys_ordered = [any_choice] + list(options_dict.keys())
+        labels = {any_choice: "🌐 الكل", **options_dict}
+        idx = 0  # الافتراضي: الكل
+        if current_value in options_dict:
+            idx = keys_ordered.index(current_value)
+        choice = st.radio(label, keys_ordered, index=idx, horizontal=True,
+                          format_func=lambda x: labels[x], key=key)
+        if choice == any_choice:
+            return True, None
+        return False, choice
+
     def _render_picker_rule(picker_key: str, rule: dict, key: str):
-        """يرسم الواجهة المختصرة لكل أصل (بدون تكرار اختيار الحقل/الحركة)."""
-        # ── Boolean attributes ───────────────────────────────────────
-        if picker_key in ("is_linked","has_email","has_phone","profile_complete"):
-            rule["type"] = "attribute"; rule["field"] = picker_key; rule["op"] = "="
-            yn = st.radio("القيمة", ["نعم","لا"], horizontal=True,
-                index=0 if rule.get("value", True) else 1, key=f"{key}_v")
-            rule["value"] = (yn == "نعم")
-            return
+        """يرسم الواجهة المختصرة لكل أصل — مطابقة فلاتر تحليل المستخدمين."""
 
+        # ── 🌐 اللغة ─────────────────────────────────────────────────
         if picker_key == "lang":
-            rule["type"] = "attribute"; rule["field"] = "lang"; rule["op"] = "="
-            langs = ["ar","en"]
-            rule["value"] = st.selectbox("اللغة", langs,
-                index=langs.index(rule.get("value","ar"))
-                      if rule.get("value") in langs else 0,
-                format_func=lambda x: "🇸🇦 العربية" if x == "ar" else "🌍 الإنجليزية",
-                key=f"{key}_v")
+            rule["type"] = "attribute"; rule["field"] = "lang"
+            cur = rule.get("value") if rule.get("op") != "is_any" else None
+            is_any, val = _radio_with_any("القيمة",
+                {"ar":"🇸🇦 عربي", "en":"🇬🇧 إنجليزي"},
+                cur, key=f"{key}_v")
+            rule["op"] = "is_any" if is_any else "="
+            rule["value"] = val
             return
 
+        # ── ⚧ الجنس ──────────────────────────────────────────────────
         if picker_key == "gender":
-            rule["type"] = "attribute"; rule["field"] = "gender"; rule["op"] = "="
-            gs = ["male","female"]
-            rule["value"] = st.radio("الجنس", gs, horizontal=True,
-                index=gs.index(rule.get("value","male"))
-                      if rule.get("value") in gs else 0,
-                format_func=lambda x: "♂️ ذكر" if x == "male" else "♀️ أنثى",
-                key=f"{key}_v")
+            rule["type"] = "attribute"; rule["field"] = "gender"
+            cur = rule.get("value") if rule.get("op") != "is_any" else None
+            is_any, val = _radio_with_any("القيمة",
+                {"male":"♂️ ذكر", "female":"♀️ أنثى"},
+                cur, key=f"{key}_v")
+            rule["op"] = "is_any" if is_any else "="
+            rule["value"] = val
             return
 
-        if picker_key == "city":
-            rule["type"] = "attribute"; rule["field"] = "city"; rule["op"] = "="
-            opts = _CITIES or ["—"]
-            cur = rule.get("value") or opts[0]
-            rule["value"] = st.selectbox("المدينة", opts,
-                index=opts.index(cur) if cur in opts else 0, key=f"{key}_v")
-            return
-
+        # ── 🎂 العمر (نطاقات مطابقة لتحليل المستخدمين) ────────────────
         if picker_key == "age":
             rule["type"] = "attribute"; rule["field"] = "age"
-            c1, c2 = st.columns([1, 2])
-            with c1:
-                ops = ["between","=",">",">=","<","<="]
-                rule["op"] = st.selectbox("العملية", ops,
-                    index=ops.index(rule.get("op","between"))
-                          if rule.get("op") in ops else 0,
-                    format_func=lambda x: _OPS_LABELS.get(x, x), key=f"{key}_op")
-            with c2:
-                if rule["op"] == "between":
-                    _raw = rule.get("value") if isinstance(rule.get("value"),
-                                                            (list,tuple)) else [18,34]
-                    try: v1 = int(_raw[0])
-                    except (ValueError, TypeError, IndexError): v1 = 18
-                    try: v2 = int(_raw[1])
-                    except (ValueError, TypeError, IndexError): v2 = 34
-                    cc1, cc2 = st.columns(2)
-                    v1 = cc1.number_input("من عمر", min_value=0, max_value=120,
-                                          value=v1, key=f"{key}_v1")
-                    v2 = cc2.number_input("إلى عمر", min_value=0, max_value=120,
-                                          value=v2, key=f"{key}_v2")
-                    rule["value"] = [int(v1), int(v2)]
-                else:
-                    try: a = int(rule.get("value", 25) or 25)
-                    except (ValueError, TypeError): a = 25
-                    rule["value"] = st.number_input("العمر", min_value=0,
-                        max_value=120, value=a, key=f"{key}_v")
+            cur_op = rule.get("op", "is_any")
+            cur_range = _detect_age_range(rule) if cur_op != "is_any" else None
+            range_opts = {k: lbl for k, lbl, _ in _AGE_RANGES}
+            is_any, sel = _radio_with_any("الفئة العمرية", range_opts,
+                cur_range, key=f"{key}_v")
+            if is_any:
+                rule["op"] = "is_any"; rule["value"] = None
+            else:
+                rule["op"] = "between"
+                rule["value"] = list(_AGE_RANGE_BOUNDS[sel])
             return
 
+        # ── 🏙 المدينة ────────────────────────────────────────────────
+        if picker_key == "city":
+            rule["type"] = "attribute"; rule["field"] = "city"
+            cur = rule.get("value") if rule.get("op") != "is_any" else None
+            city_opts = {c: c for c in (_CITIES or [])}
+            is_any, val = _radio_with_any("المدينة", city_opts,
+                cur, key=f"{key}_v")
+            rule["op"] = "is_any" if is_any else "="
+            rule["value"] = val
+            return
+
+        # ── ✅ اكتمال الملف ──────────────────────────────────────────
+        if picker_key == "profile_complete":
+            rule["type"] = "attribute"; rule["field"] = "profile_complete"
+            cur_op = rule.get("op", "is_any")
+            cur_val = "yes" if (cur_op != "is_any" and rule.get("value")) \
+                       else "no" if cur_op != "is_any" else None
+            is_any, val = _radio_with_any("الحالة",
+                {"yes":"✅ مكتمل", "no":"⚠️ ناقص"},
+                cur_val, key=f"{key}_v")
+            if is_any:
+                rule["op"] = "is_any"; rule["value"] = None
+            else:
+                rule["op"] = "="; rule["value"] = (val == "yes")
+            return
+
+        # ── ⚡ الحالة (نشط/خامل = temporal مغلّف) ───────────────────
+        if picker_key == "status":
+            rule["type"] = "temporal"; rule["field"] = "last_seen"
+            cur_op = rule.get("op", "is_any")
+            cur_st = None
+            if cur_op == ">=":   cur_st = "active"
+            elif cur_op == "<=": cur_st = "idle"
+            is_any, val = _radio_with_any("الحالة",
+                {"active":"🟢 نشط (آخر 20 يوم)",
+                 "idle":  "😴 خامل (لم يظهر منذ 20+ يوم)"},
+                cur_st, key=f"{key}_v")
+            if is_any:
+                rule["op"] = "is_any"; rule["value_days"] = 20
+            elif val == "active":
+                rule["op"] = ">="; rule["value_days"] = 20
+            else:
+                rule["op"] = "<="; rule["value_days"] = 20
+            return
+
+        # ── ❤️ مفضّل متجر ───────────────────────────────────────────
         if picker_key == "favorite_store":
-            rule["type"] = "attribute"; rule["field"] = "favorite_store"; rule["op"] = "="
-            opts = _STORES or ["—"]
-            cur = rule.get("value") or opts[0]
-            rule["value"] = st.selectbox("اسم المتجر المفضّل", opts,
-                index=opts.index(cur) if cur in opts else 0, key=f"{key}_v")
+            rule["type"] = "attribute"; rule["field"] = "favorite_store"
+            mode_opts = ["__any__", "has", "none", "specific"]
+            mode_labels = {"__any__":"🌐 الكل", "has":"❤️ عنده مفضّل",
+                          "none":"🤍 بلا مفضّل", "specific":"🎯 متجر محدد"}
+            cur_op = rule.get("op", "is_any")
+            cur_mode = ("__any__" if cur_op == "is_any"
+                        else "has" if cur_op == "has_any"
+                        else "none" if cur_op == "has_none"
+                        else "specific")
+            mode = st.radio("الوضع", mode_opts,
+                index=mode_opts.index(cur_mode),
+                horizontal=True,
+                format_func=lambda x: mode_labels[x], key=f"{key}_m")
+            if mode == "__any__":
+                rule["op"] = "is_any"; rule["value"] = None
+            elif mode == "has":
+                rule["op"] = "has_any"; rule["value"] = None
+            elif mode == "none":
+                rule["op"] = "has_none"; rule["value"] = None
+            else:
+                opts = _STORES or ["—"]
+                cur = rule.get("value") if rule.get("value") in opts else opts[0]
+                rule["value"] = st.selectbox("اسم المتجر", opts,
+                    index=opts.index(cur), key=f"{key}_s")
+                rule["op"] = "="
             return
 
+        # ── 🏷️ مفضّل قسم ────────────────────────────────────────────
         if picker_key == "favorite_category":
-            rule["type"] = "attribute"; rule["field"] = "favorite_category"; rule["op"] = "="
-            opts = _CATEGORIES or ["—"]
-            cur = rule.get("value") or opts[0]
-            rule["value"] = st.selectbox("اسم القسم المفضّل", opts,
-                index=opts.index(cur) if cur in opts else 0, key=f"{key}_v")
+            rule["type"] = "attribute"; rule["field"] = "favorite_category"
+            mode_opts = ["__any__", "has", "none", "specific"]
+            mode_labels = {"__any__":"🌐 الكل", "has":"❤️ عنده مفضّل",
+                          "none":"🤍 بلا مفضّل", "specific":"🎯 قسم محدد"}
+            cur_op = rule.get("op", "is_any")
+            cur_mode = ("__any__" if cur_op == "is_any"
+                        else "has" if cur_op == "has_any"
+                        else "none" if cur_op == "has_none"
+                        else "specific")
+            mode = st.radio("الوضع", mode_opts,
+                index=mode_opts.index(cur_mode),
+                horizontal=True,
+                format_func=lambda x: mode_labels[x], key=f"{key}_m")
+            if mode == "__any__":
+                rule["op"] = "is_any"; rule["value"] = None
+            elif mode == "has":
+                rule["op"] = "has_any"; rule["value"] = None
+            elif mode == "none":
+                rule["op"] = "has_none"; rule["value"] = None
+            else:
+                opts = _CATEGORIES or ["—"]
+                cur = rule.get("value") if rule.get("value") in opts else opts[0]
+                rule["value"] = st.selectbox("اسم القسم", opts,
+                    index=opts.index(cur), key=f"{key}_s")
+                rule["op"] = "="
             return
 
-        if picker_key == "fav_count":
-            rule["type"] = "attribute"; rule["field"] = "fav_count"
-            c1, c2 = st.columns([1, 2])
-            with c1:
-                ops = [">=",">","=","<=","<","!="]
-                rule["op"] = st.selectbox("العملية", ops,
-                    index=ops.index(rule.get("op",">="))
-                          if rule.get("op") in ops else 0,
-                    format_func=lambda x: _OPS_LABELS.get(x, x), key=f"{key}_op")
-            with c2:
-                try: cnt = int(rule.get("value", 1) or 1)
-                except (ValueError, TypeError): cnt = 1
-                rule["value"] = st.number_input("عدد المفضّلات", min_value=0,
-                    value=cnt, key=f"{key}_v")
-            return
-
-        # ── Events ───────────────────────────────────────────────────
-        if picker_key == "evt_copy":
-            rule["type"] = "event"; rule["action"] = "copy_coupon"
+        # ── 🗒️ نسخ كوبون / 🖱️ نقر رابط ─────────────────────────────
+        if picker_key in ("evt_copy", "evt_click"):
+            rule["type"] = "event"
+            rule["action"] = "copy_coupon" if picker_key == "evt_copy" else "click_link"
             _render_evt_target_context(rule, key)
             _render_window_picker(rule, f"{key}_w")
             return
 
-        if picker_key == "evt_click":
-            rule["type"] = "event"; rule["action"] = "click_link"
-            _render_evt_target_context(rule, key)
-            _render_window_picker(rule, f"{key}_w")
-            return
-
+        # ── 👁️ زيارة متجر/قسم ──────────────────────────────────────
         if picker_key == "evt_view":
             rule["type"] = "event"
             c1, c2 = st.columns(2)
@@ -8338,51 +8396,31 @@ elif page == "🎯 بناء الشرائح":
             _render_window_picker(rule, f"{key}_w")
             return
 
+        # ── 🔍 بحث ────────────────────────────────────────────────
         if picker_key == "evt_search":
             rule["type"] = "event"; rule["action"] = "search_keyword"
             rule["entity_type"] = "keyword"
             rule["entity_value"] = st.text_input(
-                "🔎 الكلمة المبحوث عنها",
+                "🔎 الكلمة (اتركها فارغة لأي بحث)",
                 value=rule.get("entity_value", "") or "",
                 placeholder="مثلاً: نون، أزياء، عطور…",
                 key=f"{key}_kw")
             _render_window_picker(rule, f"{key}_w")
             return
 
+        # ── 🎬 مشاهدة ستوري ────────────────────────────────────────
         if picker_key == "evt_story":
             rule["type"] = "event"; rule["action"] = "view_story"
-            c1, c2 = st.columns(2)
-            with c1:
-                opts = ["all","trend","normal"]
-                cur_wt = rule.get("was_trending")
-                cur_idx = 0 if cur_wt is None else (1 if cur_wt else 2)
-                sel = st.selectbox("🎬 نوع الستوري", opts, index=cur_idx,
-                    format_func=lambda x: {"all":"🌐 الكل","trend":"🔥 ترند فقط",
-                                           "normal":"📌 عادي فقط"}[x],
-                    key=f"{key}_wt")
-                rule["was_trending"] = None if sel == "all" else (sel == "trend")
-            with c2:
-                opts_s = ["— أي متجر —"] + (_STORES or [])
-                cur = rule.get("entity_value") or "— أي متجر —"
-                sel_s = st.selectbox("اسم المتجر", opts_s,
-                    index=opts_s.index(cur) if cur in opts_s else 0, key=f"{key}_st")
-                if sel_s.startswith("— أي"):
-                    rule["entity_type"] = "any"; rule["entity_value"] = None
-                else:
-                    rule["entity_type"] = "store"; rule["entity_value"] = sel_s
+            opts = ["all","trend","normal"]
+            cur_wt = rule.get("was_trending")
+            cur_idx = 0 if cur_wt is None else (1 if cur_wt else 2)
+            sel = st.radio("🎬 نوع الستوري", opts, index=cur_idx, horizontal=True,
+                format_func=lambda x: {"all":"🌐 الكل","trend":"🔥 ترند فقط",
+                                       "normal":"📌 عادي فقط"}[x],
+                key=f"{key}_wt")
+            rule["was_trending"] = None if sel == "all" else (sel == "trend")
+            rule["entity_type"] = "any"; rule["entity_value"] = None
             _render_window_picker(rule, f"{key}_w")
-            return
-
-        # ── Aggregate ────────────────────────────────────────────────
-        if picker_key == "aggregate":
-            rule["type"] = "aggregate"
-            _render_aggregate_rule(rule, key)
-            return
-
-        # ── Temporal ─────────────────────────────────────────────────
-        if picker_key == "temporal":
-            rule["type"] = "temporal"
-            _render_temporal_rule(rule, key)
             return
 
     # ── منطق التركيب بين المجموعات ────────────────────────────────────────
@@ -8419,43 +8457,86 @@ elif page == "🎯 بناء الشرائح":
                         st.rerun()
 
                 # ── قواعد داخل المجموعة ──────────────────────────────────
+                # نتتبّع الشروط "المؤكَّدة" بصرياً (مقفلة) بمفتاحٍ في session_state.
+                _confirmed_set = st.session_state.setdefault("seg_confirmed", set())
                 for r_idx, rule in enumerate(group["rules"]):
                     _cur_pk = _detect_picker_key(rule)
                     _pk_lbl = _PICKER_LABELS.get(_cur_pk, "شرط")
-                    with st.expander(
-                        f"{_pk_lbl}  —  شرط {r_idx+1}"
-                        + ("  🚫 (نفي)" if rule.get('negate') else ''),
-                        expanded=True,
-                    ):
-                        # ── اختيار الأصل (قائمة مسطّحة من 17 خيار) ─────
+                    _rule_uid = f"g{g_idx}_r{r_idx}"
+                    _is_confirmed = _rule_uid in _confirmed_set
+
+                    # ملخّص قصير للقيمة الحالية (يظهر في العنوان عند القفل)
+                    def _short_summary(rk, rl):
+                        op = rl.get("op", "")
+                        if op == "is_any":
+                            return "الكل"
+                        if rk in ("evt_copy","evt_click","evt_view",
+                                  "evt_search","evt_story"):
+                            ev = rl.get("entity_value")
+                            return f"على «{ev}»" if ev else "أي هدف"
+                        v = rl.get("value")
+                        if isinstance(v, bool):
+                            return "نعم" if v else "لا"
+                        if isinstance(v, list):
+                            return f"{v[0]}–{v[1]}"
+                        if v is not None:
+                            return str(v)
+                        if op == "has_any":  return "عنده مفضّل"
+                        if op == "has_none": return "بلا مفضّل"
+                        return ""
+
+                    _summary = _short_summary(_cur_pk, rule)
+                    _title = (f"✅ {_pk_lbl}  —  {_summary}" if _is_confirmed
+                              else f"{_pk_lbl}  —  شرط {r_idx+1}")
+                    if rule.get('negate'): _title += "  🚫 (نفي)"
+
+                    with st.expander(_title, expanded=not _is_confirmed):
+                        # ── اختيار الأصل (قائمة مسطّحة من 13 خيار) ─────
                         new_pk = st.selectbox(
                             "✨ الأصل:",
                             _PICKER_KEYS,
                             index=_PICKER_KEYS.index(_cur_pk),
                             format_func=lambda x: _PICKER_LABELS[x],
-                            key=f"g{g_idx}_r{r_idx}_pk",
+                            key=f"{_rule_uid}_pk",
                             help="اختر ما تريد التصفية به مباشرة "
                                  "(اللغة، الجنس، نسخ كوبون، …).")
                         if new_pk != _cur_pk:
-                            # إعادة تهيئة بقيم افتراضية مناسبة للأصل الجديد
+                            # إعادة تهيئة بقيم افتراضية «الكل» للأصل الجديد
                             group["rules"][r_idx] = _init_rule_for_picker(new_pk)
+                            _confirmed_set.discard(_rule_uid)
                             st.rerun()
 
                         # ── الواجهة المختصرة لهذا الأصل ────────────────
-                        _render_picker_rule(new_pk, rule, f"g{g_idx}_r{r_idx}")
+                        _render_picker_rule(new_pk, rule, _rule_uid)
 
-                        # خيارات: نفي + حذف
-                        opt_c1, opt_c2 = st.columns([3, 1])
-                        with opt_c1:
-                            rule["negate"] = st.checkbox(
-                                "🚫 نفي (ينطبق على من *لا* يحقق)",
-                                value=bool(rule.get("negate")),
-                                key=f"g{g_idx}_r{r_idx}_neg")
-                        with opt_c2:
-                            if st.button("🗑️ احذف الشرط",
-                                         key=f"g{g_idx}_r{r_idx}_del",
+                        # خيارات: نفي
+                        rule["negate"] = st.checkbox(
+                            "🚫 نفي (ينطبق على من *لا* يحقق)",
+                            value=bool(rule.get("negate")),
+                            key=f"{_rule_uid}_neg")
+
+                        # ── أزرار: ✅ تأكيد + 🗑️ حذف ─────────────────
+                        btn_c1, btn_c2 = st.columns([3, 1])
+                        with btn_c1:
+                            if _is_confirmed:
+                                if st.button("✏️ عدّل هذا الشرط",
+                                             key=f"{_rule_uid}_edit",
+                                             width="stretch"):
+                                    _confirmed_set.discard(_rule_uid)
+                                    st.rerun()
+                            else:
+                                if st.button("✅ تأكيد الشرط (اقفل المُحرِّر)",
+                                             key=f"{_rule_uid}_ok",
+                                             type="primary",
+                                             width="stretch"):
+                                    _confirmed_set.add(_rule_uid)
+                                    st.rerun()
+                        with btn_c2:
+                            if st.button("🗑️ احذف",
+                                         key=f"{_rule_uid}_del",
                                          width="stretch"):
                                 group["rules"].pop(r_idx)
+                                _confirmed_set.discard(_rule_uid)
                                 st.rerun()
 
                 # ── إضافة شرط جديد للمجموعة ───────────────────────────────
