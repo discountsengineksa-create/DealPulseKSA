@@ -10175,26 +10175,15 @@ elif page == "استوديو المحتوى":
         ImageDraw.Draw(mask).rounded_rectangle([0, 0, card_w, card_h], radius=36, fill=255)
         img.paste(glass, (card_x, card_y), mask)
 
-        # صورة/لوقو المتجر — حجمه داخل الكارت يتحكّم فيه logo_scale%
-        #   100% → cover يملأ الكارت بالكامل (قص مركزي بسيط)
-        #   أقل  → contain (اللوقو كامل بلا قص) مصغّر ومتوسّط بهوامش بيضاء
+        # صورة/لوقو المتجر — دائماً contain: اللوقو كامل بلا أي قص.
+        # النسبة logo_scale% تتحكّم بحجمه داخل الكارت فقط (100% = أكبر حجم بلا قص).
         if store_logo_bytes:
             _pct = max(20, min(int(logo_scale), 100)) / 100.0
-            if _pct >= 0.98:
-                cover = _cover_logo(store_logo_bytes, card_w, card_h)
-                if cover is not None:
-                    card_img = Image.new("RGBA", (card_w, card_h), (255, 255, 255, 255))
-                    card_img.paste(cover, (0, 0), cover)
-                    rmask = Image.new("L", (card_w, card_h), 0)
-                    ImageDraw.Draw(rmask).rounded_rectangle(
-                        [0, 0, card_w, card_h], radius=36, fill=255)
-                    img.paste(card_img, (card_x, card_y), rmask)
-            else:
-                logo = _fit_logo(store_logo_bytes, int(card_w * _pct), int(card_h * _pct))
-                if logo is not None:
-                    lx = card_x + (card_w - logo.width) // 2
-                    ly = card_y + (card_h - logo.height) // 2
-                    img.paste(logo, (lx, ly), logo)
+            logo = _fit_logo(store_logo_bytes, int(card_w * _pct), int(card_h * _pct))
+            if logo is not None:
+                lx = card_x + (card_w - logo.width) // 2
+                ly = card_y + (card_h - logo.height) // 2
+                img.paste(logo, (lx, ly), logo)
         if not store_logo_bytes:
             f_store = _font(96, weight=800)
             _center_text(draw, _ar(store_name or "متجرك"), card_y + card_h // 2 - 50, f_store, _STUDIO_INK)
