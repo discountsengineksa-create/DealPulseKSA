@@ -9786,6 +9786,11 @@ elif page == "مركز الدعم":
     page_title("🎧", "مركز إدارة الدعم الفني",
                "رسائل العملاء من البوت والميني والموقع — ردّك يُسلَّم لهم عبر تلجرام")
 
+    _rc1, _rc2 = st.columns([1, 5])
+    if _rc1.button("🔄 تحديث", key="sup_refresh", width="stretch"):
+        st.rerun()
+    _rc2.caption("اضغط «تحديث» لجلب أحدث التذاكر الواردة.")
+
     _SUP_SRC = {"bot": "📱 بوت", "telegram_miniapp": "🔹 ميني", "web": "🌐 موقع"}
     _BOT_TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
 
