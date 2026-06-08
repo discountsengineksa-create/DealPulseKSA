@@ -10107,6 +10107,20 @@ elif page == "استوديو المحتوى":
         except Exception:
             return None
 
+    def _cover_logo(logo_bytes: bytes, box_w: int, box_h: int) -> Image.Image | None:
+        """يكبّر/يصغّر الصورة لتملأ الكارت بالكامل (cover) مع قص مركزي —
+        أي صورة تملأ المقاس 540×400 بدون تشويه نسبتها."""
+        try:
+            lg = Image.open(io.BytesIO(logo_bytes)).convert("RGBA")
+            w, h = lg.size
+            scale = max(box_w / w, box_h / h)
+            nw, nh = max(int(w * scale + 0.5), box_w), max(int(h * scale + 0.5), box_h)
+            lg = lg.resize((nw, nh), Image.LANCZOS)
+            left, top = (nw - box_w) // 2, (nh - box_h) // 2
+            return lg.crop((left, top, left + box_w, top + box_h))
+        except Exception:
+            return None
+
     def _center_text(draw: ImageDraw.ImageDraw, text: str, y: int, font, fill, canvas_w: int = _CANVAS):
         bbox = draw.textbbox((0, 0), text, font=font)
         tw = bbox[2] - bbox[0]
@@ -10156,14 +10170,16 @@ elif page == "استوديو المحتوى":
         ImageDraw.Draw(mask).rounded_rectangle([0, 0, card_w, card_h], radius=36, fill=255)
         img.paste(glass, (card_x, card_y), mask)
 
-        # لوقو المتجر — يملأ المربع كاملاً (padding 20 من الإطار فقط)
+        # صورة/لوقو المتجر — تملأ الكارت بالكامل (cover 540×400) مع قص مركزي
         if store_logo_bytes:
-            inner_pad = 20
-            logo = _fit_logo(store_logo_bytes, card_w - 2 * inner_pad, card_h - 2 * inner_pad)
-            if logo is not None:
-                lx = card_x + (card_w - logo.width) // 2
-                ly = card_y + (card_h - logo.height) // 2
-                img.paste(logo, (lx, ly), logo)
+            cover = _cover_logo(store_logo_bytes, card_w, card_h)
+            if cover is not None:
+                card_img = Image.new("RGBA", (card_w, card_h), (255, 255, 255, 255))
+                card_img.paste(cover, (0, 0), cover)
+                rmask = Image.new("L", (card_w, card_h), 0)
+                ImageDraw.Draw(rmask).rounded_rectangle(
+                    [0, 0, card_w, card_h], radius=36, fill=255)
+                img.paste(card_img, (card_x, card_y), rmask)
         if not store_logo_bytes:
             f_store = _font(96, weight=800)
             _center_text(draw, _ar(store_name or "متجرك"), card_y + card_h // 2 - 50, f_store, _STUDIO_INK)
