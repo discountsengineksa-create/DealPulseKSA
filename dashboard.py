@@ -10800,7 +10800,7 @@ elif page == "📈 أداء SEO":
     with _ps_tab:
         st.caption("فحص الأداء/SEO/الإتاحة عبر Google PageSpeed — يكشف نقاط الضعف وفرص التحسين.")
         _pc1, _pc2 = st.columns([3, 1])
-        _ps_url = _pc1.text_input("رابط الصفحة", value="https://dealpulseksa.com", key="ps_url")
+        _ps_url = _pc1.text_input("رابط الصفحة", value="https://www.dealpulseksa.com/", key="ps_url")
         _ps_strat = _pc2.selectbox(
             "الجهاز", ["mobile", "desktop"],
             format_func=lambda x: "📱 جوال" if x == "mobile" else "💻 سطح مكتب", key="ps_strat")
