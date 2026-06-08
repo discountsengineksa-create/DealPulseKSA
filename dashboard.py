@@ -1516,7 +1516,6 @@ _OTHER_PAGES = [
 "📣 بلاغات الأكواد",  # ← Migration 029: بلاغات لا يعمل + إدارة المتاجر المسحوبة
 "🎯 بناء الشرائح", "مركز الإشعارات", "لوحة القيادة", "مركز الدعم",
 "استوديو المحتوى",
-"درع الحماية",
 "مركز الصيانة", "مدير القناة", "المحفز الفوري",
 "محرّك SEO", "📤 الصفحات المنشورة", "🎯 محرك الفرص", "الرصد الاجتماعي", "🎯 رادار الصفقات الفوري", "التدقيق والتجارب",
 "🛰️ متابعة المنصة",
@@ -10403,112 +10402,6 @@ elif page == "استوديو المحتوى":
 
 
 
-
-
-
-
-
-
-
-
-
-# ==============================================================================
-# --- الصفحة الثامنة والعشرين: درع الحماية الهجومي (Cyber Shield V2.0) ---
-# ==============================================================================
-elif page == "درع الحماية":
-    page_title("🛡️", "درع الحماية الهجومي (Cyber Shield)")
-    
-    # تبويبات للتحكم الكامل
-    tab_radar, tab_blacklist, tab_settings, tab_emergency = st.tabs([
-        "🚨 رادار التهديدات", 
-        "🚫 القائمة السوداء", 
-        "⚙️ بروتوكولات الأمان", 
-        "💣 منطقة الطوارئ"
-    ])
-
-    conn = get_conn()
-    if conn:
-        # --- 1. رادار التهديدات (سحب حي من الجدول) ---
-        with tab_radar:
-            st.subheader("📡 رصد النشاط المشبوه (Live Feed)")
-            # سحب آخر التهديدات المسجلة في الجدول
-            query_threats = 'SELECT threat_type as "النوع", source_val as "المصدر", action_taken as "الإجراء", detection_time as "الوقت" FROM security_threats ORDER BY detection_time DESC'
-            df_threats = pd.read_sql(query_threats, conn)
-            
-            if not df_threats.empty:
-                st.warning(f"⚠️ تم رصد {len(df_threats)} تهديد محتمل")
-                st.dataframe(df_threats, width='stretch')
-            else:
-                st.success("✅ الرادار نظيف، لا توجد تهديدات مسجلة.")
-
-        # --- 2. القائمة السوداء (تحكم كامل بالحذف والإضافة) ---
-        with tab_blacklist:
-            col1, col2 = st.columns([1, 1.5])
-            
-            with col1:
-                st.subheader("➕ إضافة حظر يدوي")
-                with st.form("manual_block"):
-                    target = st.text_input("IP / User ID / Username:")
-                    reason = st.selectbox("سبب الحظر:", ["قشط بيانات", "سبام مكثف", "محاولة اختراق", "سلوك عدواني"])
-                    if st.form_submit_button("🔨 تنفيذ الحظر"):
-                        cur = conn.cursor()
-                        cur.execute("INSERT INTO security_blacklist (target_value, reason) VALUES (%s, %s) ON CONFLICT DO NOTHING", (target, reason))
-                        conn.commit()
-                        st.success(f"تم نفي {target} للقائمة السوداء.")
-                        st.rerun()
-
-            with col2:
-                st.subheader("🔓 إدارة المحظورين حالياً")
-                df_black = pd.read_sql('SELECT target_value as "الهدف", reason as "السبب", block_date as "التاريخ" FROM security_blacklist', conn)
-                if not df_black.empty:
-                    st.table(df_black)
-                    unban_target = st.selectbox("اختر لفك الحظر:", df_black['الهدف'])
-                    if st.button("🔓 فك الحظر فوراً"):
-                        cur = conn.cursor()
-                        cur.execute("DELETE FROM security_blacklist WHERE target_value = %s", (unban_target,))
-                        conn.commit()
-                        st.rerun()
-                else:
-                    st.info("لا يوجد أي مستخدم محظور حالياً.")
-
-        # --- 3. بروتوكولات الأمان (تعديل الإعدادات الحقيقية) ---
-        with tab_settings:
-            st.subheader("⚙️ تعديل قوانين النظام")
-            # سحب القيمة الحالية من جدول الإعدادات
-            cur = conn.cursor()
-            cur.execute("SELECT setting_value FROM security_settings WHERE setting_key = 'max_requests_per_min'")
-            current_max = cur.fetchone()[0]
-
-            col_s1, col_s2 = st.columns(2)
-            with col_s1:
-                new_max = st.number_input("أقصى عدد طلبات/دقيقة:", value=int(current_max))
-                if st.button("💾 حفظ الإعدادات الجديدة"):
-                    cur.execute("UPDATE security_settings SET setting_value = %s WHERE setting_key = 'max_requests_per_min'", (new_max,))
-                    conn.commit()
-                    st.toast("تم تحديث بروتوكول السرعة!")
-
-            with col_s2:
-                st.write("📊 **تحليل كفاءة الدرع:**")
-                # إحصائية بسيطة لعدد الهجمات المصدودة
-                total_threats = len(df_threats)
-                st.metric("إجمالي التهديدات الموؤودة", total_threats, delta="نشط")
-
-        # --- 4. منطقة الطوارئ (تدمير وتصفير) ---
-        with tab_emergency:
-            st.error("🚨 منطقة العمليات الحرجة - كن حذراً")
-            col_e1, col_e2 = st.columns(2)
-            
-            if col_e1.button("🔥 تصفير سجل التهديدات بالكامل"):
-                cur = conn.cursor()
-                cur.execute("TRUNCATE TABLE security_threats")
-                conn.commit()
-                st.rerun()
-                
-            if col_e2.button("💣 طرد جميع الجلسات (Logout All)"):
-                # منطق برمجي لتصفير التوكنات أو الجلسات
-                st.warning("تم إرسال إشارة التدمير لجميع الجلسات النشطة.")
-
-        conn.close()
 
 
 
