@@ -98,6 +98,16 @@ def _trends_refresh_cycle() -> None:
         _log.warning("trends refresh cycle failed (non-fatal): %s", exc)
 
 
+def _seo_auto_cycle() -> None:
+    """محرّك SEO الأوتوماتيكي اليومي (3 صباحاً Riyadh): أكثر المتاجر طلباً +
+    ربط مناسبة + توليد + نشر مُبوّب. يتحكّم فيه SEO_AUTO_PUBLISH_ENABLED داخلياً."""
+    from api.seo.auto_pipeline import run_daily_seo_cycle
+    try:
+        run_daily_seo_cycle()
+    except Exception as exc:
+        _log.warning("seo auto cycle failed (non-fatal): %s", exc)
+
+
 def _llm_cache_cleanup_cycle() -> None:
     """
     تنظيف صفوف llm_semantic_cache المنتهية الصلاحية (migration_022).
@@ -220,6 +230,16 @@ def start_workers() -> None:
             name="SEO LLM page generation",
             replace_existing=True,
         )
+
+    # محرّك SEO الأوتوماتيكي — يومياً 3 صباحاً بتوقيت الرياض (نشر تلقائي مُبوّب).
+    # يُسجَّل دائماً؛ يتوقّف ذاتياً إذا SEO_AUTO_PUBLISH_ENABLED != true.
+    _scheduler.add_job(
+        _seo_auto_cycle,
+        trigger="cron", hour=3, minute=0, timezone="Asia/Riyadh",
+        id="seo_auto_daily",
+        name="Daily autonomous SEO generate+publish (3AM Riyadh)",
+        replace_existing=True,
+    )
 
     # Week 7-8 — social listener processing (مجاني) كل 10 دقائق
     # Run the first cycle ~30s after boot so leads start appearing quickly

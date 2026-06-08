@@ -261,6 +261,33 @@ def _build_user_prompt(job: dict[str, Any], lang: str) -> str:
 
 
 # ─── Per-language generation ────────────────────────────────────────────────
+_BLOCKLIST_CACHE: Optional[list] = None
+
+
+def _get_blocklist() -> list:
+    """يحمّل أنماط الحظر مرّة (cache على مستوى العملية)."""
+    global _BLOCKLIST_CACHE
+    if _BLOCKLIST_CACHE is None:
+        try:
+            with get_db_context() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT pattern, COALESCE(pattern_type,'substring') "
+                        "FROM seo_keyword_blocklist"
+                    )
+                    _BLOCKLIST_CACHE = [(p, (t or "substring").lower())
+                                        for p, t in cur.fetchall()]
+        except Exception:
+            _BLOCKLIST_CACHE = []
+    return _BLOCKLIST_CACHE
+
+
+def _body_has_blocked(text: str) -> bool:
+    """يفحص نص الصفحة (عربي/إنجليزي) ضد قائمة الحظر (substring/regex)."""
+    from api.seo.matcher import _is_blocked
+    return _is_blocked(text or "", _get_blocklist())
+
+
 def _generate_page_for_lang(job: dict, lang: str, job_id: int) -> tuple[bool, Optional[dict], Optional[str]]:
     """
     يولّد صفحة واحدة بلغة محدّدة. يرجّع (نجاح، meta، reason_if_failed).
@@ -307,6 +334,10 @@ def _generate_page_for_lang(job: dict, lang: str, job_id: int) -> tuple[bool, Op
     body = data["body_markdown"]
     body_hash = hashlib.sha256(body.encode("utf-8")).digest()
     word_count = len(re.findall(r"\S+", body))
+
+    # فلتر المحتوى: لا ننشئ صفحة نصّها/عنوانها يحتوي كلمة محظورة (عربي/إنجليزي)
+    if _body_has_blocked(f"{title} {desc} {body}"):
+        return False, None, f"{diag} BODY_BLOCKED (banned word in generated content)"
 
     import psycopg2
     with get_db_context() as conn:

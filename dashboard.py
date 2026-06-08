@@ -10417,6 +10417,48 @@ elif page == "محرّك SEO":
     st.header("🔍 محرّك صفحات SEO")
     st.caption("توليد ومراجعة وتعديل وحذف ونشر صفحات الـ landing من واجهة واحدة.")
 
+    # ═══ مدير المناسبات — يغذّي النشر التلقائي 3 صباحاً (ربط خلال أسبوعين) ═══
+    with st.expander("🗓️ مدير المناسبات (يستخدمها النشر التلقائي)", expanded=False):
+        _oc = get_conn(); _oc.rollback()
+        try:
+            _ocur = _oc.cursor()
+            with st.form("add_occasion", clear_on_submit=True):
+                _oa, _ob, _oc3 = st.columns([2, 1, 1])
+                _occ_name = _oa.text_input("اسم المناسبة", placeholder="مثلاً: الجمعة البيضاء")
+                _occ_date = _ob.date_input("التاريخ", format="YYYY-MM-DD")
+                _oc3.write(""); _oc3.write("")
+                if _oc3.form_submit_button("➕ إضافة", width="stretch"):
+                    if _occ_name.strip():
+                        _ocur.execute(
+                            "INSERT INTO seasonal_events (event_name, occasion_date, event_date, bot_status) "
+                            "VALUES (%s, %s, %s, 'انتظار')",
+                            (_occ_name.strip(), _occ_date, str(_occ_date)))
+                        _oc.commit()
+                        st.success(f"أُضيفت: {_occ_name}")
+                        st.rerun()
+                    else:
+                        st.error("اكتب اسم المناسبة.")
+            _df_occ = pd.read_sql(
+                "SELECT event_id, event_name, occasion_date FROM seasonal_events "
+                "WHERE occasion_date IS NOT NULL ORDER BY occasion_date ASC", _oc)
+            if _df_occ.empty:
+                st.info("لا مناسبات بتواريخ بعد — أضف من الأعلى.")
+            else:
+                st.caption(f"📅 {len(_df_occ)} مناسبة — المحرّك يربط القادمة خلال 14 يوماً.")
+                for _, _r in _df_occ.iterrows():
+                    _c1, _c2, _c3 = st.columns([3, 2, 1])
+                    _c1.write(f"**{_r['event_name']}**")
+                    _c2.write(str(_r['occasion_date']))
+                    if _c3.button("🗑️", key=f"occ_del_{_r['event_id']}"):
+                        _ocur.execute("DELETE FROM seasonal_events WHERE event_id=%s",
+                                      (int(_r['event_id']),))
+                        _oc.commit()
+                        st.rerun()
+        except Exception as _e:
+            st.error(f"خطأ في مدير المناسبات: {_e}")
+        finally:
+            _oc.close()
+
     # ═════════════════════════════════════════════════════════════════════════
     # القسم 1 — صندوق التوليد بموضوع مخصّص
     # ═════════════════════════════════════════════════════════════════════════
