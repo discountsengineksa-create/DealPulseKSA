@@ -127,9 +127,10 @@ _CONTEXT_CLAUSES = {
     "any":           None,
     "trend_daily":   "al.details = 'trend:daily'",
     "trend_weekly":  "al.details = 'trend:weekly'",
-    "trend_any":     "al.details LIKE 'trend:%'",
+    # `%%` لأن psycopg2 يفسّر `%` كـ placeholder — التضعيف يهرّبه إلى `%` حرفياً.
+    "trend_any":     "al.details LIKE 'trend:%%'",
     "story":         "al.story_view_id IS NOT NULL",
-    "card":          "(al.details IS NULL OR (al.details NOT LIKE 'trend:%' AND al.story_view_id IS NULL))",
+    "card":          "(al.details IS NULL OR (al.details NOT LIKE 'trend:%%' AND al.story_view_id IS NULL))",
 }
 
 _ATTRIBUTE_FIELDS_DIRECT = {

@@ -8074,12 +8074,14 @@ elif page == "🎯 بناء الشرائح":
         ("evt_view",          "👁️ زيارة متجر / قسم"),
         ("evt_search",        "🔍 بحث"),
         ("evt_story",         "🎬 مشاهدة ستوري"),
+        ("evt_trend",         "🔥 تفاعل مع ترند"),
     ]
     _PICKER_KEYS   = [k for k, _ in _PICKER_OPTIONS]
     _PICKER_LABELS = dict(_PICKER_OPTIONS)
     _ATTR_PICKERS  = {"lang","gender","age","city","profile_complete",
                       "favorite_store","favorite_category"}
-    _EVT_PICKERS   = {"evt_copy","evt_click","evt_view","evt_search","evt_story"}
+    _EVT_PICKERS   = {"evt_copy","evt_click","evt_view","evt_search",
+                      "evt_story","evt_trend"}
 
     # نطاقات العمر — نفس صفحة تحليل المستخدمين
     _AGE_RANGES = [
@@ -8113,7 +8115,11 @@ elif page == "🎯 بناء الشرائح":
             f = rule.get("field", "lang")
             return f if f in _ATTR_PICKERS else "lang"
         if t == "event":
-            a = rule.get("action", "copy_coupon")
+            a = rule.get("action")
+            # ترند مستقل: أي تفاعل (action=None) مع context=trend_*
+            if (a is None
+                and rule.get("context") in ("trend_daily","trend_weekly","trend_any")):
+                return "evt_trend"
             if a == "copy_coupon":                 return "evt_copy"
             if a == "click_link":                  return "evt_click"
             if a in ("view_store", "view_tag"):    return "evt_view"
@@ -8152,6 +8158,11 @@ elif page == "🎯 بناء الشرائح":
         if picker_key == "evt_story":
             return {"type":"event","action":"view_story","entity_type":"any",
                     "entity_value":None,"was_trending":None,
+                    "window":{"type":"last_days","days":30}}
+        if picker_key == "evt_trend":
+            # أي تفاعل (action=None) ضمن سياق ترند
+            return {"type":"event","action":None,"entity_type":"any",
+                    "context":"trend_any",
                     "window":{"type":"last_days","days":30}}
         return {"type":"attribute","field":"lang","op":"is_any","value":None}
 
@@ -8408,6 +8419,24 @@ elif page == "🎯 بناء الشرائح":
             _render_window_picker(rule, f"{key}_w")
             return
 
+        # ── 🔥 تفاعل مع ترند (أي تفاعل ضمن سياق ترند) ───────────────
+        if picker_key == "evt_trend":
+            rule["type"] = "event"
+            rule["action"] = None          # أي تفاعل
+            rule["entity_type"] = "any"
+            rule["entity_value"] = None
+            opts = ["trend_any","trend_daily","trend_weekly"]
+            cur_ctx = rule.get("context","trend_any")
+            cur_idx = opts.index(cur_ctx) if cur_ctx in opts else 0
+            sel = st.radio("🔥 نوع الترند", opts, index=cur_idx, horizontal=True,
+                format_func=lambda x: {"trend_any":"🌐 الكل",
+                                       "trend_daily":"🔥 يومي",
+                                       "trend_weekly":"🔥 أسبوعي"}[x],
+                key=f"{key}_tt")
+            rule["context"] = sel
+            _render_window_picker(rule, f"{key}_w")
+            return
+
         # ── 🎬 مشاهدة ستوري ────────────────────────────────────────
         if picker_key == "evt_story":
             rule["type"] = "event"; rule["action"] = "view_story"
@@ -8470,6 +8499,11 @@ elif page == "🎯 بناء الشرائح":
                         op = rl.get("op", "")
                         if op == "is_any":
                             return "الكل"
+                        if rk == "evt_trend":
+                            return {"trend_daily":"🔥 يومي",
+                                    "trend_weekly":"🔥 أسبوعي",
+                                    "trend_any":"🔥 أي ترند"
+                                   }.get(rl.get("context","trend_any"), "ترند")
                         if rk in ("evt_copy","evt_click","evt_view",
                                   "evt_search","evt_story"):
                             ev = rl.get("entity_value")
