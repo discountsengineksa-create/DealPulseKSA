@@ -99,10 +99,11 @@ def enqueue_for_stores(cur, stores: list[dict], occasion: dict | None) -> int:
 
 
 def auto_publish(cur, cap: int) -> list[dict]:
-    """ينشر المسودّات المؤهَّلة (بوابات آلية) حتى السقف اليومي. يرجّع المنشورة."""
+    """ينشر المسودّات المؤهَّلة (بوابات White-Hat) حتى السقف اليومي.
+    البوابات: كوبون فعّال + حد أدنى طول + **تفرّد** (لا ننشر صفحة شبه مطابقة لمنشورة)."""
     cur.execute(
         """
-        SELECT p.id, p.slug
+        SELECT p.id, p.slug, p.lang, p.target_keyword, p.title_meta
         FROM seo_landing_pages p
         JOIN master m ON m.id = p.master_id
         WHERE p.status = 'draft'
@@ -110,18 +111,35 @@ def auto_publish(cur, cap: int) -> list[dict]:
           AND COALESCE(m.is_suspended, FALSE) = FALSE
           AND array_length(regexp_split_to_array(trim(p.body_markdown), '\\s+'), 1) >= %s
         ORDER BY p.id ASC
-        LIMIT %s
         """,
-        (MIN_BODY_WORDS, cap),
+        (MIN_BODY_WORDS,),
     )
-    drafts = [dict(r) for r in cur.fetchall()]
-    for d in drafts:
+    candidates = [dict(r) for r in cur.fetchall()]
+    published: list[dict] = []
+    for d in candidates:
+        if len(published) >= cap:
+            break
+        # تفرّد: تخطّى لو فيه صفحة منشورة بنفس الكلمة أو عنوان شبه مطابق (>0.7)
+        cur.execute(
+            """
+            SELECT 1 FROM seo_landing_pages pub
+            WHERE pub.status = 'published' AND pub.lang = %s
+              AND (pub.target_keyword = %s OR similarity(pub.title_meta, %s) > 0.7)
+            LIMIT 1
+            """,
+            (d["lang"], d["target_keyword"], d.get("title_meta") or ""),
+        )
+        if cur.fetchone():
+            cur.execute("UPDATE seo_landing_pages SET status='rejected_dup' WHERE id=%s",
+                        (d["id"],))
+            continue
         cur.execute(
             "UPDATE seo_landing_pages SET status='published', published_at=NOW(), "
             "last_indexed_at=NOW() WHERE id=%s",
             (d["id"],),
         )
-    return drafts
+        published.append(d)
+    return published
 
 
 def run_daily_seo_cycle(force: bool = False) -> dict:

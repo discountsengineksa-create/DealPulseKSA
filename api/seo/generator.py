@@ -232,6 +232,23 @@ def _mark_failed(job_id: int, error: str) -> None:
         _log.warning("could not mark job %s failed: %s", job_id, exc)
 
 
+# زوايا محتوى متنوّعة (White-Hat: تمنع تشابه/تكرار الصفحات = scaled content abuse)
+_ANGLES_AR = [
+    "ركّز على «كيف تستخدم الكود خطوة بخطوة» + نصيحة توفير عملية. عنوان يبدأ بفعل أو سؤال.",
+    "ركّز على «أبرز فئات المنتجات والأقسام» في المتجر. عنوان يذكر الفئة + قيمة التوفير.",
+    "ركّز على «لماذا تختار هذا المتجر» + ميزته التنافسية وموثوقيته. عنوان يبرز التميّز.",
+    "اربط العرض بالموسم/المناسبة بنبرة عاجلة لطيفة. عنوان موسمي محدّد.",
+    "أسلوب «أسئلة شائعة» — جاوب على أسئلة المتسوّق الحقيقية حول الكود والشحن والإرجاع.",
+]
+_ANGLES_EN = [
+    "Focus on a step-by-step 'how to use the code' guide + a practical saving tip. Start the title with a verb or a question.",
+    "Focus on the store's top product categories and sections. Title mentions a category + the saving value.",
+    "Focus on 'why choose this store' — its competitive edge and trust signals. Title highlights the differentiator.",
+    "Tie the offer to the season/occasion with a gentle urgency tone. Use a specific seasonal title.",
+    "Use an FAQ style — answer real shopper questions about the code, shipping, and returns.",
+]
+
+
 def _build_user_prompt(job: dict[str, Any], lang: str) -> str:
     ctx = {
         "target_keyword": job["target_keyword"],
@@ -247,15 +264,23 @@ def _build_user_prompt(job: dict[str, Any], lang: str) -> str:
         "tags_en":        job.get("store_tags_en"),
     }
     canonical = json.dumps(ctx, ensure_ascii=False, indent=2)
+    # زاوية فريدة لكل صفحة (تدوير حسب المتجر + اللغة) — تنويع يمنع القوالب المكررة
+    _seed = int(job.get("matched_master_id") or 0) + (0 if lang == "ar" else 3)
     if lang == "en":
+        angle = _ANGLES_EN[_seed % len(_ANGLES_EN)]
         return (
             "Write an English SEO landing page for the target keyword and store below:\n"
             f"```json\n{canonical}\n```\n"
+            f"UNIQUE ANGLE for THIS page — do NOT use a generic templated title like "
+            f"'Best Discount Code | Latest Exclusive Offers'; make the title and structure distinct: {angle}\n"
             "Follow the system prompt rules. Return valid JSON only."
         )
+    angle = _ANGLES_AR[_seed % len(_ANGLES_AR)]
     return (
         "اكتب صفحة هبوط SEO عربية للكلمة المستهدفة والمتجر التاليين:\n"
         f"```json\n{canonical}\n```\n"
+        f"زاوية فريدة لهذه الصفحة — لا تستخدم عنواناً قالبياً عاماً مثل "
+        f"«أفضل كود خصم | أحدث العروض الحصرية»؛ اجعل العنوان والبنية مختلفين: {angle}\n"
         "التزم بقواعد الـ system prompt. ردك JSON صالح فقط."
     )
 
