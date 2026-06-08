@@ -9786,10 +9786,13 @@ elif page == "مركز الدعم":
     page_title("🎧", "مركز إدارة الدعم الفني",
                "رسائل العملاء من البوت والميني والموقع — ردّك يُسلَّم لهم عبر تلجرام")
 
-    _rc1, _rc2 = st.columns([1, 5])
-    if _rc1.button("🔄 تحديث", key="sup_refresh", width="stretch"):
+    _sc1, _sc2, _sc3 = st.columns([1, 1, 2])
+    sup_live = _sc1.toggle("🔴 لايف", value=True, key="sup_live")
+    sup_interval = _sc2.selectbox("التحديث", [5, 15, 30],
+                                  format_func=lambda x: f"كل {x} ثانية",
+                                  index=1, key="sup_interval")
+    if _sc3.button("🔄 تحديث الآن", key="sup_refresh", width="stretch"):
         st.rerun()
-    _rc2.caption("اضغط «تحديث» لجلب أحدث التذاكر الواردة.")
 
     _SUP_SRC = {"bot": "📱 بوت", "telegram_miniapp": "🔹 ميني", "web": "🌐 موقع"}
     _BOT_TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
@@ -9810,64 +9813,75 @@ elif page == "مركز الدعم":
         except Exception as ex:
             return False, str(ex)
 
+    def _sup_ident(r):
+        if isinstance(r["username"], str) and r["username"].strip():
+            return "@" + r["username"]
+        if isinstance(r["contact_name"], str) and r["contact_name"].strip():
+            return r["contact_name"]
+        if isinstance(r["contact_email"], str) and r["contact_email"].strip():
+            return r["contact_email"]
+        if pd.notna(r["telegram_id"]):
+            return f"تيليجرام #{int(r['telegram_id'])}"
+        return "— مجهول —"
+
+    _OPEN_SQL = """
+        SELECT id,
+               (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Riyadh') AS ts,
+               COALESCE(source,'bot') AS source, telegram_id, username,
+               contact_name, contact_email, contact_phone, message, reply_text
+        FROM support_tickets
+        WHERE status = 'open'
+        ORDER BY created_at DESC
+    """
+
     tab_inbox, tab_resolved = st.tabs(["📥 الرسائل الواردة", "✅ رسائل تم حلها"])
 
-    conn = None
-    try:
-        conn = get_conn()
-        cur = conn.cursor()
-        cur.execute("ROLLBACK")
-
-        with tab_inbox:
-            df_open = pd.read_sql("""
-                SELECT id,
-                       (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Riyadh') AS ts,
-                       COALESCE(source,'bot') AS source, telegram_id, username,
-                       contact_name, contact_email, contact_phone, message
-                FROM support_tickets
-                WHERE status = 'open'
-                ORDER BY created_at DESC
-            """, conn)
-
-            st.subheader(f"📬 طلبات مفتوحة ({len(df_open)})")
-            if df_open.empty:
+    # ════════════ صندوق الوارد ════════════
+    with tab_inbox:
+        # ── جدول لايف (fragment) — يتحدّث تلقائياً، بلا قطع لخانة الكتابة ──
+        def _live_inbox():
+            c = get_conn(); c.rollback()
+            try:
+                d = pd.read_sql(_OPEN_SQL, c)
+            finally:
+                c.close()
+            _stamp = (datetime.datetime.utcnow() + timedelta(hours=3)).strftime("%H:%M:%S")
+            st.subheader(f"📬 طلبات مفتوحة ({len(d)})")
+            if d.empty:
                 st.success("🎉 لا توجد طلبات دعم معلقة.")
             else:
-                def _ident(r):
-                    if isinstance(r["username"], str) and r["username"].strip():
-                        return "@" + r["username"]
-                    if isinstance(r["contact_name"], str) and r["contact_name"].strip():
-                        return r["contact_name"]
-                    if isinstance(r["contact_email"], str) and r["contact_email"].strip():
-                        return r["contact_email"]
-                    if pd.notna(r["telegram_id"]):
-                        return f"تيليجرام #{int(r['telegram_id'])}"
-                    return "— مجهول —"
-
                 _view = pd.DataFrame({
-                    "#": df_open["id"],
-                    "الوقت": pd.to_datetime(df_open["ts"]).dt.strftime("%Y-%m-%d %H:%M"),
-                    "المصدر": df_open["source"].map(_SUP_SRC).fillna(df_open["source"]),
-                    "المُرسِل": df_open.apply(_ident, axis=1),
-                    "الإيميل": df_open["contact_email"].fillna("—"),
-                    "الجوال": df_open["contact_phone"].fillna("—"),
-                    "الرسالة": df_open["message"],
+                    "#": d["id"],
+                    "الوقت": pd.to_datetime(d["ts"]).dt.strftime("%Y-%m-%d %H:%M"),
+                    "المصدر": d["source"].map(_SUP_SRC).fillna(d["source"]),
+                    "المُرسِل": d.apply(_sup_ident, axis=1),
+                    "الإيميل": d["contact_email"].fillna("—"),
+                    "الجوال": d["contact_phone"].fillna("—"),
+                    "الرسالة": d["message"],
                 })
-                st.dataframe(_view, width="stretch", hide_index=True, height=300)
+                st.dataframe(_view, width="stretch", hide_index=True, height=280)
+            st.caption(f"⏱️ آخر تحديث: {_stamp}"
+                       + ("  ·  🔴 لايف" if sup_live else "  ·  ⏸️ متوقف"))
+        st.fragment(run_every=(sup_interval if sup_live else None))(_live_inbox)()
 
-                st.divider()
+        st.divider()
+        # ── نموذج الرد (ثابت — لا ينقطع أثناء التحديث التلقائي) ──
+        _rconn = get_conn(); _rconn.rollback()
+        try:
+            df_open = pd.read_sql(_OPEN_SQL, _rconn)
+            if df_open.empty:
+                st.info("لا توجد تذاكر مفتوحة للرد عليها حالياً.")
+            else:
                 st.subheader("💬 الرد على تذكرة")
-                _ids = df_open["id"].tolist()
                 sel_id = st.selectbox(
-                    "اختر تذكرة (بالرقم):", _ids, key="sup_pick",
+                    "اختر تذكرة (بالرقم):", df_open["id"].tolist(), key="sup_pick",
                     format_func=lambda i: f"#{i} · "
-                        + _ident(df_open[df_open['id'] == i].iloc[0]))
+                        + _sup_ident(df_open[df_open['id'] == i].iloc[0]))
                 row = df_open[df_open["id"] == sel_id].iloc[0]
 
-                # بطاقة هوية المُرسِل — أهم شي: يوزره/إيميله للتدقيق على عملياته
                 ic1, ic2, ic3 = st.columns(3)
                 ic1.metric("المصدر", _SUP_SRC.get(row["source"], row["source"]))
-                ic2.metric("اليوزر/الاسم", _ident(row))
+                ic2.metric("اليوزر/الاسم", _sup_ident(row))
                 _tgid = int(row["telegram_id"]) if pd.notna(row["telegram_id"]) else None
                 ic3.metric("Telegram ID", str(_tgid) if _tgid else "—")
                 _em = row["contact_email"] if isinstance(row["contact_email"], str) else None
@@ -9875,40 +9889,63 @@ elif page == "مركز الدعم":
                     st.caption(f"📧 {_em}" + (f"  ·  📱 {row['contact_phone']}"
                                if isinstance(row['contact_phone'], str) else ""))
                 st.info(f"**رسالة العميل:**\n\n{row['message']}")
+                if isinstance(row["reply_text"], str) and row["reply_text"].strip():
+                    with st.expander("🧵 ردودك السابقة على هذه التذكرة", expanded=False):
+                        st.text(row["reply_text"])
 
-                reply_text = st.text_area("اكتب ردك:", key="sup_reply",
+                _ver = st.session_state.get("sup_reply_ver", 0)
+                reply_text = st.text_area("اكتب ردك:", key=f"sup_reply_{sel_id}_{_ver}",
                                           placeholder="أهلاً بك، بخصوص استفسارك...")
                 can_tg = _tgid is not None
                 if not can_tg:
-                    st.warning("⚠️ هذه التذكرة من الموقع بلا حساب تلجرام — "
-                               "الرد لن يُسلَّم تلقائياً؛ تواصل عبر الإيميل أعلاه، "
-                               "وسيُحفظ ردك ويُغلق الطلب.")
+                    st.warning("⚠️ تذكرة من الموقع بلا حساب تلجرام — الرد لن يُسلَّم "
+                               "تلقائياً؛ تواصل عبر الإيميل أعلاه (يُحفظ ردك).")
 
-                if st.button("📨 إرسال الرد وإغلاق الطلب", width="stretch", key="sup_send"):
-                    if not reply_text.strip():
+                _b1, _b2 = st.columns(2)
+                if _b1.button("📨 إرسال الرد (تبقى مفتوحة)", width="stretch", key="sup_send"):
+                    _rt = (reply_text or "").strip()
+                    if not _rt:
                         st.error("اكتب الرد أولاً.")
                     else:
-                        delivered, msg = (False, "—")
+                        delivered, dmsg = (False, "—")
                         if can_tg:
-                            delivered, msg = _tg_send(_tgid, reply_text.strip())
-                        cur.execute("""
+                            delivered, dmsg = _tg_send(_tgid, _rt)
+                        _ts = (datetime.datetime.utcnow() + timedelta(hours=3)).strftime("%m-%d %H:%M")
+                        _cur = _rconn.cursor()
+                        _cur.execute("""
                             UPDATE support_tickets
-                            SET reply_text=%s, replied_at=NOW(),
-                                status='resolved', delivered=%s
-                            WHERE id=%s
-                        """, (reply_text.strip(), delivered, int(sel_id)))
-                        conn.commit()
+                            SET reply_text = COALESCE(reply_text || chr(10), '') || %s,
+                                replied_at = NOW(), delivered = %s
+                            WHERE id = %s
+                        """, (f"[{_ts}] {_rt}", delivered, int(sel_id)))
+                        _rconn.commit()
+                        st.session_state["sup_reply_ver"] = _ver + 1
                         if can_tg and delivered:
-                            st.success("✅ تم تسليم الرد عبر تلجرام وإغلاق الطلب.")
-                            st.balloons()
+                            st.success("✅ أُرسل الرد عبر تلجرام — التذكرة تبقى مفتوحة للمتابعة.")
                         elif can_tg and not delivered:
-                            st.error(f"⚠️ حُفظ الرد وأُغلق الطلب، لكن تعذّر التسليم عبر تلجرام: {msg}")
+                            st.error(f"⚠️ حُفظ الرد لكن تعذّر التسليم عبر تلجرام: {dmsg}")
                         else:
-                            st.success("✅ حُفظ الرد وأُغلق الطلب (تواصل بالإيميل يدوياً).")
+                            st.info("✅ حُفظ الرد (تواصل بالإيميل — لا تلجرام).")
                         st.rerun()
 
-        with tab_resolved:
-            st.subheader("📚 أرشيف الدعم")
+                if _b2.button("🔒 إغلاق التذكرة", width="stretch", key="sup_close"):
+                    _cur = _rconn.cursor()
+                    _cur.execute("UPDATE support_tickets SET status='resolved' WHERE id=%s",
+                                 (int(sel_id),))
+                    _rconn.commit()
+                    st.success("🔒 أُغلقت التذكرة ونُقلت للأرشيف.")
+                    st.balloons()
+                    st.rerun()
+        except Exception as e:
+            st.error(f"خطأ في الرد: {e}")
+        finally:
+            _rconn.close()
+
+    # ════════════ الأرشيف ════════════
+    with tab_resolved:
+        st.subheader("📚 أرشيف الدعم")
+        _aconn = get_conn(); _aconn.rollback()
+        try:
             df_res = pd.read_sql("""
                 SELECT (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Riyadh') AS ts,
                        COALESCE(source,'bot') AS source, username, contact_email,
@@ -9917,7 +9954,7 @@ elif page == "مركز الدعم":
                 FROM support_tickets
                 WHERE status = 'resolved'
                 ORDER BY replied_at DESC NULLS LAST, created_at DESC
-            """, conn)
+            """, _aconn)
             if df_res.empty:
                 st.caption("الأرشيف فارغ حالياً.")
             else:
@@ -9930,14 +9967,10 @@ elif page == "مركز الدعم":
                     "التسليم": df_res["deliv"],
                 })
                 st.dataframe(_resv, width="stretch", hide_index=True, height=400)
-
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        st.error(f"خطأ في صفحة الدعم: {e}")
-    finally:
-        if conn:
-            conn.close()
+        except Exception as e:
+            st.error(f"خطأ في الأرشيف: {e}")
+        finally:
+            _aconn.close()
 
 
 
