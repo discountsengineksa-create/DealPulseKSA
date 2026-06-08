@@ -10479,6 +10479,25 @@ elif page == "محرّك SEO":
             )
             st.balloons()
 
+    # ═══ تنظيف: حذف المسودّات القديمة (قبل التوليد الجديد) ═══
+    with st.expander("🗑️ حذف المسودّات القديمة (تنظيف White-Hat)", expanded=False):
+        st.caption("يحذف كل الصفحات بحالة draft + المكررة المرفوضة. الصفحات المنشورة لا تُمسّ.")
+        _purge_ok = st.checkbox("أؤكّد حذف كل المسودّات القديمة", key="seo_purge_confirm")
+        if st.button("🗑️ احذف المسودّات الآن", disabled=not _purge_ok, key="seo_purge_btn"):
+            _pc = get_conn(); _pc.rollback()
+            try:
+                _pcur = _pc.cursor()
+                _pcur.execute(
+                    "DELETE FROM seo_landing_pages WHERE status IN ('draft','rejected_dup')")
+                _pn = _pcur.rowcount
+                _pc.commit()
+                st.success(f"تم حذف {_pn} مسودّة. النظام نظيف للتوليد الجديد.")
+                st.rerun()
+            except Exception as _pe:
+                st.error(f"تعذّر الحذف: {_pe}")
+            finally:
+                _pc.close()
+
     # ═════════════════════════════════════════════════════════════════════════
     # القسم 1 — صندوق التوليد بموضوع مخصّص
     # ═════════════════════════════════════════════════════════════════════════
