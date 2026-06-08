@@ -1515,7 +1515,7 @@ _ANALYSIS_PAGES = [
 _OTHER_PAGES = [
 "📣 بلاغات الأكواد",  # ← Migration 029: بلاغات لا يعمل + إدارة المتاجر المسحوبة
 "🎯 بناء الشرائح", "مركز الإشعارات", "لوحة القيادة", "مركز الدعم",
-"رادار المنافسين", "استوديو المحتوى",
+"استوديو المحتوى",
 "ذكاء التنبؤ", "نظام الولاء", "التحكم الآلي", "التخصيص الفائق",
 "رادار المناسبات", "مركز التوسع", "درع الحماية",
 "مركز الصيانة", "مدير القناة", "المحفز الفوري",
@@ -9948,75 +9948,6 @@ elif page == "مركز الدعم":
 
 
 
-# --- الصفحة العشرين: رادار المنافسين والذكاء التسويقي ---
-elif page == "رادار المنافسين":
-    st.header("📡 رادار المنافسين والذكاء التسويقي")
-    st.info("مراقبة حية للمتاجر الكبرى واكتشاف العروض Flash Sales قبل الجميع.")
-
-    conn = None
-    try:
-        conn = get_conn()
-        
-        col_spy, col_action = st.columns([1.2, 1])
-
-        with col_spy:
-            st.subheader("🕵️ وضع التجسس الذكي")
-            stores_to_watch = ["Noon.com", "Amazon.sa", "Jarir.com", "Namshi.com"]
-            selected_watch = st.multiselect("المواقع تحت المراقبة حالياً:", stores_to_watch, default=stores_to_watch)
-            
-            if st.button("🔍 فحص التغييرات الآن"):
-                with st.spinner("جاري فحص أكواد المصدر للمنافسين..."):
-                    # هنا مستقبلاً نربط سكريبت القشط (Scraping)
-                    st.success("تم اكتشاف تغيير في سياسة الخصم في 'نون'!")
-                    st.warning("⚠️ كود جديد ظهر في 'نمشي': [OFF50]")
-            
-            # جلب البيانات الحقيقية من الجدول
-            query_watch = "SELECT store_name, last_code, status FROM competitor_watch"
-            df_watch = pd.read_sql(query_watch, conn)
-            
-            if not df_watch.empty:
-                # تعريب مسميات الأعمدة في العرض فقط
-                df_watch.columns = ['المتجر', 'آخر كود مكتشف', 'الحالة']
-                st.table(df_watch)
-
-        with col_action:
-            st.subheader("⚡ رد الفعل السريع")
-            st.write("إجراءات مقترحة بناءً على حركة السوق:")
-            
-            with st.container(border=True):
-                st.write("📌 **حدث الآن:** أمازون أطلقوا 'عروض الـ 24 ساعة'.")
-                if st.button("📝 تجهيز رسالة برودكاست فورية"):
-                    st.session_state.temp_msg = "🚨 عاجل: أمازون أطلقوا عروض قوية للـ 24 ساعة القادمة! شيكوا الروابط في البوت."
-                    st.info("تم تجهيز النص، انتقل لصفحة 'مركز الإشعارات' للإرسال.")
-            
-            st.divider()
-            st.write("📊 **قوة الخصم بالسوق:**")
-            
-            # رسم بياني من بيانات القاعدة
-            query_chart = "SELECT store_name, discount_rate FROM competitor_watch"
-            df_chart = pd.read_sql(query_chart, conn)
-            if not df_chart.empty:
-                df_chart.columns = ['المتجر', 'نسبة الخصم']
-                st.line_chart(df_chart.set_index("المتجر"))
-
-        # --- قسم اقتناص الفرص (Opportunity Sniping) ---
-        st.divider()
-        st.subheader("🎯 قناص الفرص (Opportunity Sniping)")
-        st.write("الذكاء الاصطناعي يحلل أي المتاجر تعطي 'أفضل عمولة' (Affiliate) حالياً:")
-        
-        col_f1, col_f2, col_f3 = st.columns(3)
-        # ميتريك ثابتة حالياً أو تسحبها من جدول خارجي لاحقاً
-        col_f1.metric("أعلى عمولة", "نمشي", "12%")
-        col_f2.metric("أسرع انتشار", "نون", "8%")
-        col_f3.metric("أقل منافسة", "صيدلية أومني", "جديد")
-
-        st.caption("ملاحظة: البيانات يتم تحديثها بناءً على قراءة الـ Meta Data للمواقع المسجلة في الماستر.")
-
-    except Exception as e:
-        if conn: conn.rollback()
-        st.error(f"خطأ في الرادار: {e}")
-    finally:
-        if conn: conn.close()
 
 
 
