@@ -9523,19 +9523,23 @@ elif page == "لوحة القيادة":
         "view_favorites": "⭐ عرض المفضلة", "favorite_add": "❤️ أضاف للمفضلة",
         "category_favorite_add": "❤️ أضاف قسماً للمفضلة",
         "request_code": "🙋 طلب كود", "reaction_heart": "💖 تفاعل",
-        "lang_pick": "🌐 اختار اللغة",
+        "lang_pick": "🌐 اختار اللغة", "code_report": "📣 أرسل بلاغ",
         "idle_warn": "⏰ تنبيه خمول", "idle_kick": "💤 إنهاء خمول",
         "idle_alert": "⏰ تنبيه", "end_session": "⏹️ نهاية جلسة",
         "unknown_input": "❓ إدخال غير مفهوم", "back": "↩️ رجوع",
     }
-    # التصنيف — تمهيد لخطوة الألوان لاحقاً
+    # التصنيف — بمصطلحات المالك: نقر / بحث / نسخ / مفضلة / تصفّح
     _ACT_CAT = {
-        "copy_coupon": "💰 تحويل", "click_link": "💰 تحويل", "request_code": "💰 تحويل",
-        "favorite_add": "❤️ تفاعل", "category_favorite_add": "❤️ تفاعل",
-        "reaction_heart": "❤️ تفاعل", "view_favorites": "❤️ تفاعل",
+        "click_link": "🔗 نقر",
         "search": "🔍 بحث",
-        "view_store": "👀 تصفّح", "view_tag": "👀 تصفّح", "view_sections": "👀 تصفّح",
-        "view_all": "👀 تصفّح", "start": "👀 تصفّح", "lang_pick": "👀 تصفّح",
+        "copy_coupon": "📋 نسخ",
+        "request_code": "🙋 طلب",
+        "favorite_add": "❤️ مفضلة", "category_favorite_add": "❤️ مفضلة",
+        "view_favorites": "❤️ مفضلة", "reaction_heart": "❤️ مفضلة",
+        "view_store": "👀 تصفّح", "view_tag": "👀 تصفّح",
+        "view_sections": "👀 تصفّح", "view_all": "👀 تصفّح",
+        "start": "👀 تصفّح", "lang_pick": "👀 تصفّح",
+        "code_report": "📣 بلاغ",
     }
     _MEANINGFUL = ["search", "start", "click_link", "copy_coupon", "view_store",
                    "view_tag", "view_sections", "view_all", "view_favorites",
@@ -9568,6 +9572,26 @@ elif page == "لوحة القيادة":
 
     acts = _MEANINGFUL + (_SYS_ACTS if show_sys else [])
     _KSA = "AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Riyadh'"
+
+    # الهدف الحقيقي للحركة: متجر (store_id) أو قسم (tag: داخل details) أو لا شيء
+    def _target(store_id, details):
+        if store_id is not None and str(store_id).strip() and store_id != "—":
+            return store_id
+        d = (details or "").strip()
+        if d.startswith("tag:"):
+            return "🏷️ " + d[4:]
+        return "—"
+
+    # تنظيف التفاصيل من العلامات الداخلية وتعريب سياق الترند
+    def _clean_detail(details):
+        d = (details or "").strip()
+        if d.startswith("tag:") or d.startswith("user:") or d.startswith("via_cloak"):
+            return ""
+        if d == "trend:daily":
+            return "🔥 ترند يومي"
+        if d == "trend:weekly":
+            return "🔥 ترند أسبوعي"
+        return d
 
     def _render_live():
         try:
@@ -9611,18 +9635,29 @@ elif page == "لوحة القيادة":
                 st.divider()
 
                 df = pd.read_sql(f"""
-                    SELECT (a.action_time {_KSA}) AS ts,
-                           a.source, a.action_type, a.user_id,
-                           NULLIF(b.username,'') AS username, b.name_en,
-                           COALESCE(a.store_id,'—') AS store_id,
-                           COALESCE(a.details,'') AS details
-                    FROM action_logs a
-                    LEFT JOIN bot_users b ON a.user_id = b.telegram_id
-                    WHERE a.source IN ('bot','telegram_miniapp')
-                      AND a.action_type = ANY(%s)
-                      AND (a.action_time {_KSA})::date BETWEEN %s AND %s
-                    ORDER BY a.action_time DESC LIMIT %s
-                """, conn, params=(acts, d_from, d_to, limit))
+                    SELECT * FROM (
+                        SELECT (a.action_time {_KSA}) AS ts,
+                               a.source, a.action_type, a.user_id,
+                               NULLIF(b.username,'') AS username, b.name_en,
+                               a.store_id AS store_id,
+                               COALESCE(a.details,'') AS details
+                        FROM action_logs a
+                        LEFT JOIN bot_users b ON a.user_id = b.telegram_id
+                        WHERE a.source IN ('bot','telegram_miniapp')
+                          AND a.action_type = ANY(%s)
+                          AND (a.action_time {_KSA})::date BETWEEN %s AND %s
+                        UNION ALL
+                        SELECT (r.created_at {_KSA}) AS ts,
+                               r.source, 'code_report' AS action_type, r.tg_user_id AS user_id,
+                               r.reporter_telegram_username AS username, NULL::text AS name_en,
+                               r.store_id AS store_id,
+                               COALESCE(NULLIF(r.issue_note,''), r.reported_code, '') AS details
+                        FROM code_reports r
+                        WHERE r.source IN ('bot','telegram_miniapp')
+                          AND (r.created_at {_KSA})::date BETWEEN %s AND %s
+                    ) q
+                    ORDER BY ts DESC LIMIT %s
+                """, conn, params=(acts, d_from, d_to, d_from, d_to, limit))
 
                 if df.empty:
                     st.info("📭 لا توجد حركات في هذه الفترة.")
@@ -9641,8 +9676,8 @@ elif page == "لوحة القيادة":
                         "المستخدم": df.apply(_who, axis=1),
                         "الحركة": df["action_type"].map(_ACT_LBL).fillna(df["action_type"]),
                         "التصنيف": df["action_type"].map(_ACT_CAT).fillna("⚙️ نظام"),
-                        "المتجر": df["store_id"],
-                        "التفاصيل": df["details"],
+                        "المتجر / القسم": df.apply(lambda r: _target(r["store_id"], r["details"]), axis=1),
+                        "التفاصيل": df["details"].map(_clean_detail),
                     })
                     st.caption(f"عدد الأحداث المعروضة: {len(show)}")
                     st.dataframe(show, width="stretch", hide_index=True, height=460)
@@ -9680,18 +9715,30 @@ elif page == "لوحة القيادة":
                 st.divider()
 
                 dfw = pd.read_sql(f"""
-                    SELECT (a.action_time {_KSA}) AS ts, a.action_type,
-                           COALESCE(NULLIF(w.display_name,''),'—') AS name,
-                           COALESCE(w.email,'—') AS email,
-                           COALESCE(w.phone_number,'—') AS phone,
-                           COALESCE(a.store_id,'—') AS store_id,
-                           COALESCE(a.details,'') AS details
-                    FROM action_logs a
-                    LEFT JOIN web_users w ON a.user_id = w.id
-                    WHERE a.source='web' AND a.action_type = ANY(%s)
-                      AND (a.action_time {_KSA})::date BETWEEN %s AND %s
-                    ORDER BY a.action_time DESC LIMIT %s
-                """, conn, params=(acts, d_from, d_to, limit))
+                    SELECT * FROM (
+                        SELECT (a.action_time {_KSA}) AS ts, a.action_type,
+                               COALESCE(NULLIF(w.display_name,''),'—') AS name,
+                               COALESCE(w.email,'—') AS email,
+                               COALESCE(w.phone_number,'—') AS phone,
+                               a.store_id AS store_id,
+                               COALESCE(a.details,'') AS details
+                        FROM action_logs a
+                        LEFT JOIN web_users w ON a.user_id = w.id
+                        WHERE a.source='web' AND a.action_type = ANY(%s)
+                          AND (a.action_time {_KSA})::date BETWEEN %s AND %s
+                        UNION ALL
+                        SELECT (r.created_at {_KSA}) AS ts, 'code_report' AS action_type,
+                               COALESCE(NULLIF(r.reporter_name,''),'—') AS name,
+                               COALESCE(NULLIF(r.reporter_email,''),'—') AS email,
+                               COALESCE(NULLIF(r.reporter_phone,''),'—') AS phone,
+                               r.store_id AS store_id,
+                               COALESCE(NULLIF(r.issue_note,''), r.reported_code, '') AS details
+                        FROM code_reports r
+                        WHERE r.source='web'
+                          AND (r.created_at {_KSA})::date BETWEEN %s AND %s
+                    ) q
+                    ORDER BY ts DESC LIMIT %s
+                """, conn, params=(acts, d_from, d_to, d_from, d_to, limit))
 
                 if dfw.empty:
                     st.info("📭 لا توجد حركات في هذه الفترة.")
@@ -9703,8 +9750,8 @@ elif page == "لوحة القيادة":
                         "الجوال": dfw["phone"],
                         "الحركة": dfw["action_type"].map(_ACT_LBL).fillna(dfw["action_type"]),
                         "التصنيف": dfw["action_type"].map(_ACT_CAT).fillna("⚙️ نظام"),
-                        "المتجر": dfw["store_id"],
-                        "التفاصيل": dfw["details"],
+                        "المتجر / القسم": dfw.apply(lambda r: _target(r["store_id"], r["details"]), axis=1),
+                        "التفاصيل": dfw["details"].map(_clean_detail),
                     })
                     st.caption(f"عدد الأحداث المعروضة: {len(showw)}")
                     st.dataframe(showw, width="stretch", hide_index=True, height=460)
