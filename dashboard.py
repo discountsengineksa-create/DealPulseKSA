@@ -9961,70 +9961,310 @@ elif page == "مركز الدعم":
 
 
 # ==============================================================================
-# --- استوديو الإبداع والذكاء التسويقي (الربط مع الاهتمامات) ---
+# --- استوديو المحتوى: محرك بوسترات نبض الصفقات (Brand-Locked Poster Engine) ---
 # ==============================================================================
 elif page == "استوديو المحتوى":
-    page_title("🎨", "استوديو الإبداع والذكاء التسويقي")
-    
-    conn = None
-    top_interest = "عام" # افتراضي في حال عدم وجود بيانات
-    
-    try:
-        conn = get_conn()
-        conn.rollback() # حل حاسم لمشكلة "current transaction is aborted"
-        
-        # جلب أعلى اهتمام حالي لتوجيه التصميم
-        df_int = pd.read_sql("SELECT interest_category FROM user_interests ORDER BY interest_score DESC LIMIT 1", conn)
-        if not df_int.empty:
-            top_interest = df_int.iloc[0]['interest_category']
-            st.success(f"💡 **نصيحة الاستوديو:** الجمهور حالياً مهتم بـ **({top_interest})**. يفضل إنشاء محتوى لهذا القسم.")
+    page_title("🎨", "استوديو الإبداع — محرك البوسترات")
+    st.caption("ارفع لوقو المتجر، اكتب الخصم والكود، واحصل على بوستر فاخر بهوية نبض الصفقات الموحّدة. مقاس ماستر 1080×1080.")
 
-    except Exception as e:
-        st.caption("سيتم ربط التوصيات الذكية عند توفر بيانات في جدول الاهتمامات.")
-    finally:
-        if conn: conn.close()
+    import io
+    from PIL import Image, ImageDraw, ImageFilter, ImageFont
+    import arabic_reshaper
+    from bidi.algorithm import get_display
 
-    tab1, tab2, tab3 = st.tabs(["🖼️ مصمم البوستات", "✍️ كاتب الإعلانات (AI)", "🎬 مخرج الفيديو"])
+    # ─── ثوابت الهوية (مقفولة — لا يلمسها المستخدم) ─────────────────────────────
+    _CANVAS = 1080
+    _STUDIO_DIR = os.path.dirname(os.path.abspath(__file__))
+    _FONT_AR = os.path.join(_STUDIO_DIR, "NotoSansArabic-Bold.ttf")
+    _ARCHIVE_DIR = os.path.join(_STUDIO_DIR, "posters_archive")
+    os.makedirs(_ARCHIVE_DIR, exist_ok=True)
 
-    with tab1:
-        st.subheader("🛠️ أدوات التصميم")
-        col_edit, col_prev = st.columns([1, 1])
-        
-        with col_edit:
-            prod_name = st.selectbox("المنتج المستهدف:", [f"عرض {top_interest}", "ايفون 15 Pro", "كوبون خصم"])
-            coupon_code = st.text_input("كود الخصم الحصري:", "SAVE50")
-            bg_color = st.color_picker("لون الخلفية:", BRAND["text"])
-            text_color = st.color_picker("لون النص:", BRAND["emerald"])
-            
+    # لوحة الألوان: نسخة Apple/Keynote — كريمي فاخر + زمردي عميق
+    _STUDIO_BG_TOP     = (250, 250, 248)   # cream
+    _STUDIO_BG_BOTTOM  = (232, 240, 234)   # mint-cream
+    _STUDIO_EMERALD    = (16, 185, 129)
+    _STUDIO_EMERALD_DK = (5, 122, 85)
+    _STUDIO_INK        = (31, 41, 55)
+    _STUDIO_INK_SOFT   = (107, 114, 128)
+    _STUDIO_PILL_BG    = (15, 23, 35)
+    _STUDIO_PILL_FG    = (255, 255, 255)
+
+    _AR_RESHAPER = arabic_reshaper.ArabicReshaper(configuration={
+        'delete_harakat': False, 'support_ligatures': True,
+    })
+
+    def _ar(text: str) -> str:
+        """يهيّئ النص العربي لـ Pillow (تشكيل + bidi)."""
+        try:
+            return get_display(_AR_RESHAPER.reshape(str(text)))
+        except Exception:
+            return str(text)
+
+    def _font(size: int, weight: int = 700) -> ImageFont.FreeTypeFont:
+        """خط نوتو السعودي العربي — متغيّر الوزن. 700=Bold، 900=Black."""
+        try:
+            f = ImageFont.truetype(_FONT_AR, size)
+            try:
+                # axis order: [Weight, Width]
+                f.set_variation_by_axes([weight, 100])
+            except Exception:
+                pass
+            return f
+        except Exception:
+            return ImageFont.load_default()
+
+    def _vgradient(w: int, h: int, top, bottom) -> Image.Image:
+        base = Image.new("RGB", (w, h), top)
+        draw = ImageDraw.Draw(base)
+        for y in range(h):
+            t = y / max(h - 1, 1)
+            r = int(top[0] * (1 - t) + bottom[0] * t)
+            g = int(top[1] * (1 - t) + bottom[1] * t)
+            b = int(top[2] * (1 - t) + bottom[2] * t)
+            draw.line([(0, y), (w, y)], fill=(r, g, b))
+        return base
+
+    def _soft_blob(img: Image.Image, cx: int, cy: int, radius: int, color, alpha: int):
+        """يرسم blob أخضر زمردي مع blur ناعم — توهج فاخر."""
+        layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        d = ImageDraw.Draw(layer)
+        d.ellipse([cx - radius, cy - radius, cx + radius, cy + radius], fill=(*color, alpha))
+        layer = layer.filter(ImageFilter.GaussianBlur(radius // 3))
+        img.paste(layer, (0, 0), layer)
+
+    def _drop_shadow(img: Image.Image, x: int, y: int, w: int, h: int, radius: int = 18, blur: int = 22, alpha: int = 55):
+        """ظل ناعم تحت كارت زجاجي."""
+        sh = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        d = ImageDraw.Draw(sh)
+        d.rounded_rectangle([x, y + 8, x + w, y + h + 8], radius=radius, fill=(0, 0, 0, alpha))
+        sh = sh.filter(ImageFilter.GaussianBlur(blur))
+        img.paste(sh, (0, 0), sh)
+
+    def _fit_logo(logo_bytes: bytes, box_w: int, box_h: int) -> Image.Image | None:
+        """يفتح اللوقو ويصغّره/يكبّره ليناسب الصندوق مع الحفاظ على النسبة + شفافية."""
+        try:
+            lg = Image.open(io.BytesIO(logo_bytes)).convert("RGBA")
+            lg.thumbnail((box_w, box_h), Image.LANCZOS)
+            return lg
+        except Exception:
+            return None
+
+    def _center_text(draw: ImageDraw.ImageDraw, text: str, y: int, font, fill, canvas_w: int = _CANVAS):
+        bbox = draw.textbbox((0, 0), text, font=font)
+        tw = bbox[2] - bbox[0]
+        draw.text(((canvas_w - tw) // 2 - bbox[0], y - bbox[1]), text, font=font, fill=fill)
+
+    def _render_poster(
+        store_name: str,
+        store_logo_bytes: bytes | None,
+        discount_label: str,
+        discount_value: str,
+        code: str,
+        tagline: str,
+        deal_pulse_logo_bytes: bytes | None,
+    ) -> bytes:
+        """يبني البوستر الكامل ويرجعه PNG bytes."""
+        W = H = _CANVAS
+        img = _vgradient(W, H, _STUDIO_BG_TOP, _STUDIO_BG_BOTTOM).convert("RGBA")
+
+        # توهج زمردي فاخر — زاويتان متقابلتان
+        _soft_blob(img, int(W * 0.85), int(H * 0.18), 280, _STUDIO_EMERALD, 60)
+        _soft_blob(img, int(W * 0.15), int(H * 0.88), 320, _STUDIO_EMERALD_DK, 45)
+
+        draw = ImageDraw.Draw(img)
+
+        # شريط علوي رفيع: "عرض حصري" بأسلوب Keynote
+        small_label = _ar("عرض حصري")
+        f_label = _font(28)
+        _center_text(draw, small_label, 110, f_label, _STUDIO_INK_SOFT)
+
+        # خط تحت العنوان الصغير
+        line_w = 90
+        draw.rounded_rectangle(
+            [W // 2 - line_w // 2, 158, W // 2 + line_w // 2, 162],
+            radius=2, fill=_STUDIO_EMERALD,
+        )
+
+        # كارت اللوقو الزجاجي
+        card_w, card_h = 520, 280
+        card_x = (W - card_w) // 2
+        card_y = 200
+        _drop_shadow(img, card_x, card_y, card_w, card_h, radius=32, blur=30, alpha=40)
+
+        glass = Image.new("RGBA", (card_w, card_h), (255, 255, 255, 235))
+        mask = Image.new("L", (card_w, card_h), 0)
+        ImageDraw.Draw(mask).rounded_rectangle([0, 0, card_w, card_h], radius=32, fill=255)
+        img.paste(glass, (card_x, card_y), mask)
+        # حدّ ناعم
+        ImageDraw.Draw(img).rounded_rectangle(
+            [card_x, card_y, card_x + card_w, card_y + card_h],
+            radius=32, outline=(225, 230, 225, 255), width=2,
+        )
+
+        # لوقو المتجر داخل الكارت (إن وُجد) وإلا اسم المتجر
+        if store_logo_bytes:
+            logo = _fit_logo(store_logo_bytes, card_w - 80, card_h - 80)
+            if logo is not None:
+                lx = card_x + (card_w - logo.width) // 2
+                ly = card_y + (card_h - logo.height) // 2
+                img.paste(logo, (lx, ly), logo)
+        if not store_logo_bytes:
+            f_store = _font(72)
+            _center_text(draw, _ar(store_name or "متجرك"), card_y + card_h // 2 - 40, f_store, _STUDIO_INK)
+
+        # اسم المتجر تحت الكارت (لو فيه لوقو)
+        if store_logo_bytes and store_name:
+            f_store_sm = _font(34)
+            _center_text(draw, _ar(store_name), card_y + card_h + 30, f_store_sm, _STUDIO_INK)
+            block_y = card_y + card_h + 100
+        else:
+            block_y = card_y + card_h + 60
+
+        # كتلة الخصم — البطل
+        f_disc_lbl = _font(36, weight=600)
+        _center_text(draw, _ar(discount_label or "خصم يصل إلى"), block_y, f_disc_lbl, _STUDIO_INK_SOFT)
+
+        f_disc_num = _font(200, weight=900)
+        _center_text(draw, str(discount_value or "70%"), block_y + 60, f_disc_num, _STUDIO_EMERALD_DK)
+
+        # Pill الكود
+        code_text = (code or "SAVE50").upper()
+        f_code = _font(64, weight=800)
+        cb = draw.textbbox((0, 0), code_text, font=f_code)
+        cw = cb[2] - cb[0]
+        pill_w = max(cw + 140, 380)
+        pill_h = 110
+        pill_x = (W - pill_w) // 2
+        pill_y = block_y + 290
+        draw.rounded_rectangle(
+            [pill_x, pill_y, pill_x + pill_w, pill_y + pill_h],
+            radius=pill_h // 2, fill=_STUDIO_PILL_BG,
+        )
+        # نص الكود (لاتيني — لا حاجة لـ bidi)
+        text_x = pill_x + (pill_w - cw) // 2 - cb[0]
+        text_y = pill_y + (pill_h - (cb[3] - cb[1])) // 2 - cb[1]
+        draw.text((text_x, text_y), code_text, font=f_code, fill=_STUDIO_PILL_FG)
+
+        # نص فرعي تحت الـ pill
+        f_tag = _font(28)
+        _center_text(draw, _ar(tagline or "استخدم الكود عند الشراء"), pill_y + pill_h + 30, f_tag, _STUDIO_INK_SOFT)
+
+        # ختم نبض الصفقات — زاوية يمين سفلى (صغير وأنيق)
+        if deal_pulse_logo_bytes:
+            wm = _fit_logo(deal_pulse_logo_bytes, 110, 110)
+            if wm is not None:
+                # شفافية 75%
+                alpha = wm.split()[-1].point(lambda a: int(a * 0.75))
+                wm.putalpha(alpha)
+                img.paste(wm, (W - wm.width - 50, H - wm.height - 50), wm)
+
+        # نص "نبض الصفقات" بجانب الختم
+        f_wm = _font(22)
+        wm_text = _ar("نبض الصفقات")
+        wb = draw.textbbox((0, 0), wm_text, font=f_wm)
+        tw = wb[2] - wb[0]
+        draw.text((50, H - 50 - (wb[3] - wb[1])), wm_text, font=f_wm, fill=_STUDIO_INK_SOFT)
+
+        out = io.BytesIO()
+        img.convert("RGB").save(out, format="PNG", optimize=True)
+        return out.getvalue()
+
+    # ─── واجهة المستخدم ─────────────────────────────────────────────────────────
+    tab_design, tab_archive = st.tabs(["🎨 مصمم البوستر", "🗂️ أرشيف التصاميم"])
+
+    with tab_design:
+        col_form, col_prev = st.columns([1, 1.1])
+
+        with col_form:
+            st.markdown("##### 🏷️ بيانات العرض")
+            store_name_in = st.text_input("اسم المتجر / الشركة", value="", placeholder="مثال: نون، أمازون، نمشي…")
+            store_logo_file = st.file_uploader(
+                "لوقو المتجر (PNG شفاف أو JPG)",
+                type=["png", "jpg", "jpeg", "webp"],
+                help="نوصي بـ PNG شفاف لأفضل نتيجة. يُضبط الحجم والمكان تلقائياً.",
+            )
+            c1, c2 = st.columns(2)
+            with c1:
+                discount_label_in = st.text_input("سطر فوق الرقم", value="خصم يصل إلى")
+            with c2:
+                discount_value_in = st.text_input("قيمة الخصم", value="70%", help="مثل: 70%، 50 ريال، 1+1")
+            code_in = st.text_input("كود الخصم", value="SAVE50", max_chars=20)
+            tagline_in = st.text_input("سطر تذييل اختياري", value="استخدم الكود عند الشراء")
+
+            generate = st.button("✨ توليد البوستر", type="primary", width='stretch')
+
         with col_prev:
-            st.subheader("🖼️ المعاينة الحية")
-            # منطق رسم البوستر (بناءً على صورتك الرائعة)
-            st.markdown(f"""
-                <div style="background-color:{bg_color}; padding:40px; border-radius:25px; text-align:center; border: 3px solid {text_color};">
-                    <h5 style="color:white; opacity:0.6; letter-spacing:2px;">LIMITED TIME OFFER</h5>
-                    <h1 style="color:{text_color}; font-size:45px;">{prod_name}</h1>
-                    <p style="color:white; margin-top:20px;">استخدم الكود للحصول على الخصم</p>
-                    <div style="background-color:{text_color}; color:{bg_color}; padding:15px; border-radius:10px; font-weight:bold; font-size:30px; display:inline-block; margin-top:10px;">
-                        {coupon_code}
-                    </div>
-                    <p style="color:white; font-size:12px; margin-top:20px;">🚀 اطلبه الآن عبر محرك توفير</p>
-                </div>
-            """, unsafe_allow_html=True)
-            if st.button("📥 تحميل كود التصميم"):
-                st.info("سيتم تصدير التصميم بصيغة PNG في التحديث القادم.")
+            st.markdown("##### 🖼️ المعاينة")
+            if generate:
+                store_logo_bytes = store_logo_file.read() if store_logo_file else None
+                dp_logo_bytes = None
+                if os.path.exists(_logo_path):
+                    with open(_logo_path, "rb") as _f:
+                        dp_logo_bytes = _f.read()
+                with st.spinner("جاري الرسم…"):
+                    png_bytes = _render_poster(
+                        store_name=store_name_in,
+                        store_logo_bytes=store_logo_bytes,
+                        discount_label=discount_label_in,
+                        discount_value=discount_value_in,
+                        code=code_in,
+                        tagline=tagline_in,
+                        deal_pulse_logo_bytes=dp_logo_bytes,
+                    )
+                st.image(png_bytes, width='stretch')
 
-    with tab2:
-        st.subheader("🤖 كاتب الإعلانات بالذكاء الاصطناعي")
-        platform = st.selectbox("منصة النشر:", ["تيك توك", "سناب شات", "انستقرام"])
-        if st.button("✨ توليد النص البيعي"):
-            st.code(f"📢 الرابط بالبايو! {coupon_code} صار عليه عرض.. كود {top_interest} يا جماعة لا يفوتكم! 🔥")
+                # اسم ملف نظيف (slug)
+                safe_store = "".join(c for c in (store_name_in or "store") if c.isalnum() or c in ("_", "-"))[:40] or "store"
+                safe_code = "".join(c for c in (code_in or "code") if c.isalnum())[:20] or "code"
+                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                fname = f"{safe_store}_{safe_code}_{ts}.png"
 
-    with tab3:
-        # منطق مخرج الفيديو بناءً على 'Video Automation Logic'
-        st.subheader("🎬 مخرج الفيديو والترند")
-        st.info("هنا يتم تحويل بيانات الاهتمامات إلى سيناريوهات فيديو قصيرة.")
-        if st.button("🎬 توليد سكربت النشر الفوري"):
-            st.write(f"🎥 **السيناريو المقترح:** عرض سريع لمنتجات {top_interest} مع ظهور الكود {coupon_code} في المنتصف.")
+                # حفظ في الأرشيف
+                try:
+                    with open(os.path.join(_ARCHIVE_DIR, fname), "wb") as _af:
+                        _af.write(png_bytes)
+                except Exception:
+                    pass
+
+                st.download_button(
+                    "📥 تحميل PNG (1080×1080)",
+                    data=png_bytes,
+                    file_name=fname,
+                    mime="image/png",
+                    width='stretch',
+                )
+                st.success("تم. الملف محفوظ في الأرشيف ويمكن تحميله الآن.")
+            else:
+                st.info("اضغط «توليد البوستر» لرؤية المعاينة. الهوية مقفولة على ستايل نبض الصفقات — كل البوسترات تطلع بنفس الإحساس الفاخر.")
+
+    with tab_archive:
+        st.markdown("##### آخر التصاميم")
+        try:
+            files = sorted(
+                [f for f in os.listdir(_ARCHIVE_DIR) if f.lower().endswith(".png")],
+                key=lambda n: os.path.getmtime(os.path.join(_ARCHIVE_DIR, n)),
+                reverse=True,
+            )
+        except Exception:
+            files = []
+
+        if not files:
+            st.info("لا توجد تصاميم محفوظة بعد. ولّد بوسترك الأول من تبويب «مصمم البوستر».")
+        else:
+            cols = st.columns(3)
+            for i, f in enumerate(files[:18]):
+                fp = os.path.join(_ARCHIVE_DIR, f)
+                with cols[i % 3]:
+                    st.image(fp, width='stretch')
+                    with open(fp, "rb") as rf:
+                        st.download_button(
+                            "تحميل",
+                            data=rf.read(),
+                            file_name=f,
+                            mime="image/png",
+                            key=f"dl_{f}",
+                            width='stretch',
+                        )
 
 
 

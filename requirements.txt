@@ -94,6 +94,10 @@ pandas==3.0.2
 
 pillow==11.1.0
 
+arabic-reshaper==3.0.0
+
+python-bidi==0.4.2
+
 platformdirs==4.3.7
 
 plotly==6.7.0
