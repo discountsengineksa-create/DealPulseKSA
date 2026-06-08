@@ -10134,9 +10134,14 @@ elif page == "استوديو المحتوى":
         code: str,
         tagline: str,
         deal_pulse_logo_bytes: bytes | None,
+        card_w: int = 540,
+        card_h: int = 400,
     ) -> bytes:
-        """يبني البوستر الكامل ويرجعه PNG bytes."""
+        """يبني البوستر الكامل ويرجعه PNG bytes. المقاس الأصلي للكارت: 540×400."""
         W = H = _CANVAS
+        # حماية: نمنع تجاوز الكنفس أو الطغيان على العناصر تحت الكارت
+        card_w = max(100, min(int(card_w), W - 40))
+        card_h = max(100, min(int(card_h), 600))
         img = _vgradient(W, H, _STUDIO_BG_TOP, _STUDIO_BG_BOTTOM).convert("RGBA")
 
         # توهج زمردي فاخر — زاويتان متقابلتان
@@ -10157,9 +10162,8 @@ elif page == "استوديو المحتوى":
             radius=2, fill=_STUDIO_EMERALD,
         )
 
-        # كارت موحّد: مستطيل أبيض عريض + إطار زمردي ثابت = نمط واحد لكل المتاجر
-        # اللوقو يملأ الكارت بالكامل (padding 20 فقط من الإطار)
-        card_w, card_h = 540, 400
+        # كارت موحّد: مستطيل أبيض + إطار زمردي ثابت = نمط واحد لكل المتاجر
+        # الأبعاد قابلة للتحكّم من الواجهة (الأصل 540×400)
         card_x = (W - card_w) // 2
         card_y = 150
         _drop_shadow(img, card_x, card_y, card_w, card_h, radius=36, blur=35, alpha=55)
@@ -10259,8 +10263,16 @@ elif page == "استوديو المحتوى":
             store_logo_file = st.file_uploader(
                 "لوقو المتجر (PNG شفاف أو JPG)",
                 type=["png", "jpg", "jpeg", "webp"],
-                help="نوصي بـ PNG شفاف لأفضل نتيجة. يُضبط الحجم والمكان تلقائياً.",
+                help="نوصي بـ PNG شفاف لأفضل نتيجة. الصورة تملأ الكارت تلقائياً (cover).",
             )
+            st.caption("📐 مقاس كارت اللوقو — **المقاس الأصلي: 540×400**")
+            _cwc, _chc = st.columns(2)
+            with _cwc:
+                card_w_in = st.number_input("عرض الكارت", min_value=300, max_value=1000,
+                                            value=540, step=10, key="studio_card_w")
+            with _chc:
+                card_h_in = st.number_input("ارتفاع الكارت", min_value=250, max_value=460,
+                                            value=400, step=10, key="studio_card_h")
             c1, c2 = st.columns(2)
             with c1:
                 discount_label_in = st.text_input("سطر فوق الرقم", value="خصم يصل إلى")
@@ -10288,6 +10300,8 @@ elif page == "استوديو المحتوى":
                         code=code_in,
                         tagline=tagline_in,
                         deal_pulse_logo_bytes=dp_logo_bytes,
+                        card_w=card_w_in,
+                        card_h=card_h_in,
                     )
                 # تخزين في الـ session ليبقى بعد إعادة التشغيل (rerun)
                 safe_store = "".join(c for c in (store_name_in or "store") if c.isalnum() or c in ("_", "-"))[:40] or "store"
