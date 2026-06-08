@@ -10136,8 +10136,9 @@ elif page == "استوديو المحتوى":
         deal_pulse_logo_bytes: bytes | None,
         card_w: int = 540,
         card_h: int = 400,
+        logo_scale: int = 100,
     ) -> bytes:
-        """يبني البوستر الكامل ويرجعه PNG bytes. المقاس الأصلي للكارت: 540×400."""
+        """يبني البوستر الكامل ويرجعه PNG bytes. الكارت 540×400، وlogo_scale% يحدّد حجم اللوقو فيه."""
         W = H = _CANVAS
         # حماية: نمنع تجاوز الكنفس أو الطغيان على العناصر تحت الكارت
         card_w = max(100, min(int(card_w), W - 40))
@@ -10174,16 +10175,26 @@ elif page == "استوديو المحتوى":
         ImageDraw.Draw(mask).rounded_rectangle([0, 0, card_w, card_h], radius=36, fill=255)
         img.paste(glass, (card_x, card_y), mask)
 
-        # صورة/لوقو المتجر — تملأ الكارت بالكامل (cover 540×400) مع قص مركزي
+        # صورة/لوقو المتجر — حجمه داخل الكارت يتحكّم فيه logo_scale%
+        #   100% → cover يملأ الكارت بالكامل (قص مركزي بسيط)
+        #   أقل  → contain (اللوقو كامل بلا قص) مصغّر ومتوسّط بهوامش بيضاء
         if store_logo_bytes:
-            cover = _cover_logo(store_logo_bytes, card_w, card_h)
-            if cover is not None:
-                card_img = Image.new("RGBA", (card_w, card_h), (255, 255, 255, 255))
-                card_img.paste(cover, (0, 0), cover)
-                rmask = Image.new("L", (card_w, card_h), 0)
-                ImageDraw.Draw(rmask).rounded_rectangle(
-                    [0, 0, card_w, card_h], radius=36, fill=255)
-                img.paste(card_img, (card_x, card_y), rmask)
+            _pct = max(50, min(int(logo_scale), 100)) / 100.0
+            if _pct >= 0.98:
+                cover = _cover_logo(store_logo_bytes, card_w, card_h)
+                if cover is not None:
+                    card_img = Image.new("RGBA", (card_w, card_h), (255, 255, 255, 255))
+                    card_img.paste(cover, (0, 0), cover)
+                    rmask = Image.new("L", (card_w, card_h), 0)
+                    ImageDraw.Draw(rmask).rounded_rectangle(
+                        [0, 0, card_w, card_h], radius=36, fill=255)
+                    img.paste(card_img, (card_x, card_y), rmask)
+            else:
+                logo = _fit_logo(store_logo_bytes, int(card_w * _pct), int(card_h * _pct))
+                if logo is not None:
+                    lx = card_x + (card_w - logo.width) // 2
+                    ly = card_y + (card_h - logo.height) // 2
+                    img.paste(logo, (lx, ly), logo)
         if not store_logo_bytes:
             f_store = _font(96, weight=800)
             _center_text(draw, _ar(store_name or "متجرك"), card_y + card_h // 2 - 50, f_store, _STUDIO_INK)
@@ -10265,14 +10276,11 @@ elif page == "استوديو المحتوى":
                 type=["png", "jpg", "jpeg", "webp"],
                 help="نوصي بـ PNG شفاف لأفضل نتيجة. الصورة تملأ الكارت تلقائياً (cover).",
             )
-            st.caption("📐 مقاس كارت اللوقو — **المقاس الأصلي: 540×400**")
-            _cwc, _chc = st.columns(2)
-            with _cwc:
-                card_w_in = st.number_input("عرض الكارت", min_value=300, max_value=1000,
-                                            value=540, step=10, key="studio_card_w")
-            with _chc:
-                card_h_in = st.number_input("ارتفاع الكارت", min_value=250, max_value=460,
-                                            value=400, step=10, key="studio_card_h")
+            logo_scale = st.slider(
+                "📐 حجم اللوقو داخل الكارت (%)", min_value=50, max_value=100,
+                value=100, step=5, key="studio_logo_scale",
+                help="الكارت ثابت 540×400. 100% = اللوقو يملأ الكارت بالكامل · "
+                     "أقل = اللوقو أصغر وبهوامش بيضاء حوله.")
             c1, c2 = st.columns(2)
             with c1:
                 discount_label_in = st.text_input("سطر فوق الرقم", value="خصم يصل إلى")
@@ -10300,8 +10308,7 @@ elif page == "استوديو المحتوى":
                         code=code_in,
                         tagline=tagline_in,
                         deal_pulse_logo_bytes=dp_logo_bytes,
-                        card_w=card_w_in,
-                        card_h=card_h_in,
+                        logo_scale=logo_scale,
                     )
                 # تخزين في الـ session ليبقى بعد إعادة التشغيل (rerun)
                 safe_store = "".join(c for c in (store_name_in or "store") if c.isalnum() or c in ("_", "-"))[:40] or "store"
