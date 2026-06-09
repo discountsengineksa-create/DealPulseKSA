@@ -67,6 +67,30 @@ def _upload_logo(file_bytes: bytes, store_slug: str) -> str | None:
         return None
 
 
+def _upload_story_media(file_bytes: bytes, store_slug: str) -> str | None:
+    """رفع وسائط الستوري (فيديو أو صورة) إلى Cloudinary — يُعيد secure_url أو None.
+    resource_type='auto' يجعل Cloudinary يكتشف نوع الملف (فيديو/صورة) تلقائياً."""
+    if not _CLOUDINARY_OK:
+        return None
+    try:
+        result = cloudinary.uploader.upload(
+            file_bytes,
+            public_id=f"story_media/{store_slug}",
+            overwrite=True,
+            resource_type="auto",
+        )
+        return result.get("secure_url")
+    except Exception as e:
+        st.warning(f"⚠️ فشل رفع وسائط الستوري إلى Cloudinary: {e}")
+        return None
+
+
+def _is_video_url(url: str) -> bool:
+    """يكتشف الفيديو من امتداد الرابط — نفس منطق الواجهة (الويب/الميني-ويب)."""
+    u = (url or "").lower().split("?")[0]
+    return u.endswith((".mp4", ".webm", ".mov", ".m4v"))
+
+
 def _trigger_social_broadcast(master_id: int | None) -> None:
     """
     fire-and-forget: يبلّغ الـ FastAPI لينشر العرض على منصات السوشيال في الخلفية.
@@ -1509,6 +1533,7 @@ _MAIN_PAGES = [
 "مستخدمو الموقع",
 ]
 _ANALYSIS_PAGES = [
+"🎬 إضافة استوري",
 "🎬 تحليلات الستوري",
 "تحليل المتاجر", "تحليل الأقسام",
 "تحليل طلبات الأكواد", "تحليل المستخدمين",
@@ -1745,14 +1770,10 @@ if page == "إدخال بيانات الماستر":
             if logo_url_input:
                 st.image(logo_url_input, width=80)
 
-        # الصف 7: إشهار / إعلان مدفوع
+        # ملاحظة: الإشهار (is_promoted) ووسائط الستوري انتقلا لصفحة «🎬 إضافة استوري».
+        # المتجر الجديد يُحفظ غير مُشهَر افتراضياً؛ تُفعّله وترفع له ستوري من هناك.
         st.divider()
-        is_promoted_input = st.checkbox(
-            "📣 إشهار (إعلان مدفوع) — يظهر في قسم «المتاجر المختارة» أعلى الموقع",
-            value=False,
-            key="is_promoted_add",
-            help="فعّل هذا الخيار للمتاجر التي دفعت مقابل الظهور في الواجهة الأمامية كإعلان مميّز."
-        )
+        st.caption("📣 الإشهار ورفع ستوري (فيديو/صورة) صار من صفحة «🎬 إضافة استوري» بعد حفظ المتجر.")
 
         if st.form_submit_button("🚀 حفظ المتجر والبيانات"):
             # validation: كل الحقول AR + EN إجبارية
@@ -1819,7 +1840,7 @@ if page == "إدخال بيانات الماستر":
                         priority, disc_val, tags_ar_lit, tags_en_lit,
                         my_coupon, date_start, date_end,
                         final_logo_url or None,
-                        bool(is_promoted_input),
+                        False,  # is_promoted: يُفعَّل لاحقاً من صفحة «🎬 إضافة استوري»
                         _src_val,
                     ))
                     new_master_id = cur.fetchone()[0]
@@ -3884,6 +3905,127 @@ elif page == "تحليل المتاجر":
             st.divider()
             st.markdown("**📋 التجاوزات الحالية:**")
             st.dataframe(_show, hide_index=True, width='stretch')
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 🎬 إضافة استوري — رفع فيديو/صورة للستوري وربطها بمتجر + تفعيل الإشهار
+#    الوسائط → master.story_media_url ، العضوية → is_promoted (نفس الستوري الحالي).
+#    التحليلات (story_views) والترند بلا تغيير — مربوطة بالمتجر تلقائياً.
+# ════════════════════════════════════════════════════════════════════════════
+elif page == "🎬 إضافة استوري":
+    st.header("🎬 إضافة استوري")
+    st.caption(
+        "ارفع مقطع فيديو أو صورة إعلانية، اربطها بمتجر، وفعّل الإشهار ليظهر المتجر "
+        "في صف الستوري بالموقع والميني-ويب. المشاهدات والترند تُحسب تلقائياً لنفس المتجر."
+    )
+
+    _sc = get_conn(); _sc.rollback()
+    try:
+        _stores_df = pd.read_sql(
+            "SELECT id, store_id, COALESCE(NULLIF(name_en,''), store_id) AS name_en, "
+            "COALESCE(is_promoted, FALSE) AS is_promoted, story_media_url "
+            "FROM master ORDER BY id DESC",
+            _sc,
+        )
+    except Exception as _e:
+        st.error(f"تعذّر جلب المتاجر: {_e}")
+        _stores_df = pd.DataFrame()
+    finally:
+        _sc.close()
+
+    if _stores_df.empty:
+        st.info("لا توجد متاجر بعد. أضف متجراً أولاً من «إدخال بيانات الماستر».")
+    else:
+        _labels = {
+            int(r["id"]): f'{r["store_id"]} · {r["name_en"]} (#{int(r["id"])})'
+            for _, r in _stores_df.iterrows()
+        }
+        _sel_id = st.selectbox(
+            "🏪 اختر المتجر",
+            options=list(_labels.keys()),
+            format_func=lambda i: _labels[i],
+            key="story_store_select",
+        )
+        _row = _stores_df[_stores_df["id"] == _sel_id].iloc[0]
+        _cur_media = _row["story_media_url"]
+        _cur_promoted = bool(_row["is_promoted"])
+
+        cc1, cc2 = st.columns(2)
+        cc1.metric("الإشهار الحالي", "✅ مُفعّل" if _cur_promoted else "⚪ غير مُفعّل")
+        cc2.metric("ستوري حالية", "🎬 موجودة" if _cur_media else "—")
+        if _cur_media:
+            st.caption("المعاينة الحالية:")
+            try:
+                if _is_video_url(_cur_media):
+                    st.video(_cur_media)
+                else:
+                    st.image(_cur_media, width=200)
+            except Exception:
+                pass
+            st.code(_cur_media, language="text")
+
+        st.divider()
+        st.subheader("📤 وسائط الستوري")
+        up1, up2 = st.columns(2)
+        with up1:
+            _media_file = st.file_uploader(
+                "ارفع فيديو أو صورة",
+                type=["mp4", "webm", "mov", "png", "jpg", "jpeg", "webp"],
+                key="story_media_file",
+                help="فيديو (mp4/webm/mov) أو صورة (png/jpg/webp). يُرفع إلى Cloudinary.",
+            )
+        with up2:
+            _media_url_input = st.text_input(
+                "أو الصق رابط مباشر",
+                placeholder="https://...",
+                key="story_media_url_input",
+            )
+
+        _promote = st.checkbox(
+            "📣 فعّل الإشهار (يظهر المتجر في الستوري وقسم «المتاجر المختارة»)",
+            value=_cur_promoted,
+            key="story_promote_chk",
+        )
+
+        bcol1, bcol2 = st.columns(2)
+        with bcol1:
+            if st.button("💾 حفظ الستوري", type="primary", width="stretch",
+                         key="story_save_btn"):
+                _final_media = (_media_url_input or "").strip()
+                if _media_file and not _final_media:
+                    with st.spinner("جارٍ رفع الوسائط إلى Cloudinary..."):
+                        _final_media = _upload_story_media(
+                            _media_file.read(), str(_row["store_id"]))
+                    if not _final_media:
+                        st.error("❌ فشل الرفع — تأكّد أن Cloudinary مضبوط، أو الصق رابطاً مباشراً.")
+                _media_to_save = _final_media or _cur_media   # لا رفع ولا رابط = نُبقي القديم
+                try:
+                    _wc = get_conn(); _wc.rollback()
+                    _wcur = _wc.cursor()
+                    _wcur.execute(
+                        "UPDATE master SET story_media_url = %s, is_promoted = %s WHERE id = %s",
+                        (_media_to_save or None, bool(_promote), int(_sel_id)),
+                    )
+                    _wc.commit(); _wc.close()
+                    st.success("✅ حُفظت الستوري وحالة الإشهار.")
+                    st.rerun()
+                except Exception as _e:
+                    st.error(f"تعذّر الحفظ: {_e}")
+        with bcol2:
+            if _cur_media and st.button("🗑️ احذف الستوري الحالية", width="stretch",
+                                        key="story_del_btn"):
+                try:
+                    _wc = get_conn(); _wc.rollback()
+                    _wcur = _wc.cursor()
+                    _wcur.execute(
+                        "UPDATE master SET story_media_url = NULL WHERE id = %s",
+                        (int(_sel_id),),
+                    )
+                    _wc.commit(); _wc.close()
+                    st.success("🗑️ حُذفت وسائط الستوري — المتجر يرجع لعرض الشعار.")
+                    st.rerun()
+                except Exception as _e:
+                    st.error(f"تعذّر الحذف: {_e}")
 
 
 # ════════════════════════════════════════════════════════════════════════════

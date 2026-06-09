@@ -247,6 +247,8 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
   .story-content{position:relative;z-index:15;width:100%;max-width:420px;padding:0 28px;text-align:center;color:#fff;pointer-events:none}
   .story-content .s-logo{width:130px;height:130px;margin:0 auto 22px;border-radius:22px;background:#fff;overflow:hidden;display:grid;place-items:center}
   .story-content .s-logo img{width:80%;height:80%;object-fit:contain}
+  .story-content .s-media{width:100%;max-width:300px;margin:0 auto 22px;border-radius:22px;overflow:hidden;background:#000}
+  .story-content .s-media img,.story-content .s-media video{width:100%;max-height:340px;object-fit:contain;display:block}
   .story-content h3{font-size:24px;font-weight:900;margin-bottom:8px}
   .story-content .s-offer{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.6);margin-bottom:22px}
   .story-content .s-code-lbl{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.5);margin-bottom:8px}
@@ -1288,6 +1290,7 @@ async function loadData() {
             coupon: item.public_coupon || '',
             link: buildLink(item),
             logo: item.logo_url || 'logo.png',
+            storyMedia: item.story_media_url || '',
             bio: item.store_bio || '',
             trending: item.is_trending === 'ترند 🔥',
             promoted: !!item.is_promoted,
@@ -1855,6 +1858,14 @@ function renderStorySlide() {
     // فيكسر الـ HTML attribute. نـ HTML-encode الـ " إلى &quot; حتى يفك
     // الـ parser الترميز قبل ما يقرأ الـ JS — فيرى JSON صحيح.
     const sidJs = JSON.stringify(s.store_id || '').replace(/"/g, '&quot;');
+    // وسائط الستوري: فيديو/صورة مخصّصة لو وُجدت، وإلا الشعار (السلوك الافتراضي).
+    const media = (s.storyMedia || '').replace(/"/g, '&quot;');
+    const isVid = /\.(mp4|webm|mov|m4v)(\?|$)/i.test(s.storyMedia || '');
+    const mediaBlock = !media
+        ? `<div class="s-logo"><img src="${logo}" onerror="this.onerror=null;this.src='logo.png'"></div>`
+        : isVid
+        ? `<div class="s-media"><video src="${media}" autoplay muted loop playsinline></video></div>`
+        : `<div class="s-media"><img src="${media}" onerror="this.onerror=null;this.src='logo.png'"></div>`;
     document.getElementById('storyProgress').innerHTML =
         STORY.map((_, i) => `<span class="seg"><i id="seg${i}" style="width:${i < storyIdx ? '100%' : '0'}"></i></span>`).join('');
     // الكود الآن قابل للنسخ من داخل الستوري (مع تتبّع story_view_id).
@@ -1869,7 +1880,7 @@ function renderStorySlide() {
               onclick="reportCodeMiniapp(${sidJs}, event)">${ST.reportCodeBtn}</button>`
         : '';
     document.getElementById('storyContent').innerHTML = `
-        <div class="s-logo"><img src="${logo}" onerror="this.onerror=null;this.src='logo.png'"></div>
+        ${mediaBlock}
         <h3>${s.name}${s.trending ? ' 🔥' : ''}</h3>
         ${s.disc ? `<div class="s-offer">Exclusive · ${s.disc}</div>` : ''}
         ${codeBlock}
