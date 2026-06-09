@@ -243,7 +243,7 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
     background:rgba(255,255,255,0.12);color:#fff;border:none;font-size:16px;cursor:pointer}
   .story-mute{position:absolute;top:calc(20px + env(safe-area-inset-top,0));left:16px;z-index:30;width:36px;height:36px;border-radius:50%;
     background:rgba(0,0,0,0.4);color:#fff;border:none;font-size:15px;cursor:pointer;place-items:center}
-  .story-tap{position:absolute;top:0;bottom:90px;width:35%;z-index:10}
+  .story-tap{position:absolute;top:64px;bottom:90px;width:35%;z-index:10}
   html[dir="rtl"] .story-tap-prev{right:0} html[dir="rtl"] .story-tap-next{left:0}
   html[dir="ltr"] .story-tap-prev{left:0} html[dir="ltr"] .story-tap-next{right:0}
   .story-content{position:absolute;inset:0;z-index:15;color:#fff;pointer-events:none}
@@ -1805,6 +1805,9 @@ let storySlideIdx = 0;     // الشريحة داخل المتجر الحالي
 let storyMuted = false;    // حالة كتم صوت الفيديو
 const STORY_MS = 6000;
 const isStoryVideo = (u) => /\.(mp4|webm|mov|m4v)(\?|$)/i.test(u || '');
+// تحسين فيديو Cloudinary (صيغة/جودة تلقائية) → تحميل أسرع على الجوال + poster أول لقطة.
+const optimizeVideo = (u) => (u && u.includes('/video/upload/') && !/\/video\/upload\/(f_|q_)/.test(u)) ? u.replace('/video/upload/', '/video/upload/f_auto,q_auto/') : (u || '');
+const videoPoster = (u) => (u && u.includes('/video/upload/')) ? u.replace('/video/upload/', '/video/upload/so_0,q_auto,f_jpg/').replace(/\.(mp4|webm|mov|m4v)(\?.*)?$/i, '.jpg') : '';
 function storySlidesOf(s) { return (s && Array.isArray(s.storySlides)) ? s.storySlides : []; }
 
 function renderStoryRow() {
@@ -1904,10 +1907,12 @@ function renderStorySlide() {
     const mediaUrl = slides.length ? slides[Math.min(storySlideIdx, slides.length - 1)] : '';
     const media = (mediaUrl || '').replace(/"/g, '&quot;');
     const isVid = isStoryVideo(mediaUrl);
+    const vsrc = optimizeVideo(mediaUrl).replace(/"/g, '&quot;');
+    const vposter = videoPoster(mediaUrl).replace(/"/g, '&quot;');
     const stage = !media
         ? `<div class="s-logo"><img src="${logo}" onerror="this.onerror=null;this.src='logo.png'"></div>`
         : isVid
-        ? `<video src="${media}" autoplay ${storyMuted ? 'muted' : ''} playsinline ontimeupdate="storyVideoTick(this)" onended="storyNext()" onerror="storyNext()"></video>`
+        ? `<video src="${vsrc}" poster="${vposter}" autoplay ${storyMuted ? 'muted' : ''} playsinline preload="auto" ontimeupdate="storyVideoTick(this)" onended="storyNext()" onerror="storyNext()"></video>`
         : `<img src="${media}" onerror="this.onerror=null;this.src='logo.png'">`;
     // أشرطة التقدّم = شرائح المتجر الحالي
     document.getElementById('storyProgress').innerHTML =
