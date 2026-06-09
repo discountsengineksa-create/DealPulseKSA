@@ -1517,7 +1517,7 @@ _OTHER_PAGES = [
 "📣 بلاغات الأكواد",  # ← Migration 029: بلاغات لا يعمل + إدارة المتاجر المسحوبة
 "🎯 بناء الشرائح", "مركز الإشعارات", "لوحة القيادة", "مركز الدعم",
 "استوديو المحتوى",
-"محرّك SEO", "📈 أداء SEO", "📤 الصفحات المنشورة", "🎯 محرك الفرص", "الرصد الاجتماعي", "🎯 رادار الصفقات الفوري", "التدقيق والتجارب",
+"محرّك SEO", "📈 أداء SEO", "📤 الصفحات المنشورة", "🎯 محرك الفرص", "سجل التدقيق",
 "🛰️ متابعة المنصة",
 "🩺 تشخيص النشر",
 ]
@@ -10494,6 +10494,13 @@ elif page == "محرّك SEO":
                 _np = _pcur.rowcount
                 _pcur.execute("DELETE FROM seo_generation_jobs")
                 _nj = _pcur.rowcount
+                # سجل التدقيق (PDPL): أخطر عملية في النظام — تُسجَّل ضمن نفس المعاملة
+                import json as _json
+                _pcur.execute(
+                    "INSERT INTO pdpl_audit_log (actor, action, target, status, meta) "
+                    "VALUES ('dashboard', 'seo_purge_all', 'all_seo_pages', 'ok', %s::jsonb)",
+                    (_json.dumps({"pages_deleted": _np, "jobs_deleted": _nj}),),
+                )
                 _pc.commit()
                 st.success(f"تم المسح الكامل: {_np} صفحة + {_nj} وظيفة. النظام صفر.")
                 st.rerun()
@@ -11745,71 +11752,25 @@ elif page == "🎯 رادار الصفقات الفوري":
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# التدقيق والتجارب — Audit log + Quiet hours + A/B experiments (migration_016)
+# سجل التدقيق — Audit log (PDPL). يسجّل عمليات الأدمن الحسّاسة: نشر SEO، البث،
+# تعديل/حذف المسودّات، المسح الكامل. (ساعات الهدوء + تجارب A/B أُخفيتا.)
 # ─────────────────────────────────────────────────────────────────────────────
-elif page == "التدقيق والتجارب":
-    st.header("🛡️ التدقيق والتجارب")
-    st.caption("سجل عمليات الأدمن (PDPL)، ساعات كتم التنبيهات، ونتائج تجارب A/B للردود.")
+elif page == "سجل التدقيق":
+    st.header("📜 سجل التدقيق")
+    st.caption("سجل عمليات الأدمن الحسّاسة (PDPL): نشر صفحات SEO، البث، تعديل/حذف المسودّات، المسح الكامل.")
 
-    tab_audit, tab_quiet, tab_exp = st.tabs(
-        ["📜 سجل التدقيق", "🌙 ساعات الهدوء", "🧪 تجارب A/B"]
-    )
-
-    # ── سجل التدقيق ──
-    with tab_audit:
-        data, err = _admin_get("/admin/audit-log", params={"limit": 100})
-        if err:
-            st.error(err)
-        elif not data or not data.get("entries"):
-            st.info("لا توجد عمليات مُسجّلة بعد.")
-        else:
-            import pandas as _pd
-            df = _pd.DataFrame(data["entries"])
-            df = df.rename(columns={"at": "الوقت", "action": "العملية", "target": "الهدف",
-                                    "actor": "المنفّذ", "status": "الحالة", "id": "#"})
-            st.dataframe(df, width='stretch', hide_index=True)
-
-    # ── ساعات الهدوء ──
-    with tab_quiet:
-        data, err = _admin_get("/admin/quiet-hours")
-        if err:
-            st.error(err)
-        else:
-            if data.get("email_muted_now"):
-                st.warning(f"🔕 الإيميل مكتوم الآن (نافذة: {data.get('active_window') or '—'})")
-            else:
-                st.success("🔔 التنبيهات تُرسل الآن (لا نافذة كتم فعّالة).")
-            for w in data.get("windows", []):
-                with st.container(border=True):
-                    cc1, cc2 = st.columns([4, 1])
-                    with cc1:
-                        chans = ", ".join(w.get("channels") or [])
-                        st.markdown(f"**{w.get('label') or 'نافذة'}** — {w['start_hour']:02d}:00 ← {w['end_hour']:02d}:00 ({w.get('timezone')})")
-                        st.caption(f"القنوات: {chans} · الحالة: {'مفعّلة ✅' if w.get('active') else 'متوقّفة'}")
-                    with cc2:
-                        lbl = "إيقاف" if w.get("active") else "تفعيل"
-                        if st.button(lbl, key=f"qh_{w['id']}", width='stretch'):
-                            _r, e2 = _admin_post(f"/admin/quiet-hours/{w['id']}/toggle")
-                            if e2:
-                                st.error(e2)
-                            else:
-                                st.rerun()
-
-    # ── تجارب A/B ──
-    with tab_exp:
-        data, err = _admin_get("/admin/experiments")
-        if err:
-            st.error(err)
-        elif not data or not data.get("results"):
-            st.info("لا توجد بيانات تجارب بعد (تتراكم مع كل رد اجتماعي).")
-        else:
-            import pandas as _pd
-            df = _pd.DataFrame(data["results"])
-            df = df.rename(columns={"experiment": "التجربة", "surface": "السطح", "arm": "النسخة",
-                                    "impressions": "ظهور", "clicks": "نقرات",
-                                    "conversions": "تحويلات", "total_value": "القيمة"})
-            st.dataframe(df, width='stretch', hide_index=True)
-            st.caption("الظهور يُسجَّل عند توليد كل رد. النقرات/التحويلات تتفعّل مع ربط الإحالة لاحقاً.")
+    data, err = _admin_get("/admin/audit-log", params={"limit": 200})
+    if err:
+        st.error(err)
+    elif not data or not data.get("entries"):
+        st.info("لا توجد عمليات مُسجّلة بعد.")
+    else:
+        import pandas as _pd
+        df = _pd.DataFrame(data["entries"])
+        df = df.rename(columns={"at": "الوقت", "action": "العملية", "target": "الهدف",
+                                "actor": "المنفّذ", "status": "الحالة", "id": "#"})
+        st.caption(f"إجمالي المعروض: {len(df)} عملية")
+        st.dataframe(df, width='stretch', hide_index=True)
 
 
 # ─── صفحة: 🩺 تشخيص النشر ───────────────────────────────────────────────────
