@@ -10967,16 +10967,57 @@ elif page == "📤 الصفحات المنشورة":
     st.caption("متابعة صفحات SEO بعد النشر — رابط الصفحة الحيّة، حالة Google، فهرسة سريعة.")
 
     import os
-    site_url = os.getenv("SITE_URL", "https://dealpulseksa.com").rstrip("/")
+    # القانوني = www (لمطابقة GSC + تجنّب التحويلات)
+    site_url = os.getenv("SITE_URL", "https://www.dealpulseksa.com").rstrip("/")
 
     top1, top2, top3 = st.columns([1, 1, 2])
     with top1:
         if st.button("🔄 تحديث", width='stretch'):
+            st.session_state.pop("pub_gsc_cache", None)
             st.rerun()
     with top2:
         lang_pub_filter = st.selectbox("اللغة", ["الكل", "عربي", "إنجليزي"], key="pub_lang")
     with top3:
+        show_gsc_perf = st.checkbox("📊 أظهر أداء Google لكل صفحة (آخر 28 يوم)",
+                                    value=False, key="pub_show_gsc")
         st.caption(f"الموقع: `{site_url}`")
+
+    # تخصيب: أداء Google لكل صفحة (page dimension) — يُجلب مرة ويُخزَّن للجلسة
+    def _fetch_gsc_page_metrics():
+        raw = os.getenv("GSC_SA_JSON")
+        gsite = os.getenv("GSC_SITE", "https://www.dealpulseksa.com/")
+        if not raw:
+            return {}
+        try:
+            from google.oauth2 import service_account
+            from googleapiclient.discovery import build
+            _creds = service_account.Credentials.from_service_account_info(
+                json.loads(raw), scopes=["https://www.googleapis.com/auth/webmasters.readonly"])
+            _svc = build("searchconsole", "v1", credentials=_creds, cache_discovery=False)
+            _end = datetime.datetime.utcnow().date()
+            _start = _end - timedelta(days=28)
+            _resp = _svc.searchanalytics().query(
+                siteUrl=gsite,
+                body={"startDate": str(_start), "endDate": str(_end),
+                      "dimensions": ["page"], "rowLimit": 1000}).execute()
+            _out = {}
+            for _r in _resp.get("rows", []):
+                _u = _r["keys"][0].rstrip("/")
+                _out[_u] = {"clicks": int(_r.get("clicks", 0)),
+                            "impressions": int(_r.get("impressions", 0)),
+                            "position": float(_r.get("position", 0))}
+            return _out
+        except Exception:
+            return {}
+
+    _gsc_pages = {}
+    if show_gsc_perf:
+        if "pub_gsc_cache" not in st.session_state:
+            with st.spinner("جلب أداء Google لكل صفحة..."):
+                st.session_state["pub_gsc_cache"] = _fetch_gsc_page_metrics()
+        _gsc_pages = st.session_state["pub_gsc_cache"]
+        if not _gsc_pages:
+            st.caption("⚠️ تعذّر جلب بيانات GSC (تأكد GSC_SA_JSON على الداشبورد).")
 
     lang_param = {"عربي": "ar", "إنجليزي": "en"}.get(lang_pub_filter)
     params = {"limit": 200}
@@ -11012,6 +11053,14 @@ elif page == "📤 الصفحات المنشورة":
                     )
                     if p.get("description_meta"):
                         st.caption(f"📝 {p['description_meta']}")
+                    if show_gsc_perf:
+                        _m = _gsc_pages.get(live_url.rstrip("/"))
+                        if _m:
+                            st.caption(
+                                f"📊 **Google:** 👆 {_m['clicks']} نقرة · "
+                                f"👁️ {_m['impressions']} ظهور · 📈 ترتيب {_m['position']:.1f}")
+                        else:
+                            st.caption("📊 Google: لم تُفهرس بعد / لا بيانات (28 يوم)")
                 with head_r:
                     st.caption(f"slug:")
                     st.code(slug, language=None)
