@@ -74,7 +74,18 @@ def _select_lang_clause(lang: str) -> str:
             COALESCE((SELECT array_agg(ss.media_url ORDER BY ss.sort_order, ss.id)
                       FROM story_slides ss
                       WHERE ss.master_id = master.id AND ss.is_active),
-                     ARRAY[]::text[]) AS story_slides
+                     ARRAY[]::text[]) AS story_slides,
+            COALESCE((SELECT json_agg(json_build_object(
+                        'public_coupon',  ec.public_coupon,
+                        'discount_value', ec.discount_value,
+                        'extra_offer',    ec.extra_offer,
+                        'extra_offer_en', ec.extra_offer_en
+                      ) ORDER BY ec.sort_order, ec.id)
+                      FROM store_extra_coupons ec
+                      WHERE ec.master_id = master.id AND ec.is_active
+                        AND (ec.start_date IS NULL OR ec.start_date <= CURRENT_DATE)
+                        AND (ec.end_date   IS NULL OR ec.end_date   >= CURRENT_DATE)),
+                     '[]'::json) AS extra_coupons
         """
     return """
         id, store_id, name_en, affiliate_link, public_coupon,
@@ -89,7 +100,18 @@ def _select_lang_clause(lang: str) -> str:
         COALESCE((SELECT array_agg(ss.media_url ORDER BY ss.sort_order, ss.id)
                   FROM story_slides ss
                   WHERE ss.master_id = master.id AND ss.is_active),
-                 ARRAY[]::text[]) AS story_slides
+                 ARRAY[]::text[]) AS story_slides,
+        COALESCE((SELECT json_agg(json_build_object(
+                    'public_coupon',  ec.public_coupon,
+                    'discount_value', ec.discount_value,
+                    'extra_offer',    ec.extra_offer,
+                    'extra_offer_en', ec.extra_offer_en
+                  ) ORDER BY ec.sort_order, ec.id)
+                  FROM store_extra_coupons ec
+                  WHERE ec.master_id = master.id AND ec.is_active
+                    AND (ec.start_date IS NULL OR ec.start_date <= CURRENT_DATE)
+                    AND (ec.end_date   IS NULL OR ec.end_date   >= CURRENT_DATE)),
+                 '[]'::json) AS extra_coupons
     """
 
 

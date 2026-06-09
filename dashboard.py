@@ -1527,7 +1527,7 @@ st.sidebar.radio(
 )
 
 _MAIN_PAGES = [
-"إدخال بيانات الماستر", "الاستعلام والتعديل", "جدول الكوبونات",
+"إدخال بيانات الماستر", "الاستعلام والتعديل", "🎟️ أكواد إضافية", "جدول الكوبونات",
 "📦 أرشيف المنتهية",
 "جدول الأقسام", "البحث عن كود", "طلبات الأكواد", "بيانات المستخدمين",
 "مستخدمو الموقع",
@@ -11966,6 +11966,146 @@ elif page == "سجل التدقيق":
                                 "actor": "المنفّذ", "status": "الحالة", "id": "#"})
         st.caption(f"إجمالي المعروض: {len(df)} عملية")
         st.dataframe(df, width='stretch', hide_index=True)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 🎟️ أكواد إضافية — عدّة أكواد لنفس المتجر (store_extra_coupons)
+#    الثابت (الاسم/الرابط/الشعار/الوصف) من master؛ هنا فقط الأكواد الإضافية.
+#    الحسابات (نسخ/نقر/بحث/مفضّلة) تتجمّع للمتجر تلقائياً (التتبّع بـ store_id).
+# ════════════════════════════════════════════════════════════════════════════
+if page == "🎟️ أكواد إضافية":
+    st.header("🎟️ أكواد إضافية")
+    st.caption(
+        "أضف أكواداً إضافية لمتجر موجود — كل كود بعرضه الخاص (كوبون + خصم + عرض إضافي + تواريخ). "
+        "الاسم والرابط والشعار ثابتة من المتجر. النسخ/النقر/البحث/المفضّلة تتجمّع للمتجر تلقائياً."
+    )
+
+    _xsc = get_conn(); _xsc.rollback()
+    try:
+        _xstores = pd.read_sql(
+            "SELECT id, store_id, COALESCE(NULLIF(name_en,''), store_id) AS name_en, "
+            "public_coupon, discount_value FROM master ORDER BY id DESC", _xsc)
+    except Exception as _e:
+        st.error(f"تعذّر جلب المتاجر: {_e}"); _xstores = pd.DataFrame()
+    finally:
+        _xsc.close()
+
+    if _xstores.empty:
+        st.info("لا توجد متاجر بعد. أضف متجراً أولاً من «إدخال بيانات الماستر».")
+    else:
+        _xlabels = {int(r["id"]): f'{r["store_id"]} · {r["name_en"]} (#{int(r["id"])})'
+                    for _, r in _xstores.iterrows()}
+        _xsel = st.selectbox("🏪 اختر المتجر", options=list(_xlabels.keys()),
+                             format_func=lambda i: _xlabels[i], key="xc_store_select")
+        _xrow = _xstores[_xstores["id"] == _xsel].iloc[0]
+        st.caption(
+            f"🎟️ الكود الرئيسي للمتجر: **{_xrow['public_coupon'] or '—'}** · "
+            f"💰 {_xrow['discount_value'] or '—'}  (يُدار من «الاستعلام والتعديل»)")
+
+        st.divider()
+        st.subheader("🎟️ الأكواد الإضافية لهذا المتجر")
+
+        _xc = get_conn(); _xc.rollback()
+        try:
+            _xcoupons = pd.read_sql(
+                "SELECT id, public_coupon, discount_value, extra_offer, extra_offer_en, "
+                "my_coupon, start_date, end_date, sort_order FROM store_extra_coupons "
+                "WHERE master_id=%s ORDER BY sort_order, id", _xc, params=(int(_xsel),))
+        except Exception as _e:
+            st.error(f"تعذّر جلب الأكواد: {_e}"); _xcoupons = pd.DataFrame()
+        finally:
+            _xc.close()
+
+        if _xcoupons.empty:
+            st.info("لا أكواد إضافية بعد لهذا المتجر — أضف أول كود أدناه.")
+        else:
+            st.caption(f"{len(_xcoupons)} كود — تُعرض بهذا الترتيب تحت المتجر.")
+            _xn = len(_xcoupons)
+            for _xi in range(_xn):
+                _xr = _xcoupons.iloc[_xi]; _xcid = int(_xr["id"])
+                with st.container(border=True):
+                    st.markdown(f"**🎟️ {_xr['public_coupon'] or '—'}**  ·  💰 {_xr['discount_value'] or '—'}")
+                    _xparts = []
+                    if _xr['extra_offer']:    _xparts.append(f"➕ {_xr['extra_offer']}")
+                    if _xr['extra_offer_en']: _xparts.append(f"➕ EN: {_xr['extra_offer_en']}")
+                    if pd.notna(_xr['start_date']): _xparts.append(f"📅 من {_xr['start_date']}")
+                    if pd.notna(_xr['end_date']):   _xparts.append(f"إلى {_xr['end_date']}")
+                    if _xr['my_coupon']:      _xparts.append(f"💵 تتبّع: {_xr['my_coupon']}")
+                    if _xparts:
+                        st.caption(" · ".join(_xparts))
+                    xb1, xb2, xb3 = st.columns(3)
+                    if xb1.button("⬆️", key=f"xc_up_{_xcid}", width="stretch",
+                                  disabled=(_xi == 0), help="تقديم"):
+                        _xprev = _xcoupons.iloc[_xi - 1]
+                        try:
+                            _wc = get_conn(); _wc.rollback(); _wcur = _wc.cursor()
+                            _wcur.execute("UPDATE store_extra_coupons SET sort_order=%s WHERE id=%s",
+                                          (int(_xprev["sort_order"]), _xcid))
+                            _wcur.execute("UPDATE store_extra_coupons SET sort_order=%s WHERE id=%s",
+                                          (int(_xr["sort_order"]), int(_xprev["id"])))
+                            _wc.commit(); _wc.close(); st.rerun()
+                        except Exception as _e:
+                            st.error(f"تعذّر: {_e}")
+                    if xb2.button("⬇️", key=f"xc_dn_{_xcid}", width="stretch",
+                                  disabled=(_xi == _xn - 1), help="تأخير"):
+                        _xnext = _xcoupons.iloc[_xi + 1]
+                        try:
+                            _wc = get_conn(); _wc.rollback(); _wcur = _wc.cursor()
+                            _wcur.execute("UPDATE store_extra_coupons SET sort_order=%s WHERE id=%s",
+                                          (int(_xnext["sort_order"]), _xcid))
+                            _wcur.execute("UPDATE store_extra_coupons SET sort_order=%s WHERE id=%s",
+                                          (int(_xr["sort_order"]), int(_xnext["id"])))
+                            _wc.commit(); _wc.close(); st.rerun()
+                        except Exception as _e:
+                            st.error(f"تعذّر: {_e}")
+                    if xb3.button("🗑️ حذف", key=f"xc_del_{_xcid}", width="stretch"):
+                        try:
+                            _wc = get_conn(); _wc.rollback(); _wcur = _wc.cursor()
+                            _wcur.execute("DELETE FROM store_extra_coupons WHERE id=%s", (_xcid,))
+                            _wc.commit(); _wc.close()
+                            st.toast("🗑️ حُذف الكود"); st.rerun()
+                        except Exception as _e:
+                            st.error(f"تعذّر الحذف: {_e}")
+
+        st.divider()
+        st.subheader("➕ أضف كوداً إضافياً")
+        with st.form("add_extra_coupon", clear_on_submit=True):
+            xf1, xf2 = st.columns(2)
+            _x_coupon = xf1.text_input("🎟️ كوبون العملاء")
+            _x_disc   = xf2.text_input("💰 نسبة الخصم", placeholder="مثلاً: 25%")
+            xe1, xe2 = st.columns(2)
+            _x_extra    = xe1.text_input("➕ عرض إضافي (عربي)", placeholder="مثلاً: خاص بالأزياء")
+            _x_extra_en = xe2.text_input("➕ Extra Offer (English)")
+            xd1, xd2, xd3 = st.columns(3)
+            _x_my    = xd1.text_input("💵 عمولتي (كود التتبّع، اختياري)")
+            _x_start = xd2.date_input("📅 تاريخ البداية", datetime.date.today(), format="YYYY-MM-DD")
+            _x_end   = xd3.date_input("📅 تاريخ الانتهاء",
+                                      datetime.date.today() + datetime.timedelta(days=30),
+                                      format="YYYY-MM-DD")
+            if st.form_submit_button("➕ أضف الكود", type="primary"):
+                if not (_x_coupon or "").strip():
+                    st.warning("اكتب كوبون العملاء على الأقل.")
+                else:
+                    try:
+                        _wc = get_conn(); _wc.rollback(); _wcur = _wc.cursor()
+                        _wcur.execute("SELECT COALESCE(MAX(sort_order), -1) + 1 "
+                                      "FROM store_extra_coupons WHERE master_id=%s", (int(_xsel),))
+                        _xno = _wcur.fetchone()[0]
+                        _wcur.execute(
+                            "INSERT INTO store_extra_coupons "
+                            "(master_id, public_coupon, discount_value, extra_offer, extra_offer_en, "
+                            " my_coupon, start_date, end_date, sort_order) "
+                            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                            (int(_xsel), _x_coupon.strip(),
+                             (_x_disc or "").strip() or None,
+                             (_x_extra or "").strip() or None,
+                             (_x_extra_en or "").strip() or None,
+                             (_x_my or "").strip() or None,
+                             _x_start, _x_end, int(_xno)))
+                        _wc.commit(); _wc.close()
+                        st.success("✅ أُضيف الكود الإضافي."); st.rerun()
+                    except Exception as _e:
+                        st.error(f"تعذّر الإضافة: {_e}")
 
 
 # ─── صفحة: 🩺 تشخيص النشر ───────────────────────────────────────────────────

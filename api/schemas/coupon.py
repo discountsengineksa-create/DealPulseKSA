@@ -1,6 +1,14 @@
 from pydantic import BaseModel, Field
 
 
+class ExtraCoupon(BaseModel):
+    """كود إضافي للمتجر (عرض مستقل بكوبون/خصم/عرض إضافي)."""
+    public_coupon: str | None = None
+    discount_value: str | None = None
+    extra_offer: str | None = None
+    extra_offer_en: str | None = None
+
+
 class StoreResult(BaseModel):
     id: int
     store_id: str
@@ -20,6 +28,7 @@ class StoreResult(BaseModel):
     logo_url: str | None = None
     cloaked_slug: str | None = None   # Week 4 — يبني المستهلك /go/{cloaked_slug}
     story_slides: list[str] = Field(default_factory=list)   # شرائح الستوري (فيديو/صورة) بالترتيب
+    extra_coupons: list[ExtraCoupon] = Field(default_factory=list)   # أكواد إضافية للمتجر
     total_coupon_copies: int = 0
     total_link_clicks: int = 0
     # «الأكثر طلباً» = نقرات + نسخ + عدد البحث + عدد المفضّلين (يُحسب في SQL).
