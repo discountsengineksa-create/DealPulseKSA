@@ -3908,22 +3908,22 @@ elif page == "تحليل المتاجر":
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# 🎬 إضافة استوري — رفع فيديو/صورة للستوري وربطها بمتجر + تفعيل الإشهار
-#    الوسائط → master.story_media_url ، العضوية → is_promoted (نفس الستوري الحالي).
+# 🎬 إضافة استوري — عدة شرائح (فيديو/صورة) لكل متجر + تفعيل الإشهار
+#    الشرائح → جدول story_slides (متعدد/متجر) ، العضوية → is_promoted.
 #    التحليلات (story_views) والترند بلا تغيير — مربوطة بالمتجر تلقائياً.
 # ════════════════════════════════════════════════════════════════════════════
 elif page == "🎬 إضافة استوري":
     st.header("🎬 إضافة استوري")
     st.caption(
-        "ارفع مقطع فيديو أو صورة إعلانية، اربطها بمتجر، وفعّل الإشهار ليظهر المتجر "
-        "في صف الستوري بالموقع والميني-ويب. المشاهدات والترند تُحسب تلقائياً لنفس المتجر."
+        "لكل متجر عدة شرائح (فيديو/صورة) تُعرض كقصص متتابعة. فعّل الإشهار ليظهر المتجر "
+        "في صف الستوري بالموقع والميني-ويب. المشاهدات والترند تُحسب باسم المتجر."
     )
 
     _sc = get_conn(); _sc.rollback()
     try:
         _stores_df = pd.read_sql(
             "SELECT id, store_id, COALESCE(NULLIF(name_en,''), store_id) AS name_en, "
-            "COALESCE(is_promoted, FALSE) AS is_promoted, story_media_url "
+            "COALESCE(is_promoted, FALSE) AS is_promoted "
             "FROM master ORDER BY id DESC",
             _sc,
         )
@@ -3946,86 +3946,139 @@ elif page == "🎬 إضافة استوري":
             format_func=lambda i: _labels[i],
             key="story_store_select",
         )
-        _row = _stores_df[_stores_df["id"] == _sel_id].iloc[0]
-        _cur_media = _row["story_media_url"]
-        _cur_promoted = bool(_row["is_promoted"])
+        _srow = _stores_df[_stores_df["id"] == _sel_id].iloc[0]
+        _cur_promoted = bool(_srow["is_promoted"])
 
-        cc1, cc2 = st.columns(2)
-        cc1.metric("الإشهار الحالي", "✅ مُفعّل" if _cur_promoted else "⚪ غير مُفعّل")
-        cc2.metric("ستوري حالية", "🎬 موجودة" if _cur_media else "—")
-        if _cur_media:
-            st.caption("المعاينة الحالية:")
-            try:
-                if _is_video_url(_cur_media):
-                    st.video(_cur_media)
-                else:
-                    st.image(_cur_media, width=200)
-            except Exception:
-                pass
-            st.code(_cur_media, language="text")
-
-        st.divider()
-        st.subheader("📤 وسائط الستوري")
-        up1, up2 = st.columns(2)
-        with up1:
-            _media_file = st.file_uploader(
-                "ارفع فيديو أو صورة",
-                type=["mp4", "webm", "mov", "png", "jpg", "jpeg", "webp"],
-                key="story_media_file",
-                help="فيديو (mp4/webm/mov) أو صورة (png/jpg/webp). يُرفع إلى Cloudinary.",
-            )
-        with up2:
-            _media_url_input = st.text_input(
-                "أو الصق رابط مباشر",
-                placeholder="https://...",
-                key="story_media_url_input",
-            )
-
-        _promote = st.checkbox(
-            "📣 فعّل الإشهار (يظهر المتجر في الستوري وقسم «المتاجر المختارة»)",
-            value=_cur_promoted,
-            key="story_promote_chk",
+        # ── حالة الإشهار (عضوية صف الستوري) ──
+        pc1, pc2 = st.columns([3, 1])
+        _promote = pc1.checkbox(
+            "📣 فعّل الإشهار (يظهر المتجر في صف الستوري وقسم «المتاجر المختارة»)",
+            value=_cur_promoted, key="story_promote_chk",
         )
-
-        bcol1, bcol2 = st.columns(2)
-        with bcol1:
-            if st.button("💾 حفظ الستوري", type="primary", width="stretch",
-                         key="story_save_btn"):
-                _final_media = (_media_url_input or "").strip()
-                if _media_file and not _final_media:
-                    with st.spinner("جارٍ رفع الوسائط إلى Cloudinary..."):
-                        _final_media = _upload_story_media(
-                            _media_file.read(), str(_row["store_id"]))
-                    if not _final_media:
-                        st.error("❌ فشل الرفع — تأكّد أن Cloudinary مضبوط، أو الصق رابطاً مباشراً.")
-                _media_to_save = _final_media or _cur_media   # لا رفع ولا رابط = نُبقي القديم
+        with pc2:
+            st.write("")
+            if st.button("💾 حفظ الإشهار", width="stretch", key="story_promote_save"):
                 try:
-                    _wc = get_conn(); _wc.rollback()
-                    _wcur = _wc.cursor()
-                    _wcur.execute(
-                        "UPDATE master SET story_media_url = %s, is_promoted = %s WHERE id = %s",
-                        (_media_to_save or None, bool(_promote), int(_sel_id)),
-                    )
+                    _wc = get_conn(); _wc.rollback(); _wcur = _wc.cursor()
+                    _wcur.execute("UPDATE master SET is_promoted=%s WHERE id=%s",
+                                  (bool(_promote), int(_sel_id)))
                     _wc.commit(); _wc.close()
-                    st.success("✅ حُفظت الستوري وحالة الإشهار.")
-                    st.rerun()
+                    st.success("✅ حُفظت حالة الإشهار."); st.rerun()
                 except Exception as _e:
                     st.error(f"تعذّر الحفظ: {_e}")
-        with bcol2:
-            if _cur_media and st.button("🗑️ احذف الستوري الحالية", width="stretch",
-                                        key="story_del_btn"):
-                try:
-                    _wc = get_conn(); _wc.rollback()
-                    _wcur = _wc.cursor()
-                    _wcur.execute(
-                        "UPDATE master SET story_media_url = NULL WHERE id = %s",
-                        (int(_sel_id),),
-                    )
-                    _wc.commit(); _wc.close()
-                    st.success("🗑️ حُذفت وسائط الستوري — المتجر يرجع لعرض الشعار.")
-                    st.rerun()
-                except Exception as _e:
-                    st.error(f"تعذّر الحذف: {_e}")
+
+        st.divider()
+        st.subheader("🎬 شرائح هذا المتجر")
+
+        _slc = get_conn(); _slc.rollback()
+        try:
+            _slides = pd.read_sql(
+                "SELECT id, media_url, sort_order FROM story_slides "
+                "WHERE master_id=%s ORDER BY sort_order, id",
+                _slc, params=(int(_sel_id),),
+            )
+        except Exception as _e:
+            st.error(f"تعذّر جلب الشرائح: {_e}")
+            _slides = pd.DataFrame()
+        finally:
+            _slc.close()
+
+        if _slides.empty:
+            st.info("لا شرائح بعد لهذا المتجر — يعرض المتجر شعاره. أضف أول شريحة أدناه.")
+        else:
+            st.caption(f"{len(_slides)} شريحة — تُعرض بهذا الترتيب.")
+            _n = len(_slides)
+            for _i in range(_n):
+                _sr = _slides.iloc[_i]
+                _sid = int(_sr["id"]); _murl = _sr["media_url"]
+                with st.container(border=True):
+                    mc1, mc2 = st.columns([1, 2])
+                    with mc1:
+                        try:
+                            if _is_video_url(_murl):
+                                st.video(_murl)
+                            else:
+                                st.image(_murl, width=160)
+                        except Exception:
+                            pass
+                    with mc2:
+                        st.caption(
+                            f"ترتيب {_i + 1} · "
+                            f"{'🎬 فيديو' if _is_video_url(_murl) else '🖼️ صورة'} · #{_sid}")
+                        st.code(_murl, language="text")
+                        b1, b2, b3 = st.columns(3)
+                        # ⬆️ رفع الترتيب (تبديل مع السابق)
+                        if b1.button("⬆️", key=f"sl_up_{_sid}", width="stretch",
+                                     disabled=(_i == 0), help="تقديم"):
+                            _prev = _slides.iloc[_i - 1]
+                            try:
+                                _wc = get_conn(); _wc.rollback(); _wcur = _wc.cursor()
+                                _wcur.execute("UPDATE story_slides SET sort_order=%s WHERE id=%s",
+                                              (int(_prev["sort_order"]), _sid))
+                                _wcur.execute("UPDATE story_slides SET sort_order=%s WHERE id=%s",
+                                              (int(_sr["sort_order"]), int(_prev["id"])))
+                                _wc.commit(); _wc.close(); st.rerun()
+                            except Exception as _e:
+                                st.error(f"تعذّر: {_e}")
+                        # ⬇️ خفض الترتيب (تبديل مع التالي)
+                        if b2.button("⬇️", key=f"sl_dn_{_sid}", width="stretch",
+                                     disabled=(_i == _n - 1), help="تأخير"):
+                            _nxt = _slides.iloc[_i + 1]
+                            try:
+                                _wc = get_conn(); _wc.rollback(); _wcur = _wc.cursor()
+                                _wcur.execute("UPDATE story_slides SET sort_order=%s WHERE id=%s",
+                                              (int(_nxt["sort_order"]), _sid))
+                                _wcur.execute("UPDATE story_slides SET sort_order=%s WHERE id=%s",
+                                              (int(_sr["sort_order"]), int(_nxt["id"])))
+                                _wc.commit(); _wc.close(); st.rerun()
+                            except Exception as _e:
+                                st.error(f"تعذّر: {_e}")
+                        if b3.button("🗑️ حذف", key=f"sl_del_{_sid}", width="stretch"):
+                            try:
+                                _wc = get_conn(); _wc.rollback(); _wcur = _wc.cursor()
+                                _wcur.execute("DELETE FROM story_slides WHERE id=%s", (_sid,))
+                                _wc.commit(); _wc.close()
+                                st.toast("🗑️ حُذفت الشريحة"); st.rerun()
+                            except Exception as _e:
+                                st.error(f"تعذّر الحذف: {_e}")
+
+        st.divider()
+        st.subheader("➕ أضف شريحة")
+        with st.form("add_story_slide", clear_on_submit=True):
+            af1, af2 = st.columns(2)
+            _media_file = af1.file_uploader(
+                "ارفع فيديو أو صورة",
+                type=["mp4", "webm", "mov", "png", "jpg", "jpeg", "webp"],
+                key="story_slide_file",
+                help="فيديو (mp4/webm/mov) أو صورة (png/jpg/webp). يُرفع إلى Cloudinary.",
+            )
+            _media_url_input = af2.text_input(
+                "أو الصق رابط مباشر", placeholder="https://...", key="story_slide_url")
+            if st.form_submit_button("➕ أضف الشريحة", type="primary"):
+                import time as _t
+                _final = (_media_url_input or "").strip()
+                if _media_file and not _final:
+                    with st.spinner("جارٍ الرفع إلى Cloudinary..."):
+                        _final = _upload_story_media(
+                            _media_file.read(),
+                            f"{_srow['store_id']}_{int(_t.time())}")
+                if not _final:
+                    st.error("ارفع ملفاً صالحاً أو الصق رابطاً مباشراً.")
+                else:
+                    try:
+                        _wc = get_conn(); _wc.rollback(); _wcur = _wc.cursor()
+                        _wcur.execute(
+                            "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM story_slides "
+                            "WHERE master_id=%s", (int(_sel_id),))
+                        _next_order = _wcur.fetchone()[0]
+                        _wcur.execute(
+                            "INSERT INTO story_slides (master_id, media_url, sort_order, is_active) "
+                            "VALUES (%s, %s, %s, TRUE)",
+                            (int(_sel_id), _final, int(_next_order)))
+                        _wc.commit(); _wc.close()
+                        st.success("✅ أُضيفت الشريحة."); st.rerun()
+                    except Exception as _e:
+                        st.error(f"تعذّر الإضافة: {_e}")
 
 
 # ════════════════════════════════════════════════════════════════════════════

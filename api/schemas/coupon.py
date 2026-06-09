@@ -19,7 +19,7 @@ class StoreResult(BaseModel):
     is_promoted: bool = False
     logo_url: str | None = None
     cloaked_slug: str | None = None   # Week 4 — يبني المستهلك /go/{cloaked_slug}
-    story_media_url: str | None = None   # وسائط الستوري (فيديو/صورة) — NULL = يعرض الشعار
+    story_slides: list[str] = Field(default_factory=list)   # شرائح الستوري (فيديو/صورة) بالترتيب
     total_coupon_copies: int = 0
     total_link_clicks: int = 0
     # «الأكثر طلباً» = نقرات + نسخ + عدد البحث + عدد المفضّلين (يُحسب في SQL).

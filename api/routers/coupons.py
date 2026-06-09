@@ -70,7 +70,11 @@ def _select_lang_clause(lang: str) -> str:
             discount_value,
             total_coupon_copies, total_link_clicks, is_trending,
             COALESCE(is_promoted, FALSE) AS is_promoted,
-            logo_url, cloaked_slug, story_media_url
+            logo_url, cloaked_slug,
+            COALESCE((SELECT array_agg(ss.media_url ORDER BY ss.sort_order, ss.id)
+                      FROM story_slides ss
+                      WHERE ss.master_id = master.id AND ss.is_active),
+                     ARRAY[]::text[]) AS story_slides
         """
     return """
         id, store_id, name_en, affiliate_link, public_coupon,
@@ -81,7 +85,11 @@ def _select_lang_clause(lang: str) -> str:
         discount_value,
         total_coupon_copies, total_link_clicks, is_trending,
         COALESCE(is_promoted, FALSE) AS is_promoted,
-        logo_url, cloaked_slug, story_media_url
+        logo_url, cloaked_slug,
+        COALESCE((SELECT array_agg(ss.media_url ORDER BY ss.sort_order, ss.id)
+                  FROM story_slides ss
+                  WHERE ss.master_id = master.id AND ss.is_active),
+                 ARRAY[]::text[]) AS story_slides
     """
 
 

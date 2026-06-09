@@ -241,14 +241,19 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
   .story-progress .seg>i{display:block;height:100%;width:0;background:#fff}
   .story-close{position:absolute;top:calc(20px + env(safe-area-inset-top,0));right:16px;z-index:30;width:36px;height:36px;border-radius:50%;
     background:rgba(255,255,255,0.12);color:#fff;border:none;font-size:16px;cursor:pointer}
+  .story-mute{position:absolute;top:calc(20px + env(safe-area-inset-top,0));left:16px;z-index:30;width:36px;height:36px;border-radius:50%;
+    background:rgba(0,0,0,0.4);color:#fff;border:none;font-size:15px;cursor:pointer;place-items:center}
   .story-tap{position:absolute;top:0;bottom:90px;width:35%;z-index:10}
   html[dir="rtl"] .story-tap-prev{right:0} html[dir="rtl"] .story-tap-next{left:0}
   html[dir="ltr"] .story-tap-prev{left:0} html[dir="ltr"] .story-tap-next{right:0}
-  .story-content{position:relative;z-index:15;width:100%;max-width:420px;padding:0 28px;text-align:center;color:#fff;pointer-events:none}
+  .story-content{position:absolute;inset:0;z-index:15;color:#fff;pointer-events:none}
+  .story-content .s-stage{position:absolute;inset:0;display:grid;place-items:center;background:linear-gradient(135deg,#0f172a,#1e293b,#0f172a)}
+  .story-content .s-stage>video,.story-content .s-stage>img{width:100%;height:100%;object-fit:cover}
+  .story-content .s-overlay{position:absolute;left:0;right:0;bottom:0;z-index:16;text-align:center;
+    padding:90px 28px calc(26px + env(safe-area-inset-bottom,0));
+    background:linear-gradient(to top,rgba(0,0,0,0.9),rgba(0,0,0,0.45) 55%,transparent)}
   .story-content .s-logo{width:130px;height:130px;margin:0 auto 22px;border-radius:22px;background:#fff;overflow:hidden;display:grid;place-items:center}
   .story-content .s-logo img{width:80%;height:80%;object-fit:contain}
-  .story-content .s-media{width:100%;max-width:300px;margin:0 auto 22px;border-radius:22px;overflow:hidden;background:#000}
-  .story-content .s-media img,.story-content .s-media video{width:100%;max-height:340px;object-fit:contain;display:block}
   .story-content h3{font-size:24px;font-weight:900;margin-bottom:8px}
   .story-content .s-offer{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.6);margin-bottom:22px}
   .story-content .s-code-lbl{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.5);margin-bottom:8px}
@@ -397,6 +402,7 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
 <div id="storyViewer" class="story-viewer">
   <div class="story-progress" id="storyProgress"></div>
   <button class="story-close" onclick="closeStory()" aria-label="إغلاق">✕</button>
+  <button class="story-mute" id="storyMuteBtn" onclick="toggleStoryMute(event)" aria-label="الصوت" style="display:none">🔊</button>
   <div class="story-tap story-tap-prev" onclick="storyPrev()"></div>
   <div class="story-tap story-tap-next" onclick="storyNext()"></div>
   <div class="story-content" id="storyContent"></div>
@@ -1290,7 +1296,7 @@ async function loadData() {
             coupon: item.public_coupon || '',
             link: buildLink(item),
             logo: item.logo_url || 'logo.png',
-            storyMedia: item.story_media_url || '',
+            storySlides: Array.isArray(item.story_slides) ? item.story_slides : [],
             bio: item.store_bio || '',
             trending: item.is_trending === 'ترند 🔥',
             promoted: !!item.is_promoted,
@@ -1795,7 +1801,11 @@ let STORY = [];          // المتاجر المعروضة كـ stories
 let storyIdx = 0;
 let storyRAF = null;
 let storyStart = 0;
+let storySlideIdx = 0;     // الشريحة داخل المتجر الحالي
+let storyMuted = false;    // حالة كتم صوت الفيديو
 const STORY_MS = 6000;
+const isStoryVideo = (u) => /\.(mp4|webm|mov|m4v)(\?|$)/i.test(u || '');
+function storySlidesOf(s) { return (s && Array.isArray(s.storySlides)) ? s.storySlides : []; }
 
 function renderStoryRow() {
     const row = document.getElementById('storyRow');
@@ -1820,8 +1830,9 @@ function renderStoryRow() {
 function openStory(i) {
     if (i < 0 || i >= STORY.length) return;
     storyIdx = i;
+    storySlideIdx = 0;
     document.getElementById('storyViewer').classList.add('on');
-    // فتحة ستوري جديدة → سجّل view_id لربط الـ engagement لاحقاً
+    // فتحة متجر جديد → سجّل view_id لربط الـ engagement لاحقاً
     currentStoryViewId = logStoryViewMiniapp(STORY[i] && STORY[i].store_id);
     renderStorySlide();
     startStoryTimer();
@@ -1835,18 +1846,47 @@ function closeStory() {
 }
 
 function storyNext() {
+    // شريحة تالية داخل نفس المتجر؟
+    const slides = storySlidesOf(STORY[storyIdx]);
+    if (storySlideIdx < slides.length - 1) {
+        storySlideIdx++;
+        renderStorySlide();
+        startStoryTimer();
+        return;
+    }
+    // وإلا المتجر التالي (من بدايته)
     if (storyIdx >= STORY.length - 1) { closeStory(); return; }
     storyIdx++;
+    storySlideIdx = 0;
     currentStoryViewId = logStoryViewMiniapp(STORY[storyIdx] && STORY[storyIdx].store_id);
     renderStorySlide();
     startStoryTimer();
 }
 function storyPrev() {
+    // شريحة سابقة داخل نفس المتجر؟
+    if (storySlideIdx > 0) {
+        storySlideIdx--;
+        renderStorySlide();
+        startStoryTimer();
+        return;
+    }
+    // وإلا المتجر السابق (من بدايته)
     if (storyIdx <= 0) return;
     storyIdx--;
+    storySlideIdx = 0;
     currentStoryViewId = logStoryViewMiniapp(STORY[storyIdx] && STORY[storyIdx].store_id);
     renderStorySlide();
     startStoryTimer();
+}
+
+// كتم/تشغيل صوت فيديو الستوري
+function toggleStoryMute(ev) {
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    storyMuted = !storyMuted;
+    const v = document.querySelector('#storyContent video');
+    if (v) v.muted = storyMuted;
+    const btn = document.getElementById('storyMuteBtn');
+    if (btn) btn.textContent = storyMuted ? '🔇' : '🔊';
 }
 
 function renderStorySlide() {
@@ -1858,16 +1898,24 @@ function renderStorySlide() {
     // فيكسر الـ HTML attribute. نـ HTML-encode الـ " إلى &quot; حتى يفك
     // الـ parser الترميز قبل ما يقرأ الـ JS — فيرى JSON صحيح.
     const sidJs = JSON.stringify(s.store_id || '').replace(/"/g, '&quot;');
-    // وسائط الستوري: فيديو/صورة مخصّصة لو وُجدت، وإلا الشعار (السلوك الافتراضي).
-    const media = (s.storyMedia || '').replace(/"/g, '&quot;');
-    const isVid = /\.(mp4|webm|mov|m4v)(\?|$)/i.test(s.storyMedia || '');
-    const mediaBlock = !media
+    // الشريحة الحالية من شرائح المتجر — فيديو/صورة، وإلا الشعار.
+    const slides = storySlidesOf(s);
+    const slideCount = Math.max(slides.length, 1);
+    const mediaUrl = slides.length ? slides[Math.min(storySlideIdx, slides.length - 1)] : '';
+    const media = (mediaUrl || '').replace(/"/g, '&quot;');
+    const isVid = isStoryVideo(mediaUrl);
+    const stage = !media
         ? `<div class="s-logo"><img src="${logo}" onerror="this.onerror=null;this.src='logo.png'"></div>`
         : isVid
-        ? `<div class="s-media"><video src="${media}" autoplay muted playsinline ontimeupdate="storyVideoTick(this)" onended="storyNext()" onerror="storyNext()"></video></div>`
-        : `<div class="s-media"><img src="${media}" onerror="this.onerror=null;this.src='logo.png'"></div>`;
+        ? `<video src="${media}" autoplay ${storyMuted ? 'muted' : ''} playsinline ontimeupdate="storyVideoTick(this)" onended="storyNext()" onerror="storyNext()"></video>`
+        : `<img src="${media}" onerror="this.onerror=null;this.src='logo.png'">`;
+    // أشرطة التقدّم = شرائح المتجر الحالي
     document.getElementById('storyProgress').innerHTML =
-        STORY.map((_, i) => `<span class="seg"><i id="seg${i}" style="width:${i < storyIdx ? '100%' : '0'}"></i></span>`).join('');
+        Array.from({ length: slideCount }).map((_, i) =>
+            `<span class="seg"><i id="seg${i}" style="width:${i < storySlideIdx ? '100%' : '0'}"></i></span>`).join('');
+    // زر الصوت — يظهر للفيديو فقط
+    const muteBtn = document.getElementById('storyMuteBtn');
+    if (muteBtn) { muteBtn.style.display = isVid ? 'grid' : 'none'; muteBtn.textContent = storyMuted ? '🔇' : '🔊'; }
     // الكود الآن قابل للنسخ من داخل الستوري (مع تتبّع story_view_id).
     const codeBlock = s.coupon
         ? `<div class="s-code-lbl">${LANG_CURRENT === 'en' ? 'Coupon code' : 'كود الخصم'}</div>
@@ -1880,12 +1928,14 @@ function renderStorySlide() {
               onclick="reportCodeMiniapp(${sidJs}, event)">${ST.reportCodeBtn}</button>`
         : '';
     document.getElementById('storyContent').innerHTML = `
-        ${mediaBlock}
-        <h3>${s.name}${s.trending ? ' 🔥' : ''}</h3>
-        ${s.disc ? `<div class="s-offer">Exclusive · ${s.disc}</div>` : ''}
-        ${codeBlock}
-        <button class="s-visit" onclick="storyVisit(${s.id})">${ST.goToStore}</button>
-        ${reportBtn}`;
+        <div class="s-stage">${stage}</div>
+        <div class="s-overlay">
+          <h3>${s.name}${s.trending ? ' 🔥' : ''}</h3>
+          ${s.disc ? `<div class="s-offer">Exclusive · ${s.disc}</div>` : ''}
+          ${codeBlock}
+          <button class="s-visit" onclick="storyVisit(${s.id})">${ST.goToStore}</button>
+          ${reportBtn}
+        </div>`;
 }
 
 // نسخ كود الستوري — يربط بـ story_view_id لربط الـ engagement في التحليلات.
@@ -1899,11 +1949,12 @@ function storyCopyCode(store_id, ev) {
 
 function startStoryTimer() {
     if (storyRAF) cancelAnimationFrame(storyRAF);
-    // الستوري الفيديو يقود تقدّمه بنفسه (مدّته الكاملة) عبر ontimeupdate/onended.
-    const s = STORY[storyIdx];
-    if (s && /\.(mp4|webm|mov|m4v)(\?|$)/i.test(s.storyMedia || '')) return;
+    // شريحة الفيديو تقود تقدّمها بنفسها عبر ontimeupdate/onended.
+    const slides = storySlidesOf(STORY[storyIdx]);
+    const mediaUrl = slides.length ? slides[Math.min(storySlideIdx, slides.length - 1)] : '';
+    if (isStoryVideo(mediaUrl)) return;
     storyStart = performance.now();
-    const seg = document.getElementById('seg' + storyIdx);
+    const seg = document.getElementById('seg' + storySlideIdx);
     const tick = (now) => {
         const pct = Math.min((now - storyStart) / STORY_MS, 1);
         if (seg) seg.style.width = (pct * 100) + '%';
@@ -1915,7 +1966,7 @@ function startStoryTimer() {
 
 // تقدّم شريط الستوري حسب زمن الفيديو الفعلي (لا مؤقّت ثابت).
 function storyVideoTick(v) {
-    const seg = document.getElementById('seg' + storyIdx);
+    const seg = document.getElementById('seg' + storySlideIdx);
     if (seg && v.duration > 0) seg.style.width = Math.min(v.currentTime / v.duration, 1) * 100 + '%';
 }
 
