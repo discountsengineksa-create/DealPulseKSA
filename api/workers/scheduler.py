@@ -47,7 +47,7 @@ SEO_AUTOGEN_ENABLED     = os.getenv("SEO_AUTOGEN_ENABLED") == "1"
 SOCIAL_PROCESS_MINUTES  = int(os.getenv("WORKER_SOCIAL_PROCESS_MIN", "10"))
 SOCIAL_PROCESS_BATCH    = int(os.getenv("SOCIAL_PROCESS_BATCH", "20"))
 # محرك الفرص — Google Trends refresh كل ساعة افتراضياً
-TRENDS_REFRESH_HOURS    = int(os.getenv("WORKER_TRENDS_REFRESH_HOURS", "1"))
+TRENDS_REFRESH_HOURS    = int(os.getenv("WORKER_TRENDS_REFRESH_HOURS", "24"))
 
 _scheduler: BackgroundScheduler | None = None
 _consumer_thread: threading.Thread | None = None

@@ -14,10 +14,45 @@ Google Trends puller — يجلب درجة شعبية كل keyword من Google T
 from __future__ import annotations
 
 import logging
+import os
 import time
 from typing import Any
 
 _log = logging.getLogger("dp.seo.trends_puller")
+
+
+def _fetch_serpapi_trend(keyword: str, *, geo: str = "SA") -> dict[str, Any] | None:
+    """درجة Google Trends عبر SerpApi (موثوق — يتجاوز حجب pytrends على IPs السيرفرات).
+    يرجع dict بالدرجات أو None لو ما فيه مفتاح/فشل. يستهلك طلباً واحداً من حصة SerpApi."""
+    import requests as _rq
+    key = os.getenv("SERPAPI_KEY")
+    if not key:
+        return None
+    try:
+        r = _rq.get("https://serpapi.com/search", params={
+            "engine": "google_trends", "q": keyword, "geo": geo,
+            "data_type": "TIMESERIES", "date": "today 3-m",
+            "hl": "ar", "api_key": key,
+        }, timeout=30)
+        if r.status_code != 200:
+            _log.warning("serpapi HTTP %s for '%s'", r.status_code, keyword[:50])
+            return None
+        tl = ((r.json().get("interest_over_time") or {}).get("timeline_data") or [])
+        vals = []
+        for pt in tl:
+            vv = pt.get("values") or []
+            if vv and vv[0].get("extracted_value") is not None:
+                vals.append(int(vv[0]["extracted_value"]))
+        if not vals:
+            return None
+        latest, avg, peak = vals[-1], sum(vals) / len(vals), max(vals)
+        rising = ((latest - avg) / avg * 100.0) if avg > 0 else 0.0
+        return {"trend_score": latest, "trend_avg": round(avg, 2),
+                "trend_peak": peak, "rising_pct": round(rising, 1),
+                "data_points": len(vals)}
+    except Exception as exc:  # noqa: BLE001
+        _log.warning("serpapi trend failed for '%s': %s", keyword[:50], str(exc)[:200])
+        return None
 
 
 # ─── urllib3 compat shim ──────────────────────────────────────────────────────
@@ -142,7 +177,13 @@ def fetch_keyword_score(keyword: str, *, geo: str = "SA",
             _log.warning("suggest primary failed for '%s': %s",
                          keyword[:50], str(sg_exc)[:200])
 
-    # ─── المصدر #2: pytrends (الـ trend score — قد يفشل بسبب rate-limit) ──────
+    # ─── المصدر #2أ: SerpApi (موثوق — يتجاوز حجب pytrends على IPs السيرفرات) ──
+    _serp = _fetch_serpapi_trend(keyword, geo=geo)
+    if _serp:
+        out.update({"ok": True, **_serp})
+        return out
+
+    # ─── المصدر #2ب: pytrends (احتياطي — لو ما فيه SERPAPI_KEY أو فشل) ─────────
     client = _get_client()
     if client is None:
         if not out["ok"]:
