@@ -45,7 +45,11 @@ def _fetch_serpapi_trend(keyword: str, *, geo: str = "SA") -> dict[str, Any] | N
                 vals.append(int(vv[0]["extracted_value"]))
         if not vals:
             return None
-        latest, avg, peak = vals[-1], sum(vals) / len(vals), max(vals)
+        # الدرجة = متوسط آخر ~أسبوعين (أكثر تمثيلاً من نقطة واحدة قد تكون صفراً
+        # للكلمات النادرة long-tail). avg/peak على كامل الفترة.
+        _recent = vals[-14:] if len(vals) >= 14 else vals
+        latest = round(sum(_recent) / len(_recent))
+        avg, peak = sum(vals) / len(vals), max(vals)
         rising = ((latest - avg) / avg * 100.0) if avg > 0 else 0.0
         return {"trend_score": latest, "trend_avg": round(avg, 2),
                 "trend_peak": peak, "rising_pct": round(rising, 1),
@@ -183,7 +187,14 @@ def fetch_keyword_score(keyword: str, *, geo: str = "SA",
         out.update({"ok": True, **_serp})
         return out
 
-    # ─── المصدر #2ب: pytrends (احتياطي — لو ما فيه SERPAPI_KEY أو فشل) ─────────
+    # لو SERPAPI_KEY مضبوط لكن ما رجّع بيانات (كلمة نادرة جداً) — لا نسقط على
+    # pytrends المعطوب على IPs السيرفرات (يسبّب RetryError مزعج). نكتفي بنتيجة نظيفة.
+    if os.getenv("SERPAPI_KEY"):
+        if not out["ok"]:
+            out["error"] = "no_trends_data: Google Trends غير كافٍ لهذه الكلمة (نادرة)"
+        return out
+
+    # ─── المصدر #2ب: pytrends (احتياطي — فقط لو ما فيه SERPAPI_KEY) ────────────
     client = _get_client()
     if client is None:
         if not out["ok"]:
