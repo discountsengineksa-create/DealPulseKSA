@@ -916,6 +916,38 @@ def _edit_nav_photo(user_id, photo_url, caption, markup):
 #  Card Text + عرض المتاجر المرقّم
 # ============================================================
 
+def get_store_extra_coupons(store_id):
+    """الأكواد الإضافية لمتجر (نشطة + ضمن نافذة التاريخ).
+    يُرجع [(public_coupon, discount_value, extra_offer, extra_offer_en), ...]."""
+    if not store_id:
+        return []
+    conn = None
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT ec.public_coupon, ec.discount_value, ec.extra_offer, ec.extra_offer_en
+            FROM store_extra_coupons ec
+            JOIN master m ON m.id = ec.master_id
+            WHERE m.store_id = %s AND ec.is_active
+              AND (ec.start_date IS NULL OR ec.start_date <= CURRENT_DATE)
+              AND (ec.end_date   IS NULL OR ec.end_date   >= CURRENT_DATE)
+            ORDER BY ec.sort_order, ec.id
+            """,
+            (store_id,),
+        )
+        return cur.fetchall()
+    except Exception:
+        return []
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 def _card_text(s, lang):
     """
     يبني نص الكارت حسب اللغة.
@@ -934,11 +966,30 @@ def _card_text(s, lang):
         offer_value = s.get('extra_offer') or ''
 
     extra_line = f"\n{TEXTS['card_extra'][lang]} {offer_value}" if offer_value else ""
+
+    # أكواد إضافية — قائمة تحت الكود الرئيسي (الكود بصيغة Markdown قابل للنسخ بلمسة).
+    # نفس حسابات المتجر (نسخها تُعدّ على store_id عند ضغط «نسخ الكود»).
+    extra_block = ""
+    extra_rows = get_store_extra_coupons(s.get('store_id', ''))
+    if extra_rows:
+        _lines = []
+        for ec_coupon, ec_disc, ec_extra, ec_extra_en in extra_rows:
+            if not ec_coupon:
+                continue
+            eoff = ((ec_extra_en or '').strip() or (ec_extra or '')) if lang == "en" else (ec_extra or '')
+            _parts = [p for p in [ec_disc, eoff] if p]
+            _tail = (" — " + " · ".join(_parts)) if _parts else ""
+            _lines.append(f"🎟️ `{ec_coupon}`{_tail}")
+        if _lines:
+            _hdr = "More codes:" if lang == "en" else "أكواد إضافية:"
+            extra_block = f"\n\n{_hdr}\n" + "\n".join(_lines)
+
     return (
         f"{TEXTS['card_store'][lang]} {store_name}{trend_emoji}\n"
         f"{TEXTS['card_discount'][lang]} {s.get('discount_value', '')}"
         f"{extra_line}\n"
-        f"📝 {bio}\n\n"
+        f"📝 {bio}"
+        f"{extra_block}\n\n"
         f"{TEXTS['card_react_hint'][lang]}"
     )
 

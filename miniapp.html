@@ -1212,6 +1212,20 @@ function renderStoreView(storeId) {
         ? `<div class="store-trend-badge">${ST[trendBadgeKey]}</div>`
         : '';
 
+    // أكواد إضافية — عروض مستقلة لنفس المتجر، تحت الكود الرئيسي مباشرة بنفس الستايل.
+    const extraCouponsHtml = (Array.isArray(s.extraCoupons) && s.extraCoupons.length)
+        ? s.extraCoupons.map(ec => {
+            const ecOffer = (LANG_CURRENT === 'en' && ec.extra_offer_en)
+                ? ec.extra_offer_en : (ec.extra_offer || '');
+            const lbl = [ec.discount_value || '', ecOffer].filter(Boolean).join(' · ') || ST.copyHint;
+            const ecCodeJs = JSON.stringify(ec.public_coupon || '').replace(/"/g, '&quot;');
+            return `<div class="coupon-box" onclick="copyExtraCode(${ecCodeJs}, event)">
+                <div class="lbl">${lbl}</div>
+                <div class="code">${ec.public_coupon || ''}</div>
+            </div>`;
+        }).join('')
+        : '';
+
     document.getElementById('storeBody').innerHTML = `
     <div class="store-hero">
         ${trendBadgeHtml}
@@ -1224,6 +1238,7 @@ function renderStoreView(storeId) {
         <div class="lbl">${ST.copyHint}</div>
         <div class="code">${s.coupon || ST.noCoupon}</div>
     </div>
+    ${extraCouponsHtml}
     ${reportRow}
     <div class="cta-row">
         <button class="cta-primary" onclick="openLinkCurrent()">${ST.goToStore}</button>
@@ -1294,6 +1309,7 @@ async function loadData() {
                   : (item.store_id || (LANG_CURRENT === 'en' ? 'Store' : 'متجر')),
             disc: item.discount_value || (LANG_CURRENT === 'en' ? 'Special offer' : 'خصم خاص'),
             coupon: item.public_coupon || '',
+            extraCoupons: Array.isArray(item.extra_coupons) ? item.extra_coupons : [],
             link: buildLink(item),
             logo: item.logo_url || 'logo.png',
             storySlides: Array.isArray(item.story_slides) ? item.story_slides : [],
@@ -1663,6 +1679,16 @@ function copyCurrent() {
     copyText(s.coupon);
     const det = _storeTrendCtx ? `trend:${_storeTrendCtx}` : null;
     trackEvent(s.store_id, 'copy_coupon', null, det);
+}
+
+// نسخ كود إضافي — يُتتبَّع بـ store_id للمتجر النشط فتتجمّع نسخه في حساباته.
+function copyExtraCode(code, ev) {
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    const s = window._activeStore;
+    if (!code) return;
+    copyText(code);
+    if (s) trackEvent(s.store_id, 'copy_coupon', null, 'code:' + code);
+    showToast(S.copied);
 }
 
 function openLinkCurrent() {
