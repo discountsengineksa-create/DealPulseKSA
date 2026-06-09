@@ -11828,7 +11828,7 @@ if page == "🩺 تشخيص النشر":
     d1.metric("Cloudinary (رفع الشعار)", "✅ مضبوط" if _CLOUDINARY_OK else "❌ مفقود")
     d2.metric("ADMIN_SHARED_SECRET (البث)", "✅ مضبوط" if _secret_set else "❌ مفقود")
     d3.metric("وجهة الـ API", "✅" if os.getenv("INTERNAL_API_URL") else "⚠️ افتراضي")
-    st.code(f"INTERNAL_API_URL = {_api_url}", language="text")
+    st.code(f"INTERNAL_API_URL = {api_url}", language="text")
     if not _CLOUDINARY_OK:
         st.error(
             "❌ Cloudinary غير مضبوط هنا → أي شعار يُرفع كملف بينحفظ فاضي (logo_url = NULL). "
