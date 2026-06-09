@@ -1864,7 +1864,7 @@ function renderStorySlide() {
     const mediaBlock = !media
         ? `<div class="s-logo"><img src="${logo}" onerror="this.onerror=null;this.src='logo.png'"></div>`
         : isVid
-        ? `<div class="s-media"><video src="${media}" autoplay muted loop playsinline></video></div>`
+        ? `<div class="s-media"><video src="${media}" autoplay muted playsinline ontimeupdate="storyVideoTick(this)" onended="storyNext()" onerror="storyNext()"></video></div>`
         : `<div class="s-media"><img src="${media}" onerror="this.onerror=null;this.src='logo.png'"></div>`;
     document.getElementById('storyProgress').innerHTML =
         STORY.map((_, i) => `<span class="seg"><i id="seg${i}" style="width:${i < storyIdx ? '100%' : '0'}"></i></span>`).join('');
@@ -1899,6 +1899,9 @@ function storyCopyCode(store_id, ev) {
 
 function startStoryTimer() {
     if (storyRAF) cancelAnimationFrame(storyRAF);
+    // الستوري الفيديو يقود تقدّمه بنفسه (مدّته الكاملة) عبر ontimeupdate/onended.
+    const s = STORY[storyIdx];
+    if (s && /\.(mp4|webm|mov|m4v)(\?|$)/i.test(s.storyMedia || '')) return;
     storyStart = performance.now();
     const seg = document.getElementById('seg' + storyIdx);
     const tick = (now) => {
@@ -1908,6 +1911,12 @@ function startStoryTimer() {
         else storyRAF = requestAnimationFrame(tick);
     };
     storyRAF = requestAnimationFrame(tick);
+}
+
+// تقدّم شريط الستوري حسب زمن الفيديو الفعلي (لا مؤقّت ثابت).
+function storyVideoTick(v) {
+    const seg = document.getElementById('seg' + storyIdx);
+    if (seg && v.duration > 0) seg.style.width = Math.min(v.currentTime / v.duration, 1) * 100 + '%';
 }
 
 // زيارة المتجر من الستوري — يفتح صفحة المتجر داخل الميني (لا تحويل خارجي).
