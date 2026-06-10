@@ -320,6 +320,7 @@ TEXTS = {
     'btn_get_link':      {'ar': '🔗 احصل على الرابط',  'en': '🔗 Get the link'},
     'btn_copied_coupon': {'ar': '📋 نسخت الكوبون',     'en': '📋 Copied the coupon'},
     'card_store':        {'ar': '*متجر:*',             'en': '*Store:*'},
+    'card_code':         {'ar': '*الكود:*',            'en': '*Code:*'},
     'card_discount':     {'ar': '*الخصم:*',            'en': '*Discount:*'},
     'card_extra':        {'ar': '*عرض إضافي:*',        'en': '*Extra offer:*'},
     'card_react_hint':   {'ar': '_أعجبك العرض؟ تفاعل بـ ❤️ ليُضاف لمفضلتك_',
@@ -1791,37 +1792,62 @@ def handle_coupon_copy(call):
     log_action(store_id, 'copy_coupon', user_id=user_id)
     update_user_behavior(user_id, 'copy_coupon', store_id=store_id)
 
+    # نجمع كل أكواد المتجر: الرئيسي (master) + الإضافية (store_extra_coupons).
+    # لكل كود تفاصيله الخاصة (خصم/عرض إضافي) لأن العروض قد تختلف بين الأكواد.
     try:
         conn = get_db_connection()
         cur  = conn.cursor()
         cur.execute("""
-            SELECT public_coupon FROM master
+            SELECT public_coupon, discount_value, extra_offer, extra_offer_en
+            FROM master
             WHERE store_id = %s
               AND (last_time IS NULL OR last_time >= CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
             LIMIT 1
         """, (store_id,))
-        row    = cur.fetchone()
+        row = cur.fetchone()
         release_conn(conn)
-        coupon = row[0] if row and row[0] else None
     except Exception as e:
         bot.answer_callback_query(call.id, t(user_id, 'coupon_err'))
         print(f"⚠️ copy callback: {e}")
         return
 
-    if coupon:
-        bot.answer_callback_query(call.id, t(user_id, 'coupon_here'))
-        _update_nav(user_id, state='coupon')
-        # Bot API 7.7 / telebot 4.21+: زر copy_text ينسخ النص للحافظة بضغطة وحدة فعلاً
-        # (لا حاجة للمستخدم يضغط على الكود نفسه).
-        kb_copy = types.InlineKeyboardMarkup()
-        kb_copy.add(types.InlineKeyboardButton(
-            f"📋 انسخ الكود: {coupon}",
-            copy_text=types.CopyTextButton(text=coupon)))
-        kb_copy.add(types.InlineKeyboardButton(TEXTS['back_btn'][lang], callback_data='nav:card'))
-        _edit_nav(user_id, t(user_id, 'coupon_for', sid=store_id, c=coupon), kb_copy)
-    else:
+    # (code, discount, offer) — الرئيسي أولاً ثم الإضافية
+    codes = []
+    if row and row[0]:
+        m_offer = ((row[3] or '').strip() or (row[2] or '')) if lang == 'en' else (row[2] or '')
+        codes.append((row[0], (row[1] or '').strip(), (m_offer or '').strip()))
+    for ec_coupon, ec_disc, ec_extra, ec_extra_en in get_store_extra_coupons(store_id):
+        if not ec_coupon:
+            continue
+        e_offer = ((ec_extra_en or '').strip() or (ec_extra or '')) if lang == 'en' else (ec_extra or '')
+        codes.append((ec_coupon, (ec_disc or '').strip(), (e_offer or '').strip()))
+
+    if not codes:
         bot.answer_callback_query(call.id, t(user_id, 'coupon_unavailable'))
+        return
+
+    bot.answer_callback_query(call.id, t(user_id, 'coupon_here'))
+    _update_nav(user_id, state='coupon')
+
+    # لكل كود: الكود + الخصم + العرض الإضافي، وزر نسخ خاص به (copy_text = نسخ بلمسة).
+    blocks  = []
+    kb_copy = types.InlineKeyboardMarkup()
+    for code, disc, offer in codes:
+        _b = [f"{TEXTS['card_code'][lang]} `{code}`"]
+        if disc:
+            _b.append(f"{TEXTS['card_discount'][lang]} {disc}")
+        if offer:
+            _b.append(f"{TEXTS['card_extra'][lang]} {offer}")
+        blocks.append("\n".join(_b))
+        kb_copy.add(types.InlineKeyboardButton(
+            (f"📋 نسخ: {code}" if lang == 'ar' else f"📋 Copy: {code}"),
+            copy_text=types.CopyTextButton(text=code)))
+    kb_copy.add(types.InlineKeyboardButton(TEXTS['back_btn'][lang], callback_data='nav:card'))
+
+    hdr  = (f"*أكواد {store_id}:*" if lang == 'ar' else f"*{store_id} codes:*")
+    text = hdr + "\n\n" + "\n\n".join(blocks)
+    _edit_nav(user_id, text, kb_copy)
 
 
 # ============================================================
