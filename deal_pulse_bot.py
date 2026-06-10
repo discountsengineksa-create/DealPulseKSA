@@ -256,8 +256,8 @@ TEXTS = {
                           'en': '✅ تم اختيار اللغة العربية'},
     'lang_en_picked':    {'ar': '✅ English language selected',
                           'en': '✅ English language selected'},
-    'welcome':           {'ar': 'مرحباً بك في نبض الصفقات يا {name} 🛡️',
-                          'en': 'Welcome to Deal Pulse, {name} 🛡️'},
+    'welcome':           {'ar': 'مرحباً بك في نبض الصفقات يا {name} 🌹',
+                          'en': 'Welcome to Deal Pulse, {name} 🌹'},
 
     # Main menu buttons
     'menu_codes':        {'ar': '📜 أكوادنا',          'en': '📜 Our Codes'},
@@ -265,7 +265,7 @@ TEXTS = {
     'menu_search':       {'ar': '🔎 البحث عن كود',     'en': '🔎 Search Code'},
     'menu_request':      {'ar': '➕ طلب كود',          'en': '➕ Request Code'},
     'menu_favorites':    {'ar': '❤️ مفضلتي',           'en': '❤️ My Favorites'},
-    'menu_end':          {'ar': '🛑 إنهاء',            'en': '🛑 End'},
+    'menu_end':          {'ar': 'إنهاء',               'en': 'End'},
     'start_btn':         {'ar': 'بدء الاستخدام 🚀',    'en': 'Start 🚀'},
     'back_btn':          {'ar': '🔙 عودة',             'en': '🔙 Back'},
 
@@ -295,7 +295,7 @@ TEXTS = {
                           'en': '✅ Your request has been saved! We will try to provide the code soon.'},
     'request_err':       {'ar': '⚠️ تعذّر تسجيل الطلب الآن. حاول مرة ثانية.',
                           'en': '⚠️ Could not save the request now. Please try again.'},
-    'menu_support':      {'ar': '🆘 تواصل معنا',        'en': '🆘 Contact Us'},
+    'menu_support':      {'ar': 'تواصل معنا',           'en': 'Contact Us'},
     'support_prompt':    {'ar': '🆘 اكتب رسالتك للدعم (مشكلتك أو استفسارك)، وفريقنا بيرد عليك هنا في أقرب وقت.',
                           'en': '🆘 Write your message to support (your issue or question), and our team will reply to you here soon.'},
     'support_empty':     {'ar': '⚠️ ما استلمت رسالتك. اكتب مشكلتك وحاول مرة ثانية.',
@@ -319,9 +319,9 @@ TEXTS = {
     # Store card
     'btn_get_link':      {'ar': '🔗 احصل على الرابط',  'en': '🔗 Get the link'},
     'btn_copied_coupon': {'ar': '📋 نسخت الكوبون',     'en': '📋 Copied the coupon'},
-    'card_store':        {'ar': '🏪 *متجر:*',          'en': '🏪 *Store:*'},
-    'card_discount':     {'ar': '💰 *الخصم:*',         'en': '💰 *Discount:*'},
-    'card_extra':        {'ar': '🎁 *عرض إضافي:*',    'en': '🎁 *Extra offer:*'},
+    'card_store':        {'ar': '*متجر:*',             'en': '*Store:*'},
+    'card_discount':     {'ar': '*الخصم:*',            'en': '*Discount:*'},
+    'card_extra':        {'ar': '*عرض إضافي:*',        'en': '*Extra offer:*'},
     'card_react_hint':   {'ar': '_أعجبك العرض؟ تفاعل بـ ❤️ ليُضاف لمفضلتك_',
                           'en': '_Like this offer? React with ❤️ to add it to your favorites_'},
 
@@ -934,8 +934,6 @@ def _card_text(s, lang):
     لكل حقل: لو EN معبّأ نُظهره، وإلا نرجع للعربي (Fallback).
     يعمل سواء `s` جاي من DB (يحوي *_en raw) أو من API (مُستبدل).
     """
-    trend_emoji = " 🔥" if s.get('is_trending') == 'ترند 🔥' else ""
-
     if lang == "en":
         store_name  = (s.get('name_en') or '').strip() or s.get('store_id', '')
         bio         = (s.get('store_bio_en') or '').strip() or (s.get('store_bio') or '')
@@ -947,28 +945,35 @@ def _card_text(s, lang):
 
     extra_line = f"\n{TEXTS['card_extra'][lang]} {offer_value}" if offer_value else ""
 
-    # أكواد إضافية — قائمة تحت الكود الرئيسي (الكود بصيغة Markdown قابل للنسخ بلمسة).
-    # نفس حسابات المتجر (نسخها تُعدّ على store_id عند ضغط «نسخ الكود»).
+    # الأكواد — لما يكون للمتجر أكواد إضافية نعرضها كلها معاً (الرئيسي + الإضافية)
+    # في نص الكرت تماماً كما في الميني-ويب، كل كود بصيغة Markdown قابل للنسخ بلمسة.
+    # نفس حسابات المتجر (النسخ يُعدّ على store_id عند ضغط زر «نسخ الكود»).
     extra_block = ""
     extra_rows = get_store_extra_coupons(s.get('store_id', ''))
     if extra_rows:
         _lines = []
+        # الكود الرئيسي أولاً — حتى تظهر كل الأكواد سوا (لا يبقى مخفياً خلف الزر).
+        _main = (s.get('public_coupon') or '').strip()
+        if _main:
+            _mparts = [p for p in [s.get('discount_value') or '', offer_value] if p]
+            _mtail = (" — " + " · ".join(_mparts)) if _mparts else ""
+            _lines.append(f"`{_main}`{_mtail}")
         for ec_coupon, ec_disc, ec_extra, ec_extra_en in extra_rows:
             if not ec_coupon:
                 continue
             eoff = ((ec_extra_en or '').strip() or (ec_extra or '')) if lang == "en" else (ec_extra or '')
             _parts = [p for p in [ec_disc, eoff] if p]
             _tail = (" — " + " · ".join(_parts)) if _parts else ""
-            _lines.append(f"🎟️ `{ec_coupon}`{_tail}")
+            _lines.append(f"`{ec_coupon}`{_tail}")
         if _lines:
-            _hdr = "More codes:" if lang == "en" else "أكواد إضافية:"
+            _hdr = "Available codes:" if lang == "en" else "الأكواد المتاحة:"
             extra_block = f"\n\n{_hdr}\n" + "\n".join(_lines)
 
     return (
-        f"{TEXTS['card_store'][lang]} {store_name}{trend_emoji}\n"
+        f"{TEXTS['card_store'][lang]} {store_name}\n"
         f"{TEXTS['card_discount'][lang]} {s.get('discount_value', '')}"
         f"{extra_line}\n"
-        f"📝 {bio}"
+        f"{bio}"
         f"{extra_block}\n\n"
         f"{TEXTS['card_react_hint'][lang]}"
     )
