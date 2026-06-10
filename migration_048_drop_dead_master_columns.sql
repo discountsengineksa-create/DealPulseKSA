@@ -15,12 +15,19 @@ BEGIN;
 --    (لإعادة إنشائه لو لزم مستقبلاً: SELECT * FROM master مع الأعمدة الحيّة فقط.)
 DROP VIEW IF EXISTS coupons_view;
 
--- 1) نسخة احتياطية لبيانات الأعمدة الراكدة (للرجوع لو لزم)
-CREATE TABLE IF NOT EXISTS _deprecated_master_cols_bak_20260610 AS
-SELECT id,
-       link_clicks, copy_clicks, click_count, total_clicks,
-       total_search_hits, performance_status, visit_categorie, target_category
-FROM master;
+-- 1) نسخة احتياطية لبيانات الأعمدة الراكدة (للرجوع لو لزم).
+--    محروسة بـ EXECUTE ديناميكي: تعمل فقط لو الأعمدة ما زالت موجودة → آمنة لإعادة التشغيل
+--    (لو شُغّلت بعد الحذف لا تفشل على عمود غير موجود).
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name='master' AND column_name='link_clicks') THEN
+    EXECUTE 'CREATE TABLE IF NOT EXISTS _deprecated_master_cols_bak_20260610 AS
+             SELECT id, link_clicks, copy_clicks, click_count, total_clicks,
+                    total_search_hits, performance_status, visit_categorie, target_category
+             FROM master';
+  END IF;
+END $$;
 
 -- 2) حذف الأعمدة الراكدة من master
 ALTER TABLE master
