@@ -28,6 +28,27 @@ def _parse_tags(raw: str | None) -> list[str]:
     return [t.strip() for t in s.split(",") if t.strip()] if s else []
 
 
+@router.get("/site-theme")
+def get_site_theme(conn=Depends(get_db)):
+    """الثيم الفعّال لخلفية الموقع/الميني-ويب (عام، بلا مصادقة).
+    يُرجع {"theme": {...}} أو {"theme": null} (= الخلفية الأصلية المحفوظة)."""
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT id, name, desktop_url, mobile_url, "
+                "desktop_dark_url, mobile_dark_url "
+                "FROM site_themes WHERE is_active LIMIT 1"
+            )
+            row = cur.fetchone()
+        return {"theme": dict(row) if row else None}
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return {"theme": None}
+
+
 # «الأكثر طلباً» = نقرات الرابط + نسخ الكوبون + عدد مرات البحث عن المتجر +
 # عدد المُفضِّلين له. النقرات/النسخ عدّادات في master؛ البحث من action_logs
 # (action_type='search')؛ المفضّلة من user_favorites (kind='store').

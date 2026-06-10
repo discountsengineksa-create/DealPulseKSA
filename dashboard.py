@@ -1541,7 +1541,7 @@ _ANALYSIS_PAGES = [
 _OTHER_PAGES = [
 "📣 بلاغات الأكواد",  # ← Migration 029: بلاغات لا يعمل + إدارة المتاجر المسحوبة
 "🎯 بناء الشرائح", "مركز الإشعارات", "لوحة القيادة", "مركز الدعم",
-"استوديو المحتوى",
+"استوديو المحتوى", "🎨 الثيمات",
 "محرّك SEO", "📈 أداء SEO", "📤 الصفحات المنشورة", "🎯 محرك الفرص", "سجل التدقيق",
 "🛰️ متابعة المنصة",
 "🩺 تشخيص النشر",
@@ -12106,6 +12106,133 @@ if page == "🎟️ أكواد إضافية":
                         st.success("✅ أُضيف الكود الإضافي."); st.rerun()
                     except Exception as _e:
                         st.error(f"تعذّر الإضافة: {_e}")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 🎨 الثيمات — خلفيات المناسبات للموقع والميني-ويب (site_themes)
+#    مكتبة ثيمات؛ تفعيل واحد يطبّقه على الزوار. لا ثيم مُفعَّل = الخلفية الأصلية.
+#    كل ثيم: نهاري/ليلي × سطح-مكتب/جوال (الليلي اختياري → يرجع للنهاري).
+# ════════════════════════════════════════════════════════════════════════════
+if page == "🎨 الثيمات":
+    st.header("🎨 الثيمات")
+    st.caption(
+        "غيّر خلفية الموقع والميني-ويب بضغطة. ارفع ثيم مناسبة (نهاري/ليلي · سطح-مكتب/جوال) "
+        "وفعّله لكل الزوار. «الثيم الأساسي» يرجّع الخلفية الخضراء الأصلية (محفوظة دائماً)."
+    )
+
+    _tc = get_conn(); _tc.rollback()
+    try:
+        _themes = pd.read_sql(
+            "SELECT id, name, desktop_url, mobile_url, desktop_dark_url, mobile_dark_url, "
+            "is_active FROM site_themes ORDER BY created_at DESC", _tc)
+    except Exception as _e:
+        st.error(f"تعذّر جلب الثيمات: {_e}"); _themes = pd.DataFrame()
+    finally:
+        _tc.close()
+
+    _has_active = (not _themes.empty) and bool(_themes["is_active"].any())
+
+    def _theme_deactivate_all():
+        _wc = get_conn(); _wc.rollback(); _wcur = _wc.cursor()
+        _wcur.execute("UPDATE site_themes SET is_active=FALSE WHERE is_active")
+        _wc.commit(); _wc.close()
+
+    # ── الثيم الأساسي (الخلفية الأصلية) ──
+    with st.container(border=True):
+        dc1, dc2 = st.columns([3, 1])
+        dc1.markdown("**🟢 الثيم الأساسي** — الخلفية الخضراء الأصلية")
+        dc1.caption("الافتراضي المحفوظ دائماً. تفعيله = إلغاء أي ثيم والرجوع للأصل.")
+        with dc2:
+            if not _has_active:
+                st.success("✅ مُفعّل")
+            elif st.button("🟢 فعّل الأساسي", key="theme_base", width="stretch", type="primary"):
+                try:
+                    _theme_deactivate_all(); st.success("رجعنا للثيم الأساسي."); st.rerun()
+                except Exception as _e:
+                    st.error(f"تعذّر: {_e}")
+
+    st.divider()
+    st.subheader("🖼️ ثيمات المناسبات")
+    if _themes.empty:
+        st.info("لا ثيمات بعد — أضف أول ثيم أدناه.")
+    else:
+        for _ti in range(len(_themes)):
+            _tr = _themes.iloc[_ti]; _tid = int(_tr["id"])
+            with st.container(border=True):
+                st.markdown(f"**{_tr['name']}**  {'✅ مُفعّل الآن' if _tr['is_active'] else ''}")
+                _pv = [("☀️ نهاري · سطح مكتب", _tr["desktop_url"]),
+                       ("☀️ نهاري · جوال", _tr["mobile_url"]),
+                       ("🌙 ليلي · سطح مكتب", _tr["desktop_dark_url"]),
+                       ("🌙 ليلي · جوال", _tr["mobile_dark_url"])]
+                _pcols = st.columns(4)
+                for _pc, (_lbl, _u) in zip(_pcols, _pv):
+                    _pc.caption(_lbl)
+                    if _u:
+                        try: _pc.image(_u, width=150)
+                        except Exception: pass
+                    else:
+                        _pc.caption("—")
+                ac1, ac2 = st.columns(2)
+                if _tr["is_active"]:
+                    ac1.success("✅ مُفعّل")
+                elif ac1.button("🚀 فعّل هذا الثيم", key=f"theme_act_{_tid}",
+                                width="stretch", type="primary"):
+                    try:
+                        _wc = get_conn(); _wc.rollback(); _wcur = _wc.cursor()
+                        _wcur.execute("UPDATE site_themes SET is_active=FALSE WHERE is_active")
+                        _wcur.execute("UPDATE site_themes SET is_active=TRUE WHERE id=%s", (_tid,))
+                        _wc.commit(); _wc.close()
+                        st.success("✅ فُعّل الثيم — سيظهر للزوار خلال دقيقة."); st.rerun()
+                    except Exception as _e:
+                        st.error(f"تعذّر التفعيل: {_e}")
+                if ac2.button("🗑️ حذف", key=f"theme_del_{_tid}", width="stretch"):
+                    try:
+                        _wc = get_conn(); _wc.rollback(); _wcur = _wc.cursor()
+                        _wcur.execute("DELETE FROM site_themes WHERE id=%s", (_tid,))
+                        _wc.commit(); _wc.close()
+                        st.toast("🗑️ حُذف الثيم"); st.rerun()
+                    except Exception as _e:
+                        st.error(f"تعذّر الحذف: {_e}")
+
+    st.divider()
+    st.subheader("➕ أضف ثيماً")
+    st.caption("المقاس المثالي: سطح المكتب 1920×1080 · الجوال 1080×1920 (وأي مقاس قريب يشتغل — تُعرض بـ cover).")
+    with st.form("add_site_theme", clear_on_submit=True):
+        _th_name = st.text_input("🏷️ اسم الثيم", placeholder="مثلاً: اليوم الوطني ١")
+        st.markdown("**☀️ النهاري** (سطح المكتب إلزامي):")
+        tn1, tn2 = st.columns(2)
+        _th_dd = tn1.file_uploader("نهاري · سطح مكتب", type=["png", "jpg", "jpeg", "webp"], key="th_dd")
+        _th_dm = tn2.file_uploader("نهاري · جوال", type=["png", "jpg", "jpeg", "webp"], key="th_dm")
+        st.markdown("**🌙 الليلي** (اختياري — لو فاضي يُستخدم النهاري في الوضع الليلي):")
+        tk1, tk2 = st.columns(2)
+        _th_kd = tk1.file_uploader("ليلي · سطح مكتب", type=["png", "jpg", "jpeg", "webp"], key="th_kd")
+        _th_km = tk2.file_uploader("ليلي · جوال", type=["png", "jpg", "jpeg", "webp"], key="th_km")
+        if st.form_submit_button("➕ احفظ الثيم", type="primary"):
+            if not (_th_name or "").strip():
+                st.warning("اكتب اسم الثيم.")
+            elif not _th_dd:
+                st.warning("ارفع صورة «نهاري · سطح مكتب» على الأقل.")
+            else:
+                import time as _t
+                _base = int(_t.time() * 1000)
+                with st.spinner("جارٍ الرفع إلى Cloudinary..."):
+                    _u_dd = _upload_story_media(_th_dd.read(), f"theme_{_base}_dd")
+                    _u_dm = _upload_story_media(_th_dm.read(), f"theme_{_base}_dm") if _th_dm else None
+                    _u_kd = _upload_story_media(_th_kd.read(), f"theme_{_base}_kd") if _th_kd else None
+                    _u_km = _upload_story_media(_th_km.read(), f"theme_{_base}_km") if _th_km else None
+                if not _u_dd:
+                    st.error("❌ فشل رفع الصورة الأساسية — تأكّد أن Cloudinary مضبوط على الداشبورد.")
+                else:
+                    try:
+                        _wc = get_conn(); _wc.rollback(); _wcur = _wc.cursor()
+                        _wcur.execute(
+                            "INSERT INTO site_themes (name, desktop_url, mobile_url, "
+                            "desktop_dark_url, mobile_dark_url) VALUES (%s,%s,%s,%s,%s)",
+                            (_th_name.strip(), _u_dd, _u_dm, _u_kd, _u_km))
+                        _wc.commit(); _wc.close()
+                        st.success("✅ أُضيف الثيم. اضغط «فعّل» لتطبيقه."); st.rerun()
+                    except Exception as _e:
+                        st.error(f"تعذّر الحفظ: {_e}")
 
 
 # ─── صفحة: 🩺 تشخيص النشر ───────────────────────────────────────────────────
