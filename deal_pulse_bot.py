@@ -257,8 +257,10 @@ TEXTS = {
                           'en': '✅ تم اختيار اللغة العربية'},
     'lang_en_picked':    {'ar': '✅ English language selected',
                           'en': '✅ English language selected'},
-    'welcome':           {'ar': 'مرحباً بك في نبض الصفقات يا {name} 🌹',
-                          'en': 'Welcome to Deal Pulse, {name} 🌹'},
+    'welcome':           {'ar': 'مرحباً بك يا {name} في نبض الصفقات\n\n'
+                                'لا تدفع السعر كامل ما دام فيه خصم بانتظارك 🌹',
+                          'en': 'Welcome {name} to Deal Pulse\n\n'
+                                "Don't pay full price while a discount is waiting for you 🌹"},
 
     # Main menu buttons
     'menu_codes':        {'ar': '📜 أكوادنا',          'en': '📜 Our Codes'},
@@ -284,10 +286,12 @@ TEXTS = {
     'no_results':        {'ar': '❌ لم نجد نتائج.',     'en': '❌ No results found.'},
     'search_err':        {'ar': '⚠️ حصل خلل في البحث. حاول مرة ثانية.',
                           'en': '⚠️ Search error. Please try again.'},
-    'session_ended':     {'ar': '🛑 تم إنهاء الجلسة. خذ قسطاً من الراحة يا {name}!\n'
-                                'اضغط الزر أسفل لما تجهز نبدأ من جديد 👇',
-                          'en': '🛑 Session ended. Take a break, {name}!\n'
-                                'Tap the button below when you are ready to continue 👇'},
+    'session_ended':     {'ar': 'تم إنهاء الجلسة\n'
+                                'شكراً لزيارتك يا {name} لنبض الصفقات، ونتطلّع لرؤيتك مجدداً\n'
+                                'اضغط بدء الاستخدام للعودة',
+                          'en': 'Session ended\n'
+                                'Thank you for visiting Deal Pulse, {name} — we look forward to seeing you again\n'
+                                'Tap Start to return'},
     'request_prompt':    {'ar': '📝 اكتب اسم المتجر أو رابطه اللي تبي كوبونه، وحنا بنحاول نوفّره.',
                           'en': '📝 Type the store name or link you want a coupon for, and we will try to provide it.'},
     'request_empty':     {'ar': '⚠️ ما استلمت اسم المتجر. جرّب مرة ثانية.',
@@ -1679,7 +1683,6 @@ def handle_nav(call):
     user_id = call.from_user.id
     chat_id = call.message.chat.id
     lang    = get_lang(user_id)
-    name    = _display_name(call.from_user, lang)
     action  = call.data[4:]
 
     bot.answer_callback_query(call.id)
@@ -1717,7 +1720,8 @@ def handle_nav(call):
     elif action == 'end':
         log_action(None, 'end_session', user_id=user_id)
         _update_nav(user_id, state='ended')
-        _edit_nav(user_id, t(user_id, 'session_ended', name=name), _kb_start(lang))
+        _edit_nav(user_id, t(user_id, 'session_ended', name=_name_underlined(call.from_user, lang)),
+                  _kb_start(lang), parse_mode="HTML")
 
     elif action == 'prev':
         _show_card(user_id, _get_nav(user_id).get('page', 0) - 1)
