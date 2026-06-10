@@ -334,3 +334,36 @@ def get_coupon_detail(
         store_tags=_parse_tags(row.get("store_tags")),
         store_tags_en=_parse_tags(row.get("store_tags_en")),
     )
+
+
+# تطابق دقيق على store_id (الـ slug في الموقع) + تفاصيل كاملة. يحلّ مشكلة الموقع
+# الذي كان يعتمد على البحث ثم fallback لأول نتيجة (قد يعرض متجراً خاطئاً عند آلاف
+# المتاجر). store_id لا يحتوي شرطة مائلة، لكن نستخدم :path احتياطاً للأحرف الخاصة.
+@router.get("/by-slug/{slug:path}", response_model=StoreResult)
+def get_coupon_by_slug(
+    slug: str,
+    lang: Literal["ar", "en"] = Query(default="ar"),
+    conn=Depends(get_db),
+):
+    """التفاصيل الكاملة لمتجر بمطابقة store_id دقيقة — لصفحات المتجر في الموقع."""
+    sql = f"""
+        SELECT
+            {_select_lang_clause(lang)},
+            {_POPULARITY_SQL},
+            0 AS score_pct
+        FROM master
+        WHERE store_id = %(slug)s
+              AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+              AND NOT COALESCE(is_suspended, FALSE)
+        LIMIT 1
+    """
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(sql, {"slug": slug})
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="store not found")
+    return StoreResult(
+        **{k: v for k, v in row.items() if k not in ("store_tags", "store_tags_en")},
+        store_tags=_parse_tags(row.get("store_tags")),
+        store_tags_en=_parse_tags(row.get("store_tags_en")),
+    )
