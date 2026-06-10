@@ -671,6 +671,16 @@ const API_BASE = window.location.origin + '/api/v1';
 // يفتح خارج Mini App عبر tg.openLink() ليبقى Mini App مفتوحاً للعودة.
 const WEB_BASE = 'https://www.dealpulseksa.com';
 
+// ── تهريب موحّد ضد XSS ───────────────────────────────────────────────────
+// كل حقول المتاجر/الأقسام/الكوبونات تأتي من قاعدة البيانات وتُحقن في innerHTML.
+// escHtml: للنص والسمات المحاطة بـ " (يهرّب & < > " ').
+// escAttr: لسلسلة JS داخل onclick="fn('...')" (يهرّب \ ' و " → &quot;).
+function escHtml(v){ return String(v==null?'':v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function escAttr(v){ return String(v==null?'':v)
+    .replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+
 // ═══════════════════════════════════════════════════════════════════════════
 // State management — SPA داخل Mini App (3 views، Telegram BackButton أصلي)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -849,9 +859,6 @@ function renderTrendSections(daily, weekly) {
     const body = document.getElementById('trendBody');
     const emptyHtml = `<div class="trend-empty">${ST.trendEmpty}</div>`;
 
-    const escAttr = (v) => String(v || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-    const escHtml = (v) => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
     // اللقب يُحسب من item.rank بحسب اللغة المختارة (لا نعتمد على API rank_title).
     // الاسم يُختار بحسب اللغة: name_en في EN لو متوفر، وإلا store_name العربي.
     const pickName = (item) => (LANG_CURRENT === 'en' && item.name_en) ? item.name_en : item.store_name;
@@ -936,8 +943,6 @@ function renderTrendOnHome(daily, weekly) {
         return;
     }
 
-    const escAttr = (v) => String(v || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-    const escHtml = (v) => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const pickName = (it) => (LANG_CURRENT === 'en' && it.name_en) ? it.name_en : it.store_name;
     const cardHTML = (it, badgeKey, trendType) => {
         const sid = escAttr(it.store_id);
@@ -1021,7 +1026,6 @@ function renderListControls(mode) {
     if (!host) return;
     if (mode !== 'all') { host.innerHTML = ''; return; }
     const ST = STRINGS[LANG_CURRENT];
-    const escHtml = (v) => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const sorts = [
         ['popular',  ST.sortPopular],
         ['discount', ST.sortDiscount],
@@ -1102,12 +1106,12 @@ function renderCategoriesPage() {
     }
     grid.innerHTML = CATS.map(c => {
         const name = String(c.tag_name);
-        const safe = name.replace(/'/g, "\\'");
+        const safe = escAttr(name);
         const cnt  = ALL.filter(s => (s.tags || []).map(t => String(t).trim()).includes(name)).length;
         const isFav = FAV_CATS.has(name);
         const heart = `<button class="fav-btn${isFav ? ' on' : ''}" style="position:absolute;top:6px;${LANG_CURRENT==='en'?'right':'left'}:6px;font-size:14px;padding:5px"
             onclick="toggleCatFav('${safe}', event)" aria-label="favorite-category">${isFav ? '❤️' : '🤍'}</button>`;
-        return `<div class="cat-tile" style="position:relative" onclick="showCategoryView('${safe}')">${heart}<span># ${name}</span><span class="cnt">${cnt}</span></div>`;
+        return `<div class="cat-tile" style="position:relative" onclick="showCategoryView('${safe}')">${heart}<span># ${escHtml(name)}</span><span class="cnt">${cnt}</span></div>`;
     }).join('');
 }
 
@@ -1137,9 +1141,9 @@ function renderCategoryView(catName) {
     const ST = STRINGS[LANG_CURRENT];
     const titleEl = document.getElementById('catTitle');
     const isFav = FAV_CATS.has(catName);
-    const safe = catName.replace(/'/g, "\\'");
+    const safe = escAttr(catName);
     // عنوان + قلب (يحفظ القسم) — يُعرض دائماً (حتى لو لا متاجر)
-    titleEl.innerHTML = `# ${catName}
+    titleEl.innerHTML = `# ${escHtml(catName)}
         <button class="fav-btn${isFav ? ' on' : ''}"
             style="margin:0 8px;font-size:18px;padding:6px 10px;vertical-align:middle"
             onclick="toggleCatFav('${safe}', event)"
@@ -1161,15 +1165,16 @@ function renderCategoryView(catName) {
 function storeCardHTML(s) {
     // الوسام من نظام الترند الجديد (يومي/أسبوعي) — يظهر في كل الواجهات وباللغتين.
     const trendBadge = trendBadgeHTMLFor(s);
-    const logoSrc = (s.logo || 'logo.png').replace(/"/g, '&quot;');
+    const logoSrc = escHtml(s.logo || 'logo.png');
+    const nm = escHtml(s.name);
     const ST = STRINGS[LANG_CURRENT];
     return `
     <div class="card glass" style="position:relative" onclick="showStoreView(${s.id})">
         ${trendBadge}
         ${favHeartHTML(s)}
-        <div class="c-ava"><img src="${logoSrc}" alt="${s.name}" onerror="this.onerror=null;this.src='logo.png'"></div>
-        <div class="c-name">${s.name}</div>
-        <div class="disc-badge">${s.disc}</div>
+        <div class="c-ava"><img src="${logoSrc}" alt="${nm}" onerror="this.onerror=null;this.src='logo.png'"></div>
+        <div class="c-name">${nm}</div>
+        <div class="disc-badge">${escHtml(s.disc)}</div>
         <div class="c-foot"><span class="go-lbl">${ST.detailsLabel}</span></div>
     </div>`;
 }
@@ -1182,7 +1187,7 @@ function renderStoreView(storeId) {
     if (!s) { goBack(); return; }
     const ST = STRINGS[LANG_CURRENT];
     document.getElementById('storeBackLbl').textContent = ST.home;
-    const logoSrc = (s.logo || 'logo.png').replace(/"/g, '&quot;');
+    const logoSrc = escHtml(s.logo || 'logo.png');
     // تاقات قابلة للنقر → تفتح القسم (وتُسجّل view_tag) — إشارة 4
     const tagsHtml = (s.tags || []).length
         ? `<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:10px">${
@@ -1226,8 +1231,8 @@ function renderStoreView(storeId) {
             const lbl = [ec.discount_value || '', ecOffer].filter(Boolean).join(' · ') || ST.copyHint;
             const ecCodeJs = JSON.stringify(ec.public_coupon || '').replace(/"/g, '&quot;');
             return `<div class="coupon-box" onclick="copyExtraCode(${ecCodeJs}, event)">
-                <div class="lbl">${lbl}</div>
-                <div class="code">${ec.public_coupon || ''}</div>
+                <div class="lbl">${escHtml(lbl)}</div>
+                <div class="code">${escHtml(ec.public_coupon || '')}</div>
             </div>`;
         }).join('')
         : '';
@@ -1235,14 +1240,14 @@ function renderStoreView(storeId) {
     document.getElementById('storeBody').innerHTML = `
     <div class="store-hero">
         ${trendBadgeHtml}
-        <img src="${logoSrc}" alt="${s.name}" onerror="this.onerror=null;this.src='logo.png'">
-        <h2>${s.name}</h2>
-        ${s.bio ? `<p>${s.bio}</p>` : ''}
+        <img src="${logoSrc}" alt="${escHtml(s.name)}" onerror="this.onerror=null;this.src='logo.png'">
+        <h2>${escHtml(s.name)}</h2>
+        ${s.bio ? `<p>${escHtml(s.bio)}</p>` : ''}
         ${tagsHtml}
     </div>
     <div class="coupon-box" onclick="copyCurrent()">
         <div class="lbl">${ST.copyHint}</div>
-        <div class="code">${s.coupon || ST.noCoupon}</div>
+        <div class="code">${s.coupon ? escHtml(s.coupon) : ST.noCoupon}</div>
     </div>
     ${extraCouponsHtml}
     ${reportRow}
@@ -1251,7 +1256,7 @@ function renderStoreView(storeId) {
         <button class="cta-ghost" onclick="toggleFav(${s.id}, event)">${FAVS.has(s.store_id) ? ST.favInBtn : ST.favAddBtn}</button>
     </div>
     <div class="store-meta">
-        ${LANG_CURRENT==='en' ? 'Discount' : 'الخصم'}: <b style="color:var(--em)">${s.disc}</b>
+        ${LANG_CURRENT==='en' ? 'Discount' : 'الخصم'}: <b style="color:var(--em)">${escHtml(s.disc)}</b>
     </div>`;
 }
 
@@ -1868,7 +1873,7 @@ function renderStoryRow() {
     if (!STORY.length) STORY = ALL.filter(s => isTrendNow(s));   // fallback: الترند لو ما في promoted
     STORY = STORY.slice(0, 12);
     row.innerHTML = STORY.map((s, i) => {
-        const logo = (s.logo || 'logo.png').replace(/"/g, '&quot;');
+        const logo = escHtml(s.logo || 'logo.png');
         // حلقة برتقالية + شارة 🔥 صغيرة لو المتجر ترند — الوسام يظهر حتى في الاستوري
         const isTrend = isTrendNow(s);
         const ringCls = isTrend ? 'story-ring trend' : 'story-ring';
@@ -1877,7 +1882,7 @@ function renderStoryRow() {
             : '';
         return `<button class="story-item" onclick="openStory(${i})">
             <span class="${ringCls}" style="position:relative">${flame}<span class="inner"><img src="${logo}" onerror="this.onerror=null;this.src='logo.png'"></span></span>
-            <span class="story-name">${s.name}</span></button>`;
+            <span class="story-name">${escHtml(s.name)}</span></button>`;
     }).join('');
 }
 
@@ -1947,7 +1952,7 @@ function renderStorySlide() {
     const s = STORY[storyIdx];
     if (!s) return;
     const ST = STRINGS[LANG_CURRENT];
-    const logo = (s.logo || 'logo.png').replace(/"/g, '&quot;');
+    const logo = escHtml(s.logo || 'logo.png');
     // JSON.stringify يخرج نص بـ double quotes — ندفعه داخل onclick="..."
     // فيكسر الـ HTML attribute. نـ HTML-encode الـ " إلى &quot; حتى يفك
     // الـ parser الترميز قبل ما يقرأ الـ JS — فيرى JSON صحيح.
@@ -1975,7 +1980,7 @@ function renderStorySlide() {
     // الكود الآن قابل للنسخ من داخل الستوري (مع تتبّع story_view_id).
     const codeBlock = s.coupon
         ? `<div class="s-code-lbl">${LANG_CURRENT === 'en' ? 'Coupon code' : 'كود الخصم'}</div>
-           <div class="s-code" style="cursor:pointer" onclick="storyCopyCode(${sidJs}, event)">${s.coupon}</div>`
+           <div class="s-code" style="cursor:pointer" onclick="storyCopyCode(${sidJs}, event)">${escHtml(s.coupon)}</div>`
         : '';
     // زر الإبلاغ يظهر فقط لو في كود + المستخدم معروف عبر تيليجرام.
     const reportBtn = (s.coupon && tgUserId)
@@ -1986,8 +1991,8 @@ function renderStorySlide() {
     document.getElementById('storyContent').innerHTML = `
         <div class="s-stage">${stage}</div>
         <div class="s-overlay">
-          <h3>${s.name}${s.trending ? ' 🔥' : ''}</h3>
-          ${s.disc ? `<div class="s-offer">Exclusive · ${s.disc}</div>` : ''}
+          <h3>${escHtml(s.name)}${s.trending ? ' 🔥' : ''}</h3>
+          ${s.disc ? `<div class="s-offer">Exclusive · ${escHtml(s.disc)}</div>` : ''}
           ${codeBlock}
           <button class="s-visit" onclick="storyVisit(${s.id})">${ST.goToStore}</button>
           ${reportBtn}
