@@ -53,6 +53,9 @@ if _GO_BASE and not _GO_BASE.startswith("http"):
     _GO_BASE = "https://" + _GO_BASE
 _API_SEARCH_URL = _API_BASE + "/api/v1/coupons/search"
 
+# الموقع الإلكتروني (زر مباشر في القائمة)
+WEBSITE_URL = os.getenv("WEBSITE_URL", "https://www.dealpulseksa.com")
+
 bot = telebot.TeleBot(TOKEN)
 
 
@@ -61,8 +64,8 @@ def _build_pool() -> pg_pool.ThreadedConnectionPool:
         url = _DATABASE_URL
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql://", 1)
-        return pg_pool.ThreadedConnectionPool(minconn=2, maxconn=16, dsn=url)
-    return pg_pool.ThreadedConnectionPool(minconn=2, maxconn=16, **DB_CONFIG)
+        return pg_pool.ThreadedConnectionPool(minconn=2, maxconn=20, dsn=url)
+    return pg_pool.ThreadedConnectionPool(minconn=2, maxconn=20, **DB_CONFIG)
 
 _db_pool: pg_pool.ThreadedConnectionPool | None = None
 _db_pool_lock = threading.Lock()
@@ -268,6 +271,7 @@ TEXTS = {
     'menu_search':       {'ar': '🔎 البحث عن كود',     'en': '🔎 Search Code'},
     'menu_request':      {'ar': '➕ طلب كود',          'en': '➕ Request Code'},
     'menu_favorites':    {'ar': '❤️ مفضلتي',           'en': '❤️ My Favorites'},
+    'menu_website':      {'ar': '🌐 موقعنا الإلكتروني', 'en': '🌐 Our Website'},
     'menu_end':          {'ar': 'إنهاء',               'en': 'End'},
     'start_btn':         {'ar': 'بدء الاستخدام 🚀',    'en': 'Start 🚀'},
     'back_btn':          {'ar': '🔙 عودة',             'en': '🔙 Back'},
@@ -729,6 +733,7 @@ def _kb_main(lang):
         types.InlineKeyboardButton(TEXTS['menu_request'][lang], callback_data='nav:request'),
     )
     kb.add(types.InlineKeyboardButton(TEXTS['menu_favorites'][lang], callback_data='nav:favs'))
+    kb.add(types.InlineKeyboardButton(TEXTS['menu_website'][lang], url=WEBSITE_URL))
     kb.add(types.InlineKeyboardButton(TEXTS['menu_support'][lang], callback_data='nav:support'))
     kb.add(types.InlineKeyboardButton(TEXTS['menu_end'][lang], callback_data='nav:end'))
     return kb

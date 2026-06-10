@@ -85,8 +85,10 @@ bot.exception_handler = _WebhookExceptionHandler()
 # (هذا سبب «بطء ٣٠ث»). الحل: خيوط عاملة **دائمة** (جلسة مستقرّة + إعادة استخدام
 # اتصال) تستهلك من طابور؛ والـ webhook يضع التحديث ويرجّع 200 فوراً (لا انتظار،
 # لا إعادة إرسال من تيليجرام، ولا تجمّد — لكل عامل حلقة تلتقط الاستثناءات).
-_BOT_UPDATE_QUEUE: "queue.Queue" = queue.Queue(maxsize=2000)
-_NUM_BOT_WORKERS = 4
+# السعة: 16 عاملاً تُشبع سقف تيليجرام (~30 رسالة/ث) دون إفراط يسبب 429.
+# الطابور الكبير يمتصّ الذُّرَى (bursts) فلا تُسقَط ضغطات المستخدمين تحت الضغط.
+_BOT_UPDATE_QUEUE: "queue.Queue" = queue.Queue(maxsize=12000)
+_NUM_BOT_WORKERS = 16
 _bot_log = _logging.getLogger("dp.bot")
 
 
@@ -238,9 +240,12 @@ def on_startup():
     """
     clean_legacy_columns()
     ensure_tracking_tables()
-    # backfill في خيط خلفي — يمرّ على كل المستخدمين بعدة استعلامات، فلا نحجب
-    # به إقلاع الخدمة ولا تسجيل الـ webhook (الزمن ينمو مع عدد المستخدمين).
-    threading.Thread(target=backfill_user_behavior, daemon=True).start()
+    # backfill عبء O(عدد المستخدمين) — كان يعمل في كل إقلاع/deploy ويهاجم DB بلا داعٍ.
+    # السلوك يُحدَّث حيّاً عند كل تفاعل (update_user_behavior)، فالـ backfill يلزم
+    # لمرة واحدة فقط لتعبئة البيانات التاريخية. نشغّله صراحةً بـ RUN_BACKFILL=1 فقط.
+    if os.getenv("RUN_BACKFILL") == "1":
+        threading.Thread(target=backfill_user_behavior, daemon=True).start()
+        print("✅ backfill thread started (RUN_BACKFILL=1)")
 
     # مراقبة الأداء: thread يكبس مقاييس الطلبات للقاعدة (لكل عملية worker)
     try:
