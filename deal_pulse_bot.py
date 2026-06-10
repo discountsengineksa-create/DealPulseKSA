@@ -52,17 +52,6 @@ if _GO_BASE and not _GO_BASE.startswith("http"):
     _GO_BASE = "https://" + _GO_BASE
 _API_SEARCH_URL = _API_BASE + "/api/v1/coupons/search"
 
-# إعدادات مراقب الخمول — مرحلتان (قابلة للتعديل من .env)
-IDLE_WARN_MINUTES           = int(os.getenv("IDLE_WARN_MINUTES",  "5"))   # تذكير
-IDLE_KICK_MINUTES           = int(os.getenv("IDLE_KICK_MINUTES",  "10"))  # إنهاء جلسة
-IDLE_CHECK_INTERVAL_SECONDS = 30       # دورة الفحص كل 30 ثانية
-IDLE_ALERT_WINDOW_HOURS     = 24       # لا ننبّه من اختفى أكثر من 24 ساعة
-
-# تتبع المرحلتين في الذاكرة
-_idle_warned = set()   # أُرسل لهم التذكير (5 دقائق)
-_idle_kicked = set()   # أُنهيت جلستهم  (10 دقائق)
-_idle_lock   = threading.Lock()
-
 bot = telebot.TeleBot(TOKEN)
 
 
@@ -71,8 +60,8 @@ def _build_pool() -> pg_pool.ThreadedConnectionPool:
         url = _DATABASE_URL
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql://", 1)
-        return pg_pool.ThreadedConnectionPool(minconn=2, maxconn=8, dsn=url)
-    return pg_pool.ThreadedConnectionPool(minconn=2, maxconn=8, **DB_CONFIG)
+        return pg_pool.ThreadedConnectionPool(minconn=2, maxconn=16, dsn=url)
+    return pg_pool.ThreadedConnectionPool(minconn=2, maxconn=16, **DB_CONFIG)
 
 _db_pool: pg_pool.ThreadedConnectionPool | None = None
 _db_pool_lock = threading.Lock()
@@ -210,10 +199,6 @@ def register_or_update_user(message):
     device_type = 'Telegram' كقيمة محايدة صادقة (Telegram لا يكشف الجهاز)."""
     user = message.from_user
 
-    with _idle_lock:
-        _idle_warned.discard(user.id)
-        _idle_kicked.discard(user.id)
-
     # Telegram لا يكشف نوع الجهاز — نسجّل 'Telegram' كقيمة محايدة صادقة
     inferred_device = 'Telegram'
 
@@ -271,8 +256,8 @@ TEXTS = {
                           'en': '✅ تم اختيار اللغة العربية'},
     'lang_en_picked':    {'ar': '✅ English language selected',
                           'en': '✅ English language selected'},
-    'welcome':           {'ar': 'مرحباً بك في نبض الصفقات يا أبو سعود 🛡️',
-                          'en': 'Welcome to Deal Pulse 🛡️'},
+    'welcome':           {'ar': 'مرحباً بك في نبض الصفقات يا {name} 🛡️',
+                          'en': 'Welcome to Deal Pulse, {name} 🛡️'},
 
     # Main menu buttons
     'menu_codes':        {'ar': '📜 أكوادنا',          'en': '📜 Our Codes'},
@@ -298,9 +283,9 @@ TEXTS = {
     'no_results':        {'ar': '❌ لم نجد نتائج.',     'en': '❌ No results found.'},
     'search_err':        {'ar': '⚠️ حصل خلل في البحث. حاول مرة ثانية.',
                           'en': '⚠️ Search error. Please try again.'},
-    'session_ended':     {'ar': '🛑 تم إنهاء الجلسة. خذ قسطاً من الراحة يا أبو سعود!\n'
+    'session_ended':     {'ar': '🛑 تم إنهاء الجلسة. خذ قسطاً من الراحة يا {name}!\n'
                                 'اضغط الزر أسفل لما تجهز نبدأ من جديد 👇',
-                          'en': '🛑 Session ended. Take a break!\n'
+                          'en': '🛑 Session ended. Take a break, {name}!\n'
                                 'Tap the button below when you are ready to continue 👇'},
     'request_prompt':    {'ar': '📝 اكتب اسم المتجر أو رابطه اللي تبي كوبونه، وحنا بنحاول نوفّره.',
                           'en': '📝 Type the store name or link you want a coupon for, and we will try to provide it.'},
@@ -310,7 +295,7 @@ TEXTS = {
                           'en': '✅ Your request has been saved! We will try to provide the code soon.'},
     'request_err':       {'ar': '⚠️ تعذّر تسجيل الطلب الآن. حاول مرة ثانية.',
                           'en': '⚠️ Could not save the request now. Please try again.'},
-    'menu_support':      {'ar': '🆘 الدعم الفني',       'en': '🆘 Support'},
+    'menu_support':      {'ar': '🆘 تواصل معنا',        'en': '🆘 Contact Us'},
     'support_prompt':    {'ar': '🆘 اكتب رسالتك للدعم (مشكلتك أو استفسارك)، وفريقنا بيرد عليك هنا في أقرب وقت.',
                           'en': '🆘 Write your message to support (your issue or question), and our team will reply to you here soon.'},
     'support_empty':     {'ar': '⚠️ ما استلمت رسالتك. اكتب مشكلتك وحاول مرة ثانية.',
@@ -377,19 +362,6 @@ TEXTS = {
                           'en': '❤️ Added *{tag}* category to your favorites'},
     'cat_fav_removed':   {'ar': '🤍 أُزيل قسم *{tag}* من المفضلة',
                           'en': '🤍 Removed *{tag}* category from favorites'},
-
-    # Idle — مرحلة 1: تذكير
-    'idle_warn':         {'ar': '⏰ غبت عنّا {m} دقائق...\n'
-                                'هل ما زلت معنا؟ لو نعم اضغط أي زر 😊\n'
-                                '_ستنتهي جلستك تلقائياً بعد {k} دقائق إضافية._',
-                          'en': '⏰ You have been away for {m} minutes...\n'
-                                'Still there? Tap any button 😊\n'
-                                '_Session will end in {k} more minutes._'},
-    # Idle — مرحلة 2: إنهاء جلسة تلقائي
-    'idle_alert':        {'ar': '🛑 انتهت جلستك تلقائياً بسبب الخمول.\n'
-                                'اضغط الزر لما تجهز نبدأ من جديد 👇',
-                          'en': '🛑 Your session ended automatically due to inactivity.\n'
-                                'Tap the button when you are ready 👇'},
 }
 
 
@@ -440,6 +412,13 @@ def matches_label(text, key):
         return False
     entry = TEXTS.get(key, {})
     return text in (entry.get('ar'), entry.get('en'))
+
+
+def _display_name(user, lang='ar'):
+    """اسم المستخدم للعرض في رسائل الترحيب/الوداع (first_name من تيليجرام)."""
+    return (getattr(user, 'first_name', None)
+            or getattr(user, 'username', None)
+            or ('صديقنا' if lang == 'ar' else 'friend'))
 
 
 def log_action(store_id, action_type, user_id=None, details=None):
@@ -923,7 +902,7 @@ def get_store_extra_coupons(store_id):
         return []
     conn = None
     try:
-        conn = get_conn()
+        conn = get_db_connection()
         cur = conn.cursor()
         cur.execute(
             """
@@ -938,14 +917,15 @@ def get_store_extra_coupons(store_id):
             (store_id,),
         )
         return cur.fetchall()
-    except Exception:
+    except Exception as e:
+        print(f"⚠️ get_store_extra_coupons {store_id}: {e}")
+        if conn is not None:
+            try: conn.rollback()
+            except Exception: pass
         return []
     finally:
         if conn is not None:
-            try:
-                conn.close()
-            except Exception:
-                pass
+            release_conn(conn)
 
 
 def _card_text(s, lang):
@@ -1459,9 +1439,15 @@ def _start_session(message):
 
     # محاولة 4: القائمة الرئيسية — الأهم. لو فشلت، نُرسل رسالة طوارئ.
     try:
-        welcome_text = t(user_id, 'welcome')
+        welcome_text = t(user_id, 'welcome', name=_display_name(message.from_user, lang))
     except Exception:
         welcome_text = "👋 أهلاً بك في نبض الصفقات!" if lang == 'ar' else "👋 Welcome to Deal Pulse!"
+
+    # /start = ابدأ من جديد دائماً برسالة قائمة جديدة. نُصفّر msg_id المحفوظ حتى لا
+    # يحاول _ensure_nav تعديل رسالة قديمة قد تكون اختفت بعد مسح المستخدم للمحادثة
+    # (في الخاص، تعديل رسالة ممسوحة قد ينجح بصمت فلا تظهر الأزرار = مشكلة "الصورة
+    # تظهر والأزرار لا تظهر"). التصفير يُجبر إرسال رسالة أزرار جديدة.
+    _update_nav(user_id, msg_id=None)
 
     try:
         kb = _kb_main(lang)
@@ -1544,7 +1530,7 @@ def send_help(message):
     lang    = get_lang(user_id)
     if lang == 'en':
         text = (
-            "🤖 *Deal Pulse — Help*\n\n"
+            "*Deal Pulse — Help*\n\n"
             "📜 *Our Codes* — browse all available coupons\n"
             "📂 *Categories* — filter stores by category\n"
             "🔎 *Search* — type any store name to find its coupon\n"
@@ -1555,7 +1541,7 @@ def send_help(message):
         )
     else:
         text = (
-            "🤖 *نبض الصفقات — المساعدة*\n\n"
+            "*نبض الصفقات — المساعدة*\n\n"
             "📜 *أكوادنا* — تصفّح جميع الكوبونات المتاحة\n"
             "📂 *الأقسام* — فلتر المتاجر حسب القسم\n"
             "🔎 *البحث* — اكتب اسم أي متجر للعثور على كوبونه\n"
@@ -1659,7 +1645,7 @@ def handle_lang_pick(call):
 
     sent = bot.send_message(
         call.message.chat.id,
-        t(user_id, 'welcome'),
+        t(user_id, 'welcome', name=_display_name(call.from_user, lang)),
         reply_markup=_kb_main(lang),
         parse_mode="Markdown"
     )
@@ -1674,6 +1660,7 @@ def handle_nav(call):
     user_id = call.from_user.id
     chat_id = call.message.chat.id
     lang    = get_lang(user_id)
+    name    = _display_name(call.from_user, lang)
     action  = call.data[4:]
 
     bot.answer_callback_query(call.id)
@@ -1684,7 +1671,7 @@ def handle_nav(call):
 
     if action == 'menu':
         _update_nav(user_id, state='menu')
-        _edit_nav(user_id, t(user_id, 'welcome'), _kb_main(lang))
+        _edit_nav(user_id, t(user_id, 'welcome', name=name), _kb_main(lang))
 
     elif action == 'codes':
         _load_and_show_codes(user_id, lang)
@@ -1710,7 +1697,7 @@ def handle_nav(call):
     elif action == 'end':
         log_action(None, 'end_session', user_id=user_id)
         _update_nav(user_id, state='ended')
-        _edit_nav(user_id, t(user_id, 'session_ended'), _kb_start(lang))
+        _edit_nav(user_id, t(user_id, 'session_ended', name=name), _kb_start(lang))
 
     elif action == 'prev':
         _show_card(user_id, _get_nav(user_id).get('page', 0) - 1)
@@ -2207,108 +2194,6 @@ else:
 
 
 # ============================================================
-#  Idle Watcher — يعدّل رسالة التنقل بدل إرسال رسالة جديدة
-# ============================================================
-
-def check_idle_users():
-    global _idle_warned, _idle_kicked
-    try:
-        conn = get_db_connection()
-        cur  = conn.cursor()
-        # المرحلة 1: خامل >= WARN دقيقة
-        cur.execute("""
-            SELECT telegram_id FROM bot_users
-            WHERE last_seen IS NOT NULL
-              AND last_seen < NOW() - make_interval(mins => %s)
-              AND last_seen > NOW() - make_interval(hours => %s)
-        """, (IDLE_WARN_MINUTES, IDLE_ALERT_WINDOW_HOURS))
-        warn_ids = [row[0] for row in cur.fetchall()]
-
-        # المرحلة 2: خامل >= KICK دقيقة
-        cur.execute("""
-            SELECT telegram_id FROM bot_users
-            WHERE last_seen IS NOT NULL
-              AND last_seen < NOW() - make_interval(mins => %s)
-              AND last_seen > NOW() - make_interval(hours => %s)
-        """, (IDLE_KICK_MINUTES, IDLE_ALERT_WINDOW_HOURS))
-        kick_ids = [row[0] for row in cur.fetchall()]
-        release_conn(conn)
-    except Exception as e:
-        print(f"idle query error: {e}")
-        return
-
-    active_window = set(warn_ids) | set(kick_ids)
-    with _idle_lock:
-        # حذف من الـ sets من خرج عن نافذة الـ 24 ساعة (غاب وانتهت فترة المراقبة)
-        _idle_warned &= active_window
-        _idle_kicked &= active_window
-        to_warn = [uid for uid in warn_ids if uid not in _idle_warned and uid not in _idle_kicked]
-        to_kick = [uid for uid in kick_ids if uid not in _idle_kicked]
-
-    # ── المرحلة 1: إرسال تذكير ────────────────────────────────────────────
-    for uid in to_warn:
-        try:
-            lang = get_lang(uid)
-            nav  = _get_nav(uid)
-            text = t(uid, 'idle_warn',
-                     m=IDLE_WARN_MINUTES,
-                     k=IDLE_KICK_MINUTES - IDLE_WARN_MINUTES)
-            if nav.get('msg_id') and nav.get('chat_id'):
-                try:
-                    bot.edit_message_text(
-                        text, nav['chat_id'], nav['msg_id'],
-                        reply_markup=_kb_start(lang), parse_mode="Markdown"
-                    )
-                except Exception:
-                    bot.send_message(uid, text,
-                                     reply_markup=_kb_start(lang),
-                                     parse_mode="Markdown")
-            else:
-                bot.send_message(uid, text,
-                                 reply_markup=_kb_start(lang),
-                                 parse_mode="Markdown")
-            log_action(None, 'idle_warn', user_id=uid)
-            with _idle_lock:
-                _idle_warned.add(uid)
-            time.sleep(0.05)
-        except Exception as e:
-            print(f"idle warn failed for {uid}: {e}")
-
-    # ── المرحلة 2: إنهاء الجلسة تلقائياً ────────────────────────────────
-    for uid in to_kick:
-        try:
-            lang = get_lang(uid)
-            nav  = _get_nav(uid)
-            text = t(uid, 'idle_alert')
-            if nav.get('msg_id') and nav.get('chat_id'):
-                try:
-                    bot.edit_message_text(
-                        text, nav['chat_id'], nav['msg_id'],
-                        reply_markup=_kb_start(lang), parse_mode="Markdown"
-                    )
-                except Exception:
-                    bot.send_message(uid, text, reply_markup=_kb_start(lang))
-            else:
-                bot.send_message(uid, text, reply_markup=_kb_start(lang))
-            _update_nav(uid, state='ended')
-            log_action(None, 'idle_kick', user_id=uid)
-            with _idle_lock:
-                _idle_kicked.add(uid)
-            time.sleep(0.05)
-        except Exception as e:
-            print(f"idle kick failed for {uid}: {e}")
-
-
-def idle_watcher():
-    while True:
-        try:
-            check_idle_users()
-        except Exception as e:
-            print(f"idle watcher loop: {e}")
-        time.sleep(IDLE_CHECK_INTERVAL_SECONDS)
-
-
-# ============================================================
 #  تشغيل البوت
 # ============================================================
 
@@ -2329,8 +2214,7 @@ if __name__ == "__main__":
         ensure_tracking_tables()
         # backfill في background — البوت يبدأ فوراً دون انتظار
         threading.Thread(target=backfill_user_behavior, daemon=True).start()
-        threading.Thread(target=idle_watcher, daemon=True).start()
-        print(f"✅ البوت شغال + مراقبة الخمول مفعّلة (تذكير={IDLE_WARN_MINUTES}m | إنهاء={IDLE_KICK_MINUTES}m)")
+        print("✅ البوت شغال")
         bot.infinity_polling(allowed_updates=['message', 'callback_query', 'message_reaction'])
     except Exception as e:
         print(f"❌ حدث خطأ: {e}")

@@ -48,11 +48,9 @@ from telebot.types import Update
 
 from deal_pulse_bot import (
     bot,
-    idle_watcher,
     clean_legacy_columns,
     ensure_tracking_tables,
     backfill_user_behavior,
-    IDLE_KICK_MINUTES,
 )
 from telebot import ExceptionHandler
 
@@ -234,15 +232,15 @@ def on_startup():
     """
     تشغيل آمن مع multi-worker:
     - تهيئة DB تتم في كل worker (idempotent — CREATE IF NOT EXISTS)
-    - idle_watcher يشتغل في كل worker (كل واحد يفحص حصته)
+    - backfill يشتغل في خيط خلفي حتى لا يحجب الإقلاع/تسجيل الـ webhook
     - webhook registration: نتحقق أولاً، ولا نمسحه/نُسجّله إلا إذا اختلف
       (يمنع race condition بين الـ workers)
     """
     clean_legacy_columns()
     ensure_tracking_tables()
-    backfill_user_behavior()
-    threading.Thread(target=idle_watcher, daemon=True).start()
-    print(f"✅ idle_watcher started (timeout={IDLE_KICK_MINUTES}m)")
+    # backfill في خيط خلفي — يمرّ على كل المستخدمين بعدة استعلامات، فلا نحجب
+    # به إقلاع الخدمة ولا تسجيل الـ webhook (الزمن ينمو مع عدد المستخدمين).
+    threading.Thread(target=backfill_user_behavior, daemon=True).start()
 
     # مراقبة الأداء: thread يكبس مقاييس الطلبات للقاعدة (لكل عملية worker)
     try:
