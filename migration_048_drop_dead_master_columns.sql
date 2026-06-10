@@ -10,6 +10,11 @@
 
 BEGIN;
 
+-- 0) حذف view ميت يعتمد على بعض الأعمدة الميتة (coupons_view = SELECT ... FROM master).
+--    غير مستخدَم في أي كود (بوت/API/داشبورد/ويب) — تحقّقنا. v_social_leads لا يتأثّر.
+--    (لإعادة إنشائه لو لزم مستقبلاً: SELECT * FROM master مع الأعمدة الحيّة فقط.)
+DROP VIEW IF EXISTS coupons_view;
+
 -- 1) نسخة احتياطية لبيانات الأعمدة الراكدة (للرجوع لو لزم)
 CREATE TABLE IF NOT EXISTS _deprecated_master_cols_bak_20260610 AS
 SELECT id,
