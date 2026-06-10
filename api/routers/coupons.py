@@ -136,6 +136,28 @@ def _select_lang_clause(lang: str) -> str:
     """
 
 
+def _select_light_clause(lang: str) -> str:
+    """SELECT خفيف للقائمة الكاملة (آلاف المتاجر): اسم/لوقو/خصم/تاغات/عدّادات فقط.
+    بلا subqueries (ستوري/أكواد إضافية/وصف) وبلا popularity — فيبقى مسحاً سريعاً
+    لجدول master يتحمّل 3000+ متجراً. التفاصيل الكاملة تُجلب لكل متجر عبر /detail."""
+    if lang == "en":
+        return """
+            id, store_id,
+            COALESCE(NULLIF(name_en, ''), store_id)              AS name_en,
+            COALESCE(NULLIF(extra_offer_en, ''), extra_offer)    AS extra_offer,
+            COALESCE(NULLIF(store_tags_en, ''),  store_tags)     AS store_tags,
+            discount_value, is_trending,
+            COALESCE(is_promoted, FALSE) AS is_promoted,
+            logo_url, total_coupon_copies, total_link_clicks
+        """
+    return """
+        id, store_id, name_en, extra_offer, store_tags,
+        discount_value, is_trending,
+        COALESCE(is_promoted, FALSE) AS is_promoted,
+        logo_url, total_coupon_copies, total_link_clicks
+    """
+
+
 @router.get("/categories", response_model=CategoriesResponse)
 def get_categories(conn=Depends(get_db)):
     """
@@ -172,15 +194,24 @@ def get_categories(conn=Depends(get_db)):
 
 @router.get("/", response_model=SearchResponse)
 def get_all_coupons(
-    limit: int = Query(default=50, ge=1, le=1000),     # رفع السقف من 200 لـ 1000
+    limit: int = Query(default=50, ge=1, le=5000),     # light يسمح حتى 5000 (كتالوج كامل)
     lang: Literal["ar", "en"] = Query(default="ar"),
+    view: Literal["full", "light"] = Query(default="full"),
     conn=Depends(get_db),
 ):
-    """إرجاع جميع المتاجر مرتبةً: الترند أولاً ثم بالمعرّف. ?lang=en يبدّل الحقول للإنجليزية."""
+    """إرجاع المتاجر مرتبةً: المروّجة ثم الترند ثم بالمعرّف. ?lang=en يبدّل الحقول.
+    ?view=light → قائمة خفيفة سريعة (بلا ستوري/أكواد إضافية/وصف/popularity) للكتالوج
+    الكامل (آلاف المتاجر)؛ التفاصيل تُجلب لكل متجر عبر /coupons/detail/{id}."""
+    if view == "light":
+        select_clause = _select_light_clause(lang)
+        pop_clause = "0 AS popularity_score"
+    else:
+        select_clause = _select_lang_clause(lang)
+        pop_clause = _POPULARITY_SQL
     sql = f"""
         SELECT
-            {_select_lang_clause(lang)},
-            {_POPULARITY_SQL},
+            {select_clause},
+            {pop_clause},
             0 AS score_pct
         FROM master
         WHERE (last_time IS NULL OR last_time >= CURRENT_DATE)
@@ -269,4 +300,37 @@ def search_coupons(
         total=len(results),
         capped=(len(results) == limit),
         results=results,
+    )
+
+
+# مسار التفاصيل الكاملة لمتجر واحد (كوبون/وصف/ستوري/أكواد إضافية) — يُكمّل القائمة
+# الخفيفة (?view=light). مُسجَّل في نهاية الملف ليفوز المسار الثابت (search/categories/
+# site-theme) في المطابقة قبل بارامتر المسار. /detail/{id} مقطعان فلا التباس.
+@router.get("/detail/{store_pk}", response_model=StoreResult)
+def get_coupon_detail(
+    store_pk: int,
+    lang: Literal["ar", "en"] = Query(default="ar"),
+    conn=Depends(get_db),
+):
+    """التفاصيل الكاملة لمتجر بمعرّفه الرقمي (id)؛ يخدم «التفاصيل عند الطلب» للميني-ويب."""
+    sql = f"""
+        SELECT
+            {_select_lang_clause(lang)},
+            {_POPULARITY_SQL},
+            0 AS score_pct
+        FROM master
+        WHERE id = %(id)s
+              AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+              AND NOT COALESCE(is_suspended, FALSE)
+        LIMIT 1
+    """
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(sql, {"id": store_pk})
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="store not found")
+    return StoreResult(
+        **{k: v for k, v in row.items() if k not in ("store_tags", "store_tags_en")},
+        store_tags=_parse_tags(row.get("store_tags")),
+        store_tags_en=_parse_tags(row.get("store_tags_en")),
     )

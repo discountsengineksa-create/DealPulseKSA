@@ -765,7 +765,7 @@ function showCategoryView(name) {
     switchView('category');
 }
 
-function showStoreView(storeId) {
+async function showStoreView(storeId) {
     // flush فقط لو المستخدم في وضع بحث نشط (يعني فعلاً اختار نتيجة بحث).
     // بدون هذا الشرط، نقر متجر من «أبرز المتاجر» سيُسجّل بحثاً معلّقاً قديماً.
     if (activeSearch && _searchPending) flushSearchTrack();
@@ -785,8 +785,17 @@ function showStoreView(storeId) {
         _storeTrendCtx = null;
     }
 
-    renderStoreView(storeId);
     switchView('store');
+    // النموذج الخفيف: نجلب التفاصيل (كوبون/وصف/ستوري/أكواد) عند الفتح إن لم تُحمَّل.
+    const s = ALL.find(x => x.id === storeId);
+    if (s && !s._full) {
+        document.getElementById('storeBody').innerHTML =
+            `<div style="text-align:center;color:var(--t3);padding:60px 20px;font-size:13px">${STRINGS[LANG_CURRENT].refreshing || '...'}</div>`;
+        await ensureDetail(s);
+        // لو غادر المستخدم الصفحة أثناء الجلب لا نرسم فوقها
+        if (currentView !== 'store' || viewContext.storeId !== storeId) return;
+    }
+    renderStoreView(storeId);
 }
 
 // ── Trend helpers (لقب موقعي بحسب اللغة + padding اليومي من الأسبوعي) ──
@@ -1286,9 +1295,54 @@ async function loadSiteTheme() {
     } catch (e) { /* تجاهل — تبقى الخلفية الأصلية */ }
 }
 
+// ── نموذج «قائمة خفيفة + تفاصيل عند الطلب» (يتحمّل آلاف المتاجر) ──────────
+// loadData يجلب قائمة خفيفة لكل المتاجر (بلا كوبون/وصف/ستوري/أكواد إضافية).
+// ensureDetail يجلب تفاصيل متجر واحد عند فتحه (ويُخزّنها على الكائن، _full=true).
+//
+// منطق الـ link: cloaked_slug → /go (متتبَّع) · رابط خام http(s) · وإلا '#'.
+function buildLink(item) {
+    if (item.cloaked_slug) {
+        const uq = tgUserId ? `&u=${tgUserId}` : '';
+        return `${window.location.origin}/go/${item.cloaked_slug}?s=miniapp${uq}`;
+    }
+    const raw = (item.affiliate_link || '').trim();
+    if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+    return '#';
+}
+
+// يجلب التفاصيل الكاملة لمتجر ويدمجها على الكائن. fire-safe (يبقى بالحقول الفارغة لو فشل).
+async function ensureDetail(s) {
+    if (!s || s._full) return s;
+    try {
+        const r = await fetch(`${API_BASE}/coupons/detail/${s.id}?lang=${LANG_CURRENT}`, { cache: 'no-store' });
+        if (r.ok) {
+            const d = await r.json();
+            s.coupon       = d.public_coupon || '';
+            s.bio          = d.store_bio || '';
+            s.extraCoupons = Array.isArray(d.extra_coupons) ? d.extra_coupons : [];
+            s.storySlides  = Array.isArray(d.story_slides) ? d.story_slides : [];
+            s.link         = buildLink(d);
+            s._full        = true;
+        }
+    } catch (e) { /* صامت — يبقى بالحقول الفارغة */ }
+    return s;
+}
+
+// جلب تفاصيل المتاجر المعروضة على الهوم (المختارة + الستوري) بالخلفية — فتحها فوري.
+function prefetchVisibleDetails() {
+    const set = new Set();
+    ALL.filter(s => s.promoted).slice(0, 12).forEach(s => set.add(s));
+    [...ALL].sort((a, b) =>
+        ((b.promoted ? 1 : 0) - (a.promoted ? 1 : 0)) ||
+        ((isTrendNow(b) ? 1 : 0) - (isTrendNow(a) ? 1 : 0))
+    ).slice(0, 8).forEach(s => set.add(s));
+    set.forEach(s => { if (!s._full) ensureDetail(s); });
+}
+
 async function loadData() {
     const t0 = Date.now();
-    const url = `${API_BASE}/coupons/?limit=50&lang=${LANG_CURRENT}&t=${t0}&r=${Math.random().toString(36).slice(2,10)}`;
+    // view=light: قائمة خفيفة لكل الكتالوج (يتحمّل 3000+). limit عالٍ يغطّي الكتالوج كاملاً.
+    const url = `${API_BASE}/coupons/?view=light&limit=5000&lang=${LANG_CURRENT}&t=${t0}&r=${Math.random().toString(36).slice(2,10)}`;
 
     try {
         const res = await fetch(url, {
@@ -1311,50 +1365,43 @@ async function loadData() {
         const payload = await res.json();
         const items = payload.results || [];
 
-        // ── منطق الـ link (يعالج البيانات الفاسدة بأمان) ────────────────
-        // أولوية:
-        //   1. cloaked_slug → /go/{slug} (مُتتبَّع + bot challenge عبر Cloudflare)
-        //   2. affiliate_link لو URL سليم (يبدأ بـ http)
-        //   3. # fallback (يفتح نفس الصفحة — تجنّب JS exceptions)
-        const buildLink = (item) => {
-            if (item.cloaked_slug) {
-                const uq = tgUserId ? `&u=${tgUserId}` : '';
-                return `${window.location.origin}/go/${item.cloaked_slug}?s=miniapp${uq}`;
-            }
-            const raw = (item.affiliate_link || '').trim();
-            if (raw.startsWith('http://') || raw.startsWith('https://')) {
-                return raw;
-            }
-            return '#';   // لا nav إذا الرابط فاسد — نعرض toast بدل
-        };
+        // نحفظ تفاصيل المتاجر المُحمّلة سابقاً (_full) عبر التحديثات حتى لا تُفقد
+        // عند إعادة الجلب (visibilitychange/refresh) ونتجنّب جلبها مرة أخرى.
+        const prevById = new Map(ALL.map(s => [s.id, s]));
 
-        ALL = items.map(item => ({
-            id: item.id,
-            // store_id = المفتاح الأساسي (عربي دائماً) — للمفضلة/التتبّع. ثابت عبر اللغتين.
-            store_id: item.store_id || (LANG_CURRENT === 'en' ? 'Store' : 'متجر'),
-            // name = الاسم المعروض (إنجليزي في وضع EN، عربي وإلا) — للعرض فقط.
-            name: (LANG_CURRENT === 'en' && item.name_en)
-                  ? item.name_en
-                  : (item.store_id || (LANG_CURRENT === 'en' ? 'Store' : 'متجر')),
-            disc: item.discount_value || (LANG_CURRENT === 'en' ? 'Special offer' : 'خصم خاص'),
-            coupon: item.public_coupon || '',
-            extraCoupons: Array.isArray(item.extra_coupons) ? item.extra_coupons : [],
-            link: buildLink(item),
-            logo: item.logo_url || 'logo.png',
-            storySlides: Array.isArray(item.story_slides) ? item.story_slides : [],
-            bio: item.store_bio || '',
-            trending: item.is_trending === 'ترند 🔥',
-            promoted: !!item.is_promoted,
-            // store_tags array (يأتي مُسطّحاً من الـ API) — يدعم الفلترة بالقسم
-            tags: Array.isArray(item.store_tags) ? item.store_tags
-                  : (Array.isArray(item.store_tags_en) ? item.store_tags_en : []),
-            // حقول الفرز في صفحة «كل المتاجر»
-            copies: Number(item.total_coupon_copies) || 0,   // نسخ الكوبون
-            clicks: Number(item.total_link_clicks)   || 0,   // نقرات الرابط
-            offer:  (item.extra_offer || '').trim(),         // عرض إضافي (لفرز «عروض»)
-            // «الأكثر طلباً» = نقرات + نسخ + بحث + مفضّلة (محسوب في الـ API)
-            pop:    Number(item.popularity_score)    || 0,
-        }));
+        ALL = items.map(item => {
+            const base = {
+                id: item.id,
+                // store_id = المفتاح الأساسي (عربي دائماً) — للمفضلة/التتبّع. ثابت عبر اللغتين.
+                store_id: item.store_id || (LANG_CURRENT === 'en' ? 'Store' : 'متجر'),
+                // name = الاسم المعروض (إنجليزي في وضع EN، عربي وإلا) — للعرض فقط.
+                name: (LANG_CURRENT === 'en' && item.name_en)
+                      ? item.name_en
+                      : (item.store_id || (LANG_CURRENT === 'en' ? 'Store' : 'متجر')),
+                disc: item.discount_value || (LANG_CURRENT === 'en' ? 'Special offer' : 'خصم خاص'),
+                logo: item.logo_url || 'logo.png',
+                trending: item.is_trending === 'ترند 🔥',
+                promoted: !!item.is_promoted,
+                // store_tags array (يأتي مُسطّحاً من الـ API) — يدعم الفلترة بالقسم
+                tags: Array.isArray(item.store_tags) ? item.store_tags
+                      : (Array.isArray(item.store_tags_en) ? item.store_tags_en : []),
+                // حقول الفرز في «كل المتاجر»
+                copies: Number(item.total_coupon_copies) || 0,
+                clicks: Number(item.total_link_clicks)   || 0,
+                offer:  (item.extra_offer || '').trim(),       // عرض إضافي (لفرز «عروض»)
+                pop:    Number(item.popularity_score)    || 0, // 0 في الوضع الخفيف → يسقط على copies+clicks
+                // ── حقول ثقيلة (تُملأ عند فتح المتجر عبر ensureDetail) ──
+                coupon: '', bio: '', extraCoupons: [], storySlides: [], link: '', _full: false,
+            };
+            // أعِد دمج التفاصيل المُحمّلة سابقاً لو موجودة (يحفظ تجربة المستخدم)
+            const prev = prevById.get(item.id);
+            if (prev && prev._full) {
+                base.coupon = prev.coupon; base.bio = prev.bio;
+                base.extraCoupons = prev.extraCoupons; base.storySlides = prev.storySlides;
+                base.link = prev.link; base._full = true;
+            }
+            return base;
+        });
 
         const dt = Date.now() - t0;
         console.log(`[loadData] OK · ${ALL.length} stores · ${dt}ms · ${new Date().toISOString()}`);
@@ -1367,7 +1414,8 @@ async function loadData() {
         renderStores();
         updateStats();
         renderStoryRow();
-        loadTrendOnHome();   // قسم الترند على الصفحة الرئيسية — fire-and-forget
+        loadTrendOnHome();        // قسم الترند على الصفحة الرئيسية — fire-and-forget
+        prefetchVisibleDetails(); // تفاصيل المختارة/الستوري بالخلفية — فتحها فوري
     } catch (err) {
         console.error('[loadData] failed:', err);
         showToast(STRINGS[LANG_CURRENT].fetchErr);
@@ -1886,13 +1934,14 @@ function renderStoryRow() {
     }).join('');
 }
 
-function openStory(i) {
+async function openStory(i) {
     if (i < 0 || i >= STORY.length) return;
     storyIdx = i;
     storySlideIdx = 0;
     document.getElementById('storyViewer').classList.add('on');
     // فتحة متجر جديد → سجّل view_id لربط الـ engagement لاحقاً
     currentStoryViewId = logStoryViewMiniapp(STORY[i] && STORY[i].store_id);
+    await ensureDetail(STORY[i]);   // النموذج الخفيف: نجلب الشرائح/الكود عند الفتح
     renderStorySlide();
     startStoryTimer();
 }
@@ -1904,7 +1953,7 @@ function closeStory() {
     currentStoryViewId = null;
 }
 
-function storyNext() {
+async function storyNext() {
     // شريحة تالية داخل نفس المتجر؟
     const slides = storySlidesOf(STORY[storyIdx]);
     if (storySlideIdx < slides.length - 1) {
@@ -1918,10 +1967,11 @@ function storyNext() {
     storyIdx++;
     storySlideIdx = 0;
     currentStoryViewId = logStoryViewMiniapp(STORY[storyIdx] && STORY[storyIdx].store_id);
+    await ensureDetail(STORY[storyIdx]);
     renderStorySlide();
     startStoryTimer();
 }
-function storyPrev() {
+async function storyPrev() {
     // شريحة سابقة داخل نفس المتجر؟
     if (storySlideIdx > 0) {
         storySlideIdx--;
@@ -1934,6 +1984,7 @@ function storyPrev() {
     storyIdx--;
     storySlideIdx = 0;
     currentStoryViewId = logStoryViewMiniapp(STORY[storyIdx] && STORY[storyIdx].store_id);
+    await ensureDetail(STORY[storyIdx]);
     renderStorySlide();
     startStoryTimer();
 }
