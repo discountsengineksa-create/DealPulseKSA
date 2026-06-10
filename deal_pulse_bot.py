@@ -1,5 +1,6 @@
 import os
 import sys
+import html
 import threading
 import time
 from io import BytesIO
@@ -352,6 +353,10 @@ TEXTS = {
     'btn_add_fav':       {'ar': '🤍 أضف للمفضلة',       'en': '🤍 Add to favorites'},
     'btn_remove_fav':    {'ar': '❤️ إزالة من المفضلة',  'en': '❤️ Remove from favorites'},
     'btn_report_code':   {'ar': '🚫 إبلاغ كود لا يعمل',  'en': '🚫 Report broken code'},
+    'report_confirm_q':  {'ar': 'هل أنت متأكد أن كود *{sid}* لا يعمل؟',
+                          'en': 'Are you sure the *{sid}* code does not work?'},
+    'report_yes':        {'ar': 'نعم',  'en': 'Yes'},
+    'report_no':         {'ar': 'لا',   'en': 'No'},
     'report_code_ok':    {'ar': '✅ تم الإبلاغ بنجاح — سنراجع الكود فوراً',
                           'en': '✅ Reported — we will review the code right away'},
     'report_code_err':   {'ar': '❌ تعذّر إرسال البلاغ، حاول لاحقاً',
@@ -422,6 +427,12 @@ def _display_name(user, lang='ar'):
     return (getattr(user, 'first_name', None)
             or getattr(user, 'username', None)
             or ('صديقنا' if lang == 'ar' else 'friend'))
+
+
+def _name_underlined(user, lang='ar'):
+    """اسم المستخدم مُسطَّراً (HTML <u>) ليكون مميّزاً في رسالة الترحيب.
+    نهرب أحرف HTML الخاصة في الاسم. يتطلب parse_mode='HTML' عند الإرسال."""
+    return f"<u>{html.escape(_display_name(user, lang))}</u>"
 
 
 def log_action(store_id, action_type, user_id=None, details=None):
@@ -781,7 +792,7 @@ def _kb_coupon_back(lang):
 #  Nav Message Helpers
 # ============================================================
 
-def _edit_nav(user_id, text, markup):
+def _edit_nav(user_id, text, markup, parse_mode="Markdown"):
     """تعديل رسالة التنقل المحفوظة. يُرجع True عند النجاح."""
     nav = _get_nav(user_id)
     if not nav.get('msg_id'):
@@ -795,7 +806,7 @@ def _edit_nav(user_id, text, markup):
             pass
         _update_nav(user_id, msg_id=None, msg_type='text')
         try:
-            sent = bot.send_message(nav['chat_id'], text, reply_markup=markup, parse_mode="Markdown")
+            sent = bot.send_message(nav['chat_id'], text, reply_markup=markup, parse_mode=parse_mode)
         except Exception:
             sent = bot.send_message(nav['chat_id'], text, reply_markup=markup)
         _update_nav(user_id, msg_id=sent.message_id, msg_type='text')
@@ -804,7 +815,7 @@ def _edit_nav(user_id, text, markup):
     try:
         bot.edit_message_text(
             text, nav['chat_id'], nav['msg_id'],
-            reply_markup=markup, parse_mode="Markdown"
+            reply_markup=markup, parse_mode=parse_mode
         )
         return True
     except Exception as e:
@@ -814,10 +825,10 @@ def _edit_nav(user_id, text, markup):
         return "message is not modified" in err
 
 
-def _ensure_nav(chat_id, user_id, text, markup):
+def _ensure_nav(chat_id, user_id, text, markup, parse_mode="Markdown"):
     """يعدّل رسالة التنقل إن وُجدت، وإلا يُرسل واحدة جديدة.
 
-    يحتوي على fallback: لو فشل Markdown parsing (بسبب emoji أو أحرف خاصة)،
+    يحتوي على fallback: لو فشل parsing (بسبب emoji أو أحرف خاصة)،
     نُعيد المحاولة بدون parse_mode حتى لا تختفي رسالة الأزرار.
     """
     nav = _get_nav(user_id)
@@ -825,7 +836,7 @@ def _ensure_nav(chat_id, user_id, text, markup):
         try:
             bot.edit_message_text(
                 text, chat_id, nav['msg_id'],
-                reply_markup=markup, parse_mode="Markdown"
+                reply_markup=markup, parse_mode=parse_mode
             )
             return nav['msg_id']
         except Exception as e:
@@ -844,9 +855,9 @@ def _ensure_nav(chat_id, user_id, text, markup):
             # أي خطأ آخر → نسقط للإرسال الجديد بالأسفل
 
     try:
-        sent = bot.send_message(chat_id, text, reply_markup=markup, parse_mode="Markdown")
+        sent = bot.send_message(chat_id, text, reply_markup=markup, parse_mode=parse_mode)
     except Exception as e:
-        print(f"⚠️ _ensure_nav send_message Markdown failed: {e}")
+        print(f"⚠️ _ensure_nav send_message {parse_mode} failed: {e}")
         # fallback بدون parse_mode — الأزرار أهم من التنسيق
         sent = bot.send_message(chat_id, text, reply_markup=markup)
     _update_nav(user_id, chat_id=chat_id, msg_id=sent.message_id, msg_type='text')
@@ -1447,7 +1458,7 @@ def _start_session(message):
 
     # محاولة 4: القائمة الرئيسية — الأهم. لو فشلت، نُرسل رسالة طوارئ.
     try:
-        welcome_text = t(user_id, 'welcome', name=_display_name(message.from_user, lang))
+        welcome_text = t(user_id, 'welcome', name=_name_underlined(message.from_user, lang))
     except Exception:
         welcome_text = "👋 أهلاً بك في نبض الصفقات!" if lang == 'ar' else "👋 Welcome to Deal Pulse!"
 
@@ -1459,7 +1470,7 @@ def _start_session(message):
 
     try:
         kb = _kb_main(lang)
-        msg_id = _ensure_nav(chat_id, user_id, welcome_text, kb)
+        msg_id = _ensure_nav(chat_id, user_id, welcome_text, kb, parse_mode="HTML")
         _set_nav(user_id, {
             'chat_id': chat_id, 'msg_id': msg_id,
             'state': 'menu', 'stores': [], 'page': 0, 'source': 'codes',
@@ -1653,9 +1664,9 @@ def handle_lang_pick(call):
 
     sent = bot.send_message(
         call.message.chat.id,
-        t(user_id, 'welcome', name=_display_name(call.from_user, lang)),
+        t(user_id, 'welcome', name=_name_underlined(call.from_user, lang)),
         reply_markup=_kb_main(lang),
-        parse_mode="Markdown"
+        parse_mode="HTML"
     )
     _set_nav(user_id, {
         'chat_id': call.message.chat.id, 'msg_id': sent.message_id,
@@ -1679,7 +1690,8 @@ def handle_nav(call):
 
     if action == 'menu':
         _update_nav(user_id, state='menu')
-        _edit_nav(user_id, t(user_id, 'welcome', name=name), _kb_main(lang))
+        _edit_nav(user_id, t(user_id, 'welcome', name=_name_underlined(call.from_user, lang)),
+                  _kb_main(lang), parse_mode="HTML")
 
     elif action == 'codes':
         _load_and_show_codes(user_id, lang)
@@ -1858,7 +1870,24 @@ def handle_coupon_copy(call):
 # ============================================================
 @bot.callback_query_handler(func=lambda call: call.data.startswith("rprt:"))
 def handle_report_code(call):
-    """العميل ضغط زر الإبلاغ — لا نسأل، نسجّل ونرد «تم الإبلاغ»."""
+    """ضغطة الإبلاغ تطلب تأكيداً (نعم/لا) أولاً — لتفادي الإبلاغ بالخطأ أثناء التصفّح."""
+    store_id = call.data.split(":", 1)[1]
+    user_id  = call.from_user.id
+
+    bot.answer_callback_query(call.id)
+    _update_nav(user_id, chat_id=call.message.chat.id, msg_id=call.message.message_id)
+
+    kb = types.InlineKeyboardMarkup()
+    kb.row(
+        types.InlineKeyboardButton(t(user_id, 'report_yes'), callback_data=f"rcfm:{store_id}"),
+        types.InlineKeyboardButton(t(user_id, 'report_no'),  callback_data='nav:card'),
+    )
+    _edit_nav(user_id, t(user_id, 'report_confirm_q', sid=store_id), kb)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("rcfm:"))
+def handle_report_confirm(call):
+    """تأكيد «نعم» — يسجّل البلاغ فعلياً ثم يرجع لعرض البطاقة."""
     store_id = call.data.split(":", 1)[1]
     user_id  = call.from_user.id
     lang     = get_lang(user_id)
@@ -1868,6 +1897,7 @@ def handle_report_code(call):
     except Exception as e:
         print(f"⚠️ import code_reports failed: {e}")
         bot.answer_callback_query(call.id, TEXTS['report_code_err'][lang], show_alert=True)
+        _show_card(user_id, _get_nav(user_id).get('page', 0))
         return
 
     conn = None
@@ -1889,7 +1919,7 @@ def handle_report_code(call):
             except Exception: pass
         bot.answer_callback_query(call.id, TEXTS['report_code_err'][lang], show_alert=True)
     except Exception as e:
-        print(f"⚠️ report callback: {e}")
+        print(f"⚠️ report confirm callback: {e}")
         if conn:
             try: conn.rollback()
             except Exception: pass
@@ -1898,6 +1928,9 @@ def handle_report_code(call):
         if conn:
             try: release_conn(conn)
             except Exception: pass
+
+    # ارجع لعرض البطاقة بعد التأكيد (نجاحاً أو فشلاً)
+    _show_card(user_id, _get_nav(user_id).get('page', 0))
 
 
 # ============================================================
