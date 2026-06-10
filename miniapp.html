@@ -46,6 +46,11 @@ body{
   padding-bottom:calc(90px + env(safe-area-inset-bottom,16px));
 }
 
+/* ثيم المناسبة — طبقة خلفية ثابتة فوق تدرّج الـ body، خلف المحتوى */
+#themeBg{position:fixed;inset:0;z-index:-1;background-size:cover;background-position:center;background-repeat:no-repeat;display:none}
+#themeBg.on{display:block}
+#themeBg.on::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(8,14,29,0.55),rgba(8,14,29,0.40) 42%,rgba(8,14,29,0.66))}
+
 .glass{ background:var(--card); backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur); border:1px solid var(--border); }
 
 /* ── HEADER ── */
@@ -153,6 +158,7 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
 </head>
 
 <body>
+<div id="themeBg" aria-hidden="true"></div>
 <div class="toast" id="toast"></div>
 
 <header class="hdr">
@@ -1257,6 +1263,24 @@ function renderStoreView(storeId) {
 //   4. console.log واضح يطبع timestamp + count لتأكيد كل تحميل من جديد
 // ملاحظة: لو البيانات ما تتحدث رغم كل ذلك، المشكلة في الـ DB نفسها وليست
 // في الـ frontend cache. افحص /api/v1/coupons في متصفّح خارجي مباشرةً.
+// ثيم المناسبة — يجلب الثيم الفعّال ويطبّق خلفيته (الميني داكن → نفضّل النسخة الليلية/الجوال).
+async function loadSiteTheme() {
+    const el = document.getElementById('themeBg');
+    if (!el) return;
+    try {
+        const r = await fetch(`${API_BASE}/coupons/site-theme`, { cache: 'no-store' });
+        const data = await r.json();
+        const th = data && data.theme;
+        if (!th || !th.desktop_url) { el.classList.remove('on'); el.style.backgroundImage = ''; return; }
+        const opt = (u) => (u && u.includes('/upload/') && !/\/upload\/(f_|q_)/.test(u))
+            ? u.replace('/upload/', '/upload/f_auto,q_auto/') : (u || '');
+        const url = opt(th.mobile_dark_url) || opt(th.mobile_url) || opt(th.desktop_dark_url) || opt(th.desktop_url);
+        if (!url) { el.classList.remove('on'); return; }
+        el.style.backgroundImage = `url("${url}")`;
+        el.classList.add('on');
+    } catch (e) { /* تجاهل — تبقى الخلفية الأصلية */ }
+}
+
 async function loadData() {
     const t0 = Date.now();
     const url = `${API_BASE}/coupons/?limit=50&lang=${LANG_CURRENT}&t=${t0}&r=${Math.random().toString(36).slice(2,10)}`;
@@ -2144,6 +2168,7 @@ async function initProfileCheck() {
 // خاملة جاهزة لتفعيلها مستقبلاً لو غيّرنا الاستراتيجية.
 document.addEventListener('DOMContentLoaded', () => {
     switchView('home');
+    loadSiteTheme();   // ثيم المناسبة (خلفية) — fire-and-forget
     loadCategories();
     loadData();
     loadFavorites();   // مفضلة المستخدم السيرفرية (initData) — تُحدّث القلوب بعد جلبها
