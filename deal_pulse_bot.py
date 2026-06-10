@@ -257,7 +257,7 @@ TEXTS = {
     'lang_picker_msg':   {'ar': '👋 أهلاً بك!\nاختر لغتك:',
                           'en': '👋 Welcome!\nChoose your language:'},
     'lang_ar_picked':    {'ar': '✅ تم اختيار اللغة العربية',
-                          'en': '✅ تم اختيار اللغة العربية'},
+                          'en': '✅ Arabic language selected'},
     'lang_en_picked':    {'ar': '✅ English language selected',
                           'en': '✅ English language selected'},
     'welcome':           {'ar': 'مرحباً بك يا {name} في نبض الصفقات\n\n'
