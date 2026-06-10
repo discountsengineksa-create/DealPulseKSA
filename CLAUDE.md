@@ -24,7 +24,7 @@ Three components share one PostgreSQL database (`discounts_engine` on localhost:
 
 - **`dashboard.py`** — Streamlit admin interface. A single 2800+ line file; all 32 pages are implemented as one long `if/elif` chain keyed on `page = st.sidebar.radio(...)`. No page routing abstraction.
 - **`deal_pulse_bot.py`** — Telegram bot using `pyTelegramBotAPI` (`telebot`). Exposes the coupon catalog to end-users via Arabic keyboard buttons and inline cards.
-- **PostgreSQL** — 31 tables. The `master` table is the source of truth for all store/coupon data.
+- **PostgreSQL** (Railway prod, via `DATABASE_URL`) — ~76 tables (grew well beyond the original 31; ~40% are empty/dormant pending-feature tables). The `master` table is the source of truth for all store/coupon data.
 
 ## Database Patterns
 
@@ -40,7 +40,7 @@ def get_conn():
 
 **`store_tags` column** is declared as plain `text` (NOT `text[]`), but data is written in PostgreSQL array-literal format `'{tag1,tag2,tag3}'`. Calls like `unnest(store_tags)`, `array_to_string(store_tags, ',')`, or `%s = ANY(store_tags)` will fail at runtime — the column is text, the operator expects array. To work with it in SQL, convert first: `string_to_array(trim(both '{}' from COALESCE(store_tags, '')), ',')`. For substring search, plain `store_tags ILIKE '%tag%'` works.
 
-**Engagement tracking**: `master.copy_clicks` and `master.link_clicks` are counters incremented by the bot. Individual events go to `action_logs` with `action_type` (search / click / copy) and `action_time`.
+**Engagement tracking**: `master.total_link_clicks` and `master.total_coupon_copies` are the LIVE counters incremented by the bot + API (`increment_link_clicks` / `increment_coupon_copies`). ⚠️ The columns `link_clicks`, `copy_clicks`, `click_count`, `total_clicks` are LEGACY/stale duplicates (out of sync with the live counters) and are NOT read by any live code — do not use them. Individual events go to `action_logs` with `action_type` (search / click_link / copy_coupon / view_*) and `action_time`.
 
 ## Key Tables
 

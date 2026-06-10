@@ -7173,7 +7173,7 @@ elif page == "تحليل المستخدمين":
 - ⚠️ البحث عن متجر/كوبون بالاسم: استخدم دائماً ILIKE مع % من الجانبين، لأن المستخدم
   قد يكتب جزء من الاسم فقط أو يخلط بين اسم المتجر ورقم/كود الكوبون.
   مثال: «كوبون نمشي5» يعني المتجر «نمشي» وكوبون احتواؤه «5»، فابحث:
-    SELECT store_id, public_coupon, last_time, copy_clicks, link_clicks, is_trending
+    SELECT store_id, public_coupon, last_time, total_coupon_copies, total_link_clicks, is_trending
     FROM master
     WHERE (store_id ILIKE '%' || '<اسم>' || '%' OR name_en ILIKE '%' || '<اسم>' || '%'
            OR public_coupon ILIKE '%' || '<كل المدخل>' || '%')
