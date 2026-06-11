@@ -1805,13 +1805,33 @@ function openLinkCurrent() {
 }
 
 function copyText(txt) {
-    // Telegram WebApp قد لا يدعم navigator.clipboard في كل الإصدارات — نضمن fallback
+    // داخل WebView تيليجرام: navigator.clipboard.writeText يرفض بشكل غير متزامن
+    // (لا يرميه try/catch) أو يكون غير معرّف — فنعتمد بديل execCommand كمسار موثوق.
+    const _fallbackCopy = () => {
+        try {
+            const ta = document.createElement('textarea');
+            ta.value = txt;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            ta.style.top = '0';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            ta.setSelectionRange(0, txt.length);   // iOS يحتاج المدى صراحةً
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+        } catch (e) { /* تجاهل — على الأقل عرضنا الكود */ }
+    };
     try {
-        navigator.clipboard.writeText(txt);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            // .catch يمسك الرفض غير المتزامن ويُشغّل البديل
+            navigator.clipboard.writeText(txt).catch(_fallbackCopy);
+        } else {
+            _fallbackCopy();
+        }
     } catch (e) {
-        const ta = document.createElement('textarea');
-        ta.value = txt; document.body.appendChild(ta);
-        ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+        _fallbackCopy();
     }
     showToast(S.copied);
 }
