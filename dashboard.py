@@ -12232,12 +12232,12 @@ if page == "🎨 الثيمات":
         _th_name = st.text_input("🏷️ اسم الثيم", placeholder="مثلاً: اليوم الوطني ١")
         st.markdown("**☀️ النهاري** (سطح المكتب إلزامي):")
         tn1, tn2 = st.columns(2)
-        _th_dd = tn1.file_uploader("نهاري · سطح مكتب", type=["png", "jpg", "jpeg", "webp"], key="th_dd")
-        _th_dm = tn2.file_uploader("نهاري · جوال", type=["png", "jpg", "jpeg", "webp"], key="th_dm")
+        _th_dd = tn1.file_uploader("☀️ نهاري · سطح مكتب — 1920×1080 (أفقي)", type=["png", "jpg", "jpeg", "webp"], key="th_dd")
+        _th_dm = tn2.file_uploader("☀️ نهاري · جوال — 1080×1920 (عمودي)", type=["png", "jpg", "jpeg", "webp"], key="th_dm")
         st.markdown("**🌙 الليلي** (اختياري — لو فاضي يُستخدم النهاري في الوضع الليلي):")
         tk1, tk2 = st.columns(2)
-        _th_kd = tk1.file_uploader("ليلي · سطح مكتب", type=["png", "jpg", "jpeg", "webp"], key="th_kd")
-        _th_km = tk2.file_uploader("ليلي · جوال", type=["png", "jpg", "jpeg", "webp"], key="th_km")
+        _th_kd = tk1.file_uploader("🌙 ليلي · سطح مكتب — 1920×1080 (أفقي)", type=["png", "jpg", "jpeg", "webp"], key="th_kd")
+        _th_km = tk2.file_uploader("🌙 ليلي · جوال — 1080×1920 (عمودي)", type=["png", "jpg", "jpeg", "webp"], key="th_km")
         if st.form_submit_button("➕ احفظ الثيم", type="primary"):
             if not (_th_name or "").strip():
                 st.warning("اكتب اسم الثيم.")
