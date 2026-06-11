@@ -4249,7 +4249,13 @@ elif page == "🎬 تحليلات الستوري":
               COALESCE(acts.copies, 0)                                    AS عدد_النسخ,
               agg.last_view                                               AS آخر_مشاهدة
             FROM agg
-            LEFT JOIN acts       USING (web_user_id, tg_user_id, store_id)
+            -- IS NOT DISTINCT FROM: ربط آمن مع NULL — صفوف الموقع فيها tg_user_id=NULL
+            -- وصفوف الميني فيها web_user_id=NULL؛ USING/= كانت تفشل (NULL=NULL ليس TRUE)
+            -- فتظهر كل النسخ/النقرات أصفاراً. هذا الربط يطابق NULL مع NULL.
+            LEFT JOIN acts
+                   ON acts.web_user_id IS NOT DISTINCT FROM agg.web_user_id
+                  AND acts.tg_user_id  IS NOT DISTINCT FROM agg.tg_user_id
+                  AND acts.store_id     = agg.store_id
             LEFT JOIN web_users wu ON wu.id          = agg.web_user_id
             LEFT JOIN bot_users bu ON bu.telegram_id = agg.tg_user_id
             ORDER BY agg.last_view DESC, agg.views DESC
