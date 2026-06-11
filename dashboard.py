@@ -4310,14 +4310,18 @@ elif page == "🎬 تحليلات الستوري":
                 _first_nonempty = lambda s: next((v for v in s if v and v != "—"), "—")
 
                 if sv_agg_mode == "store_total":
-                    # صف لكل متجر: نُلخّص العميل بعدد العملاء الفريدين
-                    journey["_pk"] = journey.apply(_pkey, axis=1)
+                    # صف لكل متجر: نعرض أسماء العملاء الحقيقيين (ما نخترع لا أرقام
+                    # ولا تسميات). كل قيمة في حقول الاتصال = القيم الفريدة الموجودة
+                    # فعلاً، مفصولة بفاصلة. لو ما فيه قيمة → "—".
+                    _real_join = lambda s: (", ".join(sorted({str(v).strip() for v in s
+                                                              if v and str(v).strip() and str(v).strip() != "—"}))
+                                            or "—")
                     _agg_spec = {
                         "المصدر":         _src_join,
-                        "العميل":         lambda s: f"👥 {journey.loc[s.index, '_pk'].nunique()} عميل",
-                        "تيليجرام":       lambda s: "—",
-                        "الإيميل":        lambda s: "—",
-                        "الجوال":         lambda s: "—",
+                        "العميل":         _real_join,
+                        "تيليجرام":       _real_join,
+                        "الإيميل":        _real_join,
+                        "الجوال":         _real_join,
                         "حالة_الستوري":   _trend,
                         "مرات_المشاهدة":  "sum",
                         "دخل_المتجر":     _yes,
@@ -4326,9 +4330,7 @@ elif page == "🎬 تحليلات الستوري":
                         "عدد_النسخ":      "sum",
                         "آخر_مشاهدة":     "max",
                     }
-                    journey = (journey.groupby(["المتجر"], as_index=False)
-                                       .agg(_agg_spec)
-                                       .drop(columns=["_pk"], errors="ignore"))
+                    journey = journey.groupby(["المتجر"], as_index=False).agg(_agg_spec)
                 else:   # customer_total: web+miniapp لنفس الشخص في صف واحد
                     journey["_pk"] = journey.apply(_pkey, axis=1)
                     _agg_spec = {
