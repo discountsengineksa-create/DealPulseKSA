@@ -737,7 +737,10 @@ def _get_pool() -> pg_pool.ThreadedConnectionPool:
     # Railway يُعطي postgres:// لكن psycopg2 يحتاج postgresql://
         if db_url.startswith("postgres://"):
             db_url = db_url.replace("postgres://", "postgresql://", 1)
-        return pg_pool.ThreadedConnectionPool(minconn=1, maxconn=10, dsn=db_url)
+        return pg_pool.ThreadedConnectionPool(
+            minconn=1, maxconn=10, dsn=db_url,
+            options="-c timezone=Asia/Riyadh",   # كل الأوقات تُعرض/تُحسب بتوقيت الرياض
+        )
     return pg_pool.ThreadedConnectionPool(
     minconn=1,
     maxconn=10,
@@ -746,6 +749,7 @@ def _get_pool() -> pg_pool.ThreadedConnectionPool:
     password=os.getenv("DB_PASSWORD"),
     host=os.getenv("DB_HOST"),
     port=os.getenv("DB_PORT"),
+    options="-c timezone=Asia/Riyadh",
 )
 
 
@@ -2590,7 +2594,7 @@ if page == "تحليل الأقسام":
         df_views["tag"] = df_views["tag"].astype(str).str.strip()
         df_views = df_views[df_views["tag"].isin(_valid_tags)].copy()
     if not df_views.empty:
-        df_views["action_time"] = (pd.to_datetime(df_views["action_time"])
+        df_views["action_time"] = (pd.to_datetime(df_views["action_time"], utc=True).dt.tz_localize(None)
                                    + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
         df_views["adate"]  = df_views["action_time"].dt.date
         df_views["hour"]   = df_views["action_time"].dt.hour
@@ -2642,7 +2646,7 @@ if page == "تحليل الأقسام":
     _tag_norm = {_norm(t): t for t in _valid_tags}
     if not df_search.empty:
         df_search = df_search.copy()
-        df_search["search_date"] = (pd.to_datetime(df_search["search_date"])
+        df_search["search_date"] = (pd.to_datetime(df_search["search_date"], utc=True).dt.tz_localize(None)
                                     + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
         df_search["adate"] = df_search["search_date"].dt.date
         df_search["cat_match"] = df_search["search_keyword"].apply(lambda k: _tag_norm.get(_norm(k)))
@@ -3407,7 +3411,7 @@ elif page == "تحليل المتاجر":
         _df_l = df_logs_raw.copy()
         if not _df_l.empty:
             _df_l["action_time"] = (
-                pd.to_datetime(_df_l["action_time"])
+                pd.to_datetime(_df_l["action_time"], utc=True).dt.tz_localize(None)
                 + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
         _df_f = df_fav_raw.copy()
         if not _df_f.empty:
@@ -3481,7 +3485,7 @@ elif page == "تحليل المتاجر":
         if not df_logs_raw.empty:
             d = df_logs_raw.copy()
             d["action_time"] = (
-                pd.to_datetime(d["action_time"])
+                pd.to_datetime(d["action_time"], utc=True).dt.tz_localize(None)
                 + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
             d["adate"] = d["action_time"].dt.date
             d = d[(d["adate"] >= sm_date_from)
@@ -3503,7 +3507,7 @@ elif page == "تحليل المتاجر":
         if not df_search_raw.empty:
             s = df_search_raw.copy()
             s["search_date"] = (
-                pd.to_datetime(s["search_date"])
+                pd.to_datetime(s["search_date"], utc=True).dt.tz_localize(None)
                 + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
             s["adate"] = s["search_date"].dt.date
             s = s[(s["adate"] >= sm_date_from)
@@ -4266,9 +4270,10 @@ elif page == "🎬 تحليلات الستوري":
         else:
             journey["المصدر"] = journey["source"].map(
                 {"web": "🌐 الموقع", "telegram_miniapp": "🔹 الميني ويب"}).fillna(journey["source"])
-            # viewed_at مخزّن UTC (timestamp without tz) — نحوّله لتوقيت الرياض (+3) للعرض.
-            journey["آخر_مشاهدة"] = (pd.to_datetime(journey["آخر_مشاهدة"], errors="coerce")
-                                     + pd.Timedelta(hours=3)).dt.strftime("%Y-%m-%d %H:%M")
+            # باندا يقرأ timestamptz كـ UTC ويعرضه UTC؛ +3 لعرض توقيت الرياض (نفس
+            # نمط RIYADH_TZ_OFFSET_HOURS في باقي الداشبورد). tz-aware + Timedelta سليم.
+            journey["آخر_مشاهدة"] = (pd.to_datetime(journey["آخر_مشاهدة"], errors="coerce", utc=True)
+                                     + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS)).dt.strftime("%Y-%m-%d %H:%M")
             journey.drop(columns=["source"], inplace=True)
             cols_order = ["المصدر", "العميل", "تيليجرام", "الإيميل", "الجوال",
                           "المتجر", "حالة_الستوري", "مرات_المشاهدة",

@@ -38,6 +38,9 @@ def get_pool() -> pg_pool.ThreadedConnectionPool:
                         minconn=2,
                         maxconn=20,
                         dsn=db_url,
+                        # كل الأعمدة timestamptz → الجلسة بتوقيت الرياض تجعل القراءة/الكتابة
+                        # والمقارنات الزمنية (now()/CURRENT_DATE) بتوقيت السعودية تلقائياً.
+                        options="-c timezone=Asia/Riyadh",
                     )
                 else:
                     _pool = pg_pool.ThreadedConnectionPool(
@@ -48,6 +51,7 @@ def get_pool() -> pg_pool.ThreadedConnectionPool:
                         password=os.getenv("DB_PASSWORD"),
                         host=os.getenv("DB_HOST"),
                         port=os.getenv("DB_PORT"),
+                        options="-c timezone=Asia/Riyadh",
                     )
     return _pool
 

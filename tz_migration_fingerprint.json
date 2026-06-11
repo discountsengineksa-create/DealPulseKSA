@@ -1,0 +1,127 @@
+{
+ "action_logs.action_time": {
+  "count": 1876,
+  "min": "2026-05-01 16:44:16.44017",
+  "max": "2026-06-11 12:01:36.178451"
+ },
+ "auto_rules.last_run": {
+  "count": 0,
+  "min": null,
+  "max": null
+ },
+ "bot_users.joined_at": {
+  "count": 5,
+  "min": "2026-05-03 23:07:52.79336",
+  "max": "2026-06-10 15:06:34.998467"
+ },
+ "bot_users.last_seen": {
+  "count": 5,
+  "min": "2026-05-09 08:38:44.568445",
+  "max": "2026-06-11 10:31:58.896496"
+ },
+ "bot_users.search_date_timestamp": {
+  "count": 0,
+  "min": null,
+  "max": null
+ },
+ "broadcast_logs.sent_at": {
+  "count": 4,
+  "min": "2026-06-06 20:31:23.346277",
+  "max": "2026-06-07 07:03:52.558296"
+ },
+ "code_reports.created_at": {
+  "count": 10,
+  "min": "2026-06-03 02:02:10.008059",
+  "max": "2026-06-11 07:12:43.132597"
+ },
+ "code_reports.resolved_at": {
+  "count": 0,
+  "min": null,
+  "max": null
+ },
+ "content_studio_logs.created_at": {
+  "count": 0,
+  "min": null,
+  "max": null
+ },
+ "direct_search.search_date": {
+  "count": 168,
+  "min": "2026-05-01 17:11:59.410366",
+  "max": "2026-06-10 21:29:08.177213"
+ },
+ "master.suspended_at": {
+  "count": 0,
+  "min": null,
+  "max": null
+ },
+ "password_reset_tokens.created_at": {
+  "count": 15,
+  "min": "2026-05-09 17:21:47.049613",
+  "max": "2026-05-31 17:48:09.571253"
+ },
+ "password_reset_tokens.expires_at": {
+  "count": 15,
+  "min": "2026-05-09 17:36:47.064045",
+  "max": "2026-05-31 18:03:09.576447"
+ },
+ "product_comparisons.created_at": {
+  "count": 0,
+  "min": null,
+  "max": null
+ },
+ "security_blacklist.block_date": {
+  "count": 0,
+  "min": null,
+  "max": null
+ },
+ "security_threats.detection_time": {
+  "count": 0,
+  "min": null,
+  "max": null
+ },
+ "sent_coupon_messages.sent_at": {
+  "count": 326,
+  "min": "2026-05-02 18:48:23.833667",
+  "max": "2026-06-10 21:27:47.264626"
+ },
+ "social_posts_log.attempted_at": {
+  "count": 104,
+  "min": "2026-05-18 19:42:47.564906",
+  "max": "2026-06-11 06:33:46.637517"
+ },
+ "social_posts_log.completed_at": {
+  "count": 104,
+  "min": "2026-05-18 19:42:47.773966",
+  "max": "2026-06-11 06:33:46.646846"
+ },
+ "story_views.viewed_at": {
+  "count": 319,
+  "min": "2026-06-03 16:59:19.799982",
+  "max": "2026-06-11 12:02:08.107887"
+ },
+ "support_tickets.created_at": {
+  "count": 4,
+  "min": "2026-06-08 08:53:37.566747",
+  "max": "2026-06-10 21:29:46.74554"
+ },
+ "support_tickets.replied_at": {
+  "count": 3,
+  "min": "2026-06-08 08:55:27.403704",
+  "max": "2026-06-08 09:09:30.461177"
+ },
+ "unavailable_codes_requests.requested_at": {
+  "count": 9,
+  "min": "2026-05-01 17:12:21.646998",
+  "max": "2026-05-03 22:46:46.989608"
+ },
+ "web_users.created_at": {
+  "count": 7,
+  "min": "2026-05-09 16:22:03.314183",
+  "max": "2026-06-02 14:34:53.306883"
+ },
+ "web_users.last_seen": {
+  "count": 7,
+  "min": "2026-05-09 16:42:45.242933",
+  "max": "2026-06-11 07:41:38.685031"
+ }
+}

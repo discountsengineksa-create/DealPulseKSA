@@ -60,12 +60,14 @@ bot = telebot.TeleBot(TOKEN)
 
 
 def _build_pool() -> pg_pool.ThreadedConnectionPool:
+    # توقيت الجلسة Asia/Riyadh: كل الأعمدة timestamptz → الكتابة/المقارنات بتوقيت السعودية.
+    _tz = "-c timezone=Asia/Riyadh"
     if _DATABASE_URL:
         url = _DATABASE_URL
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql://", 1)
-        return pg_pool.ThreadedConnectionPool(minconn=2, maxconn=20, dsn=url)
-    return pg_pool.ThreadedConnectionPool(minconn=2, maxconn=20, **DB_CONFIG)
+        return pg_pool.ThreadedConnectionPool(minconn=2, maxconn=20, dsn=url, options=_tz)
+    return pg_pool.ThreadedConnectionPool(minconn=2, maxconn=20, options=_tz, **DB_CONFIG)
 
 _db_pool: pg_pool.ThreadedConnectionPool | None = None
 _db_pool_lock = threading.Lock()
