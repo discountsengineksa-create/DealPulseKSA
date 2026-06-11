@@ -4621,7 +4621,8 @@ elif page == "البحث عن كود":
                 lambda p: 'bot' if 'bot' in str(p).lower() or 'telegram' in str(p).lower()
                 else ('web' if 'web' in str(p).lower() else 'other')
             )
-            df_search['search_date'] = pd.to_datetime(df_search['search_date'], errors='coerce')
+            # timestamptz بعد migration_051 → نقرأ utc=True ثم نحوّل للرياض (نمط _ksa_dt)
+            df_search['search_date'] = _ksa_dt(df_search['search_date'])
 
             # ─── فلتر تاريخ (من - إلى) ───────────────────────────────
             _min_d = df_search['search_date'].min().date() if df_search['search_date'].notna().any() else date.today()
@@ -6866,8 +6867,9 @@ elif page == "تحليل المستخدمين":
                                     + ("✅ مربوط (موقع ↔ تيليجرام)"
                                        if wu_id and bu_tid else "⛔ قناة واحدة"))
                     with pc3:
+                        # last_seen صار timestamptz → _ksa_dt يضمن العرض بتوقيت الرياض
                         st.markdown(f"**⏱️ آخر ظهور:** "
-                                    f"{pd.to_datetime(sel_row['last_seen']).strftime('%Y-%m-%d %H:%M') if pd.notna(sel_row['last_seen']) else '—'}")
+                                    f"{_ksa_dt(pd.Series([sel_row['last_seen']])).iloc[0].strftime('%Y-%m-%d %H:%M') if pd.notna(sel_row['last_seen']) else '—'}")
 
                     # ── سيرة الحياة (UNION ALL) ────────────────────────
                     # UID list: نوحد رصد الأحداث من كل القنوات. للمربوط: bu.telegram_id
