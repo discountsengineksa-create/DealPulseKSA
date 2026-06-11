@@ -1047,6 +1047,7 @@ def _sa_load_actions() -> pd.DataFrame:
             """
             SELECT a.action_time, a.action_type, a.store_id, a.user_id,
                    COALESCE(a.source, 'bot')      AS source,
+                   a.story_view_id,                              -- NULL = حركة على المتجر مباشرة، غير-NULL = من داخل الستوري
                    a.device_class,                              -- web: desktop/mobile/tablet/bot
                    a.is_datacenter, a.is_proxy, a.quality_score,
                    a.city          AS geo_city,                 -- web geo (من إثراء action_logs)
@@ -3623,12 +3624,19 @@ elif page == "تحليل المتاجر":
 
         if not df_logs.empty:
             ev = df_logs.copy()
-            ev["copy"]   = (ev["action_type"] == "copy_coupon").astype(int)
-            ev["click"]  = (ev["action_type"] == "click_link").astype(int)
-            ev["srch"]   = (ev["action_type"] == "search").astype(int)
+            # story_view_id يفصل: NULL = حركة على المتجر مباشرة، غير-NULL = داخل ستوري.
+            # نسخ/نقر المتجر مستقلان عن نسخ/نقر الستوري (الجدول الستوري يعدّ الأخيرة).
+            _is_story = ev["story_view_id"].notna()
+            ev["copy"]        = ((ev["action_type"] == "copy_coupon") & ~_is_story).astype(int)
+            ev["click"]       = ((ev["action_type"] == "click_link")  & ~_is_story).astype(int)
+            ev["copy_story"]  = ((ev["action_type"] == "copy_coupon") &  _is_story).astype(int)
+            ev["click_story"] = ((ev["action_type"] == "click_link")  &  _is_story).astype(int)
+            ev["srch"]        = (ev["action_type"] == "search").astype(int)
             agg = (ev.groupby(_grp_keys, dropna=False)
                      .agg(copy=("copy", "sum"),
                           click=("click", "sum"),
+                          copy_story=("copy_story", "sum"),
+                          click_story=("click_story", "sum"),
                           srch=("srch", "sum"),
                           first_action=("action_time", "min"),
                           last_action=("action_time", "max"),
@@ -3671,6 +3679,8 @@ elif page == "تحليل المتاجر":
                     "ip_hex":      [None] * len(miss),
                     "copy":        [0] * len(miss),
                     "click":       [0] * len(miss),
+                    "copy_story":  [0] * len(miss),
+                    "click_story": [0] * len(miss),
                     "srch":        [0] * len(miss),
                     "first_action": miss["created_at"].values,
                     "last_action": miss["created_at"].values,
@@ -3738,14 +3748,19 @@ elif page == "تحليل المتاجر":
             agg = agg.rename(columns={"src_any": "المصدر",
                                        "store_id": "المتجر",
                                        "copy": "نسخ", "click": "نقر",
+                                       "copy_story": "نسخ ستوري",
+                                       "click_story": "نقر ستوري",
                                        "srch": "بحث"})
-            agg["إجمالي الحركات"] = agg["نسخ"] + agg["نقر"] + agg["بحث"]
+            agg["إجمالي الحركات"] = (agg["نسخ"] + agg["نقر"]
+                                     + agg["نسخ ستوري"] + agg["نقر ستوري"]
+                                     + agg["بحث"])
 
             _cols = ["الاسم", "الإيميل", "الجوال", "تيليجرام",
                       "المدينة", "المصدر"]
             if _store_pick == "الكل":
                 _cols.append("المتجر")
-            _cols += ["نسخ", "نقر", "بحث", "إجمالي الحركات",
+            _cols += ["نسخ", "نقر", "نسخ ستوري", "نقر ستوري",
+                       "بحث", "إجمالي الحركات",
                        "مفضل", "تاريخ أول حركة", "تاريخ آخر حركة"]
             agg = agg.sort_values("إجمالي الحركات", ascending=False)
             st.dataframe(agg[_cols], hide_index=True, width='stretch')
