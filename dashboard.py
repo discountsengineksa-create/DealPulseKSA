@@ -4275,7 +4275,18 @@ elif page == "🎬 تحليلات الستوري":
                           "نسخ_الكود", "عدد_النسخ",
                           "آخر_مشاهدة"]
             journey = journey[cols_order]
-            st.dataframe(journey, width="stretch", hide_index=True)
+
+            # ─── بحث باسم المتجر ─────────────────────────────────────────
+            _sv_q = st.text_input("🔎 بحث باسم المتجر", "", key="sv_store_search",
+                                  placeholder="اكتب اسم المتجر لتصفية الصفوف…").strip()
+            if _sv_q:
+                journey = journey[journey["المتجر"].astype(str)
+                                  .str.contains(_sv_q, case=False, na=False)]
+
+            if journey.empty:
+                st.info("📭 لا يوجد متجر مطابق للبحث.")
+            else:
+                st.dataframe(journey, width="stretch", hide_index=True)
             st.caption(f"📋 {len(journey)} صف — كل صف عميل × متجر شاف ستوريه. الحركات داخل الستوري فقط (story_view_id).")
 
             # ─── تحميل Excel ─────────────────────────────────────────────
