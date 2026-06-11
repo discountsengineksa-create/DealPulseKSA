@@ -4126,7 +4126,11 @@ elif page == "🎬 تحليلات الستوري":
     # ─── شريط الفلاتر: المصدر (segmented_control) + زر تحديث ─────────
     _sv_c1, _sv_c2 = st.columns([4, 1])
     with _sv_c1:
+        # «الكل» يفصل صفوف الموقع عن الميني (نفس الشخص قد يظهر مرتين).
+        # «👤 إجمالي العميل» يدمج الصفّين عبر telegram_username ↔ bot_users.username
+        # → 10 موقع + 7 ميني = 17 إجمالي للعميل في كل متجر.
         _SV_SRC_AR = {"all": "الكل",
+                      "unified": "👤 إجمالي العميل",
                       "telegram_miniapp": "🔹 الميني-ويب",
                       "web": "🌐 الموقع"}
         _sv_src_label = st.segmented_control(
@@ -4135,7 +4139,9 @@ elif page == "🎬 تحليلات الستوري":
         )
         sv_source_filter = next((k for k, v in _SV_SRC_AR.items()
                                  if v == _sv_src_label), "all")
-        if sv_source_filter == "all":
+        # all/unified يعرضان كل المصادر؛ unified يدمج الصفوف لاحقاً في الـSQL.
+        sv_unified = (sv_source_filter == "unified")
+        if sv_source_filter in ("all", "unified"):
             sv_source_filter = None
     with _sv_c2:
         st.markdown("&nbsp;", unsafe_allow_html=True)
@@ -4282,6 +4288,38 @@ elif page == "🎬 تحليلات الستوري":
             journey["آخر_مشاهدة"] = (pd.to_datetime(journey["آخر_مشاهدة"], errors="coerce", utc=True)
                                      + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS)).dt.strftime("%Y-%m-%d %H:%M")
             journey.drop(columns=["source"], inplace=True)
+
+            # ─── دمج «إجمالي العميل»: web+miniapp لنفس الشخص في صف واحد ───
+            # المفتاح: telegram username موحَّد عبر القناتين (wu.telegram_username
+            # ↔ bu.username). لو فاضي نستخدم الإيميل، وإلا نستخدم اسم العميل.
+            # سلوك الجمع: الأعداد تُجمع، حالة الستوري (ترند/عادي) bool_or، الأعلام
+            # «نعم/لا» تتحول لـ«نعم» لو في واحد قال نعم، التواريخ MAX.
+            if sv_unified:
+                def _pkey(r):
+                    tg = str(r.get("تيليجرام") or "").strip()
+                    if tg and tg not in ("—", "@"): return f"tg:{tg.lower()}"
+                    em = str(r.get("الإيميل") or "").strip()
+                    if em and em != "—": return f"em:{em.lower()}"
+                    return f"nm:{str(r.get('العميل') or '').strip().lower()}"
+                journey["_pk"] = journey.apply(_pkey, axis=1)
+                _agg_spec = {
+                    "المصدر":         lambda s: " + ".join(sorted(set(s.dropna()))),
+                    "العميل":         "first",
+                    "تيليجرام":       lambda s: next((v for v in s if v and v != "—"), "—"),
+                    "الإيميل":        lambda s: next((v for v in s if v and v != "—"), "—"),
+                    "الجوال":         lambda s: next((v for v in s if v and v != "—"), "—"),
+                    "حالة_الستوري":   lambda s: "🔥 ترند" if (s == "🔥 ترند").any() else ("— غير معروف" if (s == "— غير معروف").any() else "🎬 عادي"),
+                    "مرات_المشاهدة":  "sum",
+                    "دخل_المتجر":     lambda s: "✅ نعم" if (s == "✅ نعم").any() else "❌ لا",
+                    "عدد_الزيارات":   "sum",
+                    "نسخ_الكود":      lambda s: "✅ نعم" if (s == "✅ نعم").any() else "❌ لا",
+                    "عدد_النسخ":      "sum",
+                    "آخر_مشاهدة":     "max",
+                }
+                journey = (journey.groupby(["_pk", "المتجر"], as_index=False)
+                                   .agg(_agg_spec)
+                                   .drop(columns=["_pk"]))
+
             cols_order = ["المصدر", "العميل", "تيليجرام", "الإيميل", "الجوال",
                           "المتجر", "حالة_الستوري", "مرات_المشاهدة",
                           "دخل_المتجر", "عدد_الزيارات",
@@ -4300,7 +4338,8 @@ elif page == "🎬 تحليلات الستوري":
                 st.info("📭 لا يوجد متجر مطابق للبحث.")
             else:
                 st.dataframe(journey, width="stretch", hide_index=True)
-            st.caption(f"📋 {len(journey)} صف — كل صف عميل × متجر شاف ستوريه. الحركات داخل الستوري فقط (story_view_id).")
+            _sv_cap_mode = "عميل × متجر (إجمالي القناتين مجموع)" if sv_unified else "صف لكل (عميل × متجر × قناة)"
+            st.caption(f"📋 {len(journey)} صف — {_sv_cap_mode}. الحركات داخل الستوري فقط (story_view_id).")
 
             # ─── تحميل Excel ─────────────────────────────────────────────
             _sv_xlsx_buf = BytesIO()
