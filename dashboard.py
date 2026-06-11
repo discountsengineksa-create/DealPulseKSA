@@ -1020,8 +1020,15 @@ def kpi_card(emoji, label, value, accent="emerald", note=None):
 # ════════════════════════════════════════════════════════════════════════════
 #  Helpers خاصة بقسم «تحليل المتاجر» (Store Analytics BI Suite)
 # ════════════════════════════════════════════════════════════════════════════
-# action_time يُكتب بـ NOW() على خادم Railway (UTC) → الرياض = UTC+3 (بدون توقيت صيفي).
+# الأعمدة الزمنية كلها timestamptz؛ باندا يقرأها كـ UTC. الرياض = UTC+3 (بدون توقيت صيفي).
 RIYADH_TZ_OFFSET_HOURS = 3
+
+
+def _ksa_dt(s):
+    """سلسلة/عمود وقت من القاعدة → ‏Timestamp‏ naive بتوقيت الرياض (للعرض والمقارنة).
+    يتعامل مع tz-aware (timestamptz) أو naive أو نص؛ errors='coerce' للقيم الفاسدة."""
+    return (pd.to_datetime(s, utc=True, errors="coerce").dt.tz_localize(None)
+            + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
 _SA_ARABIC_DAYS = ["الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد"]
 
 
@@ -4688,7 +4695,7 @@ elif page == "البحث عن كود":
                     else:
                         df_b = df_subset[df_subset['src'] == 'bot'].copy()
                         df_b['who'] = df_b['bot_username'].fillna(df_b['user_id'].astype(str)).replace('nan', '—')
-                        df_b['search_date'] = pd.to_datetime(df_b['search_date']).dt.strftime('%Y-%m-%d %H:%M')
+                        df_b['search_date'] = _ksa_dt(df_b['search_date']).dt.strftime('%Y-%m-%d %H:%M')
                         df_b_view = df_b[['search_keyword', 'store', 'who', 'search_date']].rename(columns={
                             'search_keyword': 'كلمة البحث',
                             'store':          'تطابق مع',
@@ -4703,7 +4710,7 @@ elif page == "البحث عن كود":
                     else:
                         df_w = df_subset[df_subset['src'] == 'web'].copy()
                         df_w['who'] = df_w['user_email'].fillna('—')
-                        df_w['search_date'] = pd.to_datetime(df_w['search_date']).dt.strftime('%Y-%m-%d %H:%M')
+                        df_w['search_date'] = _ksa_dt(df_w['search_date']).dt.strftime('%Y-%m-%d %H:%M')
                         df_w_view = df_w[['search_keyword', 'store', 'who', 'search_date']].rename(columns={
                             'search_keyword': 'كلمة البحث',
                             'store':          'تطابق مع',
@@ -4785,7 +4792,7 @@ elif page == "طلبات الأكواد":
         req_df = pd.read_sql(query_requests, conn)
 
         if not req_df.empty:
-            req_df["تاريخ الطلب"] = pd.to_datetime(req_df["تاريخ الطلب"], errors='coerce')
+            req_df["تاريخ الطلب"] = _ksa_dt(req_df["تاريخ الطلب"])
             req_df['is_pending'] = (req_df["رقم الماستر"] == "قيد الانتظار ⏳")
 
             # --- كروت الإحصائيات (قبل الفلترة — الإجمالي الحقيقي) ---
@@ -5166,7 +5173,7 @@ elif page == "📣 بلاغات الأكواد":
             disp = reports.copy()
             disp["source"]     = disp["source"].map(SRC_AR).fillna(disp["source"])
             disp["status"]     = disp["status"].map(STATUS_AR).fillna(disp["status"])
-            disp["created_at"] = pd.to_datetime(disp["created_at"], errors="coerce") \
+            disp["created_at"] = _ksa_dt(disp["created_at"]) \
                                        .dt.strftime('%Y-%m-%d %H:%M')
             disp["تيليجرام"] = disp["reporter_telegram_username"].apply(
                 lambda v: f"@{v}" if v else "—")
@@ -5283,7 +5290,7 @@ elif page == "تحليل طلبات الأكواد":
             st.info("📭 ما فيه طلبات مسجّلة حتى الآن.")
             st.stop()
 
-        df_req["requested_at"] = pd.to_datetime(df_req["requested_at"], errors="coerce")
+        df_req["requested_at"] = _ksa_dt(df_req["requested_at"])
         df_req["is_pending"]   = df_req["master_id"].isna()
 
         # ─── فلتر التاريخ + المصدر ──────────────────────────────────────────
@@ -5536,7 +5543,7 @@ elif page == "بيانات المستخدمين":
                 # تنسيق التواريخ بشكل مقروء
                 for _dc in ['joined_at', 'last_seen', 'search_date_timestamp']:
                     if _dc in users_df.columns:
-                        users_df[_dc] = pd.to_datetime(users_df[_dc], errors='coerce').dt.strftime('%Y-%m-%d')
+                        users_df[_dc] = _ksa_dt(users_df[_dc]).dt.strftime('%Y-%m-%d')
 
                 # ── KPIs ──
                 st.write("### 🔑 ملخص القاعدة")
@@ -5682,7 +5689,7 @@ elif page == "مستخدمو الموقع":
             # تنسيق التواريخ
             for _dc in ['created_at', 'last_seen']:
                 if _dc in users_df.columns:
-                    users_df[_dc] = pd.to_datetime(users_df[_dc], errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
+                    users_df[_dc] = _ksa_dt(users_df[_dc]).dt.strftime('%Y-%m-%d %H:%M')
 
             # ترجمة الأعمدة
             users_df = users_df.rename(columns={
