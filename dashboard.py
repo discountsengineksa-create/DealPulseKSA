@@ -4266,8 +4266,9 @@ elif page == "🎬 تحليلات الستوري":
         else:
             journey["المصدر"] = journey["source"].map(
                 {"web": "🌐 الموقع", "telegram_miniapp": "🔹 الميني ويب"}).fillna(journey["source"])
-            journey["آخر_مشاهدة"] = pd.to_datetime(journey["آخر_مشاهدة"], errors="coerce") \
-                                          .dt.strftime("%Y-%m-%d %H:%M")
+            # viewed_at مخزّن UTC (timestamp without tz) — نحوّله لتوقيت الرياض (+3) للعرض.
+            journey["آخر_مشاهدة"] = (pd.to_datetime(journey["آخر_مشاهدة"], errors="coerce")
+                                     + pd.Timedelta(hours=3)).dt.strftime("%Y-%m-%d %H:%M")
             journey.drop(columns=["source"], inplace=True)
             cols_order = ["المصدر", "العميل", "تيليجرام", "الإيميل", "الجوال",
                           "المتجر", "حالة_الستوري", "مرات_المشاهدة",
