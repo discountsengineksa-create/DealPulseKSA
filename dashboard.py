@@ -3632,16 +3632,29 @@ elif page == "تحليل المتاجر":
             # story_view_id يفصل: NULL = حركة على المتجر مباشرة، غير-NULL = داخل ستوري.
             # نسخ/نقر المتجر مستقلان عن نسخ/نقر الستوري (الجدول الستوري يعدّ الأخيرة).
             _is_story = ev["story_view_id"].notna()
-            ev["copy"]        = ((ev["action_type"] == "copy_coupon") & ~_is_story).astype(int)
-            ev["click"]       = ((ev["action_type"] == "click_link")  & ~_is_story).astype(int)
-            ev["copy_story"]  = ((ev["action_type"] == "copy_coupon") &  _is_story).astype(int)
-            ev["click_story"] = ((ev["action_type"] == "click_link")  &  _is_story).astype(int)
-            ev["srch"]        = (ev["action_type"] == "search").astype(int)
+            # عضوية الترند: ⚠️ تستخدم daily_ids/weekly_ids الحالية (snapshot لحظة العرض).
+            # ليست تاريخية للحظة الحركة — كل النسخ/النقر على متجر هو الآن في الترند
+            # تُحسب «ترند يومي/أسبوعي». أعمدة *subset* للنسخ/النقر، لا تضاف للإجمالي.
+            _in_daily  = ev["store_id"].isin(daily_ids)
+            _in_weekly = ev["store_id"].isin(weekly_ids)
+            ev["copy"]         = ((ev["action_type"] == "copy_coupon") & ~_is_story).astype(int)
+            ev["click"]        = ((ev["action_type"] == "click_link")  & ~_is_story).astype(int)
+            ev["copy_story"]   = ((ev["action_type"] == "copy_coupon") &  _is_story).astype(int)
+            ev["click_story"]  = ((ev["action_type"] == "click_link")  &  _is_story).astype(int)
+            ev["copy_daily"]   = ((ev["action_type"] == "copy_coupon") &  _in_daily).astype(int)
+            ev["click_daily"]  = ((ev["action_type"] == "click_link")  &  _in_daily).astype(int)
+            ev["copy_weekly"]  = ((ev["action_type"] == "copy_coupon") &  _in_weekly).astype(int)
+            ev["click_weekly"] = ((ev["action_type"] == "click_link")  &  _in_weekly).astype(int)
+            ev["srch"]         = (ev["action_type"] == "search").astype(int)
             agg = (ev.groupby(_grp_keys, dropna=False)
                      .agg(copy=("copy", "sum"),
                           click=("click", "sum"),
                           copy_story=("copy_story", "sum"),
                           click_story=("click_story", "sum"),
+                          copy_daily=("copy_daily", "sum"),
+                          click_daily=("click_daily", "sum"),
+                          copy_weekly=("copy_weekly", "sum"),
+                          click_weekly=("click_weekly", "sum"),
                           srch=("srch", "sum"),
                           first_action=("action_time", "min"),
                           last_action=("action_time", "max"),
@@ -3680,13 +3693,17 @@ elif page == "تحليل المتاجر":
                 _plat_ar = {"bot": "📱 البوت", "web": "🌐 الموقع",
                              "miniapp": "🔹 الميني-ويب"}
                 new_rows = {
-                    "user_id":     miss["user_id"].values,
-                    "ip_hex":      [None] * len(miss),
-                    "copy":        [0] * len(miss),
-                    "click":       [0] * len(miss),
-                    "copy_story":  [0] * len(miss),
-                    "click_story": [0] * len(miss),
-                    "srch":        [0] * len(miss),
+                    "user_id":      miss["user_id"].values,
+                    "ip_hex":       [None] * len(miss),
+                    "copy":         [0] * len(miss),
+                    "click":        [0] * len(miss),
+                    "copy_story":   [0] * len(miss),
+                    "click_story":  [0] * len(miss),
+                    "copy_daily":   [0] * len(miss),
+                    "click_daily":  [0] * len(miss),
+                    "copy_weekly":  [0] * len(miss),
+                    "click_weekly": [0] * len(miss),
+                    "srch":         [0] * len(miss),
                     "first_action": miss["created_at"].values,
                     "last_action": miss["created_at"].values,
                     "src_any":     miss["platform"].map(_plat_ar)
@@ -3717,8 +3734,13 @@ elif page == "تحليل المتاجر":
                 _fav_full["uid"] = _fav_full["telegram_id"].fillna(
                     _fav_full["web_user_id"])
                 _fav_set = set(zip(_fav_full["uid"], _fav_full["store_id"]))
+                # عدد المفضّلين الفريدين لكل متجر — يُستخدم في وضع إجمالي المتجر
+                _fav_count_per_store = (_fav_full.dropna(subset=["store_id"])
+                                                  .groupby("store_id")["uid"]
+                                                  .nunique().to_dict())
             else:
                 _fav_set = set()
+                _fav_count_per_store = {}
 
             if _store_pick == "الكل":
                 agg["مفضل"] = [
@@ -3750,19 +3772,32 @@ elif page == "تحليل المتاجر":
             agg["تاريخ آخر حركة"] = pd.to_datetime(
                 agg["last_action"], errors="coerce").dt.strftime(
                     "%Y-%m-%d %H:%M")
-            agg = agg.rename(columns={"src_any": "المصدر",
-                                       "store_id": "المتجر",
-                                       "copy": "نسخ", "click": "نقر",
-                                       "copy_story": "نسخ ستوري",
-                                       "click_story": "نقر ستوري",
-                                       "srch": "بحث"})
+            agg = agg.rename(columns={"src_any":       "المصدر",
+                                       "store_id":      "المتجر",
+                                       "copy":          "نسخ",
+                                       "click":         "نقر",
+                                       "copy_story":    "نسخ ستوري",
+                                       "click_story":   "نقر ستوري",
+                                       "copy_daily":    "نسخ ترند يومي",
+                                       "click_daily":   "نقر ترند يومي",
+                                       "copy_weekly":   "نسخ ترند أسبوعي",
+                                       "click_weekly":  "نقر ترند أسبوعي",
+                                       "srch":          "بحث"})
+            # ⚠️ إجمالي الحركات = نسخ + نقر + ستوري + بحث فقط.
+            # أعمدة الترند (يومي/أسبوعي) مجموعات فرعية من النسخ/النقر — لو أضفناها
+            # للإجمالي راح يصير double-counting.
             agg["إجمالي الحركات"] = (agg["نسخ"] + agg["نقر"]
                                      + agg["نسخ ستوري"] + agg["نقر ستوري"]
                                      + agg["بحث"])
 
+            # ترتيب الأعمدة المشترك للحركات: المتجر/الستوري/الترند/البحث/الإجمالي
+            _ACTION_COLS = ["نسخ", "نقر",
+                            "نسخ ستوري", "نقر ستوري",
+                            "نسخ ترند يومي", "نقر ترند يومي",
+                            "نسخ ترند أسبوعي", "نقر ترند أسبوعي",
+                            "بحث", "إجمالي الحركات"]
+
             # ─── الدمج: «إجمالي المتجر» أو «إجمالي العميل» ───────────────
-            # نفس نمط صفحة تحليلات الستوري. السومات تشمل المتجر + الستوري معاً
-            # (الأعمدة الخمسة) والإجمالي يجمعها جميعاً.
             if sm_agg_mode in ("store_total", "customer_total"):
                 _yes = lambda s: "✅ نعم" if (s == "✅ نعم").any() else "—"
                 _src_join = lambda s: "، ".join(sorted({str(x) for x in s if x}))
@@ -3772,24 +3807,22 @@ elif page == "تحليل المتاجر":
                     # عند اختيار متجر واحد ما يوجد عمود المتجر — نضيفه يدوياً
                     agg["المتجر"] = _store_pick
 
+                _sum_actions = {c: "sum" for c in _ACTION_COLS}
+
                 if sm_agg_mode == "store_total":
                     _agg_spec = {
                         "المصدر":          _src_join,
-                        "نسخ":             "sum",
-                        "نقر":             "sum",
-                        "نسخ ستوري":       "sum",
-                        "نقر ستوري":       "sum",
-                        "بحث":             "sum",
-                        "إجمالي الحركات":  "sum",
-                        "مفضل":            _yes,
-                        "تاريخ أول حركة":  "min",   # YYYY-MM-DD HH:MM يقارن صحيح كسلسلة
+                        **_sum_actions,
+                        "مفضل":            _yes,   # سيُستبدل بعدد المفضّلين أدناه
+                        "تاريخ أول حركة":  "min",
                         "تاريخ آخر حركة":  "max",
                     }
                     agg = agg.groupby(["المتجر"], as_index=False).agg(_agg_spec)
-                    _cols = ["المتجر", "المصدر", "نسخ", "نقر",
-                              "نسخ ستوري", "نقر ستوري",
-                              "بحث", "إجمالي الحركات", "مفضل",
-                              "تاريخ أول حركة", "تاريخ آخر حركة"]
+                    # استبدال مفضل بعدد العملاء الفريدين الذين فضّلوا المتجر
+                    agg["مفضل"] = agg["المتجر"].map(_fav_count_per_store).fillna(0).astype(int)
+                    agg = agg.rename(columns={"مفضل": "عدد المفضلين"})
+                    _cols = ["المتجر", "المصدر", *_ACTION_COLS,
+                              "عدد المفضلين", "تاريخ أول حركة", "تاريخ آخر حركة"]
                 else:   # customer_total: عميل × متجر (يدمج القنوات)
                     def _pkey(r):
                         tg = str(r.get("تيليجرام") or "").strip()
@@ -3805,12 +3838,7 @@ elif page == "تحليل المتاجر":
                         "تيليجرام":        _first_nonempty,
                         "المدينة":         _first_nonempty,
                         "المصدر":          _src_join,
-                        "نسخ":             "sum",
-                        "نقر":             "sum",
-                        "نسخ ستوري":       "sum",
-                        "نقر ستوري":       "sum",
-                        "بحث":             "sum",
-                        "إجمالي الحركات":  "sum",
+                        **_sum_actions,
                         "مفضل":            _yes,
                         "تاريخ أول حركة":  "min",
                         "تاريخ آخر حركة":  "max",
@@ -3820,17 +3848,15 @@ elif page == "تحليل المتاجر":
                               .drop(columns=["_pk"]))
                     _cols = ["الاسم", "الإيميل", "الجوال", "تيليجرام",
                               "المدينة", "المصدر", "المتجر",
-                              "نسخ", "نقر", "نسخ ستوري", "نقر ستوري",
-                              "بحث", "إجمالي الحركات", "مفضل",
+                              *_ACTION_COLS, "مفضل",
                               "تاريخ أول حركة", "تاريخ آخر حركة"]
             else:
                 _cols = ["الاسم", "الإيميل", "الجوال", "تيليجرام",
                           "المدينة", "المصدر"]
                 if _store_pick == "الكل":
                     _cols.append("المتجر")
-                _cols += ["نسخ", "نقر", "نسخ ستوري", "نقر ستوري",
-                           "بحث", "إجمالي الحركات",
-                           "مفضل", "تاريخ أول حركة", "تاريخ آخر حركة"]
+                _cols += [*_ACTION_COLS, "مفضل",
+                          "تاريخ أول حركة", "تاريخ آخر حركة"]
             agg = agg.sort_values("إجمالي الحركات", ascending=False)
             st.dataframe(agg[_cols], hide_index=True, width='stretch')
             _sm_cap_mode = {
