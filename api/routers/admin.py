@@ -563,7 +563,6 @@ def seo_opportunities_list(
     sort_col = {
         "trend_score": "trend_score DESC NULLS LAST",
         "rising_pct":  "rising_pct DESC NULLS LAST",
-        "volume":      "avg_monthly_searches DESC NULLS LAST",
         "created_at":  "created_at DESC",
         "keyword":     "keyword ASC",
     }.get(sort, "trend_score DESC NULLS LAST")
@@ -578,11 +577,9 @@ def seo_opportunities_list(
                        trend_score, trend_avg,
                        COALESCE(trend_peak, 0)     AS trend_peak,
                        rising_pct,
-                       avg_monthly_searches, competition,
                        COALESCE(related_top, '[]'::jsonb)    AS related_top,
                        COALESCE(related_rising, '[]'::jsonb) AS related_rising,
                        to_char(last_checked_at, 'YYYY-MM-DD HH24:MI') AS last_checked_at,
-                       to_char(kw_volume_checked_at, 'YYYY-MM-DD HH24:MI') AS kw_volume_checked_at,
                        last_error, generated_page_id,
                        to_char(created_at, 'YYYY-MM-DD HH24:MI') AS created_at
                 FROM seo_opportunity_keywords
@@ -739,28 +736,7 @@ def seo_opportunities_refresh(
                     """,
                     (result["error"], kw_id),
                 )
-
-        # حجم البحث الشهري + المنافسة من Google Keyword Planner (مكمّل لـ Trends).
-        # يرجّع {} بهدوء لو الـ Ads API غير مُعدّ أو التوكن غير مُعتمد بعد — لا نكسر التحديث.
-        vol = None
-        try:
-            from api.seo.keyword_planner import fetch_keyword_volume
-            metrics = fetch_keyword_volume([kw]).get(kw.strip().lower())
-            if metrics:
-                vol = metrics
-                with conn.cursor() as cur3:
-                    cur3.execute(
-                        """
-                        UPDATE seo_opportunity_keywords
-                        SET avg_monthly_searches=%s, competition=%s,
-                            kw_volume_checked_at=NOW()
-                        WHERE id=%s
-                        """,
-                        (metrics["avg_monthly_searches"], metrics["competition"], kw_id),
-                    )
-        except Exception:
-            pass
-    return {"ok": result["ok"], "result": result, "volume": vol}
+    return {"ok": result["ok"], "result": result}
 
 
 @router.post("/seo-opportunities/refresh-all")
@@ -771,44 +747,9 @@ def seo_opportunities_refresh_all(
     _verify_admin(x_admin_secret)
     from api.seo.trends_puller import refresh_all_active_keywords
     try:
-        stats = refresh_all_active_keywords()
+        return {"ok": True, "stats": refresh_all_active_keywords()}
     except Exception as exc:
         return {"ok": False, "error": str(exc)[:500]}
-
-    # حجم البحث الشهري لكل الكلمات النشطة دفعة واحدة (Keyword Planner: 20 لكل طلب).
-    # لا يكسر العملية لو الـ Ads API غير مُعدّ/غير مُعتمد بعد.
-    vol_updated = 0
-    try:
-        from api.seo.keyword_planner import fetch_keyword_volume, is_configured
-        if is_configured():
-            from api.db import get_db_context
-            with get_db_context() as conn:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT id, keyword FROM seo_opportunity_keywords WHERE active = TRUE")
-                    rows = cur.fetchall()
-                for i in range(0, len(rows), 20):
-                    batch = rows[i:i + 20]
-                    metrics = fetch_keyword_volume([r[1] for r in batch])
-                    if not metrics:
-                        continue
-                    with conn.cursor() as cur2:
-                        for kw_id, kw in batch:
-                            m = metrics.get((kw or "").strip().lower())
-                            if not m:
-                                continue
-                            cur2.execute(
-                                """
-                                UPDATE seo_opportunity_keywords
-                                SET avg_monthly_searches=%s, competition=%s,
-                                    kw_volume_checked_at=NOW()
-                                WHERE id=%s
-                                """,
-                                (m["avg_monthly_searches"], m["competition"], kw_id),
-                            )
-                            vol_updated += 1
-    except Exception:
-        pass
-    return {"ok": True, "stats": stats, "volume_updated": vol_updated}
 
 
 class TrackRelatedQueryBody(BaseModel):

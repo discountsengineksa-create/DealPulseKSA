@@ -11387,10 +11387,9 @@ elif page == "🎯 محرك الفرص":
     with top_m:
         sort_opt = st.selectbox(
             "الترتيب",
-            ["trend_score", "volume", "rising_pct", "created_at", "keyword"],
+            ["trend_score", "rising_pct", "created_at", "keyword"],
             format_func=lambda s: {
                 "trend_score": "🔥 الأعلى شعبية",
-                "volume":      "🔎 الأعلى بحثاً/شهر",
                 "rising_pct":  "↗️ الأسرع صعوداً",
                 "created_at":  "🆕 الأحدث إضافة",
                 "keyword":     "🔤 أبجدي",
@@ -11408,11 +11407,9 @@ elif page == "🎯 محرك الفرص":
                 st.error(err)
             else:
                 stats = res.get("stats", {}) if res.get("ok") else {}
-                vol_n = res.get("volume_updated", 0) if res else 0
-                vol_msg = f" • حجم البحث: {vol_n}" if vol_n else ""
                 st.success(
                     f"✅ تم — فُحص {stats.get('checked', 0)}، "
-                    f"حُدّث {stats.get('updated', 0)}، فشل {stats.get('failed', 0)}{vol_msg}"
+                    f"حُدّث {stats.get('updated', 0)}، فشل {stats.get('failed', 0)}"
                 )
                 st.rerun()
 
@@ -11458,12 +11455,9 @@ elif page == "🎯 محرك الفرص":
                 else "#6B7280"
             )
 
-            vol = kw.get("avg_monthly_searches")
-            comp = (kw.get("competition") or "").upper()
-
             with st.container(border=True):
-                # ── السطر العلوي: الكلمة + شعبية + اتجاه + حجم البحث + الحالة ──
-                h1, h2, h3, hv, h4 = st.columns([2.6, 1.2, 1.2, 1.3, 1.4])
+                # ── السطر العلوي: الكلمة + المتجر + الحالة ──
+                h1, h2, h3, h4 = st.columns([3, 1.3, 1.3, 1.4])
                 with h1:
                     badge_active = "🔇 موقوف" if inactive else ""
                     st.markdown(
@@ -11502,32 +11496,6 @@ elif page == "🎯 محرك الفرص":
                         f"</div>",
                         unsafe_allow_html=True,
                     )
-                with hv:
-                    # حجم البحث الشهري (Google Keyword Planner) — أرقام مطلقة فعلية
-                    if vol is not None:
-                        comp_label = {"LOW": "منافسة منخفضة", "MEDIUM": "منافسة متوسطة",
-                                      "HIGH": "منافسة عالية"}.get(comp, "")
-                        comp_color = {"LOW": "#16A34A", "MEDIUM": "#F59E0B",
-                                      "HIGH": "#DC2626"}.get(comp, "#6B7280")
-                        vol_txt = f"{vol:,}" if vol else "0"
-                        st.markdown(
-                            f"<div style='text-align:center;padding:6px;border:2px solid #2563EB;"
-                            f"border-radius:8px;'>"
-                            f"<div style='font-size:11px;color:#666;'>بحث/شهر 🔎</div>"
-                            f"<div style='font-size:18px;font-weight:bold;color:#2563EB;'>{vol_txt}</div>"
-                            f"<div style='font-size:10px;color:{comp_color};'>{comp_label}</div>"
-                            f"</div>",
-                            unsafe_allow_html=True,
-                        )
-                    else:
-                        st.markdown(
-                            "<div style='text-align:center;padding:6px;border:2px dashed #D1D5DB;"
-                            "border-radius:8px;color:#9CA3AF;'>"
-                            "<div style='font-size:11px;'>بحث/شهر 🔎</div>"
-                            "<div style='font-size:14px;'>—</div>"
-                            "</div>",
-                            unsafe_allow_html=True,
-                        )
                 with h4:
                     if kw.get("store_id"):
                         st.caption(f"🏪 `{kw['store_id']}`")
@@ -11570,10 +11538,8 @@ elif page == "🎯 محرك الفرص":
                             st.error(err)
                         else:
                             r = res.get("result", {})
-                            v = res.get("volume") or {}
-                            vmsg = f" • بحث/شهر: {v['avg_monthly_searches']:,}" if v else ""
                             if r.get("ok"):
-                                st.toast(f"✅ Trend: {r.get('trend_score')}/100{vmsg}", icon="📊")
+                                st.toast(f"✅ Trend: {r.get('trend_score')}/100", icon="📊")
                             else:
                                 st.toast(f"⚠️ {r.get('error', 'فشل')}", icon="⚠️")
                             st.rerun()
