@@ -3314,6 +3314,8 @@ elif page == "تحليل المتاجر":
 
     # ── خرائط الفلاتر ──────────────────────────────────────────────
     _SM_SRC_AR   = {"none": "لا شيء", "all": "الكل",
+                     "store_total":    "🏪 إجمالي المتجر",
+                     "customer_total": "👤 إجمالي العميل",
                      "bot": "📱 البوت", "miniapp": "🔹 الميني-ويب",
                      "web": "🌐 الموقع"}
     _SM_STAT_AR  = {"none": "لا شيء", "all": "الكل",
@@ -3356,6 +3358,9 @@ elif page == "تحليل المتاجر":
                 st.rerun()
         _src_key = next((k for k, v in _SM_SRC_AR.items()
                           if v == _src_lbl), "all")
+        # وضع الدمج (نفس نمط صفحة تحليلات الستوري): store_total/customer_total
+        # ما يفلتران بالمصدر — يعرضان كل القنوات ثم يجمعان لاحقاً.
+        sm_agg_mode = _src_key if _src_key in ("store_total", "customer_total") else None
 
         st.divider()
 
@@ -3755,16 +3760,84 @@ elif page == "تحليل المتاجر":
                                      + agg["نسخ ستوري"] + agg["نقر ستوري"]
                                      + agg["بحث"])
 
-            _cols = ["الاسم", "الإيميل", "الجوال", "تيليجرام",
-                      "المدينة", "المصدر"]
-            if _store_pick == "الكل":
-                _cols.append("المتجر")
-            _cols += ["نسخ", "نقر", "نسخ ستوري", "نقر ستوري",
-                       "بحث", "إجمالي الحركات",
-                       "مفضل", "تاريخ أول حركة", "تاريخ آخر حركة"]
+            # ─── الدمج: «إجمالي المتجر» أو «إجمالي العميل» ───────────────
+            # نفس نمط صفحة تحليلات الستوري. السومات تشمل المتجر + الستوري معاً
+            # (الأعمدة الخمسة) والإجمالي يجمعها جميعاً.
+            if sm_agg_mode in ("store_total", "customer_total"):
+                _yes = lambda s: "✅ نعم" if (s == "✅ نعم").any() else "—"
+                _src_join = lambda s: "، ".join(sorted({str(x) for x in s if x}))
+                _first_nonempty = lambda s: next((v for v in s if v and v != "—"), "—")
+
+                if "المتجر" not in agg.columns:
+                    # عند اختيار متجر واحد ما يوجد عمود المتجر — نضيفه يدوياً
+                    agg["المتجر"] = _store_pick
+
+                if sm_agg_mode == "store_total":
+                    _agg_spec = {
+                        "المصدر":          _src_join,
+                        "نسخ":             "sum",
+                        "نقر":             "sum",
+                        "نسخ ستوري":       "sum",
+                        "نقر ستوري":       "sum",
+                        "بحث":             "sum",
+                        "إجمالي الحركات":  "sum",
+                        "مفضل":            _yes,
+                        "تاريخ أول حركة":  "min",   # YYYY-MM-DD HH:MM يقارن صحيح كسلسلة
+                        "تاريخ آخر حركة":  "max",
+                    }
+                    agg = agg.groupby(["المتجر"], as_index=False).agg(_agg_spec)
+                    _cols = ["المتجر", "المصدر", "نسخ", "نقر",
+                              "نسخ ستوري", "نقر ستوري",
+                              "بحث", "إجمالي الحركات", "مفضل",
+                              "تاريخ أول حركة", "تاريخ آخر حركة"]
+                else:   # customer_total: عميل × متجر (يدمج القنوات)
+                    def _pkey(r):
+                        tg = str(r.get("تيليجرام") or "").strip()
+                        if tg and tg not in ("—", "@"): return f"tg:{tg.lower()}"
+                        em = str(r.get("الإيميل") or "").strip()
+                        if em and em != "—": return f"em:{em.lower()}"
+                        return f"nm:{str(r.get('الاسم') or '').strip().lower()}"
+                    agg["_pk"] = agg.apply(_pkey, axis=1)
+                    _agg_spec = {
+                        "الاسم":           "first",
+                        "الإيميل":         _first_nonempty,
+                        "الجوال":          _first_nonempty,
+                        "تيليجرام":        _first_nonempty,
+                        "المدينة":         _first_nonempty,
+                        "المصدر":          _src_join,
+                        "نسخ":             "sum",
+                        "نقر":             "sum",
+                        "نسخ ستوري":       "sum",
+                        "نقر ستوري":       "sum",
+                        "بحث":             "sum",
+                        "إجمالي الحركات":  "sum",
+                        "مفضل":            _yes,
+                        "تاريخ أول حركة":  "min",
+                        "تاريخ آخر حركة":  "max",
+                    }
+                    agg = (agg.groupby(["_pk", "المتجر"], as_index=False)
+                              .agg(_agg_spec)
+                              .drop(columns=["_pk"]))
+                    _cols = ["الاسم", "الإيميل", "الجوال", "تيليجرام",
+                              "المدينة", "المصدر", "المتجر",
+                              "نسخ", "نقر", "نسخ ستوري", "نقر ستوري",
+                              "بحث", "إجمالي الحركات", "مفضل",
+                              "تاريخ أول حركة", "تاريخ آخر حركة"]
+            else:
+                _cols = ["الاسم", "الإيميل", "الجوال", "تيليجرام",
+                          "المدينة", "المصدر"]
+                if _store_pick == "الكل":
+                    _cols.append("المتجر")
+                _cols += ["نسخ", "نقر", "نسخ ستوري", "نقر ستوري",
+                           "بحث", "إجمالي الحركات",
+                           "مفضل", "تاريخ أول حركة", "تاريخ آخر حركة"]
             agg = agg.sort_values("إجمالي الحركات", ascending=False)
             st.dataframe(agg[_cols], hide_index=True, width='stretch')
-            st.caption(f"📋 {len(agg)} صف.")
+            _sm_cap_mode = {
+                "store_total":    "🏪 صف لكل متجر — يجمع كل العملاء والقنوات",
+                "customer_total": "👤 صف لكل (عميل × متجر) — يدمج القنوات",
+            }.get(sm_agg_mode, "صف لكل (مستخدم × متجر)")
+            st.caption(f"📋 {len(agg)} صف — {_sm_cap_mode}.")
 
             _ub = BytesIO()
             with pd.ExcelWriter(_ub, engine="xlsxwriter") as _w:
