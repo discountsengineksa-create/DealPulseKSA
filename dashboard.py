@@ -1873,6 +1873,11 @@ if page == "إدخال بيانات الماستر":
 if page == "الاستعلام والتعديل":
     st.header("🔍 مركز التحكم والتعديل الشامل")
 
+    if st.button("🔄 تحديث", key="qe_refresh", help="إعادة تحميل البيانات"):
+        try: st.cache_data.clear()
+        except Exception: pass
+        st.rerun()
+
     # 1. بلوك البحث والتعديل العلوي
     search_id = st.number_input("📌 أدخل رقم الـ ID للبحث والتعديل:", min_value=1, step=1)
 
@@ -2331,6 +2336,12 @@ if page == "جدول الكوبونات":
     st.header("🎟️ عرض الكوبونات المباشر (واجهة البوت)")
     st.info("المتاجر المحددة كـ 'ترند' في قاعدة البيانات ستظهر بعلامة 🔥 وتتصدر القائمة. "
             "الكوبونات المنتهية مخفية هنا تلقائياً ومكانها صفحة «📦 أرشيف المنتهية».")
+
+    if st.button("🔄 تحديث", key="ct_refresh", help="إعادة تحميل البيانات"):
+        try: st.cache_data.clear()
+        except Exception: pass
+        st.rerun()
+
     try:
         conn = get_conn()
         query = """
@@ -3919,6 +3930,11 @@ elif page == "🎬 إضافة استوري":
         "في صف الستوري بالموقع والميني-ويب. المشاهدات والترند تُحسب باسم المتجر."
     )
 
+    if st.button("🔄 تحديث", key="story_add_refresh", help="إعادة تحميل البيانات"):
+        try: st.cache_data.clear()
+        except Exception: pass
+        st.rerun()
+
     _sc = get_conn(); _sc.rollback()
     try:
         _stores_df = pd.read_sql(
@@ -5203,6 +5219,11 @@ elif page == "تحليل طلبات الأكواد":
                "كل من طلب كود — بياناته الكاملة ووقته. اعرف وش تنزل، وراسل الطالبين لما توفّره.")
     st.divider()
 
+    if st.button("🔄 تحديث", key="cr_refresh", help="إعادة تحميل البيانات"):
+        try: st.cache_data.clear()
+        except Exception: pass
+        st.rerun()
+
     try:
         conn = get_conn()
         conn.rollback()
@@ -5433,6 +5454,11 @@ elif page == "بيانات المستخدمين":
     page_title("👥", "سجل بيانات المستخدمين")
     st.divider()
 
+    if st.button("🔄 تحديث", key="bu_refresh", help="إعادة تحميل البيانات"):
+        try: st.cache_data.clear()
+        except Exception: pass
+        st.rerun()
+
     # خريطة التعريب (ترتيب العرض)
     _COL_AR = {
         'telegram_id':            'المعرف (ID)',
@@ -5566,6 +5592,11 @@ elif page == "مستخدمو الموقع":
     page_title("🌐", "مستخدمو موقع dealpulseksa.com")
     st.caption("جميع المستخدمين المسجّلين عبر الموقع (تسجيل اسم/جوال/إيميل/كلمة سر).")
     st.divider()
+
+    if st.button("🔄 تحديث", key="wu_refresh", help="إعادة تحميل البيانات"):
+        try: st.cache_data.clear()
+        except Exception: pass
+        st.rerun()
 
     try:
         conn = get_conn()
