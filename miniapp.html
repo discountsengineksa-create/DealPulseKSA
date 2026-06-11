@@ -30,6 +30,25 @@
   --font:        'Cairo', -apple-system, sans-serif;
 }
 
+/* ── الوضع النهاري (يُفعَّل بإضافة class="light" على body) ──
+   الأيقونة في الهيدر تبدّل بين الوضعين، والاختيار محفوظ في localStorage.
+   ثيم المناسبة يتغيّر معه: نهاري → mobile_url / ليلي → mobile_dark_url. */
+body.light {
+  --bg:          #F8FAFC;
+  --bg2:         #FFFFFF;
+  --card:        rgba(255,255,255,0.62);
+  --card-h:      rgba(255,255,255,0.82);
+  --border:      rgba(15,23,42,0.10);
+  --t1:          #0F172A;
+  --t2:          rgba(15,23,42,0.72);
+  --t3:          rgba(15,23,42,0.50);
+  --grad-bg:     linear-gradient(160deg,#F0FDF4 0%,#F8FAFC 45%,#ECFDF5 100%);
+}
+/* ستارة الثيم في الوضع النهاري: أفتح + شفافة أكثر لإظهار الخلفية بنقاء */
+body.light #themeBg.on::after {
+  background: linear-gradient(180deg,rgba(255,255,255,0.55),rgba(255,255,255,0.35) 42%,rgba(255,255,255,0.60));
+}
+
 /* ── RESET & BASE ── */
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 /* ⚠️ مهم: html بدون overflow:hidden — كان يمنع التمرير الرأسي على iOS Telegram WebView.
@@ -152,6 +171,7 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
     </div>
     <div style="display:flex;gap:6px;align-items:center">
       <button class="glass" id="langBtn" title="Language" style="padding:8px 10px; border-radius:10px; color:var(--em); border:none; font-weight:800; font-size:11px;" onclick="toggleLang()">EN</button>
+      <button class="glass" id="themeBtn" title="الوضع النهاري/الليلي" style="padding:8px 10px; border-radius:10px; color:var(--t2); border:none; font-size:14px;" onclick="toggleTheme()">🌙</button>
       <button class="glass" id="supportBtn" title="تواصل معنا" style="padding:8px 10px; border-radius:10px; color:var(--t2); border:none; font-size:14px;" onclick="openSupport()">💬</button>
       <button class="glass" id="refreshBtn" style="padding:8px 12px; border-radius:10px; color:var(--t2); border:none;" onclick="refreshData()">تحديث</button>
     </div>
@@ -1211,7 +1231,35 @@ function renderStoreView(storeId) {
 //   4. console.log واضح يطبع timestamp + count لتأكيد كل تحميل من جديد
 // ملاحظة: لو البيانات ما تتحدث رغم كل ذلك، المشكلة في الـ DB نفسها وليست
 // في الـ frontend cache. افحص /api/v1/coupons في متصفّح خارجي مباشرةً.
-// ثيم المناسبة — يجلب الثيم الفعّال ويطبّق خلفيته (الميني داكن → نفضّل النسخة الليلية/الجوال).
+// ── الوضع نهاري/ليلي ──────────────────────────────────────────────────
+// يُحفظ في localStorage. عند التبديل: نُحدِّث class على body + أيقونة الزر
+// + نعيد تحميل الثيم (تختار الصورة المناسبة) + نُبلِغ Telegram WebApp.
+function currentTheme() {
+    try { return localStorage.getItem('dpk_theme') || 'dark'; } catch (e) { return 'dark'; }
+}
+function applyTheme(mode) {
+    const isLight = mode === 'light';
+    document.body.classList.toggle('light', isLight);
+    const btn = document.getElementById('themeBtn');
+    if (btn) btn.textContent = isLight ? '☀️' : '🌙';
+    try { localStorage.setItem('dpk_theme', mode); } catch (e) {}
+    // تحديث لون header في Telegram WebApp
+    try {
+        if (tg && tg.setHeaderColor) tg.setHeaderColor(isLight ? '#FFFFFF' : '#080E1D');
+        if (tg && tg.setBackgroundColor) tg.setBackgroundColor(isLight ? '#F8FAFC' : '#080E1D');
+    } catch (e) {}
+}
+function toggleTheme() {
+    const next = currentTheme() === 'light' ? 'dark' : 'light';
+    applyTheme(next);
+    // إعادة تحميل الثيم لاختيار الصورة المناسبة (نهاري/ليلي)
+    loadSiteTheme();
+}
+// تطبيق الوضع المحفوظ مبكراً (قبل تحميل الثيم)
+applyTheme(currentTheme());
+
+// ثيم المناسبة — يجلب الثيم الفعّال + إعدادات الشفافية، ويطبّق الصورة الأنسب
+// حسب الوضع الحالي (نهاري/ليلي) للمستخدم.
 async function loadSiteTheme() {
     const el = document.getElementById('themeBg');
     if (!el) return;
@@ -1219,10 +1267,23 @@ async function loadSiteTheme() {
         const r = await fetch(`${API_BASE}/coupons/site-theme`, { cache: 'no-store' });
         const data = await r.json();
         const th = data && data.theme;
+        const visual = (data && data.visual) || {};
+        // تطبيق إعدادات الشفافية كمتغيّرات CSS على :root (تنعكس على الكروت).
+        const root = document.documentElement;
+        if (typeof visual.card_opacity === 'number') {
+            root.style.setProperty('--card', `rgba(${currentTheme()==='light'?'255,255,255':'255,255,255'}, ${visual.card_opacity})`);
+        }
+        if (typeof visual.blur_px === 'number') {
+            root.style.setProperty('--blur', `blur(${visual.blur_px}px)`);
+        }
         if (!th || !th.desktop_url) { el.classList.remove('on'); el.style.backgroundImage = ''; return; }
         const opt = (u) => (u && u.includes('/upload/') && !/\/upload\/(f_|q_)/.test(u))
             ? u.replace('/upload/', '/upload/f_auto,q_auto/') : (u || '');
-        const url = opt(th.mobile_dark_url) || opt(th.mobile_url) || opt(th.desktop_dark_url) || opt(th.desktop_url);
+        // اختيار الصورة: الميني عمودي دائماً → نفضّل mobile_*. الوضع يحدّد نهاري vs ليلي.
+        const isLight = currentTheme() === 'light';
+        const url = isLight
+            ? (opt(th.mobile_url) || opt(th.desktop_url) || opt(th.mobile_dark_url) || opt(th.desktop_dark_url))
+            : (opt(th.mobile_dark_url) || opt(th.desktop_dark_url) || opt(th.mobile_url) || opt(th.desktop_url));
         if (!url) { el.classList.remove('on'); return; }
         el.style.backgroundImage = `url("${url}")`;
         el.classList.add('on');

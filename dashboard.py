@@ -12135,24 +12135,60 @@ if page == "🎨 الثيمات":
 
     _has_active = (not _themes.empty) and bool(_themes["is_active"].any())
 
+    # ── البحث عن ثيم اسمه «الاساسي» (بأي تشكيلة من الفتحات/المسافات) ──
+    # لو موجود → هو الافتراضي. غير ذلك → الخلفية الخضراء الأصلية.
+    def _norm(s: str) -> str:
+        return "".join(ch for ch in str(s or "") if ch.isalpha()).strip()
+    _user_default_row = None
+    if not _themes.empty:
+        for _i in range(len(_themes)):
+            if _norm(_themes.iloc[_i]["name"]) in {"الاساسي", "الأساسي"}:
+                _user_default_row = _themes.iloc[_i]; break
+
     def _theme_deactivate_all():
         _wc = get_conn(); _wc.rollback(); _wcur = _wc.cursor()
         _wcur.execute("UPDATE site_themes SET is_active=FALSE WHERE is_active")
         _wc.commit(); _wc.close()
 
-    # ── الثيم الأساسي (الخلفية الأصلية) ──
+    def _theme_activate(_target_id: int):
+        _wc = get_conn(); _wc.rollback(); _wcur = _wc.cursor()
+        _wcur.execute("UPDATE site_themes SET is_active=FALSE WHERE is_active")
+        _wcur.execute("UPDATE site_themes SET is_active=TRUE WHERE id=%s", (_target_id,))
+        _wc.commit(); _wc.close()
+
+    # ── الافتراضي ──
+    # إن وُجد ثيم اسمه «الاساسي» → هو الافتراضي (يُفعَّل بدل الخلفية الخضراء).
+    # غير ذلك → الخلفية الخضراء الأصلية.
     with st.container(border=True):
         dc1, dc2 = st.columns([3, 1])
-        dc1.markdown("**🟢 الثيم الأساسي** — الخلفية الخضراء الأصلية")
-        dc1.caption("الافتراضي المحفوظ دائماً. تفعيله = إلغاء أي ثيم والرجوع للأصل.")
-        with dc2:
-            if not _has_active:
-                st.success("✅ مُفعّل")
-            elif st.button("🟢 فعّل الأساسي", key="theme_base", width="stretch", type="primary"):
-                try:
-                    _theme_deactivate_all(); st.success("رجعنا للثيم الأساسي."); st.rerun()
-                except Exception as _e:
-                    st.error(f"تعذّر: {_e}")
+        if _user_default_row is not None:
+            _udid = int(_user_default_row["id"])
+            _is_default_active = bool(_user_default_row["is_active"])
+            dc1.markdown(f"**🟢 الافتراضي — {_user_default_row['name']}**")
+            dc1.caption("ثيمك الافتراضي. أي تفعيل آخر يُلغى بالضغط هنا.")
+            with dc2:
+                if _is_default_active:
+                    st.success("✅ مُفعّل")
+                elif st.button("🟢 فعّل الافتراضي", key="theme_user_default",
+                               width="stretch", type="primary"):
+                    try:
+                        _theme_activate(_udid)
+                        st.success("✅ رجعنا لثيمك الافتراضي."); st.rerun()
+                    except Exception as _e:
+                        st.error(f"تعذّر: {_e}")
+        else:
+            dc1.markdown("**🟢 الثيم الأساسي** — الخلفية الخضراء الأصلية")
+            dc1.caption("الافتراضي المحفوظ دائماً. لتغيير الافتراضي: أضِف ثيماً اسمه «الاساسي».")
+            with dc2:
+                if not _has_active:
+                    st.success("✅ مُفعّل")
+                elif st.button("🟢 فعّل الأساسي", key="theme_base",
+                               width="stretch", type="primary"):
+                    try:
+                        _theme_deactivate_all()
+                        st.success("رجعنا للثيم الأساسي."); st.rerun()
+                    except Exception as _e:
+                        st.error(f"تعذّر: {_e}")
 
     st.divider()
     st.subheader("🖼️ ثيمات المناسبات")
