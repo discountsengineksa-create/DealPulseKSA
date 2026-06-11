@@ -467,6 +467,7 @@ const STRINGS = {
     favAddBtn:       '🤍 أضف للمفضلة',
     favInBtn:        '❤️ في المفضلة',
     reportCodeBtn:   '🚫 إبلاغ كود لا يعمل',
+    reportCodeConfirm: 'هل تريد الإبلاغ عن أن هذا الكود لا يعمل؟',
     reportCodeSent:  '✅ تم الإبلاغ بنجاح — سنراجع الكود فوراً',
     reportCodeFail:  '❌ تعذّر إرسال البلاغ، حاول لاحقاً',
     reportCodeAuth:  'افتح البوت أولاً ثم ارجع للإبلاغ',
@@ -522,6 +523,7 @@ const STRINGS = {
     favAddBtn:       '🤍 Add to favorites',
     favInBtn:        '❤️ In favorites',
     reportCodeBtn:   '🚫 Report: code not working',
+    reportCodeConfirm: 'Report that this code is not working?',
     reportCodeSent:  '✅ Reported — we will review the code right away',
     reportCodeFail:  '❌ Could not send the report, try again later',
     reportCodeAuth:  'Open the bot first then come back to report',
@@ -1254,6 +1256,7 @@ async function ensureDetail(s) {
             s.extraCoupons = Array.isArray(d.extra_coupons) ? d.extra_coupons : [];
             s.storySlides  = Array.isArray(d.story_slides) ? d.story_slides : [];
             s.link         = buildLink(d);
+            s.affiliate_link = (d.affiliate_link || '').trim();   // الرابط الخام — لزيارة الستوري المباشرة
             s._full        = true;
         }
     } catch (e) { /* صامت — يبقى بالحقول الفارغة */ }
@@ -1447,19 +1450,30 @@ async function reportCodeMiniapp(store_id, ev) {
     if (ev && ev.stopPropagation) ev.stopPropagation();
     const ST = STRINGS[LANG_CURRENT];
     if (!tgUserId) { showToast(ST.reportCodeAuth); return; }
-    try {
-        const res = await fetch(`${API_BASE}/track/report-code-issue`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                store_id: store_id,
-                source: 'telegram_miniapp',
-                tg_user_id: tgUserId
-            })
-        });
-        showToast(res.ok ? ST.reportCodeSent : ST.reportCodeFail);
-    } catch (e) {
-        showToast(ST.reportCodeFail);
+
+    // الإرسال الفعلي — بعد موافقة المستخدم فقط.
+    const _send = async () => {
+        try {
+            const res = await fetch(`${API_BASE}/track/report-code-issue`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    store_id: store_id,
+                    source: 'telegram_miniapp',
+                    tg_user_id: tgUserId
+                })
+            });
+            showToast(res.ok ? ST.reportCodeSent : ST.reportCodeFail);
+        } catch (e) {
+            showToast(ST.reportCodeFail);
+        }
+    };
+
+    // تأكيد (نعم/لا) قبل الإبلاغ — نافذة تيليجرام الأصلية، وإلا confirm المتصفّح.
+    if (tg && typeof tg.showConfirm === 'function') {
+        tg.showConfirm(ST.reportCodeConfirm, (ok) => { if (ok) _send(); });
+    } else if (window.confirm(ST.reportCodeConfirm)) {
+        _send();
     }
 }
 
@@ -1884,6 +1898,10 @@ function closeStory() {
     if (storyRAF) cancelAnimationFrame(storyRAF);
     storyRAF = null;
     currentStoryViewId = null;
+    // أوقف الفيديو/الصوت نهائياً — إخفاء الـ viewer وحده يُبقي الـ <video> شغّالاً بصوته.
+    const _sv = document.querySelector('#storyContent video');
+    if (_sv) { try { _sv.pause(); } catch (e) {} }
+    document.getElementById('storyContent').innerHTML = '';
 }
 
 async function storyNext() {
@@ -1964,7 +1982,7 @@ function renderStorySlide() {
     // الكود الآن قابل للنسخ من داخل الستوري (مع تتبّع story_view_id).
     const codeBlock = s.coupon
         ? `<div class="s-code-lbl">${LANG_CURRENT === 'en' ? 'Coupon code' : 'كود الخصم'}</div>
-           <div class="s-code" style="cursor:pointer" onclick="storyCopyCode(${sidJs}, event)">${escHtml(s.coupon)}</div>`
+           <div class="s-code" style="cursor:pointer;pointer-events:auto" onclick="storyCopyCode(${sidJs}, event)">${escHtml(s.coupon)}</div>`
         : '';
     // زر الإبلاغ يظهر فقط لو في كود + المستخدم معروف عبر تيليجرام.
     const reportBtn = (s.coupon && tgUserId)
@@ -2015,13 +2033,18 @@ function storyVideoTick(v) {
     if (seg && v.duration > 0) seg.style.width = Math.min(v.currentTime / v.duration, 1) * 100 + '%';
 }
 
-// زيارة المتجر من الستوري — يفتح صفحة المتجر داخل الميني (لا تحويل خارجي).
-// نسجّل click_link مع story_view_id قبل الإغلاق حتى نربطها بالستوري.
+// زيارة المتجر من الستوري — تنقل العميل لرابط الأفلييت مباشرةً (لا لصفحة المتجر).
+// نسجّل click_link مع story_view_id قبل الفتح حتى نربط النقرة بالستوري + يرتفع عدّاد المتجر.
+// نفتح الرابط الخام (لا /go) لتفادي العدّ المزدوج — الإسناد يتم عبر trackEvent.
 function storyVisit(id) {
     const s = STORY.find(x => x.id === id);
-    if (s) trackEvent(s.store_id, 'click_link', currentStoryViewId);
+    if (!s) return;
+    trackEvent(s.store_id, 'click_link', currentStoryViewId);
     closeStory();
-    showStoreView(id);
+    let url = (s.affiliate_link || '').trim();
+    if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
+    if (!url) { showStoreView(id); return; }   // احتياطي: لو ما فيه رابط، افتح صفحة المتجر
+    if (tg && tg.openLink) { tg.openLink(url); } else { window.open(url, '_blank'); }
 }
 
 // ── Visibility change: عند العودة لـ Mini App أعد التحميل — مع debounce ────
