@@ -30,8 +30,12 @@ def _parse_tags(raw: str | None) -> list[str]:
 
 @router.get("/site-theme")
 def get_site_theme(conn=Depends(get_db)):
-    """الثيم الفعّال لخلفية الموقع/الميني-ويب (عام، بلا مصادقة).
-    يُرجع {"theme": {...}} أو {"theme": null} (= الخلفية الأصلية المحفوظة)."""
+    """الثيم الفعّال + إعدادات الشفافية لخلفية الموقع/الميني-ويب (عام، بلا مصادقة).
+    يُرجع {"theme": {...} | null, "visual": {overlay_opacity, card_opacity,
+    icon_opacity, blur_px}}. الـvisual يُستخدم حتى لو الـtheme=null."""
+    theme_row = None
+    visual = {"overlay_opacity": 0.35, "card_opacity": 0.42,
+              "icon_opacity": 0.55, "blur_px": 28}
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
@@ -39,14 +43,30 @@ def get_site_theme(conn=Depends(get_db)):
                 "desktop_dark_url, mobile_dark_url "
                 "FROM site_themes WHERE is_active LIMIT 1"
             )
-            row = cur.fetchone()
-        return {"theme": dict(row) if row else None}
+            theme_row = cur.fetchone()
+            # إعدادات الشفافية (singleton). لو الجدول/الصف غير موجودَين نستعمل الافتراضي.
+            try:
+                cur.execute(
+                    "SELECT overlay_opacity, card_opacity, icon_opacity, blur_px "
+                    "FROM site_visual_settings WHERE id=1"
+                )
+                vrow = cur.fetchone()
+                if vrow:
+                    visual = {
+                        "overlay_opacity": float(vrow["overlay_opacity"]),
+                        "card_opacity":    float(vrow["card_opacity"]),
+                        "icon_opacity":    float(vrow["icon_opacity"]),
+                        "blur_px":         int(vrow["blur_px"]),
+                    }
+            except Exception:
+                conn.rollback()
+        return {"theme": dict(theme_row) if theme_row else None, "visual": visual}
     except Exception:
         try:
             conn.rollback()
         except Exception:
             pass
-        return {"theme": None}
+        return {"theme": None, "visual": visual}
 
 
 # «الأكثر طلباً» = نقرات الرابط + نسخ الكوبون + عدد مرات البحث عن المتجر +

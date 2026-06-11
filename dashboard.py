@@ -12198,18 +12198,100 @@ if page == "🎨 الثيمات":
                         st.error(f"تعذّر الحذف: {_e}")
 
     st.divider()
+    st.subheader("🎚️ تحكم الشفافية")
+    st.caption("تتحكم بكم تظهر خلفية الثيم خلف الكروت والأيقونات. التغيير يطبَّق على الموقع خلال دقيقة (Cloudflare cache + revalidate).")
+
+    # تحميل الإعدادات الحالية (مع fallback لو الجدول غير موجود)
+    _vs_defaults = {"overlay_opacity": 0.35, "card_opacity": 0.42,
+                    "icon_opacity": 0.55, "blur_px": 28}
+    _vs_current = dict(_vs_defaults)
+    _vc = get_conn(); _vc.rollback()
+    try:
+        _vcur = _vc.cursor()
+        _vcur.execute(
+            "SELECT overlay_opacity, card_opacity, icon_opacity, blur_px "
+            "FROM site_visual_settings WHERE id=1")
+        _vrow = _vcur.fetchone()
+        if _vrow:
+            _vs_current = {"overlay_opacity": float(_vrow[0]),
+                           "card_opacity":    float(_vrow[1]),
+                           "icon_opacity":    float(_vrow[2]),
+                           "blur_px":         int(_vrow[3])}
+    except Exception as _ve:
+        _vc.rollback()
+        st.warning(f"⚠️ جدول الإعدادات غير موجود — شغّل migration_050. ({_ve})")
+    finally:
+        _vc.close()
+
+    with st.form("visual_settings_form"):
+        st.markdown("**كل قيمة من 0 إلى 1**:  0 = شفاف تماماً (الثيم يظهر كامل)  ·  1 = معتم (الثيم مخفي).")
+        vc1, vc2 = st.columns(2)
+        _vs_overlay = vc1.slider(
+            "🌫️ الستارة فوق الثيم",
+            min_value=0.00, max_value=1.00, step=0.05,
+            value=_vs_current["overlay_opacity"],
+            help="كم تخفي الستارة البيضاء/الداكنة صورة الثيم. أقل = الثيم أوضح.")
+        _vs_card = vc2.slider(
+            "🪟 خلفية الكروت",
+            min_value=0.00, max_value=1.00, step=0.05,
+            value=_vs_current["card_opacity"],
+            help="شفافية كروت الترند والمتاجر. أقل = الثيم يطلّ تحتها.")
+        vc3, vc4 = st.columns(2)
+        _vs_icon = vc3.slider(
+            "🟢 خلفية أيقونات المتاجر",
+            min_value=0.00, max_value=1.00, step=0.05,
+            value=_vs_current["icon_opacity"],
+            help="شفافية المربع/الدائرة خلف لوقو المتجر.")
+        _vs_blur = vc4.slider(
+            "💧 شدّة الـ blur (px)",
+            min_value=0, max_value=60, step=2,
+            value=_vs_current["blur_px"],
+            help="ضباب الزجاج خلف الكروت — يساعد على قراءة النصوص فوق أي خلفية.")
+
+        sb1, sb2 = st.columns(2)
+        if sb1.form_submit_button("💾 احفظ الإعدادات", type="primary", width="stretch"):
+            try:
+                _wc = get_conn(); _wc.rollback(); _wcur = _wc.cursor()
+                _wcur.execute(
+                    "INSERT INTO site_visual_settings "
+                    "(id, overlay_opacity, card_opacity, icon_opacity, blur_px, updated_at) "
+                    "VALUES (1, %s, %s, %s, %s, NOW()) "
+                    "ON CONFLICT (id) DO UPDATE SET "
+                    "overlay_opacity=EXCLUDED.overlay_opacity, "
+                    "card_opacity=EXCLUDED.card_opacity, "
+                    "icon_opacity=EXCLUDED.icon_opacity, "
+                    "blur_px=EXCLUDED.blur_px, "
+                    "updated_at=NOW()",
+                    (_vs_overlay, _vs_card, _vs_icon, _vs_blur))
+                _wc.commit(); _wc.close()
+                st.success("✅ حُفظت الإعدادات — ستظهر على الموقع خلال دقيقة."); st.rerun()
+            except Exception as _e:
+                st.error(f"تعذّر الحفظ: {_e}")
+        if sb2.form_submit_button("🔄 ارجع للقيم الافتراضية", width="stretch"):
+            try:
+                _wc = get_conn(); _wc.rollback(); _wcur = _wc.cursor()
+                _wcur.execute(
+                    "UPDATE site_visual_settings SET "
+                    "overlay_opacity=0.35, card_opacity=0.42, icon_opacity=0.55, "
+                    "blur_px=28, updated_at=NOW() WHERE id=1")
+                _wc.commit(); _wc.close()
+                st.success("✅ رجعنا للافتراضي."); st.rerun()
+            except Exception as _e:
+                st.error(f"تعذّر: {_e}")
+
+    st.divider()
     st.subheader("➕ أضف ثيماً")
-    st.caption("المقاس المثالي: سطح المكتب 1920×1080 · الجوال 1080×1920 (وأي مقاس قريب يشتغل — تُعرض بـ cover).")
+    st.caption("المقاس المثالي: سطح المكتب 1920×1080 (16:9 أفقي) · الجوال 1080×1920 (9:16 عمودي) — أي مقاس قريب يشتغل (تُعرض بـ cover).")
     with st.form("add_site_theme", clear_on_submit=True):
         _th_name = st.text_input("🏷️ اسم الثيم", placeholder="مثلاً: اليوم الوطني ١")
         st.markdown("**☀️ النهاري** (سطح المكتب إلزامي):")
         tn1, tn2 = st.columns(2)
-        _th_dd = tn1.file_uploader("☀️ نهاري · سطح مكتب — 1920×1080 (أفقي)", type=["png", "jpg", "jpeg", "webp"], key="th_dd")
-        _th_dm = tn2.file_uploader("☀️ نهاري · جوال — 1080×1920 (عمودي)", type=["png", "jpg", "jpeg", "webp"], key="th_dm")
+        _th_dd = tn1.file_uploader("☀️ نهاري · سطح مكتب — 1920×1080 (16:9 أفقي)", type=["png", "jpg", "jpeg", "webp"], key="th_dd")
+        _th_dm = tn2.file_uploader("☀️ نهاري · جوال — 1080×1920 (9:16 عمودي)", type=["png", "jpg", "jpeg", "webp"], key="th_dm")
         st.markdown("**🌙 الليلي** (اختياري — لو فاضي يُستخدم النهاري في الوضع الليلي):")
         tk1, tk2 = st.columns(2)
-        _th_kd = tk1.file_uploader("🌙 ليلي · سطح مكتب — 1920×1080 (أفقي)", type=["png", "jpg", "jpeg", "webp"], key="th_kd")
-        _th_km = tk2.file_uploader("🌙 ليلي · جوال — 1080×1920 (عمودي)", type=["png", "jpg", "jpeg", "webp"], key="th_km")
+        _th_kd = tk1.file_uploader("🌙 ليلي · سطح مكتب — 1920×1080 (16:9 أفقي)", type=["png", "jpg", "jpeg", "webp"], key="th_kd")
+        _th_km = tk2.file_uploader("🌙 ليلي · جوال — 1080×1920 (9:16 عمودي)", type=["png", "jpg", "jpeg", "webp"], key="th_km")
         if st.form_submit_button("➕ احفظ الثيم", type="primary"):
             if not (_th_name or "").strip():
                 st.warning("اكتب اسم الثيم.")
