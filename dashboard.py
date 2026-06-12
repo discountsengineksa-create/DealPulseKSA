@@ -1049,7 +1049,11 @@ def _sa_load_actions() -> pd.DataFrame:
                    COALESCE(a.source, 'bot')      AS source,
                    a.story_view_id,                              -- NULL = حركة على المتجر مباشرة، غير-NULL = من داخل الستوري
                    a.details,                                    -- context: trend:daily/weekly/featured/...
-                   sv.was_trending AS story_was_trending,        -- snapshot لحظة فتح الستوري (للستوري عادي vs ترند)
+                   -- story_was_trending: تجاهلنا سنابشوت sv.was_trending المخزّن
+                   -- (كان يُحسب خوارزمياً top-3/7 فيلوّث متاجر عادية كترند).
+                   -- نعتمد is_trending الحالي للمتجر في master (تثبيت أدمن يدوي)
+                   -- ليطابق نتيجة تحليل المتاجر تثبيتك في «تفضيلات الترند».
+                   COALESCE(mt.is_manual_trend, FALSE) AS story_was_trending,
                    a.device_class,                              -- web: desktop/mobile/tablet/bot
                    a.is_datacenter, a.is_proxy, a.quality_score,
                    a.city          AS geo_city,                 -- web geo (من إثراء action_logs)
@@ -1065,7 +1069,12 @@ def _sa_load_actions() -> pd.DataFrame:
             FROM   action_logs a
             LEFT JOIN bot_users bu ON bu.telegram_id = a.user_id
             LEFT JOIN web_users wu ON wu.id = a.user_id AND a.source = 'web'
-            LEFT JOIN story_views sv ON sv.view_id = a.story_view_id   -- لجلب was_trending لحظة الفتح
+            LEFT JOIN story_views sv ON sv.view_id = a.story_view_id
+            LEFT JOIN LATERAL (
+                SELECT BOOL_OR(m.is_trending = 'ترند 🔥') AS is_manual_trend
+                  FROM master m
+                 WHERE m.store_id = sv.store_id
+            ) mt ON a.story_view_id IS NOT NULL
             WHERE  a.action_type IN ('click_link', 'copy_coupon', 'search')
             """,
             conn,
@@ -1089,7 +1098,13 @@ def _sa_load_passive_story_views() -> pd.DataFrame:
             """
             SELECT COALESCE(sv.tg_user_id, sv.web_user_id) AS user_id,
                    sv.store_id,
-                   sv.was_trending,
+                   -- نتجاهل sv.was_trending المخزّن (سنابشوت قديم خوارزمي)
+                   -- ونحسب «ترند يدوي حالي» من master.is_trending مثل _sa_load_actions.
+                   COALESCE(
+                     (SELECT BOOL_OR(m.is_trending = 'ترند 🔥')
+                        FROM master m WHERE m.store_id = sv.store_id),
+                     FALSE
+                   ) AS was_trending,
                    sv.viewed_at,
                    sv.source
             FROM   story_views sv
