@@ -1049,11 +1049,10 @@ def _sa_load_actions() -> pd.DataFrame:
                    COALESCE(a.source, 'bot')      AS source,
                    a.story_view_id,                              -- NULL = حركة على المتجر مباشرة، غير-NULL = من داخل الستوري
                    a.details,                                    -- context: trend:daily/weekly/featured/...
-                   -- story_was_trending: تجاهلنا سنابشوت sv.was_trending المخزّن
-                   -- (كان يُحسب خوارزمياً top-3/7 فيلوّث متاجر عادية كترند).
-                   -- نعتمد is_trending الحالي للمتجر في master (تثبيت أدمن يدوي)
-                   -- ليطابق نتيجة تحليل المتاجر تثبيتك في «تفضيلات الترند».
-                   COALESCE(mt.is_manual_trend, FALSE) AS story_was_trending,
+                   -- story_was_trending يُحسب في pandas من _sa_trend_store_ids
+                   -- (top-3 يومي + top-3 أسبوعي + كل tثبيتات تفضيلات الترند)
+                   -- ليطابق ما يراه العميل في الميني-ويب بالضبط.
+                   sv.store_id     AS sv_store_id,
                    a.device_class,                              -- web: desktop/mobile/tablet/bot
                    a.is_datacenter, a.is_proxy, a.quality_score,
                    a.city          AS geo_city,                 -- web geo (من إثراء action_logs)
@@ -1070,15 +1069,123 @@ def _sa_load_actions() -> pd.DataFrame:
             LEFT JOIN bot_users bu ON bu.telegram_id = a.user_id
             LEFT JOIN web_users wu ON wu.id = a.user_id AND a.source = 'web'
             LEFT JOIN story_views sv ON sv.view_id = a.story_view_id
-            LEFT JOIN LATERAL (
-                SELECT BOOL_OR(m.is_trending = 'ترند 🔥') AS is_manual_trend
-                  FROM master m
-                 WHERE m.store_id = sv.store_id
-            ) mt ON a.story_view_id IS NOT NULL
             WHERE  a.action_type IN ('click_link', 'copy_coupon', 'search')
             """,
             conn,
         )
+    finally:
+        conn.close()
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _sa_trend_store_ids() -> set:
+    """يرجع set من store_ids «ترند» للستوري حسب قاعدة المالك:
+       top-3 يومي + top-3 أسبوعي + كل tثبيتات تفضيلات الترند.
+
+       يستعمل نفس خوارزمية compute_trend اللي تغذّي /api/v1/trend/{daily,weekly}
+       فيطابق الترند المعروض في الميني-ويب بالضبط. يُحسب مرة كل 60ث.
+    """
+    from datetime import datetime, timedelta, timezone
+    try:
+        # استيراد كسول — لو فشل (مثلاً تشغيل dashboard خارج repo) نرجع set فاضي
+        # ولا يكسر بقية الصفحة.
+        from api.utils.trend import compute_trend, apply_overrides, person_key
+    except Exception:
+        return set()
+
+    conn = get_conn()
+    try:
+        conn.rollback()
+        cur = conn.cursor()
+        # أحداث آخر 8 أيام (نافذة الأسبوعي + يوم احتياط)
+        cur.execute("""
+            SELECT a.action_time, a.action_type, a.store_id, a.user_id,
+                   COALESCE(a.source, 'bot') AS source,
+                   encode(a.ip_hash, 'hex')  AS ip_hex
+              FROM action_logs a
+             WHERE a.action_type IN ('click_link', 'copy_coupon', 'search')
+               AND a.store_id IS NOT NULL AND TRIM(a.store_id) <> ''
+               AND a.action_time >= NOW() - INTERVAL '8 days'
+        """)
+        events = []
+        for at, at_t, sid, uid, src, ip in cur.fetchall():
+            if at.tzinfo:
+                at = at.astimezone(timezone.utc).replace(tzinfo=None)
+            events.append({
+                "time": at + timedelta(hours=3),
+                "action_type": at_t,
+                "store_id": sid,
+                "person_key": person_key(src, uid, ip),
+            })
+
+        cur.execute("""
+            SELECT uf.store_id, uf.created_at
+              FROM user_favorites uf
+             WHERE COALESCE(uf.kind, 'store') = 'store'
+               AND uf.store_id IS NOT NULL AND TRIM(uf.store_id) <> ''
+               AND uf.created_at >= NOW() - INTERVAL '8 days'
+        """)
+        favorites = []
+        for sid, ca in cur.fetchall():
+            if ca.tzinfo:
+                ca = ca.astimezone(timezone.utc).replace(tzinfo=None)
+            favorites.append({
+                "store_id": sid,
+                "created_at": ca + timedelta(hours=3),
+            })
+
+        cur.execute("""
+            SELECT DISTINCT store_id FROM master
+             WHERE store_id IS NOT NULL AND TRIM(store_id) <> ''
+               AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+        """)
+        active = {r[0] for r in cur.fetchall()}
+
+        cur.execute("SELECT window_kind, rank, store_id FROM trend_overrides")
+        daily_ov, weekly_ov = {}, {}
+        for wk, rk, sid in cur.fetchall():
+            (daily_ov if wk == "daily" else weekly_ov)[rk] = sid
+
+        events    = [e for e in events    if e["store_id"] in active]
+        favorites = [f for f in favorites if f["store_id"] in active]
+
+        now_r        = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=3)
+        daily_start  = now_r.replace(hour=0, minute=0, second=0, microsecond=0)
+        weekly_start = now_r - timedelta(days=7)
+
+        daily_raw  = compute_trend(events, favorites, daily_start,  now_r, 13)
+        weekly_raw = compute_trend(events, favorites, weekly_start, now_r, 20)
+
+        pinned_weekly = set(weekly_ov.values())
+
+        # اليومي: top-3 مع padding من الأسبوعي إن نقص (يطابق sequence الميني-ويب)
+        daily_top = apply_overrides(daily_raw, daily_ov, 3)
+        if len(daily_top) < 3:
+            existing   = {it["store_id"] for it in daily_top}
+            weekly_pad = apply_overrides(weekly_raw, weekly_ov, 20)
+            pad = [it for it in weekly_pad
+                   if it["store_id"] not in existing
+                      and it["store_id"] not in pinned_weekly]
+            daily_top = (daily_top + pad)[:3]
+        daily_ids = {it["store_id"] for it in daily_top}
+
+        # الأسبوعي: top-3 (المالك خفّضه من 7 لـ3 للستوري ترند)
+        excl_weekly      = daily_ids - pinned_weekly
+        weekly_filtered  = [it for it in weekly_raw
+                             if it["store_id"] not in excl_weekly]
+        weekly_top       = apply_overrides(weekly_filtered, weekly_ov, 3)
+        weekly_ids       = {it["store_id"] for it in weekly_top}
+
+        # كل تثبيتات الأدمن (أي rank في كلا النافذتين) — «الا اللي اختاره»
+        override_ids = set(daily_ov.values()) | set(weekly_ov.values())
+
+        return daily_ids | weekly_ids | override_ids
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return set()
     finally:
         conn.close()
 
@@ -1098,13 +1205,6 @@ def _sa_load_passive_story_views() -> pd.DataFrame:
             """
             SELECT COALESCE(sv.tg_user_id, sv.web_user_id) AS user_id,
                    sv.store_id,
-                   -- نتجاهل sv.was_trending المخزّن (سنابشوت قديم خوارزمي)
-                   -- ونحسب «ترند يدوي حالي» من master.is_trending مثل _sa_load_actions.
-                   COALESCE(
-                     (SELECT BOOL_OR(m.is_trending = 'ترند 🔥')
-                        FROM master m WHERE m.store_id = sv.store_id),
-                     FALSE
-                   ) AS was_trending,
                    sv.viewed_at,
                    sv.source
             FROM   story_views sv
@@ -3629,6 +3729,10 @@ elif page == "تحليل المتاجر":
                                   .dt.tz_localize(None)
                                 + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
             p["adate"] = p["viewed_at_r"].dt.date
+            # was_trending = داخل set الترند الحالي (top-3+3+تثبيتات).
+            # هكذا تنزل المشاهدة الواحدة في bucket صحيح حتى للستوريات التاريخية.
+            _trend_set_pv = _sa_trend_store_ids()
+            p["was_trending"] = p["store_id"].astype(str).isin(_trend_set_pv)
             p = p[(p["adate"] >= sm_date_from)
                   & (p["adate"] <= sm_date_to)
                   & (p["store_id"].isin(active_ids))]
@@ -3728,7 +3832,12 @@ elif page == "تحليل المتاجر":
             # ⚠️ البيانات قبل تطبيق ctx tracking تظهر في «متجر عادي» — مقبول.
             _details      = ev["details"].fillna("").astype(str)
             _is_story     = ev["story_view_id"].notna()
-            _story_trend  = ev["story_was_trending"].fillna(False).astype(bool)
+            # ترند الستوري = top-3 يومي ∪ top-3 أسبوعي ∪ تثبيتات تفضيلات الترند.
+            # نحسبه من _sa_trend_store_ids الذي يطابق ما يظهر في الميني-ويب،
+            # ليس من سنابشوت قديم في story_views.was_trending.
+            _trend_set    = _sa_trend_store_ids()
+            _sv_sid       = ev["sv_store_id"].fillna("").astype(str)
+            _story_trend  = _sv_sid.isin(_trend_set) & _is_story
             _ctx_daily    = _details.eq("trend:daily")
             _ctx_weekly   = _details.eq("trend:weekly")
             _ctx_featured = _details.eq("featured")
