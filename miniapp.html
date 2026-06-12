@@ -1767,11 +1767,23 @@ function renderStores() {
     const ST = STRINGS[LANG_CURRENT];
     const titleEl = document.getElementById('sectionTitle');
     const grid = document.getElementById('storesGrid');
+    // عند البحث نُخفي storyRow + الإحصائيات + قسم الترند ليظهر «نتائج البحث»
+    // مباشرة تحت شريط البحث (وإلا تظهر النتائج بعد سكروُل طويل والمستخدم يحسبها معطّلة).
+    const storyRow   = document.getElementById('storyRow');
+    const statsEl    = document.querySelector('#viewHome .stats');
+    const trendHome  = document.getElementById('trendOnHome');
+    const hide = !!activeSearch;
+    if (storyRow)  storyRow.style.display  = hide ? 'none' : '';
+    if (statsEl)   statsEl.style.display   = hide ? 'none' : '';
+    if (trendHome) trendHome.style.display = hide ? 'none' : '';
     let list;
     if (activeSearch) {
+        // مطابقة متسامحة مع المسافات: «ترنديول» ↔ «ترند يول».
+        const qNoWs = activeSearch.replace(/\s+/g, '');
         list = ALL.filter(s => {
             const hay = (s.store_id + ' ' + (s.name || '') + ' ' + (s.bio || '') + ' ' + (s.tags || []).join(' ')).toLowerCase();
-            return hay.includes(activeSearch);
+            if (hay.includes(activeSearch)) return true;
+            return hay.replace(/\s+/g, '').includes(qNoWs);
         });
         if (titleEl) titleEl.textContent = LANG_CURRENT === 'en' ? 'Search results' : 'نتائج البحث';
     } else {
