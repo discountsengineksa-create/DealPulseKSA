@@ -2097,8 +2097,12 @@ function renderStoryRow() {
     // الترند يظهر تلقائياً بلا حاجة لإشهار يدوي، والعادي بالإشهار.
     STORY = ALL.filter(s => DAILY_TREND_IDS.has(s.store_id)
                          || WEEKLY_TREND_IDS.has(s.store_id) || s.promoted);
-    // الطبقة: 0=ترند يومي، 1=ترند أسبوعي، 2=عادي. الترتيب: يومي → أسبوعي → عادي.
-    const _tier = (s) => DAILY_TREND_IDS.has(s.store_id) ? 0
+    // الطبقة: 0=ترند يومي، 1=ترند أسبوعي، 2=مُشهَر عادي.
+    // الإشهار يطغى على الترند في تحديد الـtier — المُشهَر يأخذ موضعه دائماً
+    // آخر السطر بلونه المخصّص حتى لو دخل ضمن متاجر الترند (طلب المالك:
+    // المتجر المُشهَر يجب أن يظهر بمكانه ولونه دائماً، ويُكتفى بـ 🔥 لو في الترند).
+    const _tier = (s) => s.promoted ? 2
+                       : DAILY_TREND_IDS.has(s.store_id)  ? 0
                        : WEEKLY_TREND_IDS.has(s.store_id) ? 1 : 2;
     STORY = STORY.slice().sort((a, b) => _tier(a) - _tier(b)).slice(0, 12);
     // ألوان حلقة الستوري العادي (تطابق الموقع والداشبورد).
@@ -2114,16 +2118,26 @@ function renderStoryRow() {
     const _side = LANG_CURRENT === 'en' ? 'left' : 'right';
     row.innerHTML = STORY.map((s, i) => {
         const logo = escHtml(s.logo || 'logo.png');
-        const t = _tier(s);
+        const isDaily  = DAILY_TREND_IDS.has(s.store_id);
+        const isWeekly = WEEKLY_TREND_IDS.has(s.store_id);
+        const hasCustom = s.ringColor && RING_GRAD[s.ringColor];
         let ringCls = 'story-ring', ringStyle = 'position:relative', flame = '';
-        if (t === 0) {            // يومي: حلقة برتقالية + نار برتقالية
+        // الأولوية: اللون المخصّص للإشهار يطغى على لون الترند (طلب المالك:
+        // المتجر المُشهَر يجب أن يظهر بلونه دائماً حتى لو دخل الترند). 🔥 يبقى
+        // لو في الترند ليُعرف أنه ترند رغم استخدامه لون الإشهار المخصّص.
+        if (hasCustom) {
+            ringStyle = `position:relative;background:${RING_GRAD[s.ringColor]}`;
+            if (isDaily) {
+                flame = `<span style="position:absolute;top:-2px;${_side}:-2px;font-size:12px;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4))">🔥</span>`;
+            } else if (isWeekly) {
+                flame = `<span style="position:absolute;top:-2px;${_side}:-2px;font-size:12px;filter:hue-rotate(160deg) saturate(1.6) drop-shadow(0 1px 2px rgba(0,0,0,0.4))">🔥</span>`;
+            }
+        } else if (isDaily) {            // يومي بلا لون مخصّص: حلقة برتقالية + 🔥 برتقالية
             ringCls = 'story-ring trend';
             flame = `<span style="position:absolute;top:-2px;${_side}:-2px;font-size:12px;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4))">🔥</span>`;
-        } else if (t === 1) {     // أسبوعي: حلقة زرقاء + نار زرقاء
+        } else if (isWeekly) {           // أسبوعي بلا لون مخصّص: حلقة زرقاء + 🔥 زرقاء
             ringCls = 'story-ring trend-weekly';
             flame = `<span style="position:absolute;top:-2px;${_side}:-2px;font-size:12px;filter:hue-rotate(160deg) saturate(1.6) drop-shadow(0 1px 2px rgba(0,0,0,0.4))">🔥</span>`;
-        } else if (s.ringColor && RING_GRAD[s.ringColor]) {   // عادي: لون مخصّص
-            ringStyle = `position:relative;background:${RING_GRAD[s.ringColor]}`;
         }
         return `<button class="story-item" onclick="openStory(${i})">
             <span class="${ringCls}" style="${ringStyle}">${flame}<span class="inner"><img src="${logo}" onerror="this.onerror=null;this.src='logo.png'"></span></span>
