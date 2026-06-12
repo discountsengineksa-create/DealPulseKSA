@@ -3679,9 +3679,23 @@ elif page == "تحليل المتاجر":
                                     "web_email", "web_phone", "web_tg",
                                     "web_city", "bu_username", "bu_city",
                                     "geo_city"] if c in ev.columns]
-            prof = (ev[_pcols]
-                    .drop_duplicates(subset=["user_id", "ip_hex"])
-                    .reset_index(drop=True))
+            # لكل (user_id, ip_hex) نأخذ أول قيمة غير-فاضية لكل عمود ملف شخصي.
+            # كان drop_duplicates يحتفظ بأول صف فيمحو المدينة المسحوبة لاحقاً عبر /go/.
+            # مثلاً: نسخ البوت (بلا city) ثم نقر /go/ (city=Riyadh) → الـRiyadh كان يضيع.
+            def _first_nn(s):
+                for v in s:
+                    if pd.notna(v):
+                        sv = str(v).strip()
+                        if sv and sv.lower() != "nan":
+                            return v
+                return None
+            _prof_cols = [c for c in _pcols if c not in ("user_id", "ip_hex")]
+            if _prof_cols:
+                prof = (ev.groupby(["user_id", "ip_hex"], dropna=False, as_index=False)
+                          [_prof_cols].agg(_first_nn))
+            else:
+                prof = (ev[["user_id", "ip_hex"]].drop_duplicates()
+                                                  .reset_index(drop=True))
             agg = agg.merge(prof, on=["user_id", "ip_hex"], how="left")
         else:
             agg = pd.DataFrame()
