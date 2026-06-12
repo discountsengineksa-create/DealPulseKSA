@@ -2121,7 +2121,10 @@ function renderStoryRow() {
         const logo = escHtml(s.logo || 'logo.png');
         const isDaily  = DAILY_TREND_IDS.has(s.store_id);
         const isWeekly = WEEKLY_TREND_IDS.has(s.store_id);
-        const hasCustom = s.ringColor && RING_GRAD[s.ringColor];
+        // ringColor مرتبط بتدفّق «الإشهار العادي» في الداشبورد — يُطبَّق فقط
+        // إذا المتجر مُشهَر فعلياً. القيمة قد تبقى في DB بعد إلغاء الإشهار،
+        // فالواجهة تتجاهلها لو s.promoted=false (يطابق منتقي الداشبورد).
+        const hasCustom = s.promoted && s.ringColor && RING_GRAD[s.ringColor];
         let ringCls = 'story-ring', ringStyle = 'position:relative', flame = '';
         // الأولوية: اللون المخصّص للإشهار يطغى على لون الترند (طلب المالك:
         // المتجر المُشهَر يجب أن يظهر بلونه دائماً حتى لو دخل الترند). 🔥 يبقى
