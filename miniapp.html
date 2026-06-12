@@ -802,7 +802,8 @@ function padDailyWithWeekly(daily, weekly, targetCount) {
 }
 
 // ── Trend view (يومي + أسبوعي) ──────────────────────────────────────────
-// مصدر: GET /api/v1/trend/daily و /weekly مع source=mini (تجزئة الميني-ويب).
+// مصدر: GET /api/v1/trend/daily و /weekly مع source=all (إجمالي حركات + مفضّلة
+// من كل المنصات — قاعدة بيانات واحدة، حساب ترند موحّد. مطابق للموقع والداشبورد).
 // كل كرت = لوقو + اسم؛ النقر يفتح صفحة المتجر داخل الميني-ويب نفسه.
 function showTrendView() {
     viewStack.push({ view: currentView, context: { ...viewContext } });
@@ -823,8 +824,8 @@ async function loadAndRenderTrend() {
     body.innerHTML = `<div class="trend-loading">${ST.refreshing || '...'}</div>`;
     try {
         const [d, w] = await Promise.all([
-            fetch(`${API_BASE}/trend/daily?source=mini`,  { cache: 'no-store' }).then(r => r.json()),
-            fetch(`${API_BASE}/trend/weekly?source=mini`, { cache: 'no-store' }).then(r => r.json()),
+            fetch(`${API_BASE}/trend/daily?source=all`,  { cache: 'no-store' }).then(r => r.json()),
+            fetch(`${API_BASE}/trend/weekly?source=all`, { cache: 'no-store' }).then(r => r.json()),
         ]);
         const dailyItems = d.items || [];
         const weeklyItems = w.items || [];
@@ -898,8 +899,8 @@ async function loadTrendOnHome() {
     if (!host) return;
     try {
         const [d, w] = await Promise.all([
-            fetch(`${API_BASE}/trend/daily?source=mini`,  { cache: 'no-store' }).then(r => r.json()),
-            fetch(`${API_BASE}/trend/weekly?source=mini`, { cache: 'no-store' }).then(r => r.json()),
+            fetch(`${API_BASE}/trend/daily?source=all`,  { cache: 'no-store' }).then(r => r.json()),
+            fetch(`${API_BASE}/trend/weekly?source=all`, { cache: 'no-store' }).then(r => r.json()),
         ]);
         const dailyItems = d.items || [];
         const weeklyItems = w.items || [];
