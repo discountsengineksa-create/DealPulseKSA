@@ -158,9 +158,10 @@ def cloaked_redirect(
 
     # 4) مسموح — سجّل النقرة (idempotent). العدّاد يرتفع للجودة العالية فقط.
     counted = quality >= QUALITY_THRESHOLD
-    # سياق الترند (من بطاقة الترند) — قائمة بيضاء، يُخزَّن في details لإسناد التحوّل
-    trend_ctx = ctx if ctx in ("trend:daily", "trend:weekly") else None
-    details_val = trend_ctx if trend_ctx else (
+    # سياق الإسناد (ترند يومي/أسبوعي + أبرز المتاجر) — قائمة بيضاء، يُخزَّن
+    # في details لفصل buckets في تحليل المتاجر (mutually-exclusive).
+    attr_ctx = ctx if ctx in ("trend:daily", "trend:weekly", "featured") else None
+    details_val = attr_ctx if attr_ctx else (
         "via_cloak" if counted else "via_cloak_jschallenge")
     with conn.cursor() as cur:
         cur.execute(
