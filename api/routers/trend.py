@@ -204,6 +204,20 @@ def _load_master_meta(conn) -> dict[str, dict]:
             for r in rows}
 
 
+def _trend_counts(conn) -> tuple[int, int]:
+    """أعداد الترند القابلة للتحكّم من platform_settings (يومي افتراضي 3، أسبوعي 7).
+    يضبطها المالك من «تحليل المتاجر → تفضيلات الترند»."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT key, value FROM platform_settings "
+                        "WHERE key IN ('trend_daily_count','trend_weekly_count')")
+            m = dict(cur.fetchall())
+        return (int(m.get('trend_daily_count', 3) or 3),
+                int(m.get('trend_weekly_count', 7) or 7))
+    except Exception:
+        return (3, 7)
+
+
 # ── الحساب الرئيسي (مع كاش) ─────────────────────────────────────────────────
 def _compute_window(conn, window: str, source: str, top_n: int) -> list[dict]:
     """يحسب الترند لنافذة محددة. ليس مكشوفاً مباشرة — يُستدعى عبر _get_cached."""
@@ -236,16 +250,20 @@ def _compute_window(conn, window: str, source: str, top_n: int) -> list[dict]:
     weekly_overrides = _load_trend_overrides(conn, "weekly")
     pinned_weekly_ids = set(weekly_overrides.values())
 
+    # عدد الترند اليومي القابل للتحكّم (تفضيلات الترند) — لازم لحدّ اليومي
+    # وللإقصاء حتى عند حساب الأسبوعي.
+    _dc, _wc = _trend_counts(conn)
+
     # ── اليومي النهائي (مع overrides + padding من الأسبوعي عند الحاجة) ──────
     # padding يستبعد المتاجر المثبّتة للأسبوعي (تخصّ الأسبوعي، ما نشيلها لليومي)
-    daily_after_ov = apply_overrides(daily_raw, daily_overrides, 3)
-    if len(daily_after_ov) < 3:
+    daily_after_ov = apply_overrides(daily_raw, daily_overrides, _dc)
+    if len(daily_after_ov) < _dc:
         existing = {it["store_id"] for it in daily_after_ov}
         weekly_after_ov_for_pad = apply_overrides(weekly_raw, weekly_overrides, 20)
         pad = [it for it in weekly_after_ov_for_pad
                if it["store_id"] not in existing
                and it["store_id"] not in pinned_weekly_ids]
-        daily_after_ov = (daily_after_ov + pad)[:3]
+        daily_after_ov = (daily_after_ov + pad)[:_dc]
     daily_displayed_ids = {it["store_id"] for it in daily_after_ov}
 
     # ── اختيار النتيجة بحسب النافذة المطلوبة ─────────────────────────────
@@ -325,7 +343,7 @@ def get_daily_trend(
     قاعدة Anti-Spam: لكل (مستخدم × متجر × نوع فعل) أول 2 خلال ساعة تُحسب،
     ثم تبريد لـ 5 ساعات قبل فتح نافذة جديدة.
     """
-    return _build_response("daily", source, top_n=3, conn=conn)
+    return _build_response("daily", source, top_n=_trend_counts(conn)[0], conn=conn)
 
 
 @router.get("/weekly", response_model=TrendResponse)
@@ -341,4 +359,4 @@ def get_weekly_trend(
 
     نفس نظام النقاط و Anti-Spam كالـ daily.
     """
-    return _build_response("weekly", source, top_n=7, conn=conn)
+    return _build_response("weekly", source, top_n=_trend_counts(conn)[1], conn=conn)

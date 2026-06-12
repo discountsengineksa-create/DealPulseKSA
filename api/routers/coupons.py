@@ -158,7 +158,7 @@ def _select_lang_clause(lang: str) -> str:
             discount_value,
             total_coupon_copies, total_link_clicks, is_trending,
             COALESCE(is_promoted, FALSE) AS is_promoted,
-            logo_url, cloaked_slug,
+            logo_url, cloaked_slug, story_ring_color,
             COALESCE((SELECT array_agg(ss.media_url ORDER BY ss.sort_order, ss.id)
                       FROM story_slides ss
                       WHERE ss.master_id = master.id AND ss.is_active
@@ -185,7 +185,7 @@ def _select_lang_clause(lang: str) -> str:
         discount_value,
         total_coupon_copies, total_link_clicks, is_trending,
         COALESCE(is_promoted, FALSE) AS is_promoted,
-        logo_url, cloaked_slug,
+        logo_url, cloaked_slug, story_ring_color,
         COALESCE((SELECT array_agg(ss.media_url ORDER BY ss.sort_order, ss.id)
                   FROM story_slides ss
                   WHERE ss.master_id = master.id AND ss.is_active

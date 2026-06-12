@@ -27,6 +27,7 @@ class StoreResult(BaseModel):
     is_promoted: bool = False
     logo_url: str | None = None
     cloaked_slug: str | None = None   # Week 4 — يبني المستهلك /go/{cloaked_slug}
+    story_ring_color: str | None = None   # لون حلقة الستوري العادي (gold/silver/...) — None=تلقائي
     story_slides: list[str] = Field(default_factory=list)   # شرائح الستوري (فيديو/صورة) بالترتيب
     extra_coupons: list[ExtraCoupon] = Field(default_factory=list)   # أكواد إضافية للمتجر
     total_coupon_copies: int = 0
