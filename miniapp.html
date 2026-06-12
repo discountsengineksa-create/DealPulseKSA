@@ -298,7 +298,11 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
   </style>
 
   <div class="stores">
-    <div id="sectionTitle" style="padding:0 18px 12px;font-size:14px;font-weight:800;color:var(--t1);opacity:0.85"></div>
+    <div class="trend-home-head" style="padding:0 18px 12px">
+      <span id="sectionTitle" class="trend-home-title"></span>
+      <button class="trend-home-more" id="sectionTitleMore"
+              onclick="showListView('featured')" style="display:none"></button>
+    </div>
     <div class="grid" id="storesGrid"></div>
   </div>
 
@@ -306,7 +310,11 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
        فقط (يختفي عند البحث). نقر متجر هنا = showStoreView بلا ctx، فتُحسب
        حركاته في bucket «المتاجر العادي» في تحليل المتاجر بالداشبورد. -->
   <div class="stores" id="regularStoresWrap" style="margin-top:18px">
-    <div id="sectionTitleRegular" style="padding:0 18px 12px;font-size:14px;font-weight:800;color:var(--t1);opacity:0.85"></div>
+    <div class="trend-home-head" style="padding:0 18px 12px">
+      <span id="sectionTitleRegular" class="trend-home-title"></span>
+      <button class="trend-home-more" id="sectionTitleRegularMore"
+              onclick="showListView('all')"></button>
+    </div>
     <div class="grid" id="regularStoresGrid"></div>
   </div>
 </main>
@@ -1028,6 +1036,7 @@ function renderListView(mode) {
     const ST = STRINGS[LANG_CURRENT];
     const title = (mode === 'trending') ? ST.sectionTrend
                 : (mode === 'favorites') ? ST.favorites
+                : (mode === 'featured')  ? ST.sectionAll
                 : ST.allStores;
     document.getElementById('listTitle').textContent   = title;
     document.getElementById('listBackLbl').textContent = ST.home;
@@ -1035,6 +1044,9 @@ function renderListView(mode) {
 
     let list = (mode === 'trending')  ? ALL.filter(s => s.trending)
              : (mode === 'favorites') ? ALL.filter(s => FAVS.has(s.store_id))
+             : (mode === 'featured')  ? ALL.filter(s => (s.fav_count || 0) > 0)
+                                          .slice()
+                                          .sort((a, b) => (b.fav_count || 0) - (a.fav_count || 0))
              : ALL.slice();
 
     if (mode === 'all') {
@@ -1056,12 +1068,16 @@ function renderListView(mode) {
         const msg = (mode === 'trending')
             ? (LANG_CURRENT === 'en' ? 'No trending stores right now.' : 'لا توجد متاجر رائجة حالياً.')
             : (mode === 'favorites') ? ST.favEmpty
+            : (mode === 'featured')  ? (LANG_CURRENT === 'en' ? 'No favorites yet.' : 'لا توجد مفضّلات بعد.')
             : (mode === 'all' && LIST_CAT) ? ST.noMatchFilter
             : (LANG_CURRENT === 'en' ? 'No stores yet.' : 'لا توجد متاجر بعد.');
         grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--t3);padding:40px 20px;font-size:13px;white-space:pre-line">${msg}</div>`;
         return;
     }
-    grid.innerHTML = list.map(storeCardHTML).join('');
+    // الصفحة الكاملة لـ«أبرز المتاجر»: ctx=featured يُمرَّر عبر openFeaturedStore
+    // ليُحسب النسخ/النقر في bucket «أبرز» — لا يضيع في «متجر عادي».
+    const openFn = (mode === 'featured') ? 'openFeaturedStore' : 'showStoreView';
+    grid.innerHTML = list.map(s => storeCardHTML(s, openFn)).join('');
 }
 
 // ── Categories page (chips منقولة من الهوم → tiles بعدّاد المتاجر) ──
@@ -1776,6 +1792,7 @@ function updateStats() {
 function renderStores() {
     const ST = STRINGS[LANG_CURRENT];
     const titleEl = document.getElementById('sectionTitle');
+    const moreBtn = document.getElementById('sectionTitleMore');
     const grid = document.getElementById('storesGrid');
     // عند البحث نُخفي storyRow + الإحصائيات + قسم الترند ليظهر «نتائج البحث»
     // مباشرة تحت شريط البحث (وإلا تظهر النتائج بعد سكروُل طويل والمستخدم يحسبها معطّلة).
@@ -1786,7 +1803,10 @@ function renderStores() {
     if (storyRow)  storyRow.style.display  = hide ? 'none' : '';
     if (statsEl)   statsEl.style.display   = hide ? 'none' : '';
     if (trendHome) trendHome.style.display = hide ? 'none' : '';
+    const moreLabel = LANG_CURRENT === 'en' ? 'View all' : 'الصفحة الكاملة';
+
     let list;
+    let fullCount = 0;   // إجمالي «أبرز» قبل القطع لـ3
     if (activeSearch) {
         // مطابقة متسامحة مع المسافات: «ترنديول» ↔ «ترند يول».
         const qNoWs = activeSearch.replace(/\s+/g, '');
@@ -1796,31 +1816,38 @@ function renderStores() {
             return hay.replace(/\s+/g, '').includes(qNoWs);
         });
         if (titleEl) titleEl.textContent = LANG_CURRENT === 'en' ? 'Search results' : 'نتائج البحث';
+        if (moreBtn) moreBtn.style.display = 'none';
     } else {
         // أبرز المتاجر: أعلى N حسب عدد المُفضِّلين (s.fav_count يأتي من API).
         // fallback لو ما توفّر العدد: المروّجة + الترند (لتفادي الصفحة الفارغة).
         const hasFav = ALL.some(s => typeof s.fav_count === 'number');
+        let allFeatured;
         if (hasFav) {
-            list = [...ALL]
+            allFeatured = [...ALL]
                 .filter(s => (s.fav_count || 0) > 0)
-                .sort((a, b) => (b.fav_count || 0) - (a.fav_count || 0))
-                .slice(0, 10);
-            if (!list.length) {
+                .sort((a, b) => (b.fav_count || 0) - (a.fav_count || 0));
+            if (!allFeatured.length) {
                 // لا أحد فضّل أي متجر بعد — fallback لخريطة promoted+trend
-                list = [...ALL].sort((a, b) => {
+                allFeatured = [...ALL].sort((a, b) => {
                     const p = (b.promoted ? 1 : 0) - (a.promoted ? 1 : 0);
                     if (p !== 0) return p;
                     return (isTrendNow(b) ? 1 : 0) - (isTrendNow(a) ? 1 : 0);
-                }).slice(0, 8);
+                });
             }
         } else {
-            list = [...ALL].sort((a, b) => {
+            allFeatured = [...ALL].sort((a, b) => {
                 const p = (b.promoted ? 1 : 0) - (a.promoted ? 1 : 0);
                 if (p !== 0) return p;
                 return (isTrendNow(b) ? 1 : 0) - (isTrendNow(a) ? 1 : 0);
-            }).slice(0, 8);
+            });
         }
+        fullCount = allFeatured.length;
+        list = allFeatured.slice(0, 3);   // الرئيسية: 3 فقط — الباقي في showListView('featured')
         if (titleEl) titleEl.textContent = ST.sectionAll;
+        if (moreBtn) {
+            moreBtn.textContent = `${moreLabel} ←`;
+            moreBtn.style.display = fullCount > 3 ? '' : 'none';
+        }
     }
     if (!list.length) {
         const msg = LANG_CURRENT === 'en' ? 'No matching stores. Try another search.' : 'لا توجد نتائج مطابقة. جرّب كلمة أخرى.';
@@ -1833,12 +1860,12 @@ function renderStores() {
     }
 
     // ── قسم «المتاجر» (العادي) — يَظهر على الرئيسية فقط، يختفي عند البحث.
-    //    يستثني المتاجر اللي ظهرت في «أبرز» (لتفادي التكرار) ويرتّب البقية
-    //    حسب popularity (نسخ + نقر). نقرها = showStoreView بلا ctx — تُحسب
-    //    في bucket «المتاجر العادي» (مستقل عن «أبرز/ترند/ستوري») بالداشبورد.
-    const regWrap   = document.getElementById('regularStoresWrap');
-    const regTitle  = document.getElementById('sectionTitleRegular');
-    const regGrid   = document.getElementById('regularStoresGrid');
+    //    3 الأوائل حسب popularity + «الصفحة الكاملة» تفتح showListView('all').
+    //    نقر متجر هنا = showStoreView بلا ctx → bucket «المتاجر العادي».
+    const regWrap     = document.getElementById('regularStoresWrap');
+    const regTitle    = document.getElementById('sectionTitleRegular');
+    const regMoreBtn  = document.getElementById('sectionTitleRegularMore');
+    const regGrid     = document.getElementById('regularStoresGrid');
     if (regWrap) {
         if (activeSearch) {
             regWrap.style.display = 'none';
@@ -1857,7 +1884,11 @@ function renderStores() {
                 regGrid.innerHTML = '';
                 regWrap.style.display = 'none';
             } else {
-                regGrid.innerHTML = rest.map(s => storeCardHTML(s, 'showStoreView')).join('');
+                regGrid.innerHTML = rest.slice(0, 3).map(s => storeCardHTML(s, 'showStoreView')).join('');
+                if (regMoreBtn) {
+                    regMoreBtn.textContent = `${moreLabel} ←`;
+                    regMoreBtn.style.display = rest.length > 3 ? '' : 'none';
+                }
             }
         }
     }
@@ -1874,12 +1905,17 @@ function copyCurrent() {
 }
 
 // نسخ كود إضافي — يُتتبَّع بـ store_id للمتجر النشط فتتجمّع نسخه في حساباته.
+// أولوية السياق (featured/trend) على تعريف الكود ('code:XXX')، وإلّا نسخ
+// من أبرز كانت تنزل في bucket «متجر عادي» بدل «أبرز» في تحليل المتاجر.
 function copyExtraCode(code, ev) {
     if (ev && ev.stopPropagation) ev.stopPropagation();
     const s = window._activeStore;
     if (!code) return;
     copyText(code);
-    if (s) trackEvent(s.store_id, 'copy_coupon', null, 'code:' + code);
+    if (s) {
+        const ctx = _getStoreCtxDetail();
+        trackEvent(s.store_id, 'copy_coupon', null, ctx || ('code:' + code));
+    }
     showToast(S.copied);
 }
 
@@ -2225,16 +2261,17 @@ function storyVideoTick(v) {
 }
 
 // زيارة المتجر من الستوري — تنقل العميل لرابط الأفلييت مباشرةً (لا لصفحة المتجر).
-// نسجّل click_link مع story_view_id قبل الفتح حتى نربط النقرة بالستوري + يرتفع عدّاد المتجر.
-// نفتح الرابط الخام (لا /go) لتفادي العدّ المزدوج — الإسناد يتم عبر trackEvent.
+// نسجّل click_link مع story_view_id فقط عند وجود رابط فعلي يفتح خارجياً.
+// لو الرابط فاضي (نقع في fallback لصفحة المتجر)، لا نسجّل click_link هنا — وإلا
+// المستخدم يضغط «زيارة» من الستوري ثم «زيارة» من صفحة المتجر فيُحسب نقرتين.
 function storyVisit(id) {
     const s = STORY.find(x => x.id === id);
     if (!s) return;
-    trackEvent(s.store_id, 'click_link', currentStoryViewId);
     closeStory();
     let url = (s.affiliate_link || '').trim();
     if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
-    if (!url) { showStoreView(id); return; }   // احتياطي: لو ما فيه رابط، افتح صفحة المتجر
+    if (!url) { showStoreView(id); return; }   // فولباك بلا تسجيل نقرة — نقرة المتجر تأتي من صفحته
+    trackEvent(s.store_id, 'click_link', currentStoryViewId);
     if (tg && tg.openLink) { tg.openLink(url); } else { window.open(url, '_blank'); }
 }
 

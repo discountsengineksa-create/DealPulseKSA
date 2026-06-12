@@ -1074,6 +1074,37 @@ def _sa_load_actions() -> pd.DataFrame:
         conn.close()
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def _sa_load_passive_story_views() -> pd.DataFrame:
+    """
+    مشاهدات الستوري التي لم تُترجم لتفاعل (لا نسخ ولا نقر). تعيد صف لكل
+    فتحة لتتمكّن من فلترة الفترة الزمنية في الـ caller. يضاف عمود
+    «مشاهدات ستوري عادي/ترند» لأن المالك يريد قياس الانكشاف البصري
+    وليس الـ engagement فقط.
+    """
+    conn = get_conn()
+    try:
+        conn.rollback()
+        return pd.read_sql(
+            """
+            SELECT COALESCE(sv.tg_user_id, sv.web_user_id) AS user_id,
+                   sv.store_id,
+                   sv.was_trending,
+                   sv.viewed_at,
+                   sv.source
+            FROM   story_views sv
+            WHERE  NOT EXISTS (
+                SELECT 1 FROM action_logs a
+                WHERE  a.story_view_id = sv.view_id
+                   AND a.action_type IN ('click_link', 'copy_coupon')
+            )
+            """,
+            conn,
+        )
+    finally:
+        conn.close()
+
+
 @st.cache_data(ttl=180, show_spinner=False)
 def _sa_load_master() -> pd.DataFrame:
     """
@@ -3396,6 +3427,7 @@ elif page == "تحليل المتاجر":
             df_master_raw = _sa_load_master()
             df_search_raw = _sa_load_searches()
             df_fav_raw    = _sa_load_favorites()
+            df_pview_raw  = _sa_load_passive_story_views()
         except Exception as _e:
             st.error(f"⚠️ تعذّر تحميل البيانات: {_e}")
             st.stop()
@@ -3572,6 +3604,28 @@ elif page == "تحليل المتاجر":
             if _act_key in ("click_link", "search", "copy_coupon"):
                 f = f.iloc[0:0]
             df_fav = f
+
+        # passive story views (شاف ستوري بلا نسخ/نقر) — نُحضّر بالفلترة
+        # الزمنية + المتجر، حتى تطابق صفوف agg في الـmerge اللاحق.
+        df_pview = pd.DataFrame()
+        if not df_pview_raw.empty:
+            p = df_pview_raw.copy()
+            p["viewed_at_r"] = (pd.to_datetime(p["viewed_at"], utc=True)
+                                  .dt.tz_localize(None)
+                                + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
+            p["adate"] = p["viewed_at_r"].dt.date
+            p = p[(p["adate"] >= sm_date_from)
+                  & (p["adate"] <= sm_date_to)
+                  & (p["store_id"].isin(active_ids))]
+            if _store_pick == "لا شيء":
+                p = p.iloc[0:0]
+            elif _store_pick != "الكل":
+                p = p[p["store_id"] == _store_pick]
+            # فلتر الحركات: مشاهدة بلا تفاعل ليست action — تختفي عند اختيار
+            # نسخ/نقر/بحث صراحة (نفس سلوك المفضلة).
+            if _act_key in ("click_link", "search", "copy_coupon"):
+                p = p.iloc[0:0]
+            df_pview = p
 
         # ─── ملخّص ──────────────────────────────────────────────
         st.caption(
@@ -3786,6 +3840,69 @@ elif page == "تحليل المتاجر":
                 agg = pd.concat([agg, pd.DataFrame(new_rows)],
                                  ignore_index=True)
 
+        # ─── دمج «مشاهدات الستوري بلا تفاعل» في agg ───────────────
+        # «شاف ستوري بلا نسخ/نقر» — مقياس انكشاف بصري مستقل عن الإجمالي.
+        # نبنيها لكل (user, store) ثم نُلحقها بـagg؛ وإذا في عميل شاف بلا
+        # أي تفاعل/مفضلة (مش في agg) نضيفه كصف صفري بقيمة المشاهدات فقط.
+        _all_stores = (_store_pick == "الكل")
+        _keys = ["user_id", "store_id"] if _all_stores else ["user_id"]
+        if not df_pview.empty:
+            pv_n = (df_pview[df_pview["was_trending"] == False]
+                    .groupby(_keys, dropna=False).size()
+                    .reset_index(name="view_story_normal"))
+            pv_t = (df_pview[df_pview["was_trending"] == True]
+                    .groupby(_keys, dropna=False).size()
+                    .reset_index(name="view_story_trend"))
+            if not agg.empty:
+                agg = agg.merge(pv_n, on=_keys, how="left")
+                agg = agg.merge(pv_t, on=_keys, how="left")
+
+            # كل (user,store) في pv بدون مقابل في agg → صفوف جديدة بأصفار
+            if _all_stores:
+                _exist = (set(zip(agg["user_id"], agg["store_id"]))
+                           if not agg.empty else set())
+                _pv_all = (pd.concat([pv_n[_keys], pv_t[_keys]])
+                             .drop_duplicates())
+                _miss_mask = [tuple(r) not in _exist
+                              for r in _pv_all[_keys].itertuples(index=False)]
+            else:
+                _exist = set(agg["user_id"]) if not agg.empty else set()
+                _pv_all = (pd.concat([pv_n[_keys], pv_t[_keys]])
+                             .drop_duplicates())
+                _miss_mask = [uid not in _exist
+                              for uid in _pv_all["user_id"]]
+            _miss = _pv_all[_miss_mask]
+            if not _miss.empty:
+                _zeros = [0] * len(_miss)
+                _none  = [None] * len(_miss)
+                _new = {
+                    "user_id": _miss["user_id"].values,
+                    "ip_hex":  _none,
+                    "copy": _zeros, "click": _zeros,
+                    "copy_trend_daily": _zeros,  "click_trend_daily": _zeros,
+                    "copy_trend_weekly": _zeros, "click_trend_weekly": _zeros,
+                    "copy_featured": _zeros,     "click_featured": _zeros,
+                    "copy_story_normal": _zeros, "click_story_normal": _zeros,
+                    "copy_story_trend": _zeros,  "click_story_trend": _zeros,
+                    "srch": _zeros,
+                    "first_action": _none, "last_action": _none,
+                    "src_any": ["—"] * len(_miss),
+                }
+                if _all_stores:
+                    _new["store_id"] = _miss["store_id"].values
+                _new_df = (pd.DataFrame(_new)
+                             .merge(pv_n, on=_keys, how="left")
+                             .merge(pv_t, on=_keys, how="left"))
+                agg = pd.concat([agg, _new_df], ignore_index=True)
+
+        # تأكيد العمودين موجودين (حتى مع df_pview فاضي)
+        if "view_story_normal" not in agg.columns:
+            agg["view_story_normal"] = 0
+        if "view_story_trend" not in agg.columns:
+            agg["view_story_trend"] = 0
+        agg["view_story_normal"] = agg["view_story_normal"].fillna(0).astype(int)
+        agg["view_story_trend"]  = agg["view_story_trend"].fillna(0).astype(int)
+
         if agg.empty:
             st.info("📭 لا بيانات للفلاتر المختارة.")
         else:
@@ -3850,6 +3967,8 @@ elif page == "تحليل المتاجر":
                 "click_story_normal":  "نقر ستوري عادي",
                 "copy_story_trend":    "نسخ ستوري ترند",
                 "click_story_trend":   "نقر ستوري ترند",
+                "view_story_normal":   "مشاهدة ستوري عادي",
+                "view_story_trend":    "مشاهدة ستوري ترند",
                 "srch":                "بحث",
             })
             # إجمالي = مجموع كل buckets (mutually exclusive — لا double-counting)
@@ -3865,12 +3984,14 @@ elif page == "تحليل المتاجر":
 
             # ترتيب الأعمدة: متجر → ترند يومي/أسبوعي → أبرز → ستوري عادي/ترند → بحث → إجمالي
             # كل buckets mutually exclusive (context-based) — الإجمالي = مجموعها.
+            # «مشاهدة ستوري» = شاف بلا تفاعل (لا تدخل في الإجمالي — مقياس انكشاف).
             _ACTION_COLS = ["نسخ", "نقر",
                             "نسخ ترند يومي", "نقر ترند يومي",
                             "نسخ ترند أسبوعي", "نقر ترند أسبوعي",
                             "نسخ أبرز", "نقر أبرز",
                             "نسخ ستوري عادي", "نقر ستوري عادي",
                             "نسخ ستوري ترند", "نقر ستوري ترند",
+                            "مشاهدة ستوري عادي", "مشاهدة ستوري ترند",
                             "بحث", "إجمالي الحركات"]
 
             # ─── الدمج: «إجمالي المتجر» أو «إجمالي العميل» ───────────────

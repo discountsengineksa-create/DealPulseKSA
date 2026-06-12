@@ -19,7 +19,6 @@ from api.utils.fraud_scoring import compute_quality_score
 from api.utils.event_publisher import publish_event
 from api.utils.code_reports import record_code_report
 from api.utils.rate_limit import LIMIT_TRACK, limiter
-from api.utils.trend_snapshot import compute_trending_store_ids
 
 # حدود مخصّصة لقنوات تسجيل خفيفة (search/request-code) — أقل من /track العام
 # لمنع إغراق direct_search و unavailable_codes_requests من سكربتات.
@@ -456,11 +455,17 @@ def log_story_view(payload: StoryViewRequest, request: Request, conn=Depends(get
             raise HTTPException(404, f"store '{payload.store_id}' not found")
         was_promoted = bool(row[0])
 
-        # was_trending: snapshot لما يراه العميل فعلاً في الستوري =
-        # نفس signal الـ miniapp (DAILY_TREND_IDS ∪ WEEKLY_TREND_IDS) المحسوب من
-        # خوارزمية compute_trend + trend_overrides — لا master.is_trending.
-        trending_ids = compute_trending_store_ids(conn)
-        was_trending = payload.store_id in trending_ids
+        # was_trending: snapshot للمتجر كـ«ترند» وقت فتح الستوري — يعتمد على
+        # تثبيت الأدمن اليدوي (master.is_trending='ترند 🔥') فقط، ليطابق توقّع
+        # المالك: «ما حطيته ترند يدوياً → ما يُحسب ستوري ترند». الخوارزمية
+        # (compute_trending_store_ids) ترفع متاجر عادية لـtop-3/7 في كتالوج
+        # صغير فتلوّث bucket «ستوري ترند» بمتاجر غير مقصودة.
+        cur.execute(
+            "SELECT BOOL_OR(is_trending = 'ترند 🔥') FROM master WHERE store_id = %s",
+            (payload.store_id,),
+        )
+        _row = cur.fetchone()
+        was_trending = bool(_row[0]) if _row and _row[0] is not None else False
 
         cur.execute(
             """
