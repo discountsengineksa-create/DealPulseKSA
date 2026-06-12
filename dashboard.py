@@ -4384,17 +4384,24 @@ elif page == "🎬 إضافة استوري":
     # ─── نظرة عامة: كل المتاجر اللي عندها شرائح (لرؤيتها وحذفها بسرعة) ───
     _ov = get_conn(); _ov.rollback()
     try:
+        # نعرض كل متجر يظهر في صف الستوري = مُشهَر (is_promoted) أو عليه شرائح.
+        # المُشهَر بلا شرائح يظهر بشعاره، فيهمّ المالك رؤيته هنا أيضاً.
         _ov_df = pd.read_sql(
             """
             SELECT m.store_id AS "المتجر",
-                   COUNT(*)                                                      AS "الشرائح",
-                   COUNT(*) FILTER (WHERE ss.is_active
+                   CASE WHEN COALESCE(m.is_promoted, FALSE)
+                        THEN '✅ مُشهَر' ELSE '—' END                            AS "في صف الستوري",
+                   COUNT(ss.id)                                                  AS "الشرائح",
+                   COUNT(ss.id) FILTER (WHERE ss.is_active
                         AND (ss.expires_at IS NULL OR ss.expires_at > now()))    AS "فعّالة",
-                   COUNT(*) FILTER (WHERE ss.expires_at IS NOT NULL
+                   COUNT(ss.id) FILTER (WHERE ss.expires_at IS NOT NULL
                         AND ss.expires_at <= now())                              AS "منتهية",
                    MIN(ss.expires_at) FILTER (WHERE ss.expires_at > now())       AS "أقرب انتهاء"
-            FROM story_slides ss JOIN master m ON m.id = ss.master_id
-            GROUP BY m.store_id ORDER BY COUNT(*) DESC, m.store_id
+            FROM master m
+            LEFT JOIN story_slides ss ON ss.master_id = m.id
+            WHERE COALESCE(m.is_promoted, FALSE) = TRUE OR ss.id IS NOT NULL
+            GROUP BY m.store_id, m.is_promoted
+            ORDER BY COUNT(ss.id) DESC, m.store_id
             """,
             _ov,
         )
