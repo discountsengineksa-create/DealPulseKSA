@@ -1182,11 +1182,9 @@ def _sa_trend_store_ids() -> set:
         weekly_top      = apply_overrides(weekly_filtered, weekly_ov, _wn)
         weekly_ids      = {it["store_id"] for it in weekly_top}
 
-        # كل تثبيتات الأدمن في تفضيلات الترند (أي rank، يومي أو أسبوعي).
-        override_ids = set(daily_ov.values()) | set(weekly_ov.values())
-
-        # ترند الستوري = اليومي (top-N برتقالي) ∪ الأسبوعي (top-N أزرق) ∪ تثبيتات المالك.
-        return daily_ids | weekly_ids | override_ids
+        # ترند الستوري = اليومي (top-N برتقالي) ∪ الأسبوعي (top-N أزرق).
+        # التثبيتات ضمن العدد مُدرَجة أصلاً في daily_ids/weekly_ids؛ والعدد=0 يُفرّغ الطبقة.
+        return daily_ids | weekly_ids
     except Exception:
         try:
             conn.rollback()
@@ -4234,12 +4232,14 @@ elif page == "تحليل المتاجر":
         _wcount = int(_cnt_map.get("trend_weekly_count", 7) or 7)
 
         _cc1, _cc2, _cc3 = st.columns([1.3, 1.3, 1])
-        _new_dcount = _cc1.number_input("🟠 عدد الترند اليومي (نار برتقالية)",
-                                        min_value=1, max_value=3, value=_dcount,
-                                        step=1, key="trend_dcount")
-        _new_wcount = _cc2.number_input("🔵 عدد الترند الأسبوعي (نار زرقاء)",
-                                        min_value=1, max_value=7, value=_wcount,
-                                        step=1, key="trend_wcount")
+        _new_dcount = _cc1.number_input("🟠 عدد الترند اليومي (0 = بدون)",
+                                        min_value=0, max_value=3, value=_dcount,
+                                        step=1, key="trend_dcount",
+                                        help="0 = إيقاف الترند اليومي تماماً. مثال: 1 = متجر واحد يومي.")
+        _new_wcount = _cc2.number_input("🔵 عدد الترند الأسبوعي (0 = بدون)",
+                                        min_value=0, max_value=7, value=_wcount,
+                                        step=1, key="trend_wcount",
+                                        help="0 = إيقاف الترند الأسبوعي تماماً. مثال: 3 = ثلاثة أسبوعي.")
         with _cc3:
             st.write(""); st.write("")
             if st.button("💾 حفظ الأعداد", width="stretch", key="save_trend_counts"):
