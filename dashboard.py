@@ -3607,8 +3607,18 @@ elif page == "تحليل المتاجر":
         def _email(r): return _clean(r.get("web_email")) or "—"
         def _phone(r): return _clean(r.get("web_phone")) or "—"
         def _tg(r):
+            # نعرض اليوزرنيم + بصمة تلجرام (الرقم) لما تكون متوفّرة.
+            # هكذا حتى لو اليوزرنيم رمزي أو ناقص، الـID يكفي للتعريف.
             v = _clean(r.get("web_tg")) or _clean(r.get("bu_username"))
-            return ("@" + v.lstrip("@")) if v else "—"
+            src = r.get("source", "")
+            uid = r.get("user_id")
+            parts = []
+            if v:
+                parts.append("@" + v.lstrip("@"))
+            if src in ("bot", "telegram_miniapp", "miniapp") and pd.notna(uid):
+                try: parts.append(f"#{int(uid)}")
+                except Exception: pass
+            return " ".join(parts) if parts else "—"
         def _city(r):
             return (_clean(r.get("geo_city"))
                     or _clean(r.get("web_city"))
@@ -3629,32 +3639,36 @@ elif page == "تحليل المتاجر":
 
         if not df_logs.empty:
             ev = df_logs.copy()
+            # توحيد المستخدم المعروف: لو user_id معروف نتجاهل ip_hex حتى لا يقسّم
+            # نفس مستخدم البوت لصفّين (نسخ/بحث بدون IP، ونقر عبر /go/{slug} مع IP).
+            ev.loc[ev["user_id"].notna(), "ip_hex"] = None
             # story_view_id يفصل: NULL = حركة على المتجر مباشرة، غير-NULL = داخل ستوري.
-            # نسخ/نقر المتجر مستقلان عن نسخ/نقر الستوري (الجدول الستوري يعدّ الأخيرة).
+            # نسخ/نقر المتجر مستقلان عن نسخ/نقر الستوري.
             _is_story = ev["story_view_id"].notna()
-            # عضوية الترند: ⚠️ تستخدم daily_ids/weekly_ids الحالية (snapshot لحظة العرض).
-            # ليست تاريخية للحظة الحركة — كل النسخ/النقر على متجر هو الآن في الترند
-            # تُحسب «ترند يومي/أسبوعي». أعمدة *subset* للنسخ/النقر، لا تضاف للإجمالي.
-            _in_daily  = ev["store_id"].isin(daily_ids)
-            _in_weekly = ev["store_id"].isin(weekly_ids)
-            ev["copy"]         = ((ev["action_type"] == "copy_coupon") & ~_is_story).astype(int)
-            ev["click"]        = ((ev["action_type"] == "click_link")  & ~_is_story).astype(int)
-            ev["copy_story"]   = ((ev["action_type"] == "copy_coupon") &  _is_story).astype(int)
-            ev["click_story"]  = ((ev["action_type"] == "click_link")  &  _is_story).astype(int)
-            ev["copy_daily"]   = ((ev["action_type"] == "copy_coupon") &  _in_daily).astype(int)
-            ev["click_daily"]  = ((ev["action_type"] == "click_link")  &  _in_daily).astype(int)
-            ev["copy_weekly"]  = ((ev["action_type"] == "copy_coupon") &  _in_weekly).astype(int)
-            ev["click_weekly"] = ((ev["action_type"] == "click_link")  &  _in_weekly).astype(int)
-            ev["srch"]         = (ev["action_type"] == "search").astype(int)
+            # ترند = «master.is_trending = ترند 🔥» (يدوي من الأدمن، مصدر الحقيقة).
+            # كنا نستخدم الخوارزمية الحيّة لكنها تضع متجراً جديداً في الـtop مباشرةً
+            # لو البيانات شحيحة (سطر النقر الواحد يكفي). تبديل لمنطق إداري أوضح.
+            _admin_trend_stores = set(
+                df_master_raw.loc[
+                    df_master_raw["is_trending"].astype(str).str.contains("ترند", na=False),
+                    "store_id",
+                ].dropna().astype(str)
+            )
+            _is_trend = ev["store_id"].astype(str).isin(_admin_trend_stores)
+            ev["copy"]        = ((ev["action_type"] == "copy_coupon") & ~_is_story).astype(int)
+            ev["click"]       = ((ev["action_type"] == "click_link")  & ~_is_story).astype(int)
+            ev["copy_story"]  = ((ev["action_type"] == "copy_coupon") &  _is_story).astype(int)
+            ev["click_story"] = ((ev["action_type"] == "click_link")  &  _is_story).astype(int)
+            ev["copy_trend"]  = ((ev["action_type"] == "copy_coupon") &  _is_trend).astype(int)
+            ev["click_trend"] = ((ev["action_type"] == "click_link")  &  _is_trend).astype(int)
+            ev["srch"]        = (ev["action_type"] == "search").astype(int)
             agg = (ev.groupby(_grp_keys, dropna=False)
                      .agg(copy=("copy", "sum"),
                           click=("click", "sum"),
                           copy_story=("copy_story", "sum"),
                           click_story=("click_story", "sum"),
-                          copy_daily=("copy_daily", "sum"),
-                          click_daily=("click_daily", "sum"),
-                          copy_weekly=("copy_weekly", "sum"),
-                          click_weekly=("click_weekly", "sum"),
+                          copy_trend=("copy_trend", "sum"),
+                          click_trend=("click_trend", "sum"),
                           srch=("srch", "sum"),
                           first_action=("action_time", "min"),
                           last_action=("action_time", "max"),
@@ -3699,10 +3713,8 @@ elif page == "تحليل المتاجر":
                     "click":        [0] * len(miss),
                     "copy_story":   [0] * len(miss),
                     "click_story":  [0] * len(miss),
-                    "copy_daily":   [0] * len(miss),
-                    "click_daily":  [0] * len(miss),
-                    "copy_weekly":  [0] * len(miss),
-                    "click_weekly": [0] * len(miss),
+                    "copy_trend":   [0] * len(miss),
+                    "click_trend":  [0] * len(miss),
                     "srch":         [0] * len(miss),
                     "first_action": miss["created_at"].values,
                     "last_action": miss["created_at"].values,
@@ -3772,17 +3784,15 @@ elif page == "تحليل المتاجر":
             agg["تاريخ آخر حركة"] = pd.to_datetime(
                 agg["last_action"], errors="coerce").dt.strftime(
                     "%Y-%m-%d %H:%M")
-            agg = agg.rename(columns={"src_any":       "المصدر",
-                                       "store_id":      "المتجر",
-                                       "copy":          "نسخ",
-                                       "click":         "نقر",
-                                       "copy_story":    "نسخ ستوري",
-                                       "click_story":   "نقر ستوري",
-                                       "copy_daily":    "نسخ ترند يومي",
-                                       "click_daily":   "نقر ترند يومي",
-                                       "copy_weekly":   "نسخ ترند أسبوعي",
-                                       "click_weekly":  "نقر ترند أسبوعي",
-                                       "srch":          "بحث"})
+            agg = agg.rename(columns={"src_any":     "المصدر",
+                                       "store_id":    "المتجر",
+                                       "copy":        "نسخ",
+                                       "click":       "نقر",
+                                       "copy_story":  "نسخ ستوري",
+                                       "click_story": "نقر ستوري",
+                                       "copy_trend":  "نسخ ترند",
+                                       "click_trend": "نقر ترند",
+                                       "srch":        "بحث"})
             # ⚠️ إجمالي الحركات = نسخ + نقر + ستوري + بحث فقط.
             # أعمدة الترند (يومي/أسبوعي) مجموعات فرعية من النسخ/النقر — لو أضفناها
             # للإجمالي راح يصير double-counting.
@@ -3791,10 +3801,10 @@ elif page == "تحليل المتاجر":
                                      + agg["بحث"])
 
             # ترتيب الأعمدة المشترك للحركات: المتجر/الستوري/الترند/البحث/الإجمالي
+            # الترند هنا = master.is_trending الإداري (لا الخوارزمية الحيّة).
             _ACTION_COLS = ["نسخ", "نقر",
                             "نسخ ستوري", "نقر ستوري",
-                            "نسخ ترند يومي", "نقر ترند يومي",
-                            "نسخ ترند أسبوعي", "نقر ترند أسبوعي",
+                            "نسخ ترند", "نقر ترند",
                             "بحث", "إجمالي الحركات"]
 
             # ─── الدمج: «إجمالي المتجر» أو «إجمالي العميل» ───────────────
