@@ -1901,9 +1901,13 @@ function onSearch(v) {
         _searchPending = null;
         return;
     }
+    const kwLow = kw.toLowerCase();
+    // مطابقة متسامحة مع المسافات: «ترنديول» يطابق «ترند يول» والعكس.
+    const kwLowNoWs = kwLow.replace(/\s+/g, '');
     const matches = ALL.filter(s => {
         const hay = (s.store_id + ' ' + (s.bio || '') + ' ' + (s.tags || []).join(' ')).toLowerCase();
-        return hay.includes(kw.toLowerCase());
+        if (hay.includes(kwLow)) return true;
+        return hay.replace(/\s+/g, '').includes(kwLowNoWs);
     });
     _searchPending = { kw, matches };
 }

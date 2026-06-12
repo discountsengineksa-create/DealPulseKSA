@@ -270,6 +270,10 @@ def search_coupons(
     - ?lang=en يبدّل قيم الاستجابة للإنجليزيّة (Fallback للعربية إذا فارغة).
     """
     _like = f"%{q}%"
+    # نُطبّع المسافات: المستخدم قد يكتب «ترنديول» والمتجر «ترند يول».
+    # ILIKE العادي يفشل في هذه الحالة — نطبّق REPLACE على الجانبين.
+    _q_no_ws = "".join(q.split())            # "ترنديول"
+    _like_no_ws = f"%{_q_no_ws}%"
 
     sql = f"""
         WITH filtered AS (
@@ -293,6 +297,11 @@ def search_coupons(
                     OR COALESCE(store_tags,    '') ILIKE %(like)s
                     OR COALESCE(store_tags_en, '') ILIKE %(like)s
                     OR COALESCE(store_bio_en,  '') ILIKE %(like)s
+                    -- مطابقة بدون مسافات: «ترنديول» يطابق «ترند يول»
+                    OR REPLACE(store_id,                       ' ', '') ILIKE %(like_no_ws)s
+                    OR REPLACE(COALESCE(name_en,       ''),    ' ', '') ILIKE %(like_no_ws)s
+                    OR REPLACE(COALESCE(store_tags,    ''),    ' ', '') ILIKE %(like_no_ws)s
+                    OR REPLACE(COALESCE(store_tags_en, ''),    ' ', '') ILIKE %(like_no_ws)s
                 )
         )
         SELECT *, (relevance_score * 100)::int AS score_pct
@@ -303,7 +312,8 @@ def search_coupons(
     """
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(sql, {"term": q, "like": _like, "limit": limit})
+        cur.execute(sql, {"term": q, "like": _like,
+                          "like_no_ws": _like_no_ws, "limit": limit})
         rows = cur.fetchall()
 
     results = [

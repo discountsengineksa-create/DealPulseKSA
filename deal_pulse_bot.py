@@ -1208,6 +1208,8 @@ def _db_search(search_term: str) -> list:
         conn = get_db_connection()
         cur  = conn.cursor(cursor_factory=extras.DictCursor)
         like = f"%{search_term}%"
+        # مطابقة بدون مسافات: «ترنديول» يطابق «ترند يول» والعكس.
+        like_no_ws = f"%{''.join(search_term.split())}%"
         cur.execute("""
             SELECT * FROM master
             WHERE (last_time IS NULL OR last_time >= CURRENT_DATE)
@@ -1216,8 +1218,13 @@ def _db_search(search_term: str) -> list:
                    OR COALESCE(name_en,        '')          ILIKE %s
                    OR COALESCE(store_tags,     '')          ILIKE %s
                    OR COALESCE(store_tags_en,  '')          ILIKE %s
-                   OR COALESCE(store_bio_en,   '')          ILIKE %s)
-        """, (like, like, like, like, like))
+                   OR COALESCE(store_bio_en,   '')          ILIKE %s
+                   OR REPLACE(store_id,                  ' ', '') ILIKE %s
+                   OR REPLACE(COALESCE(name_en,    ''), ' ', '') ILIKE %s
+                   OR REPLACE(COALESCE(store_tags, ''), ' ', '') ILIKE %s
+                   OR REPLACE(COALESCE(store_tags_en, ''), ' ', '') ILIKE %s)
+        """, (like, like, like, like, like,
+              like_no_ws, like_no_ws, like_no_ws, like_no_ws))
         rows = [dict(r) for r in cur.fetchall()]
         release_conn(conn)
         return rows
