@@ -2093,8 +2093,10 @@ function storySlidesOf(s) { return (s && Array.isArray(s.storySlides)) ? s.story
 function renderStoryRow() {
     const row = document.getElementById('storyRow');
     if (!row) return;
-    STORY = ALL.filter(s => s.promoted);
-    if (!STORY.length) STORY = ALL.filter(s => isTrendNow(s));   // fallback: الترند لو ما في promoted
+    // عضوية الصف = (ترند يومي) أو (ترند أسبوعي) أو (مُشهَر عادي) — ثلاث طبقات مستقلّة:
+    // الترند يظهر تلقائياً بلا حاجة لإشهار يدوي، والعادي بالإشهار.
+    STORY = ALL.filter(s => DAILY_TREND_IDS.has(s.store_id)
+                         || WEEKLY_TREND_IDS.has(s.store_id) || s.promoted);
     // الطبقة: 0=ترند يومي، 1=ترند أسبوعي، 2=عادي. الترتيب: يومي → أسبوعي → عادي.
     const _tier = (s) => DAILY_TREND_IDS.has(s.store_id) ? 0
                        : WEEKLY_TREND_IDS.has(s.store_id) ? 1 : 2;
