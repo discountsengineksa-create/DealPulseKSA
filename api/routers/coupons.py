@@ -28,6 +28,53 @@ def _parse_tags(raw: str | None) -> list[str]:
     return [t.strip() for t in s.split(",") if t.strip()] if s else []
 
 
+@router.get("/top-favorited")
+def get_top_favorited_stores(
+    limit: int = Query(default=10, ge=1, le=20),
+    conn=Depends(get_db),
+):
+    """أبرز المتاجر = أكثر المتاجر تفضيلاً عبر القنوات الثلاث (bot+miniapp+web).
+    يُستخدم في الصف الأفقي تحت الستوري على الموقع/الميني. الترتيب من الأكثر
+    تفضيلاً تنازلياً؛ المتاجر المنتهية/المعلَّقة مُستثناة.
+    """
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                WITH fav_counts AS (
+                    SELECT store_id, COUNT(*) AS fav_count
+                    FROM user_favorites
+                    WHERE COALESCE(kind, 'store') = 'store'
+                      AND store_id IS NOT NULL
+                    GROUP BY store_id
+                )
+                SELECT m.store_id,
+                       COALESCE(NULLIF(m.name_en, ''), m.store_id) AS name_en,
+                       m.logo_url, m.affiliate_link, m.public_coupon,
+                       m.discount_value,
+                       COALESCE(NULLIF(m.extra_offer_en, ''), m.extra_offer) AS extra_offer,
+                       m.extra_offer_en,
+                       m.cloaked_slug,
+                       fc.fav_count
+                FROM master m
+                JOIN fav_counts fc ON fc.store_id = m.store_id
+                WHERE (m.last_time IS NULL OR m.last_time >= CURRENT_DATE)
+                  AND NOT COALESCE(m.is_suspended, FALSE)
+                ORDER BY fc.fav_count DESC, m.store_id ASC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            rows = cur.fetchall()
+        return {"stores": [dict(r) for r in rows]}
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return {"stores": []}
+
+
 @router.get("/site-theme")
 def get_site_theme(conn=Depends(get_db)):
     """الثيم الفعّال + إعدادات الشفافية لخلفية الموقع/الميني-ويب (عام، بلا مصادقة).
