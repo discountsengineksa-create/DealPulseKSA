@@ -6972,6 +6972,7 @@ elif page == "تحليل المستخدمين":
                            wu.display_name AS name,
                            wu.telegram_username AS handle,
                            wu.email, wu.phone_number AS phone,
+                           wu.city AS reg_city,
                            wu.last_seen,
                            CASE
                              WHEN wu.telegram_username IS NOT NULL
@@ -6991,6 +6992,7 @@ elif page == "تحليل المستخدمين":
                            bu.name_en AS name,
                            bu.username AS handle,
                            NULL AS email, NULL AS phone,
+                           bu.city AS reg_city,
                            bu.last_seen,
                            CASE
                              WHEN bu.username IS NOT NULL
@@ -7076,6 +7078,26 @@ elif page == "تحليل المستخدمين":
                                   if not link_row.empty and pd.notna(link_row.iloc[0]["telegram_id"])
                                   else None)
 
+                    # ── المدينة: COALESCE chain ────────────────────────
+                    # 1) المدينة المسجَّلة في web_users/bot_users (reg_city من الـSQL أعلاه)
+                    # 2) آخر مدينة geo من action_logs (يصل من Cloudflare على /go/ وغيرها)
+                    # → نضمن إظهارها حتى لو المستخدم ما سجّل مدينة لكن النظام التقطها.
+                    _city_disp = (str(sel_row.get("reg_city") or "").strip() or None)
+                    if not _city_disp:
+                        try:
+                            _uids = [u for u in (wu_id, bu_tid) if u]
+                            if _uids:
+                                _city_row = pd.read_sql(
+                                    "SELECT city FROM action_logs "
+                                    "WHERE user_id = ANY(%s) AND city IS NOT NULL "
+                                    "AND TRIM(city) <> '' "
+                                    "ORDER BY action_time DESC LIMIT 1",
+                                    conn_i, params=[_uids])
+                                if not _city_row.empty:
+                                    _city_disp = str(_city_row.iloc[0]["city"]).strip()
+                        except Exception:
+                            pass
+
                     # عرض الملف
                     pc1, pc2, pc3 = st.columns(3)
                     with pc1:
@@ -7089,6 +7111,7 @@ elif page == "تحليل المستخدمين":
                                     + ("✅ مربوط (موقع ↔ تيليجرام)"
                                        if wu_id and bu_tid else "⛔ قناة واحدة"))
                     with pc3:
+                        st.markdown(f"**🌍 المدينة:** {_city_disp or '—'}")
                         # last_seen صار timestamptz → _ksa_dt يضمن العرض بتوقيت الرياض
                         st.markdown(f"**⏱️ آخر ظهور:** "
                                     f"{_ksa_dt(pd.Series([sel_row['last_seen']])).iloc[0].strftime('%Y-%m-%d %H:%M') if pd.notna(sel_row['last_seen']) else '—'}")
