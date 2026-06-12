@@ -1146,6 +1146,13 @@ def _sa_trend_store_ids() -> set:
         for wk, rk, sid in cur.fetchall():
             (daily_ov if wk == "daily" else weekly_ov)[rk] = sid
 
+        # أعداد الترند القابلة للتحكّم (تفضيلات الترند): يومي افتراضي 3، أسبوعي 7.
+        cur.execute("SELECT key, value FROM platform_settings "
+                    "WHERE key IN ('trend_daily_count','trend_weekly_count')")
+        _cnts = dict(cur.fetchall())
+        _dn = int(_cnts.get('trend_daily_count', 3) or 3)
+        _wn = int(_cnts.get('trend_weekly_count', 7) or 7)
+
         events    = [e for e in events    if e["store_id"] in active]
         favorites = [f for f in favorites if f["store_id"] in active]
 
@@ -1158,27 +1165,27 @@ def _sa_trend_store_ids() -> set:
 
         pinned_weekly = set(weekly_ov.values())
 
-        # اليومي: top-3 مع padding من الأسبوعي إن نقص (يطابق sequence الميني-ويب)
-        daily_top = apply_overrides(daily_raw, daily_ov, 3)
-        if len(daily_top) < 3:
+        # اليومي: top-N مع padding من الأسبوعي إن نقص (يطابق sequence الميني-ويب)
+        daily_top = apply_overrides(daily_raw, daily_ov, _dn)
+        if len(daily_top) < _dn:
             existing   = {it["store_id"] for it in daily_top}
             weekly_pad = apply_overrides(weekly_raw, weekly_ov, 20)
             pad = [it for it in weekly_pad
                    if it["store_id"] not in existing
                       and it["store_id"] not in pinned_weekly]
-            daily_top = (daily_top + pad)[:3]
+            daily_top = (daily_top + pad)[:_dn]
         daily_ids = {it["store_id"] for it in daily_top}
 
-        # الأسبوعي: top-3 (المالك خفّضه من 7 لـ3 للستوري ترند)
-        excl_weekly      = daily_ids - pinned_weekly
-        weekly_filtered  = [it for it in weekly_raw
-                             if it["store_id"] not in excl_weekly]
-        weekly_top       = apply_overrides(weekly_filtered, weekly_ov, 3)
-        weekly_ids       = {it["store_id"] for it in weekly_top}
+        # الأسبوعي: top-N (افتراضي 7) — يستثني المعروض في اليومي إلا المثبّت أسبوعياً
+        excl_weekly     = daily_ids - pinned_weekly
+        weekly_filtered = [it for it in weekly_raw if it["store_id"] not in excl_weekly]
+        weekly_top      = apply_overrides(weekly_filtered, weekly_ov, _wn)
+        weekly_ids      = {it["store_id"] for it in weekly_top}
 
-        # كل تثبيتات الأدمن (أي rank في كلا النافذتين) — «الا اللي اختاره»
+        # كل تثبيتات الأدمن في تفضيلات الترند (أي rank، يومي أو أسبوعي).
         override_ids = set(daily_ov.values()) | set(weekly_ov.values())
 
+        # ترند الستوري = اليومي (top-N برتقالي) ∪ الأسبوعي (top-N أزرق) ∪ تثبيتات المالك.
         return daily_ids | weekly_ids | override_ids
     except Exception:
         try:
@@ -4212,6 +4219,48 @@ elif page == "تحليل المتاجر":
             "التثبيت اليدوي يطغى عليها. التغيير يظهر للزوار خلال **دقيقة** "
             "(كاش API).")
 
+        # ─── أعداد الترند القابلة للتحكّم (platform_settings) ───
+        _pscn = get_conn(); _pscn.rollback()
+        try:
+            _cnt_df = pd.read_sql(
+                "SELECT key, value FROM platform_settings "
+                "WHERE key IN ('trend_daily_count','trend_weekly_count')", _pscn)
+        except Exception:
+            _cnt_df = pd.DataFrame(columns=["key", "value"])
+        finally:
+            _pscn.close()
+        _cnt_map = dict(zip(_cnt_df["key"], _cnt_df["value"])) if not _cnt_df.empty else {}
+        _dcount = int(_cnt_map.get("trend_daily_count", 3) or 3)
+        _wcount = int(_cnt_map.get("trend_weekly_count", 7) or 7)
+
+        _cc1, _cc2, _cc3 = st.columns([1.3, 1.3, 1])
+        _new_dcount = _cc1.number_input("🟠 عدد الترند اليومي (نار برتقالية)",
+                                        min_value=1, max_value=3, value=_dcount,
+                                        step=1, key="trend_dcount")
+        _new_wcount = _cc2.number_input("🔵 عدد الترند الأسبوعي (نار زرقاء)",
+                                        min_value=1, max_value=7, value=_wcount,
+                                        step=1, key="trend_wcount")
+        with _cc3:
+            st.write(""); st.write("")
+            if st.button("💾 حفظ الأعداد", width="stretch", key="save_trend_counts"):
+                try:
+                    _sc2 = get_conn(); _sc2.rollback()
+                    with _sc2.cursor() as _c2:
+                        for _k, _v in (("trend_daily_count", int(_new_dcount)),
+                                       ("trend_weekly_count", int(_new_wcount))):
+                            _c2.execute("UPDATE platform_settings SET value=%s, "
+                                        "updated_at=now() WHERE key=%s", (str(_v), _k))
+                            if _c2.rowcount == 0:
+                                _c2.execute("INSERT INTO platform_settings (key, value, "
+                                            "updated_at) VALUES (%s, %s, now())", (_k, str(_v)))
+                    _sc2.commit(); _sc2.close()
+                    try: st.cache_data.clear()
+                    except Exception: pass
+                    st.success("✅ حُفظت الأعداد."); st.rerun()
+                except Exception as _e:
+                    st.error(f"تعذّر حفظ الأعداد: {_e}")
+        st.divider()
+
         try:
             _ov_conn = get_conn()
             _ov_conn.rollback()
@@ -4280,19 +4329,19 @@ elif page == "تحليل المتاجر":
                                  key=f"pin_tab_{window}_{rank}")
             return None if pick == _AUTO else pick
 
-        st.markdown("##### 🌞 الترند اليومي (3 مراكز)")
+        st.markdown(f"##### 🟠 الترند اليومي — نار برتقالية ({int(_new_dcount)} مراكز)")
         _daily_picks: dict[int, str | None] = {}
-        for _rk, _lbl in _DAILY_TITLES.items():
+        for _rk in range(1, int(_new_dcount) + 1):
             _daily_picks[_rk] = _pin_picker(
-                "daily", _rk, _lbl, _ov_daily.get(_rk))
+                "daily", _rk, _DAILY_TITLES.get(_rk, f"🏅 المركز {_rk}"), _ov_daily.get(_rk))
 
-        st.markdown("##### 📅 الترند الأسبوعي (7 مراكز)")
+        st.markdown(f"##### 🔵 الترند الأسبوعي — نار زرقاء ({int(_new_wcount)} مراكز)")
         _weekly_picks: dict[int, str | None] = {}
         _w_cols = st.columns(2)
-        for _i, (_rk, _lbl) in enumerate(_WEEKLY_TITLES.items()):
+        for _i, _rk in enumerate(range(1, int(_new_wcount) + 1)):
             with _w_cols[_i % 2]:
                 _weekly_picks[_rk] = _pin_picker(
-                    "weekly", _rk, _lbl, _ov_weekly.get(_rk))
+                    "weekly", _rk, _WEEKLY_TITLES.get(_rk, f"🏅 المركز {_rk}"), _ov_weekly.get(_rk))
 
         _b1, _b2 = st.columns(2)
         with _b1:
@@ -4423,7 +4472,7 @@ elif page == "🎬 إضافة استوري":
     try:
         _stores_df = pd.read_sql(
             "SELECT id, store_id, COALESCE(NULLIF(name_en,''), store_id) AS name_en, "
-            "COALESCE(is_promoted, FALSE) AS is_promoted "
+            "COALESCE(is_promoted, FALSE) AS is_promoted, story_ring_color "
             "FROM master ORDER BY id DESC",
             _sc,
         )
@@ -4449,21 +4498,42 @@ elif page == "🎬 إضافة استوري":
         _srow = _stores_df[_stores_df["id"] == _sel_id].iloc[0]
         _cur_promoted = bool(_srow["is_promoted"])
 
-        # ── حالة الإشهار (عضوية صف الستوري) ──
+        # ── حالة الإشهار (عضوية صف الستوري) + لون حلقة الستوري العادي ──
+        # ألوان الحلقة للستوري العادي (اليدوي). البرتقالي/الأزرق محجوزان للترند
+        # اليومي/الأسبوعي فلا نضعهما هنا. None = حلقة افتراضية تلقائية.
+        _RING_COLORS = {
+            "⚙️ تلقائي/عادي": None, "🟡 ذهبي": "gold", "⚪ فضي": "silver",
+            "🟤 برونزي": "bronze", "🔴 أحمر": "red", "🟢 أخضر": "green",
+            "🟣 بنفسجي": "purple", "🌸 وردي": "pink",
+        }
+        _cur_ring = (_srow.get("story_ring_color")
+                     if hasattr(_srow, "get") else _srow["story_ring_color"])
+        _cur_ring = None if pd.isna(_cur_ring) else _cur_ring
+        _ring_labels = list(_RING_COLORS.keys())
+        _cur_ring_label = next((k for k, v in _RING_COLORS.items() if v == _cur_ring),
+                               _ring_labels[0])
+
         pc1, pc2 = st.columns([3, 1])
         _promote = pc1.checkbox(
             "📣 فعّل الإشهار (يظهر المتجر في صف الستوري وقسم «المتاجر المختارة»)",
             value=_cur_promoted, key="story_promote_chk",
         )
+        _ring_pick = pc1.selectbox(
+            "🎨 لون حلقة الستوري العادي",
+            _ring_labels, index=_ring_labels.index(_cur_ring_label),
+            key="story_ring_color_sel",
+            help="يُطبَّق على الحلقة عندما يكون المتجر استوري عادي. لو دخل الترند "
+                 "اليومي (برتقالي) أو الأسبوعي (أزرق) يطغى لون الترند تلقائياً.")
         with pc2:
-            st.write("")
-            if st.button("💾 حفظ الإشهار", width="stretch", key="story_promote_save"):
+            st.write(""); st.write("")
+            if st.button("💾 حفظ", width="stretch", key="story_promote_save"):
                 try:
                     _wc = get_conn(); _wc.rollback(); _wcur = _wc.cursor()
-                    _wcur.execute("UPDATE master SET is_promoted=%s WHERE id=%s",
-                                  (bool(_promote), int(_sel_id)))
+                    _wcur.execute(
+                        "UPDATE master SET is_promoted=%s, story_ring_color=%s WHERE id=%s",
+                        (bool(_promote), _RING_COLORS[_ring_pick], int(_sel_id)))
                     _wc.commit(); _wc.close()
-                    st.success("✅ حُفظت حالة الإشهار."); st.rerun()
+                    st.success("✅ حُفظ الإشهار واللون."); st.rerun()
                 except Exception as _e:
                     st.error(f"تعذّر الحفظ: {_e}")
 
