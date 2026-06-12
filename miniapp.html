@@ -464,7 +464,7 @@ const STRINGS = {
     siteTab:         'الموقع 🌐',
     title:           'نبض الصفقات | Deal Pulse KSA',
     chipAll:         '✨ الكل',
-    sectionAll:      'المتاجر المختارة',
+    sectionAll:      'أبرز المتاجر',
     allStores:       'كل المتاجر',
     filterAll:       'الكل',
     sortPopular:     'الأكثر طلباً',
@@ -520,7 +520,7 @@ const STRINGS = {
     siteTab:         'Website 🌐',
     title:           'Deal Pulse KSA',
     chipAll:         '✨ All',
-    sectionAll:      'Featured Stores',
+    sectionAll:      'Top Stores',
     allStores:       'All Stores',
     filterAll:       'All',
     sortPopular:     'Most popular',
@@ -724,20 +724,24 @@ async function showStoreView(storeId) {
     viewStack.push({ view: currentView, context: { ...viewContext } });
     viewContext = { storeId };
 
-    // إسناد الترند: إن جاء من بطاقة ترند (openTrendStore) نلتقط الـ pending
-    // ونحوّله للسياق الحي للصفحة. غير ذلك نمسح أي سياق سابق.
+    // إسناد السياق: ترند له الأولوية، وإلا featured، وإلا نمسح أي سياق سابق.
     if (_pendingTrendCtx) {
         _storeTrendCtx = _pendingTrendCtx;
         _pendingTrendCtx = null;
+        _storeFeaturedCtx = false;
+    } else if (_pendingFeaturedCtx) {
+        _storeFeaturedCtx = true;
+        _pendingFeaturedCtx = false;
+        _storeTrendCtx = null;
     } else {
         _storeTrendCtx = null;
+        _storeFeaturedCtx = false;
     }
 
     const s = ALL.find(x => x.id === storeId);
-    // نُسجّل view_store لكل فتح متجر (لا من الترند فقط) — مع إسناد الترند إن وُجد.
+    // نُسجّل view_store لكل فتح متجر — مع إسناد سياق الترند/أبرز إن وُجد.
     if (s && s.store_id) {
-        trackEvent(s.store_id, 'view_store', null,
-                   _storeTrendCtx ? `trend:${_storeTrendCtx}` : null);
+        trackEvent(s.store_id, 'view_store', null, _getStoreCtxDetail());
     }
 
     switchView('store');
@@ -1125,14 +1129,16 @@ function renderCategoryView(catName) {
 }
 
 // HTML لبطاقة متجر — مشتركة بين home grid و category grid و list grid
-function storeCardHTML(s) {
+function storeCardHTML(s, openFn) {
     // الوسام من نظام الترند الجديد (يومي/أسبوعي) — يظهر في كل الواجهات وباللغتين.
     const trendBadge = trendBadgeHTMLFor(s);
     const logoSrc = escHtml(s.logo || 'logo.png');
     const nm = escHtml(s.name);
     const ST = STRINGS[LANG_CURRENT];
+    // openFn = 'openFeaturedStore' لكروت «أبرز المتاجر»، أو الافتراضي showStoreView.
+    const handler = openFn || 'showStoreView';
     return `
-    <div class="card glass" style="position:relative" onclick="showStoreView(${s.id})">
+    <div class="card glass" style="position:relative" onclick="${handler}(${s.id})">
         ${trendBadge}
         ${favHeartHTML(s)}
         <div class="c-ava"><img src="${logoSrc}" alt="${nm}" onerror="this.onerror=null;this.src='logo.png'"></div>
@@ -1408,6 +1414,20 @@ async function loadData() {
             dbgEl.textContent = `↻ ${hh} · ${ALL.length}`;
         }
 
+        // أبرز المتاجر: نُلصِق fav_count على المتاجر الأكثر تفضيلاً (top 10).
+        // fire-and-forget — لو فشل، renderStores يرجع لـpromoted+trend.
+        fetch(`${API_BASE}/coupons/top-favorited?limit=10`).then(r => r.ok ? r.json() : null)
+            .then(d => {
+                const rows = (d && d.stores) || [];
+                if (!rows.length) return;
+                const byId = new Map(ALL.map(s => [String(s.store_id), s]));
+                rows.forEach(r => {
+                    const s = byId.get(String(r.store_id));
+                    if (s) s.fav_count = Number(r.fav_count) || 0;
+                });
+                renderStores();
+            }).catch(() => {});
+
         renderStores();
         updateStats();
         renderStoryRow();
@@ -1445,19 +1465,35 @@ async function trackEvent(store_id, action, storyViewId, details) {
     } catch (e) { /* silent */ }
 }
 
-// ── سياق الترند داخل الميني-ويب ────────────────────────────────────────
-// _pendingTrendCtx: نوع الترند المراد إسناده عند الدخول التالي لصفحة متجر.
-// _storeTrendCtx:   نوع الترند المرتبط بالصفحة المعروضة حالياً (يخدم
-//                    النسخ/النقر داخل الصفحة لإسنادهم لنفس الترند).
-// كلاهما يُمسح بمجرد المغادرة لصفحة متجر آخر بدون سياق ترند.
-let _pendingTrendCtx = null;   // 'daily' | 'weekly' | null
-let _storeTrendCtx   = null;
+// ── سياق الترند/أبرز داخل الميني-ويب ─────────────────────────────────────
+// _pending*Ctx: نوع السياق المراد إسناده عند الدخول التالي لصفحة متجر.
+// _store*Ctx:   نوع السياق المرتبط بالصفحة المعروضة حالياً (يخدم
+//                النسخ/النقر داخل الصفحة لإسنادهم لنفس السياق).
+// تُمسح كلها بمجرد المغادرة لصفحة متجر آخر بدون سياق.
+let _pendingTrendCtx    = null;   // 'daily' | 'weekly' | null
+let _storeTrendCtx      = null;
+let _pendingFeaturedCtx = false;  // true عند الدخول من قسم «أبرز المتاجر»
+let _storeFeaturedCtx   = false;
+
+// helper موحَّد: يرجّع سلسلة details للنسخ/النقر/الزيارة حسب السياق الحالي.
+// الأولوية للترند (لو دخل من ترند + سُمي أبرز، الترند أدقّ منطقياً).
+function _getStoreCtxDetail() {
+    if (_storeTrendCtx)    return `trend:${_storeTrendCtx}`;
+    if (_storeFeaturedCtx) return 'featured';
+    return null;
+}
 
 // تستدعى من بطاقة ترند قبل التنقّل لصفحة المتجر.
 function openTrendStore(storeId, trendType) {
     _pendingTrendCtx = (trendType === 'daily' || trendType === 'weekly')
         ? trendType : null;
     showStoreByStoreId(storeId);
+}
+
+// تستدعى من كرت «أبرز المتاجر» — يطبع ctx=featured على نسخ/نقر اللاحقة.
+function openFeaturedStore(storeId) {
+    _pendingFeaturedCtx = true;
+    showStoreView(storeId);
 }
 
 // اهتمام صريح بقسم (view_tag) — تايل القسم / فلتر / تاق متجر. fire-and-forget.
@@ -1739,13 +1775,29 @@ function renderStores() {
         });
         if (titleEl) titleEl.textContent = LANG_CURRENT === 'en' ? 'Search results' : 'نتائج البحث';
     } else {
-        // المتاجر المختارة: المروّجة (is_promoted) أولاً، ثم الترند، بحد 8 — يطابق
-        // قسم «المتاجر المختارة» في الموقع. الوسام يظهر تلقائياً من storeCardHTML.
-        list = [...ALL].sort((a, b) => {
-            const p = (b.promoted ? 1 : 0) - (a.promoted ? 1 : 0);
-            if (p !== 0) return p;
-            return (isTrendNow(b) ? 1 : 0) - (isTrendNow(a) ? 1 : 0);
-        }).slice(0, 8);
+        // أبرز المتاجر: أعلى N حسب عدد المُفضِّلين (s.fav_count يأتي من API).
+        // fallback لو ما توفّر العدد: المروّجة + الترند (لتفادي الصفحة الفارغة).
+        const hasFav = ALL.some(s => typeof s.fav_count === 'number');
+        if (hasFav) {
+            list = [...ALL]
+                .filter(s => (s.fav_count || 0) > 0)
+                .sort((a, b) => (b.fav_count || 0) - (a.fav_count || 0))
+                .slice(0, 10);
+            if (!list.length) {
+                // لا أحد فضّل أي متجر بعد — fallback لخريطة promoted+trend
+                list = [...ALL].sort((a, b) => {
+                    const p = (b.promoted ? 1 : 0) - (a.promoted ? 1 : 0);
+                    if (p !== 0) return p;
+                    return (isTrendNow(b) ? 1 : 0) - (isTrendNow(a) ? 1 : 0);
+                }).slice(0, 8);
+            }
+        } else {
+            list = [...ALL].sort((a, b) => {
+                const p = (b.promoted ? 1 : 0) - (a.promoted ? 1 : 0);
+                if (p !== 0) return p;
+                return (isTrendNow(b) ? 1 : 0) - (isTrendNow(a) ? 1 : 0);
+            }).slice(0, 8);
+        }
         if (titleEl) titleEl.textContent = ST.sectionAll;
     }
     if (!list.length) {
@@ -1753,7 +1805,10 @@ function renderStores() {
         grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--t3);padding:40px 20px;font-size:13px">${msg}</div>`;
         return;
     }
-    grid.innerHTML = list.map(storeCardHTML).join('');
+    // كروت «أبرز المتاجر» تستخدم openFeaturedStore لتثبيت ctx=featured.
+    // البحث/الكل العادي يبقى showStoreView بدون سياق.
+    const openFn = activeSearch ? 'showStoreView' : 'openFeaturedStore';
+    grid.innerHTML = list.map(s => storeCardHTML(s, openFn)).join('');
 }
 
 // Legacy openStore — أعيد توجيهها للـ inline view الجديد. لا modal بعد الآن.
@@ -1763,8 +1818,7 @@ function copyCurrent() {
     const s = window._activeStore;
     if (!s || !s.coupon) { showToast(S.noCoupon); return; }
     copyText(s.coupon);
-    const det = _storeTrendCtx ? `trend:${_storeTrendCtx}` : null;
-    trackEvent(s.store_id, 'copy_coupon', null, det);
+    trackEvent(s.store_id, 'copy_coupon', null, _getStoreCtxDetail());
 }
 
 // نسخ كود إضافي — يُتتبَّع بـ store_id للمتجر النشط فتتجمّع نسخه في حساباته.
@@ -1785,8 +1839,8 @@ function openLinkCurrent() {
         showToast(LANG_CURRENT === 'en' ? 'Link unavailable' : 'الرابط غير متوفّر');
         return;
     }
-    const det = _storeTrendCtx ? `trend:${_storeTrendCtx}` : null;
-    // /go المتتبَّع: لو في سياق ترند نُضيف ?ctx=trend:* ليرتفع للسيرفر ويُكتب
+    const det = _getStoreCtxDetail();
+    // /go المتتبَّع: لو في سياق (ترند/أبرز) نُضيف ?ctx=... ليرتفع للسيرفر ويُكتب
     // في action_logs.details من go.py. لو رابط خام نُسجّله هنا مع details.
     if (s.link && s.link.includes('/go/') && det) {
         const sep = s.link.includes('?') ? '&' : '?';

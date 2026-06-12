@@ -273,6 +273,9 @@ TEXTS = {
     'menu_search':       {'ar': '🔎 البحث عن كود',     'en': '🔎 Search Code'},
     'menu_request':      {'ar': '➕ طلب كود',          'en': '➕ Request Code'},
     'menu_favorites':    {'ar': '❤️ مفضلتي',           'en': '❤️ My Favorites'},
+    'menu_featured':     {'ar': '✨ أبرز المتاجر',      'en': '✨ Top Stores'},
+    'no_featured':       {'ar': 'ما فيه متاجر مميزة حالياً.',
+                          'en': 'No top stores right now.'},
     'menu_website':      {'ar': '🌐 موقعنا الإلكتروني', 'en': '🌐 Our Website'},
     'menu_end':          {'ar': 'إنهاء',               'en': 'End'},
     'start_btn':         {'ar': 'بدء الاستخدام 🚀',    'en': 'Start 🚀'},
@@ -730,11 +733,16 @@ def _kb_main(lang):
         types.InlineKeyboardButton(TEXTS['menu_codes'][lang],      callback_data='nav:codes'),
         types.InlineKeyboardButton(TEXTS['menu_categories'][lang], callback_data='nav:cats'),
     )
+    # «أبرز المتاجر» = top N حسب عدد المُفضِّلين عبر القنوات الثلاث.
+    # تفاعلاتها تُسجَّل بـdetails='featured' لفصلها في تحليل المتاجر.
+    kb.add(
+        types.InlineKeyboardButton(TEXTS['menu_featured'][lang], callback_data='nav:featured'),
+        types.InlineKeyboardButton(TEXTS['menu_favorites'][lang], callback_data='nav:favs'),
+    )
     kb.add(
         types.InlineKeyboardButton(TEXTS['menu_search'][lang],  callback_data='nav:search'),
         types.InlineKeyboardButton(TEXTS['menu_request'][lang], callback_data='nav:request'),
     )
-    kb.add(types.InlineKeyboardButton(TEXTS['menu_favorites'][lang], callback_data='nav:favs'))
     kb.add(types.InlineKeyboardButton(TEXTS['menu_website'][lang], url=WEBSITE_URL))
     kb.add(types.InlineKeyboardButton(TEXTS['menu_support'][lang], callback_data='nav:support'))
     kb.add(types.InlineKeyboardButton(TEXTS['menu_end'][lang], callback_data='nav:end'))
@@ -1069,6 +1077,42 @@ def _load_and_show_codes(user_id, lang):
         _edit_nav(user_id, t(user_id, 'no_codes'), _kb_cancel(lang))
         return
     _update_nav(user_id, stores=rows, page=0, source='codes', state='codes')
+    _show_card(user_id, 0)
+
+
+def _load_and_show_featured(user_id, lang):
+    """«أبرز المتاجر» في البوت = top N حسب عدد المُفضِّلين عبر القنوات الثلاث.
+    nav.source='featured' حتى تُسجَّل النقرة/النسخة بـdetails='featured'."""
+    log_action(None, 'view_featured', user_id=user_id)
+    try:
+        conn = get_db_connection()
+        cur  = conn.cursor(cursor_factory=extras.DictCursor)
+        cur.execute("""
+            WITH fav_counts AS (
+                SELECT store_id, COUNT(*) AS fav_count
+                FROM user_favorites
+                WHERE COALESCE(kind, 'store') = 'store'
+                  AND store_id IS NOT NULL
+                GROUP BY store_id
+            )
+            SELECT m.*, fc.fav_count
+            FROM master m
+            JOIN fav_counts fc ON fc.store_id = m.store_id
+            WHERE (m.last_time IS NULL OR m.last_time >= CURRENT_DATE)
+              AND NOT COALESCE(m.is_suspended, FALSE)
+            ORDER BY fc.fav_count DESC, m.store_id ASC
+            LIMIT 10
+        """)
+        rows = [dict(r) for r in cur.fetchall()]
+        release_conn(conn)
+    except Exception as e:
+        print(f"⚠️ _load_and_show_featured: {e}")
+        _edit_nav(user_id, t(user_id, 'tech_error'), _kb_cancel(lang))
+        return
+    if not rows:
+        _edit_nav(user_id, t(user_id, 'no_featured'), _kb_cancel(lang))
+        return
+    _update_nav(user_id, stores=rows, page=0, source='featured', state='codes')
     _show_card(user_id, 0)
 
 
@@ -1713,6 +1757,9 @@ def handle_nav(call):
     elif action == 'codes':
         _load_and_show_codes(user_id, lang)
 
+    elif action == 'featured':
+        _load_and_show_featured(user_id, lang)
+
     elif action == 'cats':
         _show_cats(user_id, lang)
 
@@ -1793,16 +1840,23 @@ def handle_link_click(call):
     affiliate_link = row[0] if row else None
     cloaked_slug   = row[1] if row else None
 
+    # context: من أي قسم في البوت دخل المستخدم؟ يُمرَّر لـ /go كـctx
+    # فيُحفظ في action_logs.details (يُستخدم في تحليل المتاجر لفصل buckets).
+    nav_src = _get_nav(user_id).get('source')
+    ctx_detail = {'featured': 'featured'}.get(nav_src)   # أكواد/أقسام/مفضلتي = NULL
+
     if cloaked_slug:
         # عبر /go → السيرفر يلتقط الـ IP (Worker) فيُعرف المدينة، ويسجّل النقرة + يرفع
         # العدّاد. s=bot لفصل المصدر، u=معرّف المستخدم لربط النقرة/المدينة بالشخص.
-        # فلا نسجّل النقرة هنا تفادياً للتكرار.
+        # ctx=featured لتعليم النقرات من قسم «أبرز المتاجر» (تذهب لـbucket مستقل).
         open_url = f"{_GO_BASE}/go/{cloaked_slug}?s=bot&u={user_id}"
+        if ctx_detail:
+            open_url += f"&ctx={ctx_detail}"
     elif affiliate_link:
         # متجر بلا cloaked_slug → رابط خام لا يمرّ على /go → نسجّل النقرة هنا (بلا مدينة)
         open_url = affiliate_link
         increment_link_clicks(store_id)
-        log_action(store_id, 'click_link', user_id=user_id)
+        log_action(store_id, 'click_link', user_id=user_id, details=ctx_detail)
     else:
         bot.answer_callback_query(call.id, t(user_id, 'link_unavailable'))
         return
@@ -1821,7 +1875,10 @@ def handle_coupon_copy(call):
 
     _update_nav(user_id, chat_id=call.message.chat.id, msg_id=call.message.message_id)
     increment_coupon_copies(store_id)
-    log_action(store_id, 'copy_coupon', user_id=user_id)
+    # context: details='featured' لو دخل من قسم «أبرز المتاجر» في البوت.
+    nav_src = _get_nav(user_id).get('source')
+    ctx_detail = {'featured': 'featured'}.get(nav_src)
+    log_action(store_id, 'copy_coupon', user_id=user_id, details=ctx_detail)
     update_user_behavior(user_id, 'copy_coupon', store_id=store_id)
 
     # نجمع كل أكواد المتجر: الرئيسي (master) + الإضافية (store_extra_coupons).
