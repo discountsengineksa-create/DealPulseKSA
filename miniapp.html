@@ -381,6 +381,7 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
       box-shadow:0 1px 4px rgba(239,68,68,0.3)}
     /* حلقة برتقالية للستوري لو المتجر ترند */
     .story-ring.trend{background:conic-gradient(from 0deg,#F97316,#EF4444,#F97316)}
+    .story-ring.trend-weekly{background:conic-gradient(from 0deg,#3B82F6,#1D4ED8,#3B82F6)}
     .trend-card:active{transform:scale(0.96)}
     .trend-card:hover{box-shadow:0 2px 10px rgba(16,185,129,0.08)}
     .trend-card .tc-title{font-size:10px;color:var(--em);font-weight:800;
@@ -1410,6 +1411,7 @@ async function loadData() {
                 logo: item.logo_url || 'logo.png',
                 trending: item.is_trending === 'ترند 🔥',
                 promoted: !!item.is_promoted,
+                ringColor: item.story_ring_color || null,   // لون حلقة الستوري العادي
                 // store_tags array (يأتي مُسطّحاً من الـ API) — يدعم الفلترة بالقسم
                 tags: Array.isArray(item.store_tags) ? item.store_tags
                       : (Array.isArray(item.store_tags_en) ? item.store_tags_en : []),
@@ -2093,17 +2095,36 @@ function renderStoryRow() {
     if (!row) return;
     STORY = ALL.filter(s => s.promoted);
     if (!STORY.length) STORY = ALL.filter(s => isTrendNow(s));   // fallback: الترند لو ما في promoted
-    STORY = STORY.slice(0, 12);
+    // الطبقة: 0=ترند يومي، 1=ترند أسبوعي، 2=عادي. الترتيب: يومي → أسبوعي → عادي.
+    const _tier = (s) => DAILY_TREND_IDS.has(s.store_id) ? 0
+                       : WEEKLY_TREND_IDS.has(s.store_id) ? 1 : 2;
+    STORY = STORY.slice().sort((a, b) => _tier(a) - _tier(b)).slice(0, 12);
+    // ألوان حلقة الستوري العادي (تطابق الموقع والداشبورد).
+    const RING_GRAD = {
+        gold:'linear-gradient(135deg,#fde047,#d4af37,#fde047)',
+        silver:'linear-gradient(135deg,#e5e7eb,#9ca3af,#e5e7eb)',
+        bronze:'linear-gradient(135deg,#e8b486,#cd7f32,#e8b486)',
+        red:'linear-gradient(135deg,#f87171,#dc2626,#f87171)',
+        green:'linear-gradient(135deg,#34d399,#059669,#34d399)',
+        purple:'linear-gradient(135deg,#c084fc,#7c3aed,#c084fc)',
+        pink:'linear-gradient(135deg,#f9a8d4,#db2777,#f9a8d4)'
+    };
+    const _side = LANG_CURRENT === 'en' ? 'left' : 'right';
     row.innerHTML = STORY.map((s, i) => {
         const logo = escHtml(s.logo || 'logo.png');
-        // حلقة برتقالية + شارة 🔥 صغيرة لو المتجر ترند — الوسام يظهر حتى في الاستوري
-        const isTrend = isTrendNow(s);
-        const ringCls = isTrend ? 'story-ring trend' : 'story-ring';
-        const flame = isTrend
-            ? `<span style="position:absolute;top:-2px;${LANG_CURRENT==='en'?'left':'right'}:-2px;font-size:12px;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4))">🔥</span>`
-            : '';
+        const t = _tier(s);
+        let ringCls = 'story-ring', ringStyle = 'position:relative', flame = '';
+        if (t === 0) {            // يومي: حلقة برتقالية + نار برتقالية
+            ringCls = 'story-ring trend';
+            flame = `<span style="position:absolute;top:-2px;${_side}:-2px;font-size:12px;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4))">🔥</span>`;
+        } else if (t === 1) {     // أسبوعي: حلقة زرقاء + نار زرقاء
+            ringCls = 'story-ring trend-weekly';
+            flame = `<span style="position:absolute;top:-2px;${_side}:-2px;font-size:12px;filter:hue-rotate(160deg) saturate(1.6) drop-shadow(0 1px 2px rgba(0,0,0,0.4))">🔥</span>`;
+        } else if (s.ringColor && RING_GRAD[s.ringColor]) {   // عادي: لون مخصّص
+            ringStyle = `position:relative;background:${RING_GRAD[s.ringColor]}`;
+        }
         return `<button class="story-item" onclick="openStory(${i})">
-            <span class="${ringCls}" style="position:relative">${flame}<span class="inner"><img src="${logo}" onerror="this.onerror=null;this.src='logo.png'"></span></span>
+            <span class="${ringCls}" style="${ringStyle}">${flame}<span class="inner"><img src="${logo}" onerror="this.onerror=null;this.src='logo.png'"></span></span>
             <span class="story-name">${escHtml(s.name)}</span></button>`;
     }).join('');
 }

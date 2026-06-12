@@ -217,13 +217,13 @@ def _select_light_clause(lang: str) -> str:
             COALESCE(NULLIF(store_tags_en, ''),  store_tags)     AS store_tags,
             discount_value, is_trending,
             COALESCE(is_promoted, FALSE) AS is_promoted,
-            logo_url, total_coupon_copies, total_link_clicks
+            logo_url, story_ring_color, total_coupon_copies, total_link_clicks
         """
     return """
         id, store_id, name_en, extra_offer, store_tags,
         discount_value, is_trending,
         COALESCE(is_promoted, FALSE) AS is_promoted,
-        logo_url, total_coupon_copies, total_link_clicks
+        logo_url, story_ring_color, total_coupon_copies, total_link_clicks
     """
 
 
