@@ -301,6 +301,14 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
     <div id="sectionTitle" style="padding:0 18px 12px;font-size:14px;font-weight:800;color:var(--t1);opacity:0.85"></div>
     <div class="grid" id="storesGrid"></div>
   </div>
+
+  <!-- ── قسم «المتاجر» (الكل العادي) — يَظهر تحت «أبرز المتاجر» على الرئيسية
+       فقط (يختفي عند البحث). نقر متجر هنا = showStoreView بلا ctx، فتُحسب
+       حركاته في bucket «المتاجر العادي» في تحليل المتاجر بالداشبورد. -->
+  <div class="stores" id="regularStoresWrap" style="margin-top:18px">
+    <div id="sectionTitleRegular" style="padding:0 18px 12px;font-size:14px;font-weight:800;color:var(--t1);opacity:0.85"></div>
+    <div class="grid" id="regularStoresGrid"></div>
+  </div>
 </main>
 
 <!-- ═══════════════════════════════════════════════════════════════════
@@ -465,6 +473,7 @@ const STRINGS = {
     title:           'نبض الصفقات | Deal Pulse KSA',
     chipAll:         '✨ الكل',
     sectionAll:      'أبرز المتاجر',
+    sectionRegular:  'المتاجر',
     allStores:       'كل المتاجر',
     filterAll:       'الكل',
     sortPopular:     'الأكثر طلباً',
@@ -521,6 +530,7 @@ const STRINGS = {
     title:           'Deal Pulse KSA',
     chipAll:         '✨ All',
     sectionAll:      'Top Stores',
+    sectionRegular:  'Stores',
     allStores:       'All Stores',
     filterAll:       'All',
     sortPopular:     'Most popular',
@@ -1815,12 +1825,42 @@ function renderStores() {
     if (!list.length) {
         const msg = LANG_CURRENT === 'en' ? 'No matching stores. Try another search.' : 'لا توجد نتائج مطابقة. جرّب كلمة أخرى.';
         grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--t3);padding:40px 20px;font-size:13px">${msg}</div>`;
-        return;
+    } else {
+        // كروت «أبرز المتاجر» تستخدم openFeaturedStore لتثبيت ctx=featured.
+        // البحث/الكل العادي يبقى showStoreView بدون سياق.
+        const openFn = activeSearch ? 'showStoreView' : 'openFeaturedStore';
+        grid.innerHTML = list.map(s => storeCardHTML(s, openFn)).join('');
     }
-    // كروت «أبرز المتاجر» تستخدم openFeaturedStore لتثبيت ctx=featured.
-    // البحث/الكل العادي يبقى showStoreView بدون سياق.
-    const openFn = activeSearch ? 'showStoreView' : 'openFeaturedStore';
-    grid.innerHTML = list.map(s => storeCardHTML(s, openFn)).join('');
+
+    // ── قسم «المتاجر» (العادي) — يَظهر على الرئيسية فقط، يختفي عند البحث.
+    //    يستثني المتاجر اللي ظهرت في «أبرز» (لتفادي التكرار) ويرتّب البقية
+    //    حسب popularity (نسخ + نقر). نقرها = showStoreView بلا ctx — تُحسب
+    //    في bucket «المتاجر العادي» (مستقل عن «أبرز/ترند/ستوري») بالداشبورد.
+    const regWrap   = document.getElementById('regularStoresWrap');
+    const regTitle  = document.getElementById('sectionTitleRegular');
+    const regGrid   = document.getElementById('regularStoresGrid');
+    if (regWrap) {
+        if (activeSearch) {
+            regWrap.style.display = 'none';
+        } else {
+            regWrap.style.display = '';
+            const featuredIds = new Set(list.map(s => String(s.store_id)));
+            const rest = ALL
+                .filter(s => !featuredIds.has(String(s.store_id)))
+                .sort((a, b) => {
+                    const pa = (a.pop || 0) || ((a.copies || 0) + (a.clicks || 0));
+                    const pb = (b.pop || 0) || ((b.copies || 0) + (b.clicks || 0));
+                    return pb - pa;
+                });
+            if (regTitle) regTitle.textContent = ST.sectionRegular;
+            if (!rest.length) {
+                regGrid.innerHTML = '';
+                regWrap.style.display = 'none';
+            } else {
+                regGrid.innerHTML = rest.map(s => storeCardHTML(s, 'showStoreView')).join('');
+            }
+        }
+    }
 }
 
 // Legacy openStore — أعيد توجيهها للـ inline view الجديد. لا modal بعد الآن.
