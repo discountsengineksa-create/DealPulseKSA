@@ -161,7 +161,8 @@ def _select_lang_clause(lang: str) -> str:
             logo_url, cloaked_slug,
             COALESCE((SELECT array_agg(ss.media_url ORDER BY ss.sort_order, ss.id)
                       FROM story_slides ss
-                      WHERE ss.master_id = master.id AND ss.is_active),
+                      WHERE ss.master_id = master.id AND ss.is_active
+                        AND (ss.expires_at IS NULL OR ss.expires_at > now())),
                      ARRAY[]::text[]) AS story_slides,
             COALESCE((SELECT json_agg(json_build_object(
                         'public_coupon',  ec.public_coupon,
@@ -187,7 +188,8 @@ def _select_lang_clause(lang: str) -> str:
         logo_url, cloaked_slug,
         COALESCE((SELECT array_agg(ss.media_url ORDER BY ss.sort_order, ss.id)
                   FROM story_slides ss
-                  WHERE ss.master_id = master.id AND ss.is_active),
+                  WHERE ss.master_id = master.id AND ss.is_active
+                    AND (ss.expires_at IS NULL OR ss.expires_at > now())),
                  ARRAY[]::text[]) AS story_slides,
         COALESCE((SELECT json_agg(json_build_object(
                     'public_coupon',  ec.public_coupon,

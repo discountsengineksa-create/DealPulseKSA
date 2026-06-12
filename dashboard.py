@@ -4381,6 +4381,37 @@ elif page == "🎬 إضافة استوري":
         except Exception: pass
         st.rerun()
 
+    # ─── نظرة عامة: كل المتاجر اللي عندها شرائح (لرؤيتها وحذفها بسرعة) ───
+    _ov = get_conn(); _ov.rollback()
+    try:
+        _ov_df = pd.read_sql(
+            """
+            SELECT m.store_id AS "المتجر",
+                   COUNT(*)                                                      AS "الشرائح",
+                   COUNT(*) FILTER (WHERE ss.is_active
+                        AND (ss.expires_at IS NULL OR ss.expires_at > now()))    AS "فعّالة",
+                   COUNT(*) FILTER (WHERE ss.expires_at IS NOT NULL
+                        AND ss.expires_at <= now())                              AS "منتهية",
+                   MIN(ss.expires_at) FILTER (WHERE ss.expires_at > now())       AS "أقرب انتهاء"
+            FROM story_slides ss JOIN master m ON m.id = ss.master_id
+            GROUP BY m.store_id ORDER BY COUNT(*) DESC, m.store_id
+            """,
+            _ov,
+        )
+    except Exception:
+        _ov_df = pd.DataFrame()
+    finally:
+        _ov.close()
+
+    if not _ov_df.empty:
+        _exp = (pd.to_datetime(_ov_df["أقرب انتهاء"], utc=True, errors="coerce")
+                + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
+        _ov_df["أقرب انتهاء"] = _exp.dt.strftime("%Y-%m-%d %H:%M").where(_exp.notna(), "♾️ دائم")
+        st.markdown("##### 📚 المتاجر التي عليها شرائح")
+        st.dataframe(_ov_df, hide_index=True, width="stretch")
+        st.caption("اختر المتجر أدناه لعرض شرائحه وحذفها أو تحديد مدّتها.")
+        st.divider()
+
     _sc = get_conn(); _sc.rollback()
     try:
         _stores_df = pd.read_sql(
@@ -4435,7 +4466,7 @@ elif page == "🎬 إضافة استوري":
         _slc = get_conn(); _slc.rollback()
         try:
             _slides = pd.read_sql(
-                "SELECT id, media_url, sort_order FROM story_slides "
+                "SELECT id, media_url, sort_order, expires_at FROM story_slides "
                 "WHERE master_id=%s ORDER BY sort_order, id",
                 _slc, params=(int(_sel_id),),
             )
@@ -4467,8 +4498,31 @@ elif page == "🎬 إضافة استوري":
                         st.caption(
                             f"ترتيب {_i + 1} · "
                             f"{'🎬 فيديو' if _is_video_url(_murl) else '🖼️ صورة'} · #{_sid}")
+                        # حالة الانتهاء (expires_at مخزّن timestamptz → عرض بتوقيت الرياض)
+                        _exp_v = _sr["expires_at"]
+                        if pd.isna(_exp_v):
+                            st.caption("♾️ **دائمة** — لا تُحذف تلقائياً")
+                        else:
+                            _e = (pd.to_datetime(_exp_v, utc=True)
+                                  + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS)).tz_localize(None)
+                            _nw = (pd.Timestamp.utcnow().tz_localize(None)
+                                   + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
+                            if _e <= _nw:
+                                st.caption(f"⌛ **منتهية** ({_e:%Y-%m-%d %H:%M}) — مخفيّة عن العملاء")
+                            else:
+                                st.caption(f"⏳ تُحذف تلقائياً: **{_e:%Y-%m-%d %H:%M}**")
                         st.code(_murl, language="text")
-                        b1, b2, b3 = st.columns(3)
+                        b1, b2, b3, b4 = st.columns(4)
+                        # ♾️ إلغاء الانتهاء (تصير دائمة)
+                        if b4.button("♾️", key=f"sl_perm_{_sid}", width="stretch",
+                                     disabled=pd.isna(_exp_v), help="اجعلها دائمة (إلغاء الحذف التلقائي)"):
+                            try:
+                                _wc = get_conn(); _wc.rollback(); _wcur = _wc.cursor()
+                                _wcur.execute("UPDATE story_slides SET expires_at=NULL WHERE id=%s", (_sid,))
+                                _wc.commit(); _wc.close()
+                                st.toast("♾️ صارت دائمة"); st.rerun()
+                            except Exception as _e:
+                                st.error(f"تعذّر: {_e}")
                         # ⬆️ رفع الترتيب (تبديل مع السابق)
                         if b1.button("⬆️", key=f"sl_up_{_sid}", width="stretch",
                                      disabled=(_i == 0), help="تقديم"):
@@ -4516,6 +4570,10 @@ elif page == "🎬 إضافة استوري":
             )
             _media_url_input = af2.text_input(
                 "أو الصق رابط مباشر", placeholder="https://...", key="story_slide_url")
+            _dur_days = st.number_input(
+                "⏳ يُحذف تلقائياً بعد (أيام) — 0 = دائم",
+                min_value=0, max_value=365, value=0, step=1, key="story_slide_dur",
+                help="مثال: 2 = يُخفى عن العملاء ويُحذف بعد يومين. 0 = يبقى دائماً.")
             if st.form_submit_button("➕ أضف الشريحة", type="primary"):
                 import time as _t
                 _final = (_media_url_input or "").strip()
@@ -4533,10 +4591,18 @@ elif page == "🎬 إضافة استوري":
                             "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM story_slides "
                             "WHERE master_id=%s", (int(_sel_id),))
                         _next_order = _wcur.fetchone()[0]
-                        _wcur.execute(
-                            "INSERT INTO story_slides (master_id, media_url, sort_order, is_active) "
-                            "VALUES (%s, %s, %s, TRUE)",
-                            (int(_sel_id), _final, int(_next_order)))
+                        if _dur_days and int(_dur_days) > 0:
+                            _wcur.execute(
+                                "INSERT INTO story_slides "
+                                "(master_id, media_url, sort_order, is_active, expires_at) "
+                                "VALUES (%s, %s, %s, TRUE, now() + (%s || ' days')::interval)",
+                                (int(_sel_id), _final, int(_next_order), int(_dur_days)))
+                        else:
+                            _wcur.execute(
+                                "INSERT INTO story_slides "
+                                "(master_id, media_url, sort_order, is_active) "
+                                "VALUES (%s, %s, %s, TRUE)",
+                                (int(_sel_id), _final, int(_next_order)))
                         _wc.commit(); _wc.close()
                         st.success("✅ أُضيفت الشريحة."); st.rerun()
                     except Exception as _e:
