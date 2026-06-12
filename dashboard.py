@@ -4465,6 +4465,31 @@ elif page == "🎬 إضافة استوري":
         _ov_df["أقرب انتهاء"] = _exp.dt.strftime("%Y-%m-%d %H:%M").where(_exp.notna(), "♾️ دائم")
         st.markdown("##### 📚 المتاجر التي عليها شرائح")
         st.dataframe(_ov_df, hide_index=True, width="stretch")
+
+        # ── إزالة سريعة من صف الستوري (إلغاء الإشهار) — لا يحذف المتجر ولا شرائحه ──
+        _promoted_now = _ov_df.loc[_ov_df["في صف الستوري"] == "✅ مُشهَر",
+                                   "المتجر"].astype(str).tolist()
+        if _promoted_now:
+            _rm_c1, _rm_c2 = st.columns([3, 1])
+            _rm_sel = _rm_c1.multiselect(
+                "🗑️ إزالة من صف الستوري (إلغاء الإشهار)", _promoted_now,
+                key="story_unpromote_sel",
+                help="يخفي المتجر من صف الستوري فقط — لا يحذف المتجر ولا شرائحه.")
+            with _rm_c2:
+                st.write(""); st.write("")
+                if st.button("تأكيد الإزالة", width="stretch",
+                             key="story_unpromote_btn", disabled=not _rm_sel):
+                    try:
+                        _uc = get_conn(); _uc.rollback(); _ucur = _uc.cursor()
+                        _ucur.execute(
+                            "UPDATE master SET is_promoted=FALSE WHERE store_id = ANY(%s)",
+                            (_rm_sel,))
+                        _n = _ucur.rowcount
+                        _uc.commit(); _uc.close()
+                        st.success(f"✅ أُزيل {_n} متجر من صف الستوري."); st.rerun()
+                    except Exception as _e:
+                        st.error(f"تعذّر: {_e}")
+
         st.caption("اختر المتجر أدناه لعرض شرائحه وحذفها أو تحديد مدّتها.")
         st.divider()
 
