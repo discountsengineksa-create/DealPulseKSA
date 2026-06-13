@@ -104,7 +104,12 @@
       "Bash(./venv/Scripts/python.exe _run_migration_009.py)",
       "Bash(python -c 'import ast; ast.parse\\(open\\('\\\\''__TRACKED_VAR__'\\\\'', encoding='\\\\''utf-8'\\\\''\\).read\\(\\)\\); print\\('\\\\''OK: __TRACKED_VAR__'\\\\''\\)')",
       "Bash(python -c \"import ast; ast.parse\\(open\\('api/routers/track.py', encoding='utf-8'\\).read\\(\\)\\); print\\('track.py OK'\\)\")",
-      "Bash(python -c \"import ast; ast.parse\\(open\\('api/schemas/track.py', encoding='utf-8'\\).read\\(\\)\\); print\\('schemas/track.py OK'\\)\")"
+      "Bash(python -c \"import ast; ast.parse\\(open\\('api/schemas/track.py', encoding='utf-8'\\).read\\(\\)\\); print\\('schemas/track.py OK'\\)\")",
+      "Bash(curl -s \"https://api.dealpulseksa.com/api/v1/trend/daily?source=web\")",
+      "Bash(curl -s \"https://api.dealpulseksa.com/api/v1/trend/weekly?source=web\")",
+      "Bash(curl -s \"https://www.dealpulseksa.com/\" -H \"Cache-Control: no-cache\" -o /tmp/page.html)",
+      "Read(//tmp/**)",
+      "Bash(curl -sI \"https://www.dealpulseksa.com/\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\PC\\Desktop\\dealpulseksa-web\\lib",
