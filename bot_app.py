@@ -372,12 +372,11 @@ def serve_miniapp():
 
 
 # ─── Static assets (logos, fonts) — صراحة بدون mount لتجنب فتح الجذر ────────
+# logo.png = نهاري، logo2.png = ليلي (يستخدمهما الميني-ويب + الداشبورد + البوت).
+# مراجع logo[1-4].jpeg القديمة أُزيلت — لم تعد مستخدمة بعد توحيد الهوية الجديدة.
 _STATIC_FILES = {
     "logo.png":  "image/png",
-    "logo1.jpeg": "image/jpeg",
-    "logo2.jpeg": "image/jpeg",
-    "logo3.jpeg": "image/jpeg",
-    "logo4.jpeg": "image/jpeg",
+    "logo2.png": "image/png",
     "Cairo-Bold.ttf": "font/ttf",
 }
 
