@@ -11224,7 +11224,7 @@ elif page == "مركز الدعم":
 # ==============================================================================
 elif page == "استوديو المحتوى":
     page_title("🎨", "استوديو الإبداع — محرك البوسترات")
-    st.caption("ارفع لوقو المتجر، اكتب الخصم والكود، واحصل على بوستر فاخر بهوية نبض الصفقات الموحّدة. مقاس ماستر 1080×1080.")
+    st.caption("ارفع لوقو المتجر، اكتب الخصم والكود، واحصل على بوسترين: شعار نظيف 1080×1080 + بوستر سوشيال بالثيم 768×1376 (ستوري).")
 
     import io
     from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -11368,6 +11368,21 @@ elif page == "استوديو المحتوى":
         except Exception:
             return None
 
+    def _cover_top(logo_bytes: bytes, box_w: int, box_h: int) -> Image.Image | None:
+        """مثل _cover_logo لكن يقصّ من الأعلى (يحفظ الجزء العلوي بدل المركز).
+        ضروري لخلفية logo5 (768×1376): الـheader 'نبض الصفقات DEAL PULSE KSA'
+        موجود في النصف العلوي — لو قطعنا من المركز يضيع، فنقطع من الأعلى."""
+        try:
+            lg = Image.open(io.BytesIO(logo_bytes)).convert("RGBA")
+            w, h = lg.size
+            scale = max(box_w / w, box_h / h)
+            nw, nh = max(int(w * scale + 0.5), box_w), max(int(h * scale + 0.5), box_h)
+            lg = lg.resize((nw, nh), Image.LANCZOS)
+            left = (nw - box_w) // 2
+            return lg.crop((left, 0, left + box_w, box_h))
+        except Exception:
+            return None
+
     def _remove_bg_api(image_bytes: bytes):
         """يشيل خلفية الصورة عبر remove.bg API → PNG شفاف.
         يرجع (bytes, None) عند النجاح أو (None, رسالة الخطأ)."""
@@ -11430,119 +11445,104 @@ elif page == "استوديو المحتوى":
         code: str,
         tagline: str,
         deal_pulse_logo_bytes: bytes | None,
-        card_w: int = 540,
-        card_h: int = 400,
-        logo_scale: int = 100,
-        wm_opacity_pct: int = 10,
+        card_w: int = 600,
+        card_h: int = 320,
+        logo_scale: int = 80,
+        wm_opacity_pct: int = 100,
     ) -> bytes:
-        """يبني البوستر الكامل ويرجعه PNG bytes. الكارت 540×400، وlogo_scale% يحدّد حجم اللوقو فيه.
-        wm_opacity_pct = شفافية خلفية logo5 (1-30). الخلفية نفسها ثابتة cover على 1080×1080."""
-        W = H = _CANVAS
-        # حماية: نمنع تجاوز الكنفس أو الطغيان على العناصر تحت الكارت
-        card_w = max(100, min(int(card_w), W - 40))
-        card_h = max(100, min(int(card_h), 600))
+        """البوستر النهائي 768×1376 (ستوري) — تصميم نبض الصفقات الفاخر:
+        خلفية logo5 بنفس الأبعاد فتظهر بدون قص — DP + 'نبض الصفقات DEAL PULSE KSA'
+        كـheader طبيعي ← كارت أبيض بإطار أخضر فاتح + لوقو المتجر + توقيع 'نبض الصفقات'
+        ← خصم كبير + pill أسود + لمسة ✦."""
+        # مقاس الستوري — نفس logo5 (768×1376) → الخلفية تظهر بدقّة بدون قص
+        W, H = 768, 1376
+        # خلفية كريم احتياطية (لو logo5 ما تحمّل)
         img = _vgradient(W, H, _STUDIO_BG_TOP, _STUDIO_BG_BOTTOM).convert("RGBA")
 
-        # توهج زمردي فاخر — زاويتان متقابلتان
-        _soft_blob(img, int(W * 0.85), int(H * 0.18), 280, _STUDIO_EMERALD, 60)
-        _soft_blob(img, int(W * 0.15), int(H * 0.88), 320, _STUDIO_EMERALD_DK, 45)
-
-        # ─── خلفية نبض الصفقات الرسمية (logo5) — cover ثابت 1080×1080 ────
-        # نستخدم _cover_logo: يملأ كامل الكنفس بدقّة (قصّ مركزي عند الحاجة)،
-        # فالخلفية لا تتجاوز الإطار أبداً مهما كانت أبعاد الصورة المصدر.
-        # الشفافية% تتحكّم بدرجة الـwatermark — حدّها الأقصى 30% لمنع طغيانها
-        # على المحتوى (الكارت + الخصم + الكود).
+        # ─── خلفية logo5 الرسمية — بنفس أبعاد الكنفس (بدون قص) ───────────
         if deal_pulse_logo_bytes:
-            wm = _cover_logo(deal_pulse_logo_bytes, W, H)
-            if wm is not None:
+            bg = _cover_logo(deal_pulse_logo_bytes, W, H)
+            if bg is not None:
                 _op = max(1, min(int(wm_opacity_pct), 100)) / 100.0
-                _wm_alpha = wm.split()[-1].point(lambda a: int(a * _op))
-                wm.putalpha(_wm_alpha)
-                img.paste(wm, (0, 0), wm)
+                if _op < 1.0:
+                    _bg_alpha = bg.split()[-1].point(lambda a: int(a * _op))
+                    bg.putalpha(_bg_alpha)
+                img.paste(bg, (0, 0), bg)
 
         draw = ImageDraw.Draw(img)
 
-        # شريط علوي رفيع: "عرض حصري" بأسلوب Keynote
-        small_label = _ar("عرض حصري")
-        f_label = _font(28)
-        _center_text(draw, small_label, 70, f_label, _STUDIO_INK_SOFT)
-
-        # خط تحت العنوان الصغير
-        line_w = 90
-        draw.rounded_rectangle(
-            [W // 2 - line_w // 2, 118, W // 2 + line_w // 2, 122],
-            radius=2, fill=_STUDIO_EMERALD,
-        )
-
-        # كارت موحّد: مستطيل أبيض + إطار زمردي ثابت = نمط واحد لكل المتاجر
-        # الأبعاد قابلة للتحكّم من الواجهة (الأصل 540×400)
+        # ─── الكارت الأبيض الفاخر ────────────────────────────────────────
+        # يأتي تحت header logo5 (DP + كتابة البراند) ويغطّي وسط الصورة
         card_x = (W - card_w) // 2
-        card_y = 150
-        _drop_shadow(img, card_x, card_y, card_w, card_h, radius=36, blur=35, alpha=55)
+        card_y = 470
+        _drop_shadow(img, card_x, card_y, card_w, card_h, radius=50, blur=30, alpha=50)
 
         # خلفية الكارت الأبيض
         glass = Image.new("RGBA", (card_w, card_h), (255, 255, 255, 255))
         mask = Image.new("L", (card_w, card_h), 0)
-        ImageDraw.Draw(mask).rounded_rectangle([0, 0, card_w, card_h], radius=36, fill=255)
+        ImageDraw.Draw(mask).rounded_rectangle([0, 0, card_w, card_h], radius=50, fill=255)
         img.paste(glass, (card_x, card_y), mask)
 
-        # صورة/لوقو المتجر — دائماً contain: اللوقو كامل بلا أي قص.
-        # النسبة logo_scale% تتحكّم بحجمه داخل الكارت فقط (100% = أكبر حجم بلا قص).
+        # لوقو المتجر — يملأ الجزء العلوي من الكارت
+        # نترك ~60px في الأسفل لتوقيع "نبض الصفقات"
+        _logo_area_h = card_h - 75
         if store_logo_bytes:
-            _pct = max(20, min(int(logo_scale), 100)) / 100.0
-            logo = _fit_logo(store_logo_bytes, int(card_w * _pct), int(card_h * _pct))
+            _pct = max(40, min(int(logo_scale), 100)) / 100.0
+            logo = _fit_logo(
+                store_logo_bytes,
+                int(card_w * _pct),
+                int(_logo_area_h * _pct),
+            )
             if logo is not None:
                 lx = card_x + (card_w - logo.width) // 2
-                ly = card_y + (card_h - logo.height) // 2
+                ly = card_y + 20 + (_logo_area_h - logo.height) // 2
                 img.paste(logo, (lx, ly), logo)
-        if not store_logo_bytes:
-            f_store = _font(96, weight=800)
-            _center_text(draw, _ar(store_name or "متجرك"), card_y + card_h // 2 - 50, f_store, _STUDIO_INK)
+        elif store_name:
+            f_store = _font(72, weight=900)
+            _center_text(draw, _ar(store_name), card_y + 70, f_store, _STUDIO_INK, canvas_w=W)
 
-        # إطار موحّد ثابت — يطبع فوق كل شيء = نفس الـ frame لكل المتاجر بغض النظر عن اللوقو
+        # توقيع براند "نبض الصفقات" داخل الكارت — أخضر داكن صغير
+        f_brand_sm = _font(28, weight=800)
+        _center_text(draw, _ar("نبض الصفقات"), card_y + card_h - 55, f_brand_sm, _STUDIO_EMERALD_DK, canvas_w=W)
+
+        # إطار أخضر فاتح ناعم (لون مينت رقيق)
         ImageDraw.Draw(img).rounded_rectangle(
             [card_x, card_y, card_x + card_w, card_y + card_h],
-            radius=36, outline=_STUDIO_EMERALD_DK, width=5,
+            radius=50, outline=(142, 202, 169), width=4,
         )
 
-        # اسم المتجر تحت الكارت (لو فيه لوقو)
-        if store_logo_bytes and store_name:
-            f_store_sm = _font(32)
-            _center_text(draw, _ar(store_name), card_y + card_h + 18, f_store_sm, _STUDIO_INK)
-            block_y = card_y + card_h + 75
-        else:
-            block_y = card_y + card_h + 40
+        # ─── كتلة الخصم تحت الكارت ───────────────────────────────────────
+        block_y = card_y + card_h + 40   # = 470 + 320 + 40 = 830
+        f_disc_lbl = _font(38, weight=700)
+        _center_text(draw, _ar(discount_label or "خصم يصل إلى"), block_y, f_disc_lbl, _STUDIO_EMERALD_DK, canvas_w=W)
 
-        # كتلة الخصم — البطل
-        f_disc_lbl = _font(32, weight=600)
-        _center_text(draw, _ar(discount_label or "خصم يصل إلى"), block_y, f_disc_lbl, _STUDIO_INK_SOFT)
+        f_disc_num = _font(150, weight=900)
+        _center_text(draw, str(discount_value or "70%"), block_y + 55, f_disc_num, _STUDIO_EMERALD_DK, canvas_w=W)
 
-        f_disc_num = _font(170, weight=900)
-        _center_text(draw, str(discount_value or "70%"), block_y + 50, f_disc_num, _STUDIO_EMERALD_DK)
-
-        # Pill الكود
+        # ─── Pill الكود (أسود ناعم) ──────────────────────────────────────
         code_text = (code or "SAVE50").upper()
-        f_code = _font(60, weight=800)
+        f_code = _font(56, weight=800)
         cb = draw.textbbox((0, 0), code_text, font=f_code)
         cw = cb[2] - cb[0]
-        pill_w = max(cw + 130, 360)
+        pill_w = max(cw + 110, 340)
         pill_h = 100
         pill_x = (W - pill_w) // 2
-        pill_y = block_y + 250
+        pill_y = block_y + 240   # = 1070
         draw.rounded_rectangle(
             [pill_x, pill_y, pill_x + pill_w, pill_y + pill_h],
             radius=pill_h // 2, fill=_STUDIO_PILL_BG,
         )
-        # نص الكود (لاتيني — لا حاجة لـ bidi)
         text_x = pill_x + (pill_w - cw) // 2 - cb[0]
         text_y = pill_y + (pill_h - (cb[3] - cb[1])) // 2 - cb[1]
         draw.text((text_x, text_y), code_text, font=f_code, fill=_STUDIO_PILL_FG)
 
         # نص فرعي تحت الـ pill
-        f_tag = _font(28)
-        _center_text(draw, _ar(tagline or "استخدم الكود عند الشراء"), pill_y + pill_h + 22, f_tag, _STUDIO_INK_SOFT)
+        f_tag = _font(26, weight=700)
+        _center_text(draw, _ar(tagline or "استخدم الكود عند الشراء"), pill_y + pill_h + 20, f_tag, _STUDIO_EMERALD_DK, canvas_w=W)
 
-        # (الـwatermark تم رسمه في الخلفية بشفافية 15% قبل المحتوى)
+        # ─── ديكور ✦ في الزاوية اليمنى-السفلى ────────────────────────────
+        f_deco = _font(44, weight=900)
+        draw.text((W - 80, H - 90), "✦", font=f_deco, fill=(160, 195, 180))
 
         out = io.BytesIO()
         img.convert("RGB").save(out, format="PNG", optimize=True)
@@ -11567,10 +11567,10 @@ elif page == "استوديو المحتوى":
                 key="studio_auto_rmbg",
                 help="يحوّل اللوقو لخلفية شفافة قبل وضعه. يحتاج ضبط REMOVEBG_API_KEY.")
             logo_scale = st.number_input(
-                "📐 حجم اللوقو داخل الكارت (%) — اكتب الرقم", min_value=20, max_value=100,
-                value=100, step=1, key="studio_logo_scale",
-                help="الكارت ثابت 540×400. 100% = اللوقو يملأ الكارت بالكامل · "
-                     "أقل = اللوقو أصغر وبهوامش بيضاء حوله. اكتب أي رقم من 20 إلى 100.")
+                "📐 حجم اللوقو داخل الكارت (%) — اكتب الرقم", min_value=40, max_value=100,
+                value=80, step=1, key="studio_logo_scale",
+                help="الكارت ثابت 600×320 ضمن الستوري 768×1376. 80% = الافتراضي · "
+                     "100% = اللوقو يملأ الكارت بالكامل · أقل = اللوقو أصغر بهوامش بيضاء.")
             c1, c2 = st.columns(2)
             with c1:
                 discount_label_in = st.text_input("سطر فوق الرقم", value="خصم يصل إلى")
@@ -11582,13 +11582,14 @@ elif page == "استوديو المحتوى":
             # ─── تحكّم بعلامة نبض الصفقات (watermark) ───────────────────────
             st.markdown("##### 💧 علامة نبض الصفقات المائية")
             st.caption(
-                "خلفية البوستر = **logo5.png** ثابتة cover على 1080×1080 (لا تتجاوز الإطار أبداً). "
-                "اكتب نسبة الشفافية فقط. الموصى به: 8-15% — أعلى من 25% يطغى على المحتوى."
+                "البوستر النهائي مقاس **ستوري 768×1376** = نفس مقاس logo5 بالضبط، "
+                "فالخلفية الرسمية (DP + نبض الصفقات DEAL PULSE KSA) تظهر كاملة بدون قص. "
+                "الافتراضي شفافية 100% (الخلفية واضحة بكامل قوّتها)."
             )
             wm_opacity_in = st.number_input(
-                "🌫️ شفافية الخلفية (%) — اكتب الرقم", min_value=1, max_value=30,
-                value=10, step=1, key="studio_wm_opacity",
-                help="1% = شبه مخفي · 10% = watermark خفيف (الافتراضي) · 25%+ = ظاهر بقوة",
+                "🌫️ شفافية الخلفية (%) — اكتب الرقم", min_value=20, max_value=100,
+                value=100, step=1, key="studio_wm_opacity",
+                help="100% = الخلفية واضحة (الافتراضي/الموصى به) · أقل = أبهت",
             )
 
             generate = st.button("✨ توليد البوسترين (نظيف + بالثيم)", type="primary", width='stretch')
