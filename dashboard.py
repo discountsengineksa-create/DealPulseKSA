@@ -11433,8 +11433,11 @@ elif page == "استوديو المحتوى":
         card_w: int = 540,
         card_h: int = 400,
         logo_scale: int = 100,
+        wm_opacity_pct: int = 15,
+        wm_size_pct: int = 100,
     ) -> bytes:
-        """يبني البوستر الكامل ويرجعه PNG bytes. الكارت 540×400، وlogo_scale% يحدّد حجم اللوقو فيه."""
+        """يبني البوستر الكامل ويرجعه PNG bytes. الكارت 540×400، وlogo_scale% يحدّد حجم اللوقو فيه.
+        wm_opacity_pct = شفافية علامة نبض الصفقات (5-100). wm_size_pct = حجمها (30-150)."""
         W = H = _CANVAS
         # حماية: نمنع تجاوز الكنفس أو الطغيان على العناصر تحت الكارت
         card_w = max(100, min(int(card_w), W - 40))
@@ -11445,13 +11448,16 @@ elif page == "استوديو المحتوى":
         _soft_blob(img, int(W * 0.85), int(H * 0.18), 280, _STUDIO_EMERALD, 60)
         _soft_blob(img, int(W * 0.15), int(H * 0.88), 320, _STUDIO_EMERALD_DK, 45)
 
-        # ─── الـwatermark «مائي شفاف» — يُرسم في الخلفية قبل المحتوى ─────
-        # 15% شفافية + موقع وسط-أسفل = حضور brand خفيف بدون طغيان. كل العناصر
-        # (الكارت، الكود، النصوص) تُرسم فوقه فتبقى واضحة بلا تداخل بصري.
+        # ─── الـwatermark — يُرسم في الخلفية قبل المحتوى ─────────────────
+        # شفافية وحجم قابلان للتحكّم من واجهة الستوديو. الكل يُرسم فوقه فلا تداخل.
         if deal_pulse_logo_bytes:
-            wm = _fit_logo(deal_pulse_logo_bytes, 380, 200)
+            _wm_scale = max(30, min(int(wm_size_pct), 150)) / 100.0
+            _wm_w = int(380 * _wm_scale)
+            _wm_h = int(200 * _wm_scale)
+            wm = _fit_logo(deal_pulse_logo_bytes, _wm_w, _wm_h)
             if wm is not None:
-                _wm_alpha = wm.split()[-1].point(lambda a: int(a * 0.15))
+                _op = max(5, min(int(wm_opacity_pct), 100)) / 100.0
+                _wm_alpha = wm.split()[-1].point(lambda a: int(a * _op))
                 wm.putalpha(_wm_alpha)
                 wx = (W - wm.width) // 2
                 wy = H - wm.height - 30
@@ -11576,6 +11582,26 @@ elif page == "استوديو المحتوى":
             code_in = st.text_input("كود الخصم", value="SAVE50", max_chars=20)
             tagline_in = st.text_input("سطر تذييل اختياري", value="استخدم الكود عند الشراء")
 
+            # ─── تحكّم بعلامة نبض الصفقات (watermark) ───────────────────────
+            st.markdown("##### 💧 علامة نبض الصفقات المائية")
+            st.caption(
+                "هذي إعدادات شعار **شركتي** (نبض الصفقات) في خلف البوستر فقط. "
+                "شعار المتجر داخل الكارت يبقى 100%. الافتراضي 15% شفافية مع الحجم 100%."
+            )
+            wm_c1, wm_c2 = st.columns(2)
+            with wm_c1:
+                wm_opacity_in = st.slider(
+                    "🌫️ الشفافية (%)", min_value=5, max_value=100,
+                    value=15, step=5, key="studio_wm_opacity",
+                    help="5% = شبه مخفي · 15% = watermark خفيف (الافتراضي) · 50%+ = ظاهر بقوة",
+                )
+            with wm_c2:
+                wm_size_in = st.slider(
+                    "📐 الحجم (%)", min_value=30, max_value=150,
+                    value=100, step=5, key="studio_wm_size",
+                    help="100% = 380×200 (الافتراضي) · أقل = أصغر، أكبر = أبرز",
+                )
+
             generate = st.button("✨ توليد البوسترين (نظيف + بالثيم)", type="primary", width='stretch')
 
         with col_prev:
@@ -11590,9 +11616,13 @@ elif page == "استوديو المحتوى":
                         st.caption("🪄 تمت إزالة الخلفية بنجاح.")
                     else:
                         st.warning(f"تعذّر إزالة الخلفية: {_rmbg_err} — سنستخدم الصورة كما هي.")
+                # نُفضّل logo_for_watermark.png (نسخة معالَجة بعتبة السطوع، شفافة)
+                # إن وُجدت — وإلا نسقط للوقو العادي بخلفيته الكريم.
                 dp_logo_bytes = None
-                if os.path.exists(_logo_path):
-                    with open(_logo_path, "rb") as _f:
+                _wm_src = os.path.join(_STUDIO_DIR, "logo_for_watermark.png")
+                _wm_path = _wm_src if os.path.exists(_wm_src) else _logo_path
+                if os.path.exists(_wm_path):
+                    with open(_wm_path, "rb") as _f:
                         dp_logo_bytes = _f.read()
                 with st.spinner("جاري رسم الصورتين…"):
                     # 1) الشعار النظيف (1080×1080 أبيض + لوقو موسَّط) → master.logo_url
@@ -11607,6 +11637,8 @@ elif page == "استوديو المحتوى":
                         tagline=tagline_in,
                         deal_pulse_logo_bytes=dp_logo_bytes,
                         logo_scale=logo_scale,
+                        wm_opacity_pct=wm_opacity_in,
+                        wm_size_pct=wm_size_in,
                     )
                 safe_store = "".join(c for c in (store_name_in or "store") if c.isalnum() or c in ("_", "-"))[:40] or "store"
                 safe_code  = "".join(c for c in (code_in or "code") if c.isalnum())[:20] or "code"
