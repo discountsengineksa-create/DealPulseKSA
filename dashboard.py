@@ -4422,6 +4422,168 @@ elif page == "تحليل المتاجر":
                 except Exception: pass
             st.rerun()
 
+        # ════════════════════════════════════════════════════════════════
+        # 🔍 جداول تدقيق الترند — شفافية كاملة لكيف دخل المتجر الترند
+        # ════════════════════════════════════════════════════════════════
+        st.divider()
+        st.markdown("### 🔍 تدقيق الترند — على أي أساس دخل كل متجر")
+        st.caption(
+            "كل صف يُظهر **نقرات / بحث / نسخ / مفضّلة** (بعد Anti-Spam) و"
+            "**إجمالي الحركات** و**إجمالي النقاط** (نقر=1، بحث=2، نسخ=3، مفضلة=4). "
+            "هذي بالضبط الأرقام التي تغذّي الخوارزمية — لا حسابات مخفية.")
+
+        try:
+            from api.utils.trend import (
+                apply_anti_spam, person_key, POINTS, FAV_POINTS,
+            )
+            from datetime import timezone, timedelta
+
+            _au_conn = get_conn(); _au_conn.rollback()
+
+            # ── تحميل الأحداث + المفضلة لآخر 8 أيام (يكفي لـ daily + weekly) ──
+            with _au_conn.cursor() as _cur:
+                _cur.execute("""
+                    SELECT action_time, action_type, store_id, user_id,
+                           COALESCE(source, 'bot') AS source,
+                           encode(ip_hash, 'hex')  AS ip_hex
+                      FROM action_logs
+                     WHERE action_type IN ('click_link','copy_coupon','search')
+                       AND store_id IS NOT NULL AND TRIM(store_id) <> ''
+                       AND action_time >= NOW() - INTERVAL '9 days'
+                """)
+                _events_raw = _cur.fetchall()
+                _cur.execute("""
+                    SELECT store_id, created_at
+                      FROM user_favorites
+                     WHERE COALESCE(kind,'store') = 'store'
+                       AND store_id IS NOT NULL AND TRIM(store_id) <> ''
+                       AND created_at >= NOW() - INTERVAL '9 days'
+                """)
+                _favs_raw = _cur.fetchall()
+
+            _au_conn.close()
+
+            # تحويل التواريخ إلى وقت الرياض (UTC+3) naive
+            _events = []
+            for at, atype, sid, uid, src, ip in _events_raw:
+                if at.tzinfo:
+                    at = at.astimezone(timezone.utc).replace(tzinfo=None)
+                _events.append({
+                    "time": at + timedelta(hours=3),
+                    "action_type": atype,
+                    "store_id": sid,
+                    "person_key": person_key(src, uid, ip),
+                })
+            _favs = []
+            for sid, ca in _favs_raw:
+                if ca.tzinfo:
+                    ca = ca.astimezone(timezone.utc).replace(tzinfo=None)
+                _favs.append({"store_id": sid, "created_at": ca + timedelta(hours=3)})
+
+            # تطبيق Anti-Spam على كل الأحداث (in-place)
+            apply_anti_spam(_events)
+
+            def _aggregate(events_in_window: list, favs_in_window: list) -> pd.DataFrame:
+                """يجمع per-store: clicks/searches/copies/favs + إجمالي + نقاط."""
+                from collections import defaultdict
+                agg = defaultdict(lambda: {"clicks": 0, "searches": 0, "copies": 0, "favs": 0})
+                for e in events_in_window:
+                    if not e.get("counted"):
+                        continue
+                    sid = e["store_id"]
+                    at = e["action_type"]
+                    if at == "click_link":   agg[sid]["clicks"]   += 1
+                    elif at == "search":     agg[sid]["searches"] += 1
+                    elif at == "copy_coupon": agg[sid]["copies"]  += 1
+                for f in favs_in_window:
+                    agg[f["store_id"]]["favs"] += 1
+                rows = []
+                for sid, b in agg.items():
+                    total_actions = b["clicks"] + b["searches"] + b["copies"] + b["favs"]
+                    total_points  = (b["clicks"] * POINTS["click_link"]
+                                     + b["searches"] * POINTS["search"]
+                                     + b["copies"] * POINTS["copy_coupon"]
+                                     + b["favs"] * FAV_POINTS)
+                    if total_actions == 0:
+                        continue
+                    rows.append({
+                        "المتجر": sid,
+                        "نقرات": b["clicks"],
+                        "بحث":   b["searches"],
+                        "نسخ":   b["copies"],
+                        "مفضلة": b["favs"],
+                        "إجمالي الحركات": total_actions,
+                        "إجمالي النقاط":  total_points,
+                    })
+                df = pd.DataFrame(rows)
+                if not df.empty:
+                    df = df.sort_values("إجمالي النقاط", ascending=False).reset_index(drop=True)
+                return df
+
+            # ── نافذة اليومي: منذ منتصف الليل بتوقيت الرياض إلى الآن ──
+            _now_r       = datetime.datetime.utcnow() + timedelta(hours=3)
+            _daily_start = _now_r.replace(hour=0, minute=0, second=0, microsecond=0)
+            _e_daily = [e for e in _events if _daily_start <= e["time"] <= _now_r]
+            _f_daily = [f for f in _favs   if _daily_start <= f["created_at"] <= _now_r]
+            _df_daily_audit = _aggregate(_e_daily, _f_daily)
+
+            st.markdown(f"#### 🟠 الترند اليومي — منذ {_daily_start.strftime('%Y-%m-%d %H:%M')} (الرياض)")
+            if _df_daily_audit.empty:
+                st.info("لا نشاط اليوم بعد. الترند اليومي فارغ. أول حدث (نقر/بحث/نسخ/مفضّلة) سيظهر هنا فوراً.")
+            else:
+                st.dataframe(_df_daily_audit, hide_index=True, width='stretch')
+                st.caption(f"المتاجر التي حصلت على نقاط اليوم: **{len(_df_daily_audit)}** "
+                           f"· إجمالي النقاط: **{int(_df_daily_audit['إجمالي النقاط'].sum())}**")
+
+            # ── نافذة الأسبوع: الأحد 00:00 → السبت 23:59:59 بتوقيت الرياض ──
+            # weekday(): الإثنين=0..الأحد=6. الأحد الذي بدأ منه الأسبوع الحالي:
+            _wd = _now_r.weekday()
+            _days_since_sunday = (_wd + 1) % 7   # الأحد=0، الإثنين=1، ... السبت=6
+            _week_start = (_now_r - timedelta(days=_days_since_sunday)).replace(
+                hour=0, minute=0, second=0, microsecond=0)
+            _week_end   = _week_start + timedelta(days=7) - timedelta(microseconds=1)
+
+            _e_week = [e for e in _events if _week_start <= e["time"] <= _week_end]
+            _f_week = [f for f in _favs   if _week_start <= f["created_at"] <= _week_end]
+
+            st.markdown(f"#### 🔵 الترند الأسبوعي — تقسيم يومي ({_week_start.strftime('%Y-%m-%d')} → {(_week_start + timedelta(days=6)).strftime('%Y-%m-%d')})")
+            st.caption("الأسبوع التقويمي الحالي بتوقيت الرياض: الأحد 00:00 → السبت 23:59. "
+                       "كل يوم يُعرض مستقلاً + إجمالي الأسبوع لكل متجر.")
+
+            _AR_DAYS = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"]
+            _week_dfs = []
+            for _i in range(7):
+                _ds = _week_start + timedelta(days=_i)
+                _de = _ds + timedelta(days=1) - timedelta(microseconds=1)
+                _e_d = [e for e in _e_week if _ds <= e["time"] <= _de]
+                _f_d = [f for f in _f_week if _ds <= f["created_at"] <= _de]
+                _df_d = _aggregate(_e_d, _f_d)
+                if not _df_d.empty:
+                    _df_d.insert(0, "اليوم", f"{_AR_DAYS[_i]} ({_ds.strftime('%m-%d')})")
+                    _week_dfs.append(_df_d)
+
+            if not _week_dfs:
+                st.info("لا نشاط هذا الأسبوع بعد.")
+            else:
+                _df_week_long = pd.concat(_week_dfs, ignore_index=True)
+                st.dataframe(_df_week_long, hide_index=True, width='stretch')
+
+                # ── إجمالي الأسبوع لكل متجر (pivot summary) ──
+                st.markdown("##### 📊 إجمالي الأسبوع لكل متجر")
+                _df_w_total = (_df_week_long.groupby("المتجر", as_index=False)
+                               [["نقرات","بحث","نسخ","مفضلة","إجمالي الحركات","إجمالي النقاط"]]
+                               .sum()
+                               .sort_values("إجمالي النقاط", ascending=False)
+                               .reset_index(drop=True))
+                st.dataframe(_df_w_total, hide_index=True, width='stretch')
+                st.caption(f"إجمالي متاجر نشطة هذا الأسبوع: **{len(_df_w_total)}** "
+                           f"· إجمالي النقاط الأسبوعية: **{int(_df_w_total['إجمالي النقاط'].sum())}**")
+                st.caption("⚠️ ملاحظة: خوارزمية الترند الأسبوعي تستخدم نافذة rolling 7 أيام "
+                           "(الآن − 7 يوم → الآن)، بينما هذا الجدول يستخدم الأسبوع التقويمي "
+                           "(الأحد → السبت) للقراءة الأسهل. قد تختلف القائمتان قليلاً عند حدود الأسبوع.")
+        except Exception as _e:
+            st.error(f"⚠️ تعذّر تحميل جداول التدقيق: {_e}")
+
         if not _df_ov.empty:
             _show = _df_ov.copy()
             _show["window"] = _show["window"].map(
