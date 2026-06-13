@@ -11448,20 +11448,23 @@ elif page == "استوديو المحتوى":
         _soft_blob(img, int(W * 0.85), int(H * 0.18), 280, _STUDIO_EMERALD, 60)
         _soft_blob(img, int(W * 0.15), int(H * 0.88), 320, _STUDIO_EMERALD_DK, 45)
 
-        # ─── الـwatermark — يُرسم في الخلفية قبل المحتوى ─────────────────
-        # شفافية وحجم قابلان للتحكّم من واجهة الستوديو. الكل يُرسم فوقه فلا تداخل.
+        # ─── خلفية نبض الصفقات الرسمية (logo5) — تغطّي كامل البوستر ─────
+        # حجم% = نسبة من الكنفس (100% = يملأ 1080×1080 كاملاً، أقل = أصغر بهامش).
+        # الشفافية% تُطبَّق على كل البكسلات (بما فيها غير الشفافة) لتعطي watermark ناعم.
         if deal_pulse_logo_bytes:
             _wm_scale = max(30, min(int(wm_size_pct), 150)) / 100.0
-            _wm_w = int(380 * _wm_scale)
-            _wm_h = int(200 * _wm_scale)
-            wm = _fit_logo(deal_pulse_logo_bytes, _wm_w, _wm_h)
-            if wm is not None:
-                _op = max(5, min(int(wm_opacity_pct), 100)) / 100.0
+            _wm_box = int(W * _wm_scale)
+            try:
+                wm = Image.open(io.BytesIO(deal_pulse_logo_bytes)).convert("RGBA")
+                wm.thumbnail((_wm_box, _wm_box), Image.LANCZOS)
+                _op = max(1, min(int(wm_opacity_pct), 100)) / 100.0
                 _wm_alpha = wm.split()[-1].point(lambda a: int(a * _op))
                 wm.putalpha(_wm_alpha)
                 wx = (W - wm.width) // 2
-                wy = H - wm.height - 30
+                wy = (H - wm.height) // 2
                 img.paste(wm, (wx, wy), wm)
+            except Exception:
+                pass
 
         draw = ImageDraw.Draw(img)
 
@@ -11585,21 +11588,21 @@ elif page == "استوديو المحتوى":
             # ─── تحكّم بعلامة نبض الصفقات (watermark) ───────────────────────
             st.markdown("##### 💧 علامة نبض الصفقات المائية")
             st.caption(
-                "هذي إعدادات شعار **شركتي** (نبض الصفقات) في خلف البوستر فقط. "
-                "شعار المتجر داخل الكارت يبقى 100%. الافتراضي 15% شفافية مع الحجم 100%."
+                "خلفية البوستر الرسمية = **logo5.png** ممدودة على كامل المقاس 1080×1080. "
+                "شعار المتجر داخل الكارت يبقى 100%. اكتب الأرقام بنفسك للتحكّم الدقيق."
             )
             wm_c1, wm_c2 = st.columns(2)
             with wm_c1:
-                wm_opacity_in = st.slider(
-                    "🌫️ الشفافية (%)", min_value=5, max_value=100,
-                    value=15, step=5, key="studio_wm_opacity",
-                    help="5% = شبه مخفي · 15% = watermark خفيف (الافتراضي) · 50%+ = ظاهر بقوة",
+                wm_opacity_in = st.number_input(
+                    "🌫️ الشفافية (%) — اكتب الرقم", min_value=1, max_value=100,
+                    value=15, step=1, key="studio_wm_opacity",
+                    help="1% = شبه مخفي · 15% = watermark خفيف · 100% = الخلفية بدون شفافية",
                 )
             with wm_c2:
-                wm_size_in = st.slider(
-                    "📐 الحجم (%)", min_value=30, max_value=150,
-                    value=100, step=5, key="studio_wm_size",
-                    help="100% = 380×200 (الافتراضي) · أقل = أصغر، أكبر = أبرز",
+                wm_size_in = st.number_input(
+                    "📐 الحجم (%) — اكتب الرقم", min_value=30, max_value=150,
+                    value=100, step=1, key="studio_wm_size",
+                    help="100% = يملأ كامل البوستر 1080×1080 · أقل = أصغر بهامش · أكبر = يتجاوز الإطار",
                 )
 
             generate = st.button("✨ توليد البوسترين (نظيف + بالثيم)", type="primary", width='stretch')
@@ -11616,12 +11619,18 @@ elif page == "استوديو المحتوى":
                         st.caption("🪄 تمت إزالة الخلفية بنجاح.")
                     else:
                         st.warning(f"تعذّر إزالة الخلفية: {_rmbg_err} — سنستخدم الصورة كما هي.")
-                # نُفضّل logo_for_watermark.png (نسخة معالَجة بعتبة السطوع، شفافة)
-                # إن وُجدت — وإلا نسقط للوقو العادي بخلفيته الكريم.
+                # ترتيب الأفضليّة لخلفية البوستر الرسمية:
+                #   1) logo5.png — الخلفية الفاخرة الكاملة (الافتراضي حالياً).
+                #   2) logo_for_watermark.png — نسخة معالَجة بعتبة السطوع.
+                #   3) logo.png — اللوقو العادي بخلفيته الكريم.
                 dp_logo_bytes = None
-                _wm_src = os.path.join(_STUDIO_DIR, "logo_for_watermark.png")
-                _wm_path = _wm_src if os.path.exists(_wm_src) else _logo_path
-                if os.path.exists(_wm_path):
+                _wm_path = None
+                for _cand in ("logo5.png", "logo_for_watermark.png", "logo.png"):
+                    _p = os.path.join(_STUDIO_DIR, _cand)
+                    if os.path.exists(_p):
+                        _wm_path = _p
+                        break
+                if _wm_path:
                     with open(_wm_path, "rb") as _f:
                         dp_logo_bytes = _f.read()
                 with st.spinner("جاري رسم الصورتين…"):
