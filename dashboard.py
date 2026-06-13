@@ -11224,7 +11224,7 @@ elif page == "مركز الدعم":
 # ==============================================================================
 elif page == "استوديو المحتوى":
     page_title("🎨", "استوديو الإبداع — محرك البوسترات")
-    st.caption("ارفع لوقو المتجر، اكتب الخصم والكود، واحصل على بوسترين: شعار نظيف 1080×1080 + بوستر سوشيال بالثيم 768×1376 (ستوري).")
+    st.caption("ارفع لوقو المتجر، اكتب الخصم والكود، واحصل على بوسترين 1080×1080: شعار نظيف للستوري والكروت + بوستر بالثيم للسوشيال (انستجرام/تويتر/فيسبوك/تلجرام).")
 
     import io
     from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -11445,36 +11445,30 @@ elif page == "استوديو المحتوى":
         code: str,
         tagline: str,
         deal_pulse_logo_bytes: bytes | None,
-        card_w: int = 600,
+        card_w: int = 620,
         card_h: int = 320,
         logo_scale: int = 80,
-        wm_opacity_pct: int = 100,
     ) -> bytes:
-        """البوستر النهائي 768×1376 (ستوري) — تصميم نبض الصفقات الفاخر:
-        خلفية logo5 بنفس الأبعاد فتظهر بدون قص — DP + 'نبض الصفقات DEAL PULSE KSA'
-        كـheader طبيعي ← كارت أبيض بإطار أخضر فاتح + لوقو المتجر + توقيع 'نبض الصفقات'
-        ← خصم كبير + pill أسود + لمسة ✦."""
-        # مقاس الستوري — نفس logo5 (768×1376) → الخلفية تظهر بدقّة بدون قص
-        W, H = 768, 1376
-        # خلفية كريم احتياطية (لو logo5 ما تحمّل)
+        """البوستر النهائي 1080×1080 — تصميم نبض الصفقات الفاخر.
+        الخلفية logo6.png مصمَّمة جاهزة (DP + 'نبض الصفقات DEAL PULSE KSA' header
+        + ✦ ديكور + مساحة وسطى فارغة). نضع فوقها الكارت + الخصم + الكود."""
+        W = H = _CANVAS  # 1080×1080 = نفس مقاس logo6
+
+        # خلفية كريم احتياطية (لو ما تحمّلت)
         img = _vgradient(W, H, _STUDIO_BG_TOP, _STUDIO_BG_BOTTOM).convert("RGBA")
 
-        # ─── خلفية logo5 الرسمية — بنفس أبعاد الكنفس (بدون قص) ───────────
+        # ─── الخلفية الرسمية (logo6) — جاهزة بدون أي شفافية ──────────────
         if deal_pulse_logo_bytes:
             bg = _cover_logo(deal_pulse_logo_bytes, W, H)
             if bg is not None:
-                _op = max(1, min(int(wm_opacity_pct), 100)) / 100.0
-                if _op < 1.0:
-                    _bg_alpha = bg.split()[-1].point(lambda a: int(a * _op))
-                    bg.putalpha(_bg_alpha)
                 img.paste(bg, (0, 0), bg)
 
         draw = ImageDraw.Draw(img)
 
         # ─── الكارت الأبيض الفاخر ────────────────────────────────────────
-        # يأتي تحت header logo5 (DP + كتابة البراند) ويغطّي وسط الصورة
+        # يقع وسط البوستر، تحت header logo6 (DP + كتابة البراند).
         card_x = (W - card_w) // 2
-        card_y = 470
+        card_y = 360
         _drop_shadow(img, card_x, card_y, card_w, card_h, radius=50, blur=30, alpha=50)
 
         # خلفية الكارت الأبيض
@@ -11483,8 +11477,7 @@ elif page == "استوديو المحتوى":
         ImageDraw.Draw(mask).rounded_rectangle([0, 0, card_w, card_h], radius=50, fill=255)
         img.paste(glass, (card_x, card_y), mask)
 
-        # لوقو المتجر — يملأ الجزء العلوي من الكارت
-        # نترك ~60px في الأسفل لتوقيع "نبض الصفقات"
+        # لوقو المتجر — يملأ الجزء العلوي. نترك ~60px في الأسفل لتوقيع "نبض الصفقات"
         _logo_area_h = card_h - 75
         if store_logo_bytes:
             _pct = max(40, min(int(logo_scale), 100)) / 100.0
@@ -11499,35 +11492,35 @@ elif page == "استوديو المحتوى":
                 img.paste(logo, (lx, ly), logo)
         elif store_name:
             f_store = _font(72, weight=900)
-            _center_text(draw, _ar(store_name), card_y + 70, f_store, _STUDIO_INK, canvas_w=W)
+            _center_text(draw, _ar(store_name), card_y + 70, f_store, _STUDIO_INK)
 
-        # توقيع براند "نبض الصفقات" داخل الكارت — أخضر داكن صغير
+        # توقيع براند "نبض الصفقات" داخل الكارت
         f_brand_sm = _font(28, weight=800)
-        _center_text(draw, _ar("نبض الصفقات"), card_y + card_h - 55, f_brand_sm, _STUDIO_EMERALD_DK, canvas_w=W)
+        _center_text(draw, _ar("نبض الصفقات"), card_y + card_h - 55, f_brand_sm, _STUDIO_EMERALD_DK)
 
-        # إطار أخضر فاتح ناعم (لون مينت رقيق)
+        # إطار أخضر فاتح ناعم
         ImageDraw.Draw(img).rounded_rectangle(
             [card_x, card_y, card_x + card_w, card_y + card_h],
             radius=50, outline=(142, 202, 169), width=4,
         )
 
         # ─── كتلة الخصم تحت الكارت ───────────────────────────────────────
-        block_y = card_y + card_h + 40   # = 470 + 320 + 40 = 830
-        f_disc_lbl = _font(38, weight=700)
-        _center_text(draw, _ar(discount_label or "خصم يصل إلى"), block_y, f_disc_lbl, _STUDIO_EMERALD_DK, canvas_w=W)
+        block_y = card_y + card_h + 30   # = 360 + 320 + 30 = 710
+        f_disc_lbl = _font(36, weight=700)
+        _center_text(draw, _ar(discount_label or "خصم يصل إلى"), block_y, f_disc_lbl, _STUDIO_EMERALD_DK)
 
-        f_disc_num = _font(150, weight=900)
-        _center_text(draw, str(discount_value or "70%"), block_y + 55, f_disc_num, _STUDIO_EMERALD_DK, canvas_w=W)
+        f_disc_num = _font(140, weight=900)
+        _center_text(draw, str(discount_value or "70%"), block_y + 50, f_disc_num, _STUDIO_EMERALD_DK)
 
         # ─── Pill الكود (أسود ناعم) ──────────────────────────────────────
         code_text = (code or "SAVE50").upper()
-        f_code = _font(56, weight=800)
+        f_code = _font(54, weight=800)
         cb = draw.textbbox((0, 0), code_text, font=f_code)
         cw = cb[2] - cb[0]
-        pill_w = max(cw + 110, 340)
-        pill_h = 100
+        pill_w = max(cw + 110, 320)
+        pill_h = 90
         pill_x = (W - pill_w) // 2
-        pill_y = block_y + 240   # = 1070
+        pill_y = block_y + 220   # = 930
         draw.rounded_rectangle(
             [pill_x, pill_y, pill_x + pill_w, pill_y + pill_h],
             radius=pill_h // 2, fill=_STUDIO_PILL_BG,
@@ -11536,13 +11529,11 @@ elif page == "استوديو المحتوى":
         text_y = pill_y + (pill_h - (cb[3] - cb[1])) // 2 - cb[1]
         draw.text((text_x, text_y), code_text, font=f_code, fill=_STUDIO_PILL_FG)
 
-        # نص فرعي تحت الـ pill
-        f_tag = _font(26, weight=700)
-        _center_text(draw, _ar(tagline or "استخدم الكود عند الشراء"), pill_y + pill_h + 20, f_tag, _STUDIO_EMERALD_DK, canvas_w=W)
+        # نص فرعي تحت الـ pill — مكثّف ليفيت بدون قطع
+        f_tag = _font(22, weight=700)
+        _center_text(draw, _ar(tagline or "استخدم الكود عند الشراء"), pill_y + pill_h + 14, f_tag, _STUDIO_EMERALD_DK)
 
-        # ─── ديكور ✦ في الزاوية اليمنى-السفلى ────────────────────────────
-        f_deco = _font(44, weight=900)
-        draw.text((W - 80, H - 90), "✦", font=f_deco, fill=(160, 195, 180))
+        # ملاحظة: الديكور ✦ موجود في خلفية logo6 — لا نرسمه يدوياً
 
         out = io.BytesIO()
         img.convert("RGB").save(out, format="PNG", optimize=True)
@@ -11569,7 +11560,7 @@ elif page == "استوديو المحتوى":
             logo_scale = st.number_input(
                 "📐 حجم اللوقو داخل الكارت (%) — اكتب الرقم", min_value=40, max_value=100,
                 value=80, step=1, key="studio_logo_scale",
-                help="الكارت ثابت 600×320 ضمن الستوري 768×1376. 80% = الافتراضي · "
+                help="الكارت ثابت 620×320 ضمن البوستر 1080×1080. 80% = الافتراضي · "
                      "100% = اللوقو يملأ الكارت بالكامل · أقل = اللوقو أصغر بهوامش بيضاء.")
             c1, c2 = st.columns(2)
             with c1:
@@ -11579,17 +11570,11 @@ elif page == "استوديو المحتوى":
             code_in = st.text_input("كود الخصم", value="SAVE50", max_chars=20)
             tagline_in = st.text_input("سطر تذييل اختياري", value="استخدم الكود عند الشراء")
 
-            # ─── تحكّم بعلامة نبض الصفقات (watermark) ───────────────────────
-            st.markdown("##### 💧 علامة نبض الصفقات المائية")
-            st.caption(
-                "البوستر النهائي مقاس **ستوري 768×1376** = نفس مقاس logo5 بالضبط، "
-                "فالخلفية الرسمية (DP + نبض الصفقات DEAL PULSE KSA) تظهر كاملة بدون قص. "
-                "الافتراضي شفافية 100% (الخلفية واضحة بكامل قوّتها)."
-            )
-            wm_opacity_in = st.number_input(
-                "🌫️ شفافية الخلفية (%) — اكتب الرقم", min_value=20, max_value=100,
-                value=100, step=1, key="studio_wm_opacity",
-                help="100% = الخلفية واضحة (الافتراضي/الموصى به) · أقل = أبهت",
+            # ─── تنبيه عن الخلفية الرسمية ───────────────────────────────────
+            st.info(
+                "🎨 **الخلفية الرسمية = logo6.png** (مربّع 1080×1080 جاهز للنشر). "
+                "تحتوي على DP + 'نبض الصفقات DEAL PULSE KSA' + لمسة ✦ في الزاوية. "
+                "لا تحتاج لأي تحكّم بالشفافية — المنتج النهائي جاهز للنشر مباشرة."
             )
 
             generate = st.button("✨ توليد البوسترين (نظيف + بالثيم)", type="primary", width='stretch')
@@ -11607,12 +11592,13 @@ elif page == "استوديو المحتوى":
                     else:
                         st.warning(f"تعذّر إزالة الخلفية: {_rmbg_err} — سنستخدم الصورة كما هي.")
                 # ترتيب الأفضليّة لخلفية البوستر الرسمية:
-                #   1) logo5.png — الخلفية الفاخرة الكاملة (الافتراضي حالياً).
-                #   2) logo_for_watermark.png — نسخة معالَجة بعتبة السطوع.
-                #   3) logo.png — اللوقو العادي بخلفيته الكريم.
+                #   1) logo6.png — الخلفية المربّعة 1024×1024 الجاهزة (الافتراضي).
+                #   2) logo5.png — الخلفية الطولية 768×1376 (احتياط).
+                #   3) logo_for_watermark.png — نسخة معالَجة بعتبة السطوع.
+                #   4) logo.png — اللوقو العادي بخلفيته الكريم.
                 dp_logo_bytes = None
                 _wm_path = None
-                for _cand in ("logo5.png", "logo_for_watermark.png", "logo.png"):
+                for _cand in ("logo6.png", "logo5.png", "logo_for_watermark.png", "logo.png"):
                     _p = os.path.join(_STUDIO_DIR, _cand)
                     if os.path.exists(_p):
                         _wm_path = _p
@@ -11633,7 +11619,6 @@ elif page == "استوديو المحتوى":
                         tagline=tagline_in,
                         deal_pulse_logo_bytes=dp_logo_bytes,
                         logo_scale=logo_scale,
-                        wm_opacity_pct=wm_opacity_in,
                     )
                 safe_store = "".join(c for c in (store_name_in or "store") if c.isalnum() or c in ("_", "-"))[:40] or "store"
                 safe_code  = "".join(c for c in (code_in or "code") if c.isalnum())[:20] or "code"
