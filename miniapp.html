@@ -790,15 +790,11 @@ function localizedRankTitle(rank) {
 
 // يضمن دائماً targetCount متجر في اليومي: إن نقص نُكمل من الأسبوعي بلا تكرار.
 function padDailyWithWeekly(daily, weekly, targetCount) {
+    // قاعدة المالك: اليومي = نشاط اليوم فقط (نقر/بحث/نسخ/مفضّلة منذ منتصف
+    // الليل بتوقيت الرياض). لا حشو من الأسبوعي. لو ناقص → ناقص، والـUI
+    // يخفي القسم تلقائياً حين يكون فارغاً.
     targetCount = targetCount || 3;
-    if (daily.length >= targetCount) {
-        return daily.slice(0, targetCount).map((it, i) => Object.assign({}, it, { rank: i + 1 }));
-    }
-    const existing = new Set(daily.map(it => it.store_id));
-    const fill = weekly.filter(it => !existing.has(it.store_id))
-                       .slice(0, targetCount - daily.length);
-    return daily.concat(fill).slice(0, targetCount)
-                .map((it, i) => Object.assign({}, it, { rank: i + 1 }));
+    return daily.slice(0, targetCount).map((it, i) => Object.assign({}, it, { rank: i + 1 }));
 }
 
 // ── Trend view (يومي + أسبوعي) ──────────────────────────────────────────

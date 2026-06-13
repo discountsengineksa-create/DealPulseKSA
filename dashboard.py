@@ -1165,15 +1165,9 @@ def _sa_trend_store_ids() -> set:
 
         pinned_weekly = set(weekly_ov.values())
 
-        # اليومي: top-N مع padding من الأسبوعي إن نقص (يطابق sequence الميني-ويب)
+        # اليومي: top-N (overrides فقط — بلا حشو من الأسبوعي).
+        # قاعدة المالك: اليومي = نشاط اليوم فقط. لو ناقص → ناقص (يطابق API).
         daily_top = apply_overrides(daily_raw, daily_ov, _dn)
-        if len(daily_top) < _dn:
-            existing   = {it["store_id"] for it in daily_top}
-            weekly_pad = apply_overrides(weekly_raw, weekly_ov, 20)
-            pad = [it for it in weekly_pad
-                   if it["store_id"] not in existing
-                      and it["store_id"] not in pinned_weekly]
-            daily_top = (daily_top + pad)[:_dn]
         daily_ids = {it["store_id"] for it in daily_top}
 
         # الأسبوعي: top-N (افتراضي 7) — يستثني المعروض في اليومي إلا المثبّت أسبوعياً

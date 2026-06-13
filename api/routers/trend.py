@@ -254,16 +254,11 @@ def _compute_window(conn, window: str, source: str, top_n: int) -> list[dict]:
     # وللإقصاء حتى عند حساب الأسبوعي.
     _dc, _wc = _trend_counts(conn)
 
-    # ── اليومي النهائي (مع overrides + padding من الأسبوعي عند الحاجة) ──────
-    # padding يستبعد المتاجر المثبّتة للأسبوعي (تخصّ الأسبوعي، ما نشيلها لليومي)
+    # ── اليومي النهائي (overrides فقط — بلا حشو من الأسبوعي) ────────────────
+    # قاعدة المالك: اليومي = أعلى N خلال اليوم فقط من نقرات/بحث/نسخ/مفضّلة.
+    # لو ما في نشاط اليوم → اليومي فارغ (والـUI يخفي القسم). لا حشو من
+    # الأسبوعي حتى لا يُعرض «ترند اليوم» وسماً كاذباً على متجر أسبوعي.
     daily_after_ov = apply_overrides(daily_raw, daily_overrides, _dc)
-    if len(daily_after_ov) < _dc:
-        existing = {it["store_id"] for it in daily_after_ov}
-        weekly_after_ov_for_pad = apply_overrides(weekly_raw, weekly_overrides, 20)
-        pad = [it for it in weekly_after_ov_for_pad
-               if it["store_id"] not in existing
-               and it["store_id"] not in pinned_weekly_ids]
-        daily_after_ov = (daily_after_ov + pad)[:_dc]
     daily_displayed_ids = {it["store_id"] for it in daily_after_ov}
 
     # ── اختيار النتيجة بحسب النافذة المطلوبة ─────────────────────────────
