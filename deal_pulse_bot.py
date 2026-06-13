@@ -1434,23 +1434,46 @@ def _load_arabic_font(size: int) -> ImageFont.FreeTypeFont:
 
 
 def generate_welcome_image(user_name: str) -> BytesIO:
-    img_path = os.path.join(_BASE_DIR, "logo4.jpeg")
-    img  = Image.open(img_path).convert("RGBA")
-    draw = ImageDraw.Draw(img)
-    font = _load_arabic_font(85)
+    """يبني صورة ترحيب: لوقو نبض الصفقات الجديد + اسم المستخدم تحته.
+    اللوقو 1424×752 (logo.png) — نضيف 220px أسفل للترحيب بخلفية كريم متناسقة
+    مع هوية اللوقو، فلا قطع ولا تشوّه."""
+    img_path = os.path.join(_BASE_DIR, "logo.png")
+    logo = Image.open(img_path).convert("RGBA")
+    W, H_logo = logo.size
+    BAND_H = 240
+    H = H_logo + BAND_H
 
-    reshaped     = arabic_reshaper.reshape(user_name)
-    display_name = get_display(reshaped)
+    # خلفية كريم تطابق خلفية اللوقو الأصلية (FAF9F6 تقريباً).
+    canvas = Image.new("RGB", (W, H), (250, 249, 246))
+    canvas.paste(logo, (0, 0), logo)
 
-    img_w  = img.width
-    bbox   = draw.textbbox((0, 0), display_name, font=font)
-    text_w = bbox[2] - bbox[0]
-    x, y   = (img_w - text_w) // 2, 270
-    draw.text((x, y), display_name, font=font,
-              fill="#1B5E3B", stroke_width=2, stroke_fill="#1B5E3B")
+    draw = ImageDraw.Draw(canvas)
+
+    # سطر الترحيب: «أهلاً، {الاسم}» — الاسم بحجم أكبر ولون داكن مطابق للوقو.
+    f_greet = _load_arabic_font(54)
+    f_name  = _load_arabic_font(82)
+
+    greeting = "أهلاً بك"
+    greet_rshp = get_display(arabic_reshaper.reshape(greeting))
+    name_rshp  = get_display(arabic_reshaper.reshape(user_name))
+
+    g_bbox = draw.textbbox((0, 0), greet_rshp, font=f_greet)
+    g_w = g_bbox[2] - g_bbox[0]
+    n_bbox = draw.textbbox((0, 0), name_rshp, font=f_name)
+    n_w = n_bbox[2] - n_bbox[0]
+
+    gx = (W - g_w) // 2
+    gy = H_logo + 35
+    draw.text((gx, gy), greet_rshp, font=f_greet, fill="#475569")
+
+    nx = (W - n_w) // 2
+    ny = H_logo + 105
+    # لون داكن (Slate-900) يطابق نص اللوقو + stroke خفيف للوضوح على الكريم.
+    draw.text((nx, ny), name_rshp, font=f_name,
+              fill="#0F172A", stroke_width=1, stroke_fill="#0F172A")
 
     buf = BytesIO()
-    img.convert("RGB").save(buf, format="JPEG", quality=95)
+    canvas.save(buf, format="JPEG", quality=95)
     buf.seek(0)
     return buf
 

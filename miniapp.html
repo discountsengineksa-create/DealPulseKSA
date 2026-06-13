@@ -235,7 +235,9 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
   .story-ring{width:66px;height:66px;border-radius:50%;padding:2px;display:grid;place-items:center;
     background:conic-gradient(from 0deg,#10B981,#34D399,#059669,#10B981)}
   .story-ring .inner{width:100%;height:100%;border-radius:50%;background:var(--bg2);overflow:hidden;display:grid;place-items:center;border:2px solid var(--bg)}
-  .story-ring img{width:78%;height:78%;object-fit:contain}
+  /* object-fit:cover يقصّ الأطراف لملء الدائرة (يطابق سلوك تطبيقات الستوري).
+     يحتاج الشعار المرفوع أن يكون مربعاً 1:1 (تنتجها صفحة الستوديو). */
+  .story-ring img{width:100%;height:100%;object-fit:cover;border-radius:50%}
   .story-name{font-size:10px;color:var(--t2);max-width:66px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
 
   /* ── STORY VIEWER (ملء الشاشة) ── */

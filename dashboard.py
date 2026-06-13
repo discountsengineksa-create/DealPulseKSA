@@ -67,6 +67,25 @@ def _upload_logo(file_bytes: bytes, store_slug: str) -> str | None:
         return None
 
 
+def _upload_social_poster(file_bytes: bytes, store_slug: str) -> str | None:
+    """رفع بوستر السوشيال (الـthemed من الستوديو) إلى Cloudinary — base عالية الدقة.
+    api/social/image_specs.py يشتقّ مقاسات المنصات الـ8 من هذا الـURL عبر transforms.
+    يُعيد secure_url أو None."""
+    if not _CLOUDINARY_OK:
+        return None
+    try:
+        result = cloudinary.uploader.upload(
+            file_bytes,
+            public_id=f"store_posters/{store_slug}",
+            overwrite=True,
+            transformation=[{"width": 1600, "height": 1600, "crop": "limit"}],
+        )
+        return result.get("secure_url")
+    except Exception as e:
+        st.warning(f"⚠️ فشل رفع البوستر إلى Cloudinary: {e}")
+        return None
+
+
 def _upload_story_media(file_bytes: bytes, store_slug: str) -> str | None:
     """رفع وسائط الستوري (فيديو أو صورة) إلى Cloudinary — يُعيد secure_url أو None.
     resource_type='auto' يجعل Cloudinary يكتشف نوع الملف (فيديو/صورة) تلقائياً."""
@@ -273,12 +292,22 @@ BRAND_DARK = {
 
 load_dotenv()
 
-# ─── تحميل الشعار ─────────────────────────────────────────────────────────────
-_logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo.png")
-_logo_b64: str | None = None
+# ─── تحميل الشعارات (نهاري + ليلي) ───────────────────────────────────────────
+# logo.png  = الإصدار النهاري (خلفية كريم + لوقو داكن)
+# logo2.png = الإصدار الليلي (خلفية داكنة + لوقو فاتح)
+# نختار حسب وضع الثيم في الجلسة (يُحدَّد بعد قليل عند قراءة ui_theme_radio).
+_BASE_DIR_HERE = os.path.dirname(os.path.abspath(__file__))
+_logo_path  = os.path.join(_BASE_DIR_HERE, "logo.png")     # نهاري
+_logo2_path = os.path.join(_BASE_DIR_HERE, "logo2.png")    # ليلي
+_logo_b64:  str | None = None
+_logo2_b64: str | None = None
 if os.path.exists(_logo_path):
-    with open(_logo_path, "rb") as _f:_logo_b64 = base64.b64encode(_f.read()).decode()
-_wm_url = f"data:image/jpeg;base64,{_logo_b64}" if _logo_b64 else ""
+    with open(_logo_path, "rb") as _f:  _logo_b64  = base64.b64encode(_f.read()).decode()
+if os.path.exists(_logo2_path):
+    with open(_logo2_path, "rb") as _f: _logo2_b64 = base64.b64encode(_f.read()).decode()
+# data URI الصحيح للـPNG (الكود السابق كان يضع mime=jpeg خطأً).
+_logo_data_uri  = f"data:image/png;base64,{_logo_b64}"  if _logo_b64  else ""
+_logo2_data_uri = f"data:image/png;base64,{_logo2_b64}" if _logo2_b64 else ""
 
 # إعداد الصفحة
 st.set_page_config(
@@ -292,6 +321,8 @@ initial_sidebar_state="expanded",
 # (يُعرض بعد الدخول)؛ session_state يحفظ الاختيار فيُطبَّق على كل الـ CSS أدناه.
 _ui_dark = st.session_state.get("ui_theme_radio", "🌙 ليلي").startswith("🌙")
 BRAND = BRAND_DARK if _ui_dark else BRAND_LIGHT
+# الشعار يتبع المظهر: logo2 (ليلي/داكن) أو logo (نهاري). fallback للنهاري لو الليلي مفقود.
+_wm_url = (_logo2_data_uri if _ui_dark and _logo2_data_uri else _logo_data_uri)
 
 # ─── CSS حرج مبكّر: يمنع وميض التصميم الافتراضي (FOUC) قبل تحميل الستايل الكامل ─
 # يثبّت اتجاه RTL، يضع الـ sidebar على اليمين، ويفرض خلفية الثيم الفاتحة فوراً
@@ -1672,10 +1703,11 @@ def _sa_compute_trend(df_logs: pd.DataFrame, df_fav: pd.DataFrame,
 
 
 # --- القائمة الجانبية ---
-if _logo_b64:
+# _wm_url محسوب أعلاه حسب وضع الثيم (ليلي → logo2، نهاري → logo).
+if _wm_url:
     st.sidebar.markdown(f"""
 <div style="text-align:center; padding:10px 8px 12px 8px; border-bottom:1px solid {BRAND["border"]}; margin-bottom:10px;">
-<img src="data:image/jpeg;base64,{_logo_b64}"
+<img src="{_wm_url}"
         style="width:90px; border-radius:8px;" />
 </div>
 """, unsafe_allow_html=True)
@@ -1932,6 +1964,31 @@ if page == "إدخال بيانات الماستر":
             if logo_url_input:
                 st.image(logo_url_input, width=80)
 
+        # ─── بوستر السوشيال (للنشر التلقائي) ────────────────────────────────
+        st.divider()
+        st.markdown("**📣 بوستر الإعلان للسوشيال (اختياري — مخرج «بالثيم» من الستوديو)**")
+        st.caption(
+            "ارفع بوستر 1080×1080 بالثيم الكامل (من صفحة «استوديو المحتوى»). يُحفَظ "
+            "على Cloudinary، وتُشتقّ منه مقاسات المنصات الـ8 (FB/IG/Threads/TG/X/"
+            "Discord/Pinterest/LinkedIn) تلقائياً عند النشر."
+        )
+        poster_col1, poster_col2 = st.columns([1, 2])
+        with poster_col1:
+            poster_file = st.file_uploader(
+                "رفع البوستر",
+                type=["png", "jpg", "jpeg", "webp"],
+                key="poster_upload_add",
+                help="مربّع 1080×1080 يفضّل (من زر «تحميل البوستر بالثيم» في الاستوديو)"
+            )
+        with poster_col2:
+            poster_url_input = st.text_input(
+                "أو رابط البوستر مباشرة",
+                placeholder="https://res.cloudinary.com/...",
+                key="poster_url_add"
+            )
+            if poster_url_input:
+                st.image(poster_url_input, width=120)
+
         # ملاحظة: الإشهار (is_promoted) ووسائط الستوري انتقلا لصفحة «🎬 إضافة استوري».
         # المتجر الجديد يُحفظ غير مُشهَر افتراضياً؛ تُفعّله وترفع له ستوري من هناك.
         st.divider()
@@ -1959,6 +2016,15 @@ if page == "إدخال بيانات الماستر":
                     + "\n\n✅ بياناتك محفوظة كما هي — أكمل الناقص فقط واضغط حفظ مرة ثانية."
                 )
             else:
+                # ─── حل رابط بوستر السوشيال ──────────────────────────────
+                final_poster_url = (poster_url_input or "").strip()
+                if poster_file and not final_poster_url:
+                    _up_poster = _upload_social_poster(poster_file.read(), store_id.strip())
+                    if _up_poster:
+                        final_poster_url = _up_poster
+                    elif not _CLOUDINARY_OK:
+                        st.warning("⚠️ البوستر **ما انرفع** — Cloudinary غير مضبوط. المتجر بينحفظ بدون بوستر سوشيال.")
+
                 # ─── حل رابط الشعار ───────────────────────────────────────
                 final_logo_url = (logo_url_input or "").strip()
                 if logo_file and not final_logo_url:
@@ -1992,8 +2058,8 @@ if page == "إدخال بيانات الماستر":
                                 priority_score, discount_value, store_tags, store_tags_en,
                                 my_coupon, first_time, last_time,
                                 total_coupon_copies, total_link_clicks, is_trending,
-                                logo_url, is_promoted, source_platform)
-                        VALUES (%s,%s,%s,%s, %s,%s,%s,%s, %s, %s,%s,%s,%s, %s,%s,%s, 0,0,'عادي', %s, %s, %s)
+                                logo_url, is_promoted, source_platform, social_poster_url)
+                        VALUES (%s,%s,%s,%s, %s,%s,%s,%s, %s, %s,%s,%s,%s, %s,%s,%s, 0,0,'عادي', %s, %s, %s, %s)
                         RETURNING id
                     """, (
                         store_id, name_en, aff_link, pub_coupon,
@@ -2004,6 +2070,7 @@ if page == "إدخال بيانات الماستر":
                         final_logo_url or None,
                         False,  # is_promoted: يُفعَّل لاحقاً من صفحة «🎬 إضافة استوري»
                         _src_val,
+                        final_poster_url or None,
                     ))
                     new_master_id = cur.fetchone()[0]
                     # Week 4 — توليد cloaked_slug للمتجر الجديد (نفس تعبير backfill في migration_012)
@@ -11168,8 +11235,14 @@ elif page == "استوديو المحتوى":
     _CANVAS = 1080
     _STUDIO_DIR = os.path.dirname(os.path.abspath(__file__))
     _FONT_AR = os.path.join(_STUDIO_DIR, "NotoSansArabic-Bold.ttf")
+    # الأرشيف للقراءة فقط (تصاميم قديمة). الجديد يُحمَّل عبر زر التحميل
+    # بحيث المالك يختار مكان الحفظ (طلب صريح).
     _ARCHIVE_DIR = os.path.join(_STUDIO_DIR, "posters_archive")
-    os.makedirs(_ARCHIVE_DIR, exist_ok=True)
+    if not os.path.isdir(_ARCHIVE_DIR):
+        try: os.makedirs(_ARCHIVE_DIR, exist_ok=True)
+        except Exception: pass
+    if not os.path.exists(_FONT_AR):
+        st.warning("⚠️ الخط `NotoSansArabic-Bold.ttf` مفقود — البوسترات ستظهر بخط افتراضي لا يدعم العربي. ارفع الخط للمجلد ثم أعد التشغيل.")
 
     # لوحة الألوان: نسخة Apple/Keynote — كريمي فاخر + زمردي عميق
     _STUDIO_BG_TOP     = (250, 250, 248)   # cream
@@ -11309,6 +11382,29 @@ elif page == "استوديو المحتوى":
         tw = bbox[2] - bbox[0]
         draw.text(((canvas_w - tw) // 2 - bbox[0], y - bbox[1]), text, font=font, fill=fill)
 
+    def _render_clean_logo(store_logo_bytes: bytes | None, store_name: str = "") -> bytes:
+        """يُنتج «الشعار النظيف» 1080×1080 — خلفية بيضاء صلبة + اللوقو موسَّط
+        (~75% من الكنفس مع هوامش). مخصّص لـ master.logo_url (يُستخدم في الستوري
+        والكروت). يضمن مربع 1:1 ليُعرض دائرياً صحيحاً في حلقة الستوري بـobject-fit:cover.
+        لو ما في لوقو: يُعرض اسم المتجر بخط أسود كبير على أبيض (مثل styli)."""
+        W = H = _CANVAS
+        img = Image.new("RGBA", (W, H), (255, 255, 255, 255))
+        if store_logo_bytes:
+            box = int(W * 0.75)
+            logo = _fit_logo(store_logo_bytes, box, box)
+            if logo is not None:
+                lx = (W - logo.width) // 2
+                ly = (H - logo.height) // 2
+                img.paste(logo, (lx, ly), logo)
+        elif store_name:
+            draw = ImageDraw.Draw(img)
+            f = _font(140, weight=900)
+            _center_text(draw, _ar(store_name), H // 2 - 70, f, _STUDIO_INK)
+        out = io.BytesIO()
+        img.convert("RGB").save(out, format="PNG", optimize=True)
+        return out.getvalue()
+
+
     def _render_poster(
         store_name: str,
         store_logo_bytes: bytes | None,
@@ -11414,21 +11510,14 @@ elif page == "استوديو المحتوى":
         f_tag = _font(28)
         _center_text(draw, _ar(tagline or "استخدم الكود عند الشراء"), pill_y + pill_h + 22, f_tag, _STUDIO_INK_SOFT)
 
-        # ختم نبض الصفقات — زاوية يمين سفلى (صغير وأنيق)
+        # ختم نبض الصفقات — أسفل الكنفس بحجم أكبر (اللوقو الجديد فيه النص أصلاً
+        # فلا حاجة لإضافة «نبض الصفقات» منفصلة كما كان).
         if deal_pulse_logo_bytes:
-            wm = _fit_logo(deal_pulse_logo_bytes, 110, 110)
+            wm = _fit_logo(deal_pulse_logo_bytes, 240, 130)
             if wm is not None:
-                # شفافية 75%
-                alpha = wm.split()[-1].point(lambda a: int(a * 0.75))
+                alpha = wm.split()[-1].point(lambda a: int(a * 0.85))
                 wm.putalpha(alpha)
-                img.paste(wm, (W - wm.width - 50, H - wm.height - 50), wm)
-
-        # نص "نبض الصفقات" بجانب الختم
-        f_wm = _font(22)
-        wm_text = _ar("نبض الصفقات")
-        wb = draw.textbbox((0, 0), wm_text, font=f_wm)
-        tw = wb[2] - wb[0]
-        draw.text((50, H - 50 - (wb[3] - wb[1])), wm_text, font=f_wm, fill=_STUDIO_INK_SOFT)
+                img.paste(wm, ((W - wm.width) // 2, H - wm.height - 40), wm)
 
         out = io.BytesIO()
         img.convert("RGB").save(out, format="PNG", optimize=True)
@@ -11465,7 +11554,7 @@ elif page == "استوديو المحتوى":
             code_in = st.text_input("كود الخصم", value="SAVE50", max_chars=20)
             tagline_in = st.text_input("سطر تذييل اختياري", value="استخدم الكود عند الشراء")
 
-            generate = st.button("✨ توليد البوستر", type="primary", width='stretch')
+            generate = st.button("✨ توليد البوسترين (نظيف + بالثيم)", type="primary", width='stretch')
 
         with col_prev:
             st.markdown("##### 🖼️ المعاينة")
@@ -11483,8 +11572,11 @@ elif page == "استوديو المحتوى":
                 if os.path.exists(_logo_path):
                     with open(_logo_path, "rb") as _f:
                         dp_logo_bytes = _f.read()
-                with st.spinner("جاري الرسم…"):
-                    png_bytes = _render_poster(
+                with st.spinner("جاري رسم الصورتين…"):
+                    # 1) الشعار النظيف (1080×1080 أبيض + لوقو موسَّط) → master.logo_url
+                    clean_png = _render_clean_logo(store_logo_bytes, store_name_in)
+                    # 2) البوستر بالثيم (التصميم الكامل) → master.social_poster_url
+                    themed_png = _render_poster(
                         store_name=store_name_in,
                         store_logo_bytes=store_logo_bytes,
                         discount_label=discount_label_in,
@@ -11494,42 +11586,40 @@ elif page == "استوديو المحتوى":
                         deal_pulse_logo_bytes=dp_logo_bytes,
                         logo_scale=logo_scale,
                     )
-                # تخزين في الـ session ليبقى بعد إعادة التشغيل (rerun)
                 safe_store = "".join(c for c in (store_name_in or "store") if c.isalnum() or c in ("_", "-"))[:40] or "store"
-                safe_code = "".join(c for c in (code_in or "code") if c.isalnum())[:20] or "code"
+                safe_code  = "".join(c for c in (code_in or "code") if c.isalnum())[:20] or "code"
                 ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                st.session_state["studio_last_png"] = png_bytes
-                st.session_state["studio_last_fname"] = f"{safe_store}_{safe_code}_{ts}.png"
-                st.session_state["studio_last_saved"] = False
+                st.session_state["studio_clean_png"]  = clean_png
+                st.session_state["studio_clean_fname"] = f"{safe_store}_logo_{ts}.png"
+                st.session_state["studio_themed_png"] = themed_png
+                st.session_state["studio_themed_fname"] = f"{safe_store}_{safe_code}_{ts}.png"
 
-            last_png = st.session_state.get("studio_last_png")
-            last_fname = st.session_state.get("studio_last_fname")
+            clean_png  = st.session_state.get("studio_clean_png")
+            themed_png = st.session_state.get("studio_themed_png")
 
-            if last_png:
-                st.image(last_png, width='stretch')
-
-                bcol1, bcol2 = st.columns(2)
-                with bcol1:
-                    if st.button("💾 حفظ في الأرشيف", width='stretch', disabled=st.session_state.get("studio_last_saved", False)):
-                        try:
-                            with open(os.path.join(_ARCHIVE_DIR, last_fname), "wb") as _af:
-                                _af.write(last_png)
-                            st.session_state["studio_last_saved"] = True
-                            st.success(f"تم الحفظ: {last_fname}")
-                        except Exception as e:
-                            st.error(f"فشل الحفظ: {e}")
-                with bcol2:
+            if clean_png and themed_png:
+                # عرض الصورتين جنباً إلى جنب — كلٌّ بزر تحميل خاص (المالك يختار مكان الحفظ).
+                p1, p2 = st.columns(2)
+                with p1:
+                    st.markdown("**🏷️ الشعار النظيف** (للستوري والكروت)")
+                    st.image(clean_png, width='stretch')
                     st.download_button(
-                        "📥 تحميل PNG",
-                        data=last_png,
-                        file_name=last_fname,
-                        mime="image/png",
-                        width='stretch',
+                        "📥 تحميل الشعار النظيف", data=clean_png,
+                        file_name=st.session_state["studio_clean_fname"],
+                        mime="image/png", width='stretch', key="dl_clean",
                     )
-                if st.session_state.get("studio_last_saved"):
-                    st.caption(f"✓ محفوظ في الأرشيف باسم {last_fname}")
+                    st.caption("ارفعه في «إدخال بيانات الماستر» → حقل «🖼️ شعار المتجر».")
+                with p2:
+                    st.markdown("**📣 البوستر بالثيم** (للسوشيال)")
+                    st.image(themed_png, width='stretch')
+                    st.download_button(
+                        "📥 تحميل البوستر بالثيم", data=themed_png,
+                        file_name=st.session_state["studio_themed_fname"],
+                        mime="image/png", width='stretch', key="dl_themed",
+                    )
+                    st.caption("ارفعه في «إدخال بيانات الماستر» → حقل «📣 بوستر الإعلان للسوشيال».")
             else:
-                st.info("اضغط «توليد البوستر» لرؤية المعاينة. الهوية مقفولة على ستايل نبض الصفقات — كل البوسترات تطلع بنفس الإحساس الفاخر.")
+                st.info("اضغط «توليد البوسترين» لرؤية المعاينة. ستحصل على **صورتين**: شعار نظيف 1080×1080 + بوستر بالثيم بنفس المقاس. كلتاهما تُحمَّل لجهازك (أنت تختار مكان الحفظ).")
 
     with tab_archive:
         st.markdown("##### آخر التصاميم")
