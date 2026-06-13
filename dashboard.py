@@ -11433,11 +11433,10 @@ elif page == "استوديو المحتوى":
         card_w: int = 540,
         card_h: int = 400,
         logo_scale: int = 100,
-        wm_opacity_pct: int = 15,
-        wm_size_pct: int = 100,
+        wm_opacity_pct: int = 10,
     ) -> bytes:
         """يبني البوستر الكامل ويرجعه PNG bytes. الكارت 540×400، وlogo_scale% يحدّد حجم اللوقو فيه.
-        wm_opacity_pct = شفافية علامة نبض الصفقات (5-100). wm_size_pct = حجمها (30-150)."""
+        wm_opacity_pct = شفافية خلفية logo5 (1-30). الخلفية نفسها ثابتة cover على 1080×1080."""
         W = H = _CANVAS
         # حماية: نمنع تجاوز الكنفس أو الطغيان على العناصر تحت الكارت
         card_w = max(100, min(int(card_w), W - 40))
@@ -11448,23 +11447,18 @@ elif page == "استوديو المحتوى":
         _soft_blob(img, int(W * 0.85), int(H * 0.18), 280, _STUDIO_EMERALD, 60)
         _soft_blob(img, int(W * 0.15), int(H * 0.88), 320, _STUDIO_EMERALD_DK, 45)
 
-        # ─── خلفية نبض الصفقات الرسمية (logo5) — تغطّي كامل البوستر ─────
-        # حجم% = نسبة من الكنفس (100% = يملأ 1080×1080 كاملاً، أقل = أصغر بهامش).
-        # الشفافية% تُطبَّق على كل البكسلات (بما فيها غير الشفافة) لتعطي watermark ناعم.
+        # ─── خلفية نبض الصفقات الرسمية (logo5) — cover ثابت 1080×1080 ────
+        # نستخدم _cover_logo: يملأ كامل الكنفس بدقّة (قصّ مركزي عند الحاجة)،
+        # فالخلفية لا تتجاوز الإطار أبداً مهما كانت أبعاد الصورة المصدر.
+        # الشفافية% تتحكّم بدرجة الـwatermark — حدّها الأقصى 30% لمنع طغيانها
+        # على المحتوى (الكارت + الخصم + الكود).
         if deal_pulse_logo_bytes:
-            _wm_scale = max(30, min(int(wm_size_pct), 150)) / 100.0
-            _wm_box = int(W * _wm_scale)
-            try:
-                wm = Image.open(io.BytesIO(deal_pulse_logo_bytes)).convert("RGBA")
-                wm.thumbnail((_wm_box, _wm_box), Image.LANCZOS)
+            wm = _cover_logo(deal_pulse_logo_bytes, W, H)
+            if wm is not None:
                 _op = max(1, min(int(wm_opacity_pct), 100)) / 100.0
                 _wm_alpha = wm.split()[-1].point(lambda a: int(a * _op))
                 wm.putalpha(_wm_alpha)
-                wx = (W - wm.width) // 2
-                wy = (H - wm.height) // 2
-                img.paste(wm, (wx, wy), wm)
-            except Exception:
-                pass
+                img.paste(wm, (0, 0), wm)
 
         draw = ImageDraw.Draw(img)
 
@@ -11588,22 +11582,14 @@ elif page == "استوديو المحتوى":
             # ─── تحكّم بعلامة نبض الصفقات (watermark) ───────────────────────
             st.markdown("##### 💧 علامة نبض الصفقات المائية")
             st.caption(
-                "خلفية البوستر الرسمية = **logo5.png** ممدودة على كامل المقاس 1080×1080. "
-                "شعار المتجر داخل الكارت يبقى 100%. اكتب الأرقام بنفسك للتحكّم الدقيق."
+                "خلفية البوستر = **logo5.png** ثابتة cover على 1080×1080 (لا تتجاوز الإطار أبداً). "
+                "اكتب نسبة الشفافية فقط. الموصى به: 8-15% — أعلى من 25% يطغى على المحتوى."
             )
-            wm_c1, wm_c2 = st.columns(2)
-            with wm_c1:
-                wm_opacity_in = st.number_input(
-                    "🌫️ الشفافية (%) — اكتب الرقم", min_value=1, max_value=100,
-                    value=15, step=1, key="studio_wm_opacity",
-                    help="1% = شبه مخفي · 15% = watermark خفيف · 100% = الخلفية بدون شفافية",
-                )
-            with wm_c2:
-                wm_size_in = st.number_input(
-                    "📐 الحجم (%) — اكتب الرقم", min_value=30, max_value=150,
-                    value=100, step=1, key="studio_wm_size",
-                    help="100% = يملأ كامل البوستر 1080×1080 · أقل = أصغر بهامش · أكبر = يتجاوز الإطار",
-                )
+            wm_opacity_in = st.number_input(
+                "🌫️ شفافية الخلفية (%) — اكتب الرقم", min_value=1, max_value=30,
+                value=10, step=1, key="studio_wm_opacity",
+                help="1% = شبه مخفي · 10% = watermark خفيف (الافتراضي) · 25%+ = ظاهر بقوة",
+            )
 
             generate = st.button("✨ توليد البوسترين (نظيف + بالثيم)", type="primary", width='stretch')
 
@@ -11647,7 +11633,6 @@ elif page == "استوديو المحتوى":
                         deal_pulse_logo_bytes=dp_logo_bytes,
                         logo_scale=logo_scale,
                         wm_opacity_pct=wm_opacity_in,
-                        wm_size_pct=wm_size_in,
                     )
                 safe_store = "".join(c for c in (store_name_in or "store") if c.isalnum() or c in ("_", "-"))[:40] or "store"
                 safe_code  = "".join(c for c in (code_in or "code") if c.isalnum())[:20] or "code"
