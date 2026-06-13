@@ -4973,10 +4973,11 @@ elif page == "🎬 تحليلات الستوري":
     _sv_t_to   = (pd.Timestamp(sv_date_to) + pd.Timedelta(days=1)).strftime("%Y-%m-%d 00:00:00")
 
     # ─── بنّاء WHERE لـ story_views ──────────────────────────────────
-    # was_trending هو snapshot دقيق محفوظ لحظة الـ INSERT في track.py،
-    # محسوب من compute_trending_store_ids (يطابق /api/v1/trend الحي).
-    # ما نقدر نخترع تصنيف للسجلات القديمة (NULL)؛ فلتر «ترند» و «عادي»
-    # يستثنيها، فلتر «الكل» يضمّها.
+    # تصنيف «ترند/عادي» يعتمد الخوارزمية الحيّة (يومي ∪ أسبوعي من
+    # _sa_trend_store_ids) لا snapshot was_trending — لأن snapshot يلتقط
+    # التثبيت اليدوي (master.is_trending='ترند 🔥') فقط، ويفوّت متاجر
+    # الترند الخوارزمي بالكامل.
+    _live_trend_set = _sa_trend_store_ids()
     def _sv_build_where(alias="sv"):
         parts  = [f"{alias}.viewed_at >= %s", f"{alias}.viewed_at < %s"]
         params = [_sv_t_from, _sv_t_to]
@@ -4984,9 +4985,12 @@ elif page == "🎬 تحليلات الستوري":
             parts.append(f"{alias}.source = %s")
             params.append(sv_source_filter)
         if sv_trend_filter == "trend":
-            parts.append(f"{alias}.was_trending IS TRUE")
+            parts.append(f"{alias}.store_id = ANY(%s)")
+            params.append(list(_live_trend_set))
         elif sv_trend_filter == "normal":
-            parts.append(f"{alias}.was_trending IS FALSE")
+            parts.append(f"({alias}.store_id <> ALL(%s) OR %s::text[] = '{{}}'::text[])")
+            params.append(list(_live_trend_set))
+            params.append(list(_live_trend_set))
         return "WHERE " + " AND ".join(parts), params
 
     try:
@@ -5072,6 +5076,10 @@ elif page == "🎬 تحليلات الستوري":
         else:
             journey["المصدر"] = journey["source"].map(
                 {"web": "🌐 الموقع", "telegram_miniapp": "🔹 الميني ويب"}).fillna(journey["source"])
+            # حالة الستوري نُعيد حسابها من الترند الحيّ (يومي ∪ أسبوعي)
+            # بدل snapshot was_trending (المعطّل لأنه يلتقط التثبيت اليدوي فقط).
+            journey["حالة_الستوري"] = journey["المتجر"].astype(str).apply(
+                lambda sid: "🔥 ترند" if sid in _live_trend_set else "🎬 عادي")
             # باندا يقرأ timestamptz كـ UTC ويعرضه UTC؛ +3 لعرض توقيت الرياض (نفس
             # نمط RIYADH_TZ_OFFSET_HOURS في باقي الداشبورد). tz-aware + Timedelta سليم.
             journey["آخر_مشاهدة"] = (pd.to_datetime(journey["آخر_مشاهدة"], errors="coerce", utc=True)
