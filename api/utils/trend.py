@@ -173,6 +173,9 @@ def assign_rank_titles(items: list[dict]) -> list[dict]:
     return items
 
 
+NONE_SENTINEL = "__NONE__"   # «بدون» — يُخفي مركزاً معيّناً عمداً من قائمة الترند.
+
+
 def apply_overrides(items: list[dict], overrides: dict[int, str],
                     top_n: int) -> list[dict]:
     """
@@ -180,18 +183,20 @@ def apply_overrides(items: list[dict], overrides: dict[int, str],
 
     منطق الإزاحة (نفس ما طلبه المالك):
       - لكل rank من 1 إلى top_n: لو فيه override → نضع المتجر المُثبَّت هناك.
+      - لو الـoverride هو NONE_SENTINEL «بدون» → نتخطّى هذا المركز كلياً
+        (لا يظهر شيء)، والمراكز اللاحقة لا تتزحّح لملئه.
       - لو ما فيه override → نأخذ التالي من نتائج الخوارزمية، **متخطّين**
-        المتاجر المُجاوزة (لتجنّب التكرار). يضمن أن المتاجر اللي كانت في
-        موقع مُجاوَز تتزحّح طبيعياً للموقع التالي.
+        المتاجر المُجاوزة (لتجنّب التكرار).
 
     إذا المتجر المُجاوَز موجود أصلاً في نتائج الخوارزمية، نحافظ على نقاطه
     (breakdown). إذا غير موجود (مثلاً متجر بلا نشاط هذه النافذة)، نُنشئ
     placeholder بأصفار — الـ caller يُثري التفاصيل (logo/name_en) من master.
 
-    overrides: dict {rank: store_id}.
+    overrides: dict {rank: store_id | NONE_SENTINEL}.
     """
     items_by_id = {it["store_id"]: it for it in items}
-    overridden_ids = set(overrides.values())
+    # NONE_SENTINEL لا يُحجز متجراً حقيقياً، فلا يُستبعد من algo_pool.
+    overridden_ids = {v for v in overrides.values() if v != NONE_SENTINEL}
     # algo pool — ترتيب الخوارزمية مع استبعاد المتاجر المُجاوزة (لمنع التكرار).
     algo_pool = [it for it in items if it["store_id"] not in overridden_ids]
 
@@ -199,6 +204,9 @@ def apply_overrides(items: list[dict], overrides: dict[int, str],
     for rank in range(1, top_n + 1):
         if rank in overrides:
             sid = overrides[rank]
+            if sid == NONE_SENTINEL:
+                # «بدون» صريحة لهذا المركز — لا نُضيف شيئاً، نتخطّى.
+                continue
             if sid in items_by_id:
                 # المتجر له نقاط من الخوارزمية — نستخدمها (مع تجاهل ترتيبه الأصلي).
                 result.append(dict(items_by_id[sid]))

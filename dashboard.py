@@ -4208,8 +4208,9 @@ elif page == "تحليل المتاجر":
         st.caption(
             "ثبّت متجراً في مركز محدد — الباقي يتزحّح تلقائياً. الخوارزمية "
             "تحسب النقاط (نقر=1، بحث=2، نسخ=3، مفضلة=4) مع anti-spam؛ "
-            "التثبيت اليدوي يطغى عليها. التغيير يظهر للزوار خلال **دقيقة** "
-            "(كاش API).")
+            "التثبيت اليدوي يطغى عليها. اختيار **«بدون»** يُخفي المركز كلياً "
+            "(لتقليل عدد المتاجر الظاهرة دون تعديل الـعدد). التغيير يظهر "
+            "للزوار خلال **دقيقة** (كاش API).")
 
         # ─── أعداد الترند القابلة للتحكّم (platform_settings) ───
         _pscn = get_conn(); _pscn.rollback()
@@ -4271,6 +4272,16 @@ elif page == "تحليل المتاجر":
                         CONSTRAINT trend_overrides_uniq_store UNIQUE (window_kind, store_id)
                     )
                 """)
+                # تحويل uniq_store إلى partial index — يسمح بتكرار __NONE__ عبر مراكز.
+                _cur.execute("""
+                    ALTER TABLE trend_overrides
+                    DROP CONSTRAINT IF EXISTS trend_overrides_uniq_store
+                """)
+                _cur.execute("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS trend_overrides_uniq_store_real
+                    ON trend_overrides (window_kind, store_id)
+                    WHERE store_id <> '__NONE__'
+                """)
                 _ov_conn.commit()
             _df_ov = pd.read_sql(
                 "SELECT window_kind AS window, rank, store_id FROM trend_overrides",
@@ -4299,7 +4310,9 @@ elif page == "تحليل المتاجر":
                                    .dropna().astype(str).unique().tolist())
                           if not _master_for_pin.empty else [])
         _AUTO = "⚙️ تلقائي (بدون تثبيت)"
-        _option_list = [_AUTO] + _store_options
+        _NONE = "🚫 بدون — إخفاء هذا المركز"   # يطابق NONE_SENTINEL في trend.py
+        _NONE_SENTINEL = "__NONE__"
+        _option_list = [_AUTO, _NONE] + _store_options
 
         _DAILY_TITLES = {
             1: "🥇 المركز 1 — الأعلى طلباً",
@@ -4317,11 +4330,22 @@ elif page == "تحليل المتاجر":
         }
 
         def _pin_picker(window: str, rank: int, label: str, current):
-            idx = (_option_list.index(current)
-                   if current in _option_list else 0)
+            # current في DB قد يكون: None (تلقائي)، __NONE__ (بدون)، أو store_id.
+            # نحوّل __NONE__ لاسم العرض _NONE قبل اختيار default index.
+            if current == _NONE_SENTINEL:
+                _display_current = _NONE
+            elif current in _option_list:
+                _display_current = current
+            else:
+                _display_current = _AUTO
+            idx = _option_list.index(_display_current)
             pick = st.selectbox(label, _option_list, index=idx,
                                  key=f"pin_tab_{window}_{rank}")
-            return None if pick == _AUTO else pick
+            if pick == _AUTO:
+                return None
+            if pick == _NONE:
+                return _NONE_SENTINEL
+            return pick
 
         st.markdown(f"##### 🟠 الترند اليومي — نار برتقالية ({int(_new_dcount)} مراكز)")
         _daily_picks: dict[int, str | None] = {}
@@ -4347,13 +4371,15 @@ elif page == "تحليل المتاجر":
 
         if _save:
             def _dup_in(picks: dict) -> str | None:
+                # «بدون» (__NONE__) يُسمح بتكراره — التحقّق على المتاجر الحقيقية فقط.
                 seen = {}
                 for rk, sid in picks.items():
-                    if sid and sid in seen:
+                    if not sid or sid == _NONE_SENTINEL:
+                        continue
+                    if sid in seen:
                         return (f"المتجر «{sid}» مكرّر في مركزين "
                                 f"({seen[sid]} و {rk})")
-                    if sid:
-                        seen[sid] = rk
+                    seen[sid] = rk
                 return None
             err = _dup_in(_daily_picks) or _dup_in(_weekly_picks)
             if err:
