@@ -662,6 +662,8 @@ let FAVS = new Set();          // store_id strings — مفضلة المستخد
 let FAV_CATS = new Set();      // category names — مفضلة الأقسام (سيرفرية kind='category')
 let DAILY_TREND_IDS  = new Set();  // store_id حالياً في الترند اليومي
 let WEEKLY_TREND_IDS = new Set();  // store_id حالياً في الترند الأسبوعي (يشمل اليومي)
+let DAILY_TREND_ORDER  = [];        // مرتّب بالـrank: index 0 = الأعلى نقاطاً
+let WEEKLY_TREND_ORDER = [];        // مرتّب بالـrank: index 0 = الأعلى نقاطاً
 
 // وسام الترند — مصدر واحد لكل الواجهات (كروت/استوري/صفحة متجر).
 // اليومي يطغى على الأسبوعي إذا المتجر في الاثنين. يُرجِع مفتاح STRINGS أو null.
@@ -827,8 +829,10 @@ async function loadAndRenderTrend() {
         const weeklyItems = w.items || [];
         // نُحدّث Sets الترند (نفس منطق loadTrendOnHome) لشارة renderStoreView.
         const dailyDisplayed = padDailyWithWeekly(dailyItems, weeklyItems, 3);
-        DAILY_TREND_IDS  = new Set(dailyDisplayed.map(it => it.store_id));
-        WEEKLY_TREND_IDS = new Set(weeklyItems.map(it => it.store_id));
+        DAILY_TREND_ORDER  = dailyDisplayed.map(it => it.store_id);
+        WEEKLY_TREND_ORDER = weeklyItems.map(it => it.store_id);
+        DAILY_TREND_IDS  = new Set(DAILY_TREND_ORDER);
+        WEEKLY_TREND_IDS = new Set(WEEKLY_TREND_ORDER);
         renderTrendSections(dailyItems, weeklyItems);
         refreshTrendBadges();   // حدّث أوسمة الكروت/الاستوري في أي واجهة ظاهرة
     } catch (err) {
@@ -904,8 +908,10 @@ async function loadTrendOnHome() {
         // padding اليومي من الأسبوعي يحدث في renderTrendOnHome، فنعبّئ الـ Set
         // بالمتاجر اللي *فعلاً* راح تظهر بشارة "ترند اليوم" — وهي 3 الأولى بعد الـ padding.
         const dailyDisplayed = padDailyWithWeekly(dailyItems, weeklyItems, 3);
-        DAILY_TREND_IDS  = new Set(dailyDisplayed.map(it => it.store_id));
-        WEEKLY_TREND_IDS = new Set(weeklyItems.map(it => it.store_id));
+        DAILY_TREND_ORDER  = dailyDisplayed.map(it => it.store_id);
+        WEEKLY_TREND_ORDER = weeklyItems.map(it => it.store_id);
+        DAILY_TREND_IDS  = new Set(DAILY_TREND_ORDER);
+        WEEKLY_TREND_IDS = new Set(WEEKLY_TREND_ORDER);
         renderTrendOnHome(dailyItems, weeklyItems);
         refreshTrendBadges();   // حدّث أوسمة الكروت/الاستوري في أي واجهة ظاهرة
     } catch (err) {
@@ -2096,12 +2102,22 @@ function renderStoryRow() {
                          || WEEKLY_TREND_IDS.has(s.store_id) || s.promoted);
     // الطبقة: 0=ترند يومي، 1=ترند أسبوعي، 2=مُشهَر عادي.
     // الإشهار يطغى على الترند في تحديد الـtier — المُشهَر يأخذ موضعه دائماً
-    // آخر السطر بلونه المخصّص حتى لو دخل ضمن متاجر الترند (طلب المالك:
-    // المتجر المُشهَر يجب أن يظهر بمكانه ولونه دائماً، ويُكتفى بـ 🔥 لو في الترند).
+    // آخر السطر بلونه المخصّص حتى لو دخل ضمن متاجر الترند.
     const _tier = (s) => s.promoted ? 2
                        : DAILY_TREND_IDS.has(s.store_id)  ? 0
                        : WEEKLY_TREND_IDS.has(s.store_id) ? 1 : 2;
-    STORY = STORY.slice().sort((a, b) => _tier(a) - _tier(b)).slice(0, 12);
+    // داخل كل طبقة ترند: الأعلى نقاطاً (rank index 0) ينزل آخر DOM لطبقته →
+    // يظهر في RTL أقرب لليمين، يلتصق بالمشهر.
+    const _rankIdx = (s, t) => {
+        if (t === 0) { const i = DAILY_TREND_ORDER.indexOf(s.store_id);  return i < 0 ? 999 : i; }
+        if (t === 1) { const i = WEEKLY_TREND_ORDER.indexOf(s.store_id); return i < 0 ? 999 : i; }
+        return 999;
+    };
+    STORY = STORY.slice().sort((a, b) => {
+        const ta = _tier(a), tb = _tier(b);
+        if (ta !== tb) return ta - tb;
+        return _rankIdx(b, tb) - _rankIdx(a, ta);   // الأعلى rank آخر DOM
+    }).slice(0, 12);
     // ألوان حلقة الستوري العادي (تطابق الموقع والداشبورد).
     const RING_GRAD = {
         gold:'linear-gradient(135deg,#fde047,#d4af37,#fde047)',
