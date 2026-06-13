@@ -11339,6 +11339,21 @@ elif page == "استوديو المحتوى":
         except Exception:
             return None
 
+
+    def _fit_logo_resize(logo_bytes: bytes, box_w: int, box_h: int) -> Image.Image | None:
+        """يقصّ ثم يكبّر/يصغّر ليملأ الصندوق (مع الحفاظ على النسبة).
+        مختلف عن _fit_logo (الذي يستعمل thumbnail = scale-down فقط) — هذا يسمح بالتكبير
+        لو الإدخال أصغر من الصندوق، مفيد للوقو نظيف 1080×1080 من شعار صغير."""
+        try:
+            lg = Image.open(io.BytesIO(logo_bytes)).convert("RGBA")
+            lg = _smart_crop_logo(lg)
+            w, h = lg.size
+            scale = min(box_w / max(w, 1), box_h / max(h, 1))
+            nw, nh = max(1, int(w * scale)), max(1, int(h * scale))
+            return lg.resize((nw, nh), Image.LANCZOS)
+        except Exception:
+            return None
+
     def _cover_logo(logo_bytes: bytes, box_w: int, box_h: int) -> Image.Image | None:
         """يكبّر/يصغّر الصورة لتملأ الكارت بالكامل (cover) مع قص مركزي —
         أي صورة تملأ المقاس 540×400 بدون تشويه نسبتها."""
@@ -11384,14 +11399,16 @@ elif page == "استوديو المحتوى":
 
     def _render_clean_logo(store_logo_bytes: bytes | None, store_name: str = "") -> bytes:
         """يُنتج «الشعار النظيف» 1080×1080 — خلفية بيضاء صلبة + اللوقو موسَّط
-        (~75% من الكنفس مع هوامش). مخصّص لـ master.logo_url (يُستخدم في الستوري
+        (~80% من الكنفس مع هوامش). مخصّص لـ master.logo_url (يُستخدم في الستوري
         والكروت). يضمن مربع 1:1 ليُعرض دائرياً صحيحاً في حلقة الستوري بـobject-fit:cover.
+        يستخدم _fit_logo_resize (يسمح بالتكبير) فالشعارات الصغيرة تكبر لتملأ الكنفس
+        بدل ما تبقى نقطة في الوسط.
         لو ما في لوقو: يُعرض اسم المتجر بخط أسود كبير على أبيض (مثل styli)."""
         W = H = _CANVAS
         img = Image.new("RGBA", (W, H), (255, 255, 255, 255))
         if store_logo_bytes:
-            box = int(W * 0.75)
-            logo = _fit_logo(store_logo_bytes, box, box)
+            box = int(W * 0.80)
+            logo = _fit_logo_resize(store_logo_bytes, box, box)
             if logo is not None:
                 lx = (W - logo.width) // 2
                 ly = (H - logo.height) // 2
@@ -11427,6 +11444,18 @@ elif page == "استوديو المحتوى":
         # توهج زمردي فاخر — زاويتان متقابلتان
         _soft_blob(img, int(W * 0.85), int(H * 0.18), 280, _STUDIO_EMERALD, 60)
         _soft_blob(img, int(W * 0.15), int(H * 0.88), 320, _STUDIO_EMERALD_DK, 45)
+
+        # ─── الـwatermark «مائي شفاف» — يُرسم في الخلفية قبل المحتوى ─────
+        # 15% شفافية + موقع وسط-أسفل = حضور brand خفيف بدون طغيان. كل العناصر
+        # (الكارت، الكود، النصوص) تُرسم فوقه فتبقى واضحة بلا تداخل بصري.
+        if deal_pulse_logo_bytes:
+            wm = _fit_logo(deal_pulse_logo_bytes, 380, 200)
+            if wm is not None:
+                _wm_alpha = wm.split()[-1].point(lambda a: int(a * 0.15))
+                wm.putalpha(_wm_alpha)
+                wx = (W - wm.width) // 2
+                wy = H - wm.height - 30
+                img.paste(wm, (wx, wy), wm)
 
         draw = ImageDraw.Draw(img)
 
@@ -11510,14 +11539,7 @@ elif page == "استوديو المحتوى":
         f_tag = _font(28)
         _center_text(draw, _ar(tagline or "استخدم الكود عند الشراء"), pill_y + pill_h + 22, f_tag, _STUDIO_INK_SOFT)
 
-        # ختم نبض الصفقات — أسفل الكنفس بحجم أكبر (اللوقو الجديد فيه النص أصلاً
-        # فلا حاجة لإضافة «نبض الصفقات» منفصلة كما كان).
-        if deal_pulse_logo_bytes:
-            wm = _fit_logo(deal_pulse_logo_bytes, 240, 130)
-            if wm is not None:
-                alpha = wm.split()[-1].point(lambda a: int(a * 0.85))
-                wm.putalpha(alpha)
-                img.paste(wm, ((W - wm.width) // 2, H - wm.height - 40), wm)
+        # (الـwatermark تم رسمه في الخلفية بشفافية 15% قبل المحتوى)
 
         out = io.BytesIO()
         img.convert("RGB").save(out, format="PNG", optimize=True)
