@@ -1173,11 +1173,10 @@ def _sa_trend_store_ids() -> set:
         daily_top = apply_overrides(daily_raw, daily_ov, _dn)
         daily_ids = {it["store_id"] for it in daily_top}
 
-        # الأسبوعي: top-N (افتراضي 7) — يستثني المعروض في اليومي إلا المثبّت أسبوعياً
-        excl_weekly     = daily_ids - pinned_weekly
-        weekly_filtered = [it for it in weekly_raw if it["store_id"] not in excl_weekly]
-        weekly_top      = apply_overrides(weekly_filtered, weekly_ov, _wn)
-        weekly_ids      = {it["store_id"] for it in weekly_top}
+        # الأسبوعي: top-N مستقل بالكامل — متجر يمكن أن يكون في الطبقتين معاً
+        # (يطابق /trend/weekly في الـ API).
+        weekly_top = apply_overrides(weekly_raw, weekly_ov, _wn)
+        weekly_ids = {it["store_id"] for it in weekly_top}
 
         # ترند الستوري = اليومي (top-N برتقالي) ∪ الأسبوعي (top-N أزرق).
         # التثبيتات ضمن العدد مُدرَجة أصلاً في daily_ids/weekly_ids؛ والعدد=0 يُفرّغ الطبقة.

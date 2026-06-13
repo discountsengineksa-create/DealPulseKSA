@@ -270,12 +270,10 @@ def _compute_window(conn, window: str, source: str, top_n: int) -> list[dict]:
     if window == "daily":
         raw = daily_after_ov[:top_n]
     else:  # weekly
-        # الأسبوعي يستبعد كل متاجر اليومي المعروضة (ما عدا المثبّتة يدوياً للأسبوعي).
-        # المالك: "الترند الأسبوعي مستقل عن اليومي بالكامل".
-        ids_to_exclude = daily_displayed_ids - pinned_weekly_ids
-        weekly_filtered = [it for it in weekly_raw
-                           if it["store_id"] not in ids_to_exclude]
-        raw = apply_overrides(weekly_filtered, weekly_overrides, top_n)
+        # الطبقتان مستقلّتان بالحساب لكن غير متبادلتي الإقصاء — متجر يمكن أن
+        # يظهر في اليومي والأسبوعي معاً إذا استحقّ في كل منهما. (طلب المالك:
+        # ستايلي يحتفظ بـ rank الأسبوعي ولو دخل اليومي اليوم.)
+        raw = apply_overrides(weekly_raw, weekly_overrides, top_n)
 
     items = assign_rank_titles(raw)
 

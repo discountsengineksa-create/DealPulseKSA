@@ -134,12 +134,15 @@ def cloaked_redirect(
                 (slug,),
             )
             row = cur.fetchone()
-        if not row or not (row.get("affiliate_link") or "").strip():
+        # slug غير موجود إطلاقاً → 404 بلا تسجيل (لا نعرف أي متجر).
+        if not row:
             return HTMLResponse(_not_found_page(), status_code=404)
-        target_url = row["affiliate_link"].strip()
+        target_url = (row.get("affiliate_link") or "").strip()
         store_id = row["store_id"]
         master_id_int = row["id"]
-        _cache_store(slug, master_id_int, store_id, target_url)
+        # نخزّن في الكاش فقط لو الرابط موجود (المتاجر بلا رابط نُعيد فحصها كل مرة).
+        if target_url:
+            _cache_store(slug, master_id_int, store_id, target_url)
 
     # 2) إثراء + جودة
     geo = extract_geo(request)
@@ -213,7 +216,13 @@ def cloaked_redirect(
         "via": "cloak",
     })
 
-    # 6) تحويل 302 — رابط الأفلييت في الترويسة فقط، بلا كاش ولا referrer
+    # 6) لو الرابط فاضي: النقرة سُجّلت أعلاه، نُظهر 404 بدلاً من التحويل.
+    #    الفائدة: نية المستخدم بالنقر تدخل الترند، حتى لو المتجر بلا رابط أفلييت
+    #    (متجر تجريبي مثلاً). master.total_link_clicks ارتفع لو الجودة عالية.
+    if not target_url:
+        return HTMLResponse(_not_found_page(), status_code=404)
+
+    # 7) تحويل 302 — رابط الأفلييت في الترويسة فقط، بلا كاش ولا referrer
     resp = RedirectResponse(url=target_url, status_code=302)
     resp.headers["Cache-Control"] = "no-store"
     resp.headers["Referrer-Policy"] = "no-referrer"
