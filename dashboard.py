@@ -1158,7 +1158,10 @@ def _sa_trend_store_ids() -> set:
 
         now_r        = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=3)
         daily_start  = now_r.replace(hour=0, minute=0, second=0, microsecond=0)
-        weekly_start = now_r - timedelta(days=7)
+        # الأسبوع التقويمي: الأحد 00:00 → الآن (الرياض). يُصفَّر كل أحد.
+        _dss         = (now_r.weekday() + 1) % 7
+        weekly_start = (now_r - timedelta(days=_dss)).replace(
+            hour=0, minute=0, second=0, microsecond=0)
 
         daily_raw  = compute_trend(events, favorites, daily_start,  now_r, 13)
         weekly_raw = compute_trend(events, favorites, weekly_start, now_r, 20)
@@ -4578,9 +4581,8 @@ elif page == "تحليل المتاجر":
                 st.dataframe(_df_w_total, hide_index=True, width='stretch')
                 st.caption(f"إجمالي متاجر نشطة هذا الأسبوع: **{len(_df_w_total)}** "
                            f"· إجمالي النقاط الأسبوعية: **{int(_df_w_total['إجمالي النقاط'].sum())}**")
-                st.caption("⚠️ ملاحظة: خوارزمية الترند الأسبوعي تستخدم نافذة rolling 7 أيام "
-                           "(الآن − 7 يوم → الآن)، بينما هذا الجدول يستخدم الأسبوع التقويمي "
-                           "(الأحد → السبت) للقراءة الأسهل. قد تختلف القائمتان قليلاً عند حدود الأسبوع.")
+                st.caption("✅ هذي الأرقام مطابقة تماماً لما يدخل خوارزمية الترند الأسبوعي — "
+                           "النافذة موحّدة: الأحد 00:00 → الآن بتوقيت الرياض، يُصفَّر كل أحد.")
         except Exception as _e:
             st.error(f"⚠️ تعذّر تحميل جداول التدقيق: {_e}")
 

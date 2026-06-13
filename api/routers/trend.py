@@ -4,7 +4,8 @@
 GET /api/v1/trend/daily   → أعلى 3 متاجر (الأعلى طلباً / الأكثر شعبية / الأوسع انتشاراً)
                             من 12:00 ص بتوقيت الرياض إلى الآن.
 GET /api/v1/trend/weekly  → أعلى 7 متاجر (المراكز 1-3 بألقاب، 4-7 بترقيم)
-                            آخر 7 أيام rolling.
+                            الأسبوع التقويمي: الأحد 00:00 → الآن (الرياض).
+                            يُصفَّر تلقائياً كل أحد منتصف الليل.
 
 كلاهما يدعم ?source=all|bot|web|mini للتجزئة حسب المنصة.
 
@@ -241,7 +242,11 @@ def _compute_window(conn, window: str, source: str, top_n: int) -> list[dict]:
     # اليومي من الأسبوعي (الاستقلال المطلوب من المالك).
     now_r = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=3)
     daily_start = now_r.replace(hour=0, minute=0, second=0, microsecond=0)
-    weekly_start_dt = now_r - timedelta(days=7)
+    # الأسبوع التقويمي: الأحد 00:00 → الآن (يُصفَّر كل أحد منتصف الليل بتوقيت
+    # الرياض). weekday(): الإثنين=0..الأحد=6 → أيام منذ آخر أحد:
+    _days_since_sunday = (now_r.weekday() + 1) % 7
+    weekly_start_dt = (now_r - timedelta(days=_days_since_sunday)).replace(
+        hour=0, minute=0, second=0, microsecond=0)
     wstart = daily_start if window == "daily" else weekly_start_dt
 
     daily_raw    = compute_trend(events, favorites, daily_start,    now_r, 13)   # 3 + 10 buffer
@@ -347,7 +352,8 @@ def get_weekly_trend(
     conn=Depends(get_db),
 ):
     """
-    أعلى 7 متاجر — آخر 7 أيام rolling (يتحرك مع الوقت ثانية بثانية).
+    أعلى 7 متاجر — الأسبوع التقويمي بتوقيت الرياض (الأحد 00:00 → الآن).
+    يُصفَّر كل أحد منتصف الليل، يتراكم خلال أيام الأسبوع.
 
     المراكز 1-3: الأعلى طلباً / الأكثر شعبية / الأوسع انتشاراً.
     المراكز 4-7: المركز الرابع، الخامس، السادس، السابع.
