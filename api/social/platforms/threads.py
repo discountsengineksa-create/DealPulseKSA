@@ -18,6 +18,25 @@ from api.social.base import BaseSocialPoster, PostResult
 
 GRAPH = "https://graph.threads.net/v1.0"
 
+# حد Threads الصارم: 500 حرف. نُبقي header + الحقول + الرابط، ونقتطع من النبذة.
+THREADS_MAX_CHARS = 500
+
+
+def _truncate_for_threads(text: str, limit: int = THREADS_MAX_CHARS) -> str:
+    """يقصّ النص لحدّ Threads (500 حرف) بذكاء: يحافظ على الرابط في النهاية
+    ويقطع من جسم النبذة لو طال. لو النص أصلاً ≤ الحد، يرجع كما هو."""
+    if len(text) <= limit:
+        return text
+    # نحاول نحافظ على آخر فقرة (تحوي الرابط عادةً)
+    parts = text.rsplit("\n\n", 1)
+    if len(parts) == 2 and len(parts[1]) < limit - 50:
+        head, tail = parts
+        # نقتطع head ونضيف "…" قبل tail
+        keep = limit - len(tail) - 4  # 4 = "\n…\n"
+        return head[: max(50, keep)].rstrip() + "\n…\n" + tail
+    # fallback: قصّ بسيط من النهاية مع "…"
+    return text[: limit - 1].rstrip() + "…"
+
 
 class ThreadsPoster(BaseSocialPoster):
     name = "threads"
@@ -30,6 +49,9 @@ class ThreadsPoster(BaseSocialPoster):
         token = os.getenv("THREADS_ACCESS_TOKEN")
         if not user_id or not token:
             return PostResult(error="THREADS_USER_ID or THREADS_ACCESS_TOKEN missing")
+
+        # تطبيق حد الـ500 حرف الصارم لـThreads
+        text = _truncate_for_threads(text)
 
         # Step 1: container
         params = {
