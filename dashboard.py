@@ -1998,6 +1998,15 @@ if page == "إدخال بيانات الماستر":
             label_visibility="collapsed",
         )
 
+        # سماح/منع توليد SEO — بعض المعلنين يمنعون SEO على اسم البراند
+        # (مثل AliExpress: حظر + عدم دفع). شِل الصح لاستثناء المتجر.
+        _seo_enabled = st.checkbox(
+            "🔎 السماح بتوليد صفحات SEO لهذا المتجر",
+            value=True,
+            key="m_seo_enabled",
+            help="شِل الصح للمتاجر التي يمنع معلنها الـSEO على اسم البراند (مثل AliExpress).",
+        )
+
         # الصف 6: شعار المتجر
         st.divider()
         st.markdown("**🖼️ شعار المتجر (اختياري)**")
@@ -2117,8 +2126,8 @@ if page == "إدخال بيانات الماستر":
                                 my_coupon, first_time, last_time,
                                 total_coupon_copies, total_link_clicks, is_trending,
                                 logo_url, is_promoted, source_platform, social_poster_url,
-                                publish_channels)
-                        VALUES (%s,%s,%s,%s, %s,%s,%s,%s, %s, %s,%s,%s,%s, %s,%s,%s, 0,0,'عادي', %s, %s, %s, %s, %s)
+                                publish_channels, seo_enabled)
+                        VALUES (%s,%s,%s,%s, %s,%s,%s,%s, %s, %s,%s,%s,%s, %s,%s,%s, 0,0,'عادي', %s, %s, %s, %s, %s, %s)
                         RETURNING id
                     """, (
                         store_id, name_en, aff_link, pub_coupon,
@@ -2131,6 +2140,7 @@ if page == "إدخال بيانات الماستر":
                         _src_val,
                         final_poster_url or None,
                         _channels_val,
+                        bool(_seo_enabled),
                     ))
                     new_master_id = cur.fetchone()[0]
                     # Week 4 — توليد cloaked_slug للمتجر الجديد (نفس تعبير backfill في migration_012)
@@ -2249,6 +2259,12 @@ if page == "الاستعلام والتعديل":
                         key=f"publish_channels_edit_{search_id}",
                         label_visibility="collapsed",
                     )
+                    u_seo_enabled = st.checkbox(
+                        "🔎 السماح بتوليد صفحات SEO لهذا المتجر",
+                        value=bool(res.get('seo_enabled') if res.get('seo_enabled') is not None else True),
+                        key=f"seo_enabled_edit_{search_id}",
+                        help="شِل الصح للمتاجر التي يمنع معلنها الـSEO على اسم البراند (مثل AliExpress).",
+                    )
 
                     # الصف 6: شعار المتجر
                     st.divider()
@@ -2346,7 +2362,8 @@ if page == "الاستعلام والتعديل":
                                     social_poster_url=%s,
                                     is_promoted=%s,
                                     source_platform=%s,
-                                    publish_channels=%s
+                                    publish_channels=%s,
+                                    seo_enabled=%s
                                 WHERE id=%s
                             """, (
                                 u_store, u_name_en,
@@ -2361,6 +2378,7 @@ if page == "الاستعلام والتعديل":
                                 bool(u_promoted),
                                 _u_src_val,
                                 _u_channels_val,
+                                bool(u_seo_enabled),
                                 search_id,
                             ))
                             conn.commit()

@@ -50,6 +50,8 @@ def select_top_demand_stores(cur, n: int) -> list[dict]:
           -- يحترم قنوات النشر: لا نولّد صفحة SEO عامة لمتجر مخفيّ عن الموقع
           -- (مثل متجر منعه المعلن من القناة، أو حصري للبوت). NULL = كل القنوات.
           AND (m.publish_channels IS NULL OR m.publish_channels ILIKE '%%website%%')
+          -- سماح SEO لكل متجر: معلنون يمنعون SEO على البراند (AliExpress) → نستثنيه.
+          AND COALESCE(m.seo_enabled, TRUE) = TRUE
         GROUP BY m.id, store_name
         ORDER BY demand DESC
         LIMIT %s
