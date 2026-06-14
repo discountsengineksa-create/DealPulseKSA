@@ -1817,161 +1817,88 @@ if page == "إدخال بيانات الماستر":
         st.success(_master_ok_msg)
         st.balloons()
 
-    # 1. تهيئة قوائم التاقات (AR + EN) في Session State
-    if 'custom_tags_list' not in st.session_state:
+    # 1. كتالوج الأقسام (أزواج عربي↔إنجليزي) — مصدره الدائم جدول categories_tags
+    def _load_tag_pairs() -> dict:
+        """يحمّل {عربي: إنجليزي} من categories_tags. الإنجليزي قد يكون فارغاً
+        لصفوف قديمة أُضيفت قبل عمود tag_name_en."""
+        pairs: dict = {}
         try:
             conn = get_conn()
             cur = conn.cursor()
             cur.execute("""
-                SELECT DISTINCT trim(t) AS tag
-                FROM master,
-                        unnest(string_to_array(trim(both '{}' from COALESCE(store_tags, '')), ',')) AS t
-                WHERE trim(t) <> ''
+                SELECT trim(tag_name), trim(COALESCE(tag_name_en, ''))
+                FROM categories_tags
+                WHERE trim(COALESCE(tag_name, '')) <> ''
+                ORDER BY tag_name
             """)
-            db_tags = [row[0] for row in cur.fetchall() if row[0]]
+            for ar, en in cur.fetchall():
+                if ar:
+                    pairs[ar] = en
             conn.close()
-            base = ["أزياء", "عطور", "إلكترونيات", "منزل", "أطفال", "تجميل", "سفر"]
-            st.session_state.custom_tags_list = sorted(list(set(base + db_tags)))
-        except:
-            st.session_state.custom_tags_list = ["أزياء", "عطور", "إلكترونيات", "منزل", "أطفال", "تجميل", "سفر"]
-
-    if 'custom_tags_list_en' not in st.session_state:
-        try:
-            conn = get_conn()
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT DISTINCT trim(t) AS tag
-                FROM master,
-                        unnest(string_to_array(trim(both '{}' from COALESCE(store_tags_en, '')), ',')) AS t
-                WHERE trim(t) <> ''
-            """)
-            db_tags_en = [row[0] for row in cur.fetchall() if row[0]]
-            conn.close()
-            base_en = ["Fashion", "Perfumes", "Electronics", "Home", "Kids", "Beauty", "Travel"]
-            st.session_state.custom_tags_list_en = sorted(list(set(base_en + db_tags_en)))
-        except:
-            st.session_state.custom_tags_list_en = ["Fashion", "Perfumes", "Electronics", "Home", "Kids", "Beauty", "Travel"]
-
-    # ─── ربط ذكي AR↔EN ──────────────────────────────────────────────────
-    # قاموس مرادفات شائعة (instant، بدون LLM) — يغطي ٩٠٪ من المتاجر السعودية.
-    _TAG_AR_EN = {
-        "أزياء": "Fashion", "ملابس": "Clothing", "أحذية": "Shoes",
-        "حقائب": "Bags", "إكسسوارات": "Accessories", "ساعات": "Watches",
-        "مجوهرات": "Jewelry", "نظارات": "Eyewear",
-        "عطور": "Perfumes", "تجميل": "Beauty", "عناية": "Personal Care",
-        "مكياج": "Makeup", "شعر": "Hair Care",
-        "إلكترونيات": "Electronics", "جوالات": "Mobiles", "حاسبات": "Computers",
-        "ألعاب": "Gaming", "كاميرات": "Cameras", "صوتيات": "Audio",
-        "منزل": "Home", "أثاث": "Furniture", "مطبخ": "Kitchen",
-        "ديكور": "Decor", "أدوات منزلية": "Home Appliances",
-        "أطفال": "Kids", "مواليد": "Babies", "ألعاب أطفال": "Toys",
-        "رياضة": "Sports", "لياقة": "Fitness", "خارجية": "Outdoor",
-        "سفر": "Travel", "حجوزات": "Bookings", "طيران": "Flights",
-        "فنادق": "Hotels", "سيارات": "Cars",
-        "مطاعم": "Restaurants", "طعام": "Food", "بقالة": "Grocery",
-        "صحة": "Health", "صيدلية": "Pharmacy", "أدوية": "Medications",
-        "كتب": "Books", "تعليم": "Education", "دورات": "Courses",
-        "هدايا": "Gifts", "زهور": "Flowers",
-        "حيوانات أليفة": "Pet Supplies", "حدائق": "Garden",
-        "أدوات مكتبية": "Office Supplies", "فنون": "Arts",
-    }
-
-    # عكس القاموس للترجمة EN → AR (case-insensitive)
-    _TAG_EN_AR = {v.lower(): k for k, v in _TAG_AR_EN.items()}
-
-    def _call_translate_llm(text: str, direction: str) -> str:
-        """direction = 'ar2en' أو 'en2ar'. يستدعي Gemini → fallback OpenRouter."""
-        try:
-            import sys, pathlib
-            sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-            from api.utils.llm_client import call_llm
-            if direction == "ar2en":
-                sys_p = ("You translate Arabic e-commerce category names to concise "
-                         "standard English retail-catalog terms. Reply with ONLY the "
-                         "English term (1-3 words), no quotes, no explanation.")
-            else:
-                sys_p = ("ترجم اسم القسم التجاري الإنجليزي إلى المرادف العربي الفصيح "
-                         "المستخدم في التجارة الإلكترونية السعودية. ردّ بالكلمة العربية "
-                         "فقط (١-٣ كلمات)، بدون شرح ولا علامات اقتباس.")
-            r = call_llm(
-                purpose=f"tag_translation_{direction}",
-                system=sys_p, user=text,
-                max_tokens=20, temperature=0.1,
-            )
-            return (getattr(r, "text", "") or "").strip().strip('"\'').split("\n")[0].strip()
         except Exception:
-            return ""
+            pass
+        return pairs
 
-    @st.cache_data(ttl=86400, show_spinner=False)
-    def _translate_tag_ar_to_en(ar_tag: str) -> str:
-        """قسم عربي → إنجليزي. mapping ثابت أولاً → LLM. cache يومي."""
-        s = (ar_tag or "").strip()
-        if not s: return ""
-        if s in _TAG_AR_EN: return _TAG_AR_EN[s]
-        return _call_translate_llm(s, "ar2en")
+    if 'tag_pairs' not in st.session_state:
+        st.session_state.tag_pairs = _load_tag_pairs()
+    tag_pairs = st.session_state.tag_pairs
 
-    @st.cache_data(ttl=86400, show_spinner=False)
-    def _translate_tag_en_to_ar(en_tag: str) -> str:
-        """قسم إنجليزي → عربي. mapping ثابت أولاً → LLM. cache يومي."""
-        s = (en_tag or "").strip()
-        if not s: return ""
-        if s.lower() in _TAG_EN_AR: return _TAG_EN_AR[s.lower()]
-        return _call_translate_llm(s, "en2ar")
+    # قوائم مشتقّة من الكتالوج (يعتمد عليها نموذج الإدخال + صفحة تحليل المتاجر)
+    st.session_state.custom_tags_list = sorted(tag_pairs.keys())
+    st.session_state.custom_tags_list_en = sorted({v for v in tag_pairs.values() if v})
 
     # 2. إدارة الأقسام بلغتين (AR + EN)
     st.subheader("🏷️ إدارة الأقسام (Tags)")
 
-    # ─── الصف العربي ───
-    st.markdown("**عربي:**")
-    t1, t2, t3 = st.columns([2, 1, 0.5])
-    with t1:
-        selected_tags = st.multiselect(
-            "🔍 ابحث عن القسم بالعربي:",
-            options=st.session_state.custom_tags_list,
-            placeholder="اكتب هنا للبحث (مثلاً: عطور)..."
-        )
-    with t2:
-        new_tag_input = st.text_input("✨ تاق جديد (AR):", key="quick_tag_ar")
-    with t3:
-        st.write(" ")
-        if st.button("➕ إضافة AR", key="add_tag_ar"):
-            if new_tag_input and new_tag_input not in st.session_state.custom_tags_list:
-                st.session_state.custom_tags_list.append(new_tag_input)
-                # ربط ذكي AR↔EN: ترجم تلقائياً وأضف للقائمة الإنجليزية
-                with st.spinner("🪄 جاري ربط الترجمة الإنجليزية…"):
-                    en_translation = _translate_tag_ar_to_en(new_tag_input)
-                if en_translation and en_translation not in st.session_state.custom_tags_list_en:
-                    st.session_state.custom_tags_list_en.append(en_translation)
-                    st.toast(f"✅ {new_tag_input} ↔ {en_translation}")
+    # ─── إضافة قسم جديد كزوج (عربي + إنجليزي معاً) — يُحفظ دائماً في categories_tags ───
+    with st.expander("➕ إضافة قسم جديد (عربي + إنجليزي)", expanded=not tag_pairs):
+        ac1, ac2, ac3 = st.columns([2, 2, 0.7])
+        with ac1:
+            _new_ar = st.text_input("القسم بالعربي:", key="new_pair_ar", placeholder="مثال: سيارات")
+        with ac2:
+            _new_en = st.text_input("Category in English:", key="new_pair_en", placeholder="e.g. Cars")
+        with ac3:
+            st.write(" ")
+            if st.button("➕ إضافة", key="add_tag_pair"):
+                _ar = (_new_ar or "").strip()
+                _en = (_new_en or "").strip()
+                if not _ar or not _en:
+                    st.warning("⚠️ اكتب القسم بالعربي والإنجليزي معاً.")
+                elif _ar in tag_pairs:
+                    st.info(f"«{_ar}» موجود مسبقاً (الإنجليزي: {tag_pairs[_ar] or '—'}).")
                 else:
-                    st.toast(f"تمت إضافة '{new_tag_input}'")
-                st.rerun()
+                    try:
+                        conn = get_conn()
+                        cur = conn.cursor()
+                        cur.execute(
+                            "INSERT INTO categories_tags (tag_name, tag_name_en, priority_rank) "
+                            "VALUES (%s, %s, 5)",
+                            (_ar, _en),
+                        )
+                        conn.commit()
+                        conn.close()
+                        st.session_state.tag_pairs[_ar] = _en
+                        st.session_state.pop("new_pair_ar", None)
+                        st.session_state.pop("new_pair_en", None)
+                        st.toast(f"✅ {_ar} ↔ {_en}")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"تعذّر الحفظ: {e}")
 
-    # ─── الصف الإنجليزي ───
-    st.markdown("**English:**")
-    e1, e2, e3 = st.columns([2, 1, 0.5])
-    with e1:
-        selected_tags_en = st.multiselect(
-            "🔍 Search for English tag:",
-            options=st.session_state.custom_tags_list_en,
-            placeholder="Type to search (e.g. Perfumes)..."
+    # ─── اختيار أقسام المتجر بالعربي — والإنجليزي يُشتق تلقائياً من الزوج ───
+    selected_tags = st.multiselect(
+        "🔍 ابحث واختر أقسام المتجر (بالعربي):",
+        options=st.session_state.custom_tags_list,
+        placeholder="اكتب هنا للبحث (مثلاً: سيارات)...",
+        help="الإنجليزي يُربط تلقائياً من الزوج المحفوظ — لا حاجة لاختياره يدوياً.",
+    )
+    # الإنجليزي المرتبط (يُحفظ في store_tags_en عند حفظ المتجر)
+    selected_tags_en = [tag_pairs[t] for t in selected_tags if tag_pairs.get(t)]
+    if selected_tags:
+        st.caption(
+            "🔗 الإنجليزي المرتبط تلقائياً: "
+            + " · ".join(f"{ar} → {tag_pairs.get(ar) or '⚠️ ناقص'}" for ar in selected_tags)
         )
-    with e2:
-        new_tag_input_en = st.text_input("✨ New tag (EN):", key="quick_tag_en")
-    with e3:
-        st.write(" ")
-        if st.button("➕ Add EN", key="add_tag_en"):
-            if new_tag_input_en and new_tag_input_en not in st.session_state.custom_tags_list_en:
-                st.session_state.custom_tags_list_en.append(new_tag_input_en)
-                # ربط ذكي EN↔AR: ترجم تلقائياً وأضف للقائمة العربية
-                with st.spinner("🪄 جاري ربط الترجمة العربية…"):
-                    ar_translation = _translate_tag_en_to_ar(new_tag_input_en)
-                if ar_translation and ar_translation not in st.session_state.custom_tags_list:
-                    st.session_state.custom_tags_list.append(ar_translation)
-                    st.toast(f"✅ {new_tag_input_en} ↔ {ar_translation}")
-                else:
-                    st.toast(f"Added '{new_tag_input_en}'")
-                st.rerun()
 
     st.divider()
 
