@@ -7,26 +7,46 @@ def build_post_text(store: dict) -> str:
     يبني نص المنشور الموحّد من صف master.
 
     المتوقّع في `store`:
-      store_id, public_coupon, last_time (str أو date), description, affiliate_link
+      store_id, name_en, public_coupon, discount_value, extra_offer,
+      last_time, description, affiliate_link
+    الحقول الاختيارية تُحذف من النص لو ناقصة.
     """
-    name        = store.get("store_id") or ""
-    coupon      = store.get("public_coupon") or "—"
+    name        = (store.get("store_id") or "").strip()
+    name_en     = (store.get("name_en") or "").strip()
+    coupon      = (store.get("public_coupon") or "").strip()
+    discount    = (store.get("discount_value") or "").strip()
+    extra       = (store.get("extra_offer") or "").strip()
     last_time   = store.get("last_time")
-    description = (store.get("description") or "").strip() or "—"
-    link        = store.get("affiliate_link") or ""
+    description = (store.get("description") or "").strip()
+    link        = (store.get("affiliate_link") or "").strip()
 
     # last_time قد يكون date أو str — نحوّله لنص قصير
-    if last_time is None:
+    if last_time is None or str(last_time).strip() == "":
         last_time_str = "—"
     else:
         last_time_str = str(last_time)[:10]  # YYYY-MM-DD
 
-    return (
-        "نبض الصفقات\n\n"
-        f"المتجر: {name}\n"
-        f"كود الخصم الجديد: {coupon}\n"
-        f"تاريخ انتهاء الكوبون: {last_time_str}\n"
-        f"تفاصيل العرض: {description}\n\n"
-        "يمكنكم الاستفادة من العرض وتصفح التفاصيل مباشرة عبر الرابط التالي:\n"
-        f"{link}"
-    )
+    # اسم المتجر: بالعربي + (الإنجليزي بين قوسين) لو موجود
+    name_line = name + (f" ({name_en})" if name_en and name_en.lower() != name.lower() else "")
+
+    lines = [
+        "نبض الصفقات",
+        "",
+        f"المتجر: {name_line}",
+    ]
+    if discount:
+        lines.append(f"نسبة الخصم: {discount}")
+    if coupon:
+        lines.append(f"كود الخصم: {coupon}")
+    if last_time_str and last_time_str != "—":
+        lines.append(f"تاريخ انتهاء الكوبون: {last_time_str}")
+    if extra:
+        lines.append(f"عرض إضافي: {extra}")
+    if description:
+        lines.append("")
+        lines.append(f"نبذة: {description}")
+    lines.append("")
+    lines.append("استفد من العرض من خلال الرابط التالي:")
+    lines.append(link or "—")
+
+    return "\n".join(lines)

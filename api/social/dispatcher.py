@@ -19,8 +19,10 @@ def _fetch_store(conn, master_id: int) -> dict | None:
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
-            SELECT id, store_id, public_coupon, last_time, description,
-                   affiliate_link, logo_url
+            SELECT id, store_id, name_en, public_coupon,
+                   discount_value, extra_offer, extra_offer_en,
+                   last_time, description,
+                   affiliate_link, logo_url, social_poster_url
             FROM master
             WHERE id = %s
             """,
@@ -135,7 +137,9 @@ def broadcast_to_all_platforms(master_id: int) -> None:
             return
 
         post_text = build_post_text(store)
-        base_logo = store.get("logo_url")
+        # نفضّل البوستر بالثيم (مقاس 1080×1080 مع كل بيانات العرض)
+        # ونرجع للوقو فقط لو ما تم توليد بوستر بعد.
+        base_image = store.get("social_poster_url") or store.get("logo_url")
 
         for poster_cls in REGISTERED_POSTERS:
             try:
@@ -143,7 +147,7 @@ def broadcast_to_all_platforms(master_id: int) -> None:
             except Exception as e:
                 print(f"[social] failed to instantiate {poster_cls.__name__}: {e}")
                 continue
-            image_url = platform_image_url(base_logo, poster.name)  # مقاس كل منصة
+            image_url = platform_image_url(base_image, poster.name)  # مقاس كل منصة
             _run_one_poster(conn, master_id, store, post_text, image_url, poster)
     finally:
         try:
