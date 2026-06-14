@@ -33,6 +33,17 @@ try:
 except ImportError:
     _OPTION_MENU_OK = False
 
+# ─── قنوات النشر (publish_channels) — استهداف انتقائي لكل متجر ───────────────
+# المفتاح (يُخزَّن نصاً مفصولاً بفواصل في master.publish_channels) → التسمية العربية.
+# bot = البوت + الميني-ويب (واجهة واحدة). NULL/'' في القاعدة = كل القنوات (توافق).
+PUBLISH_CHANNELS = {
+    "website":   "🌐 الموقع",
+    "bot":       "🤖 البوت + الميني",
+    "instagram": "📸 انستقرام",
+    "threads":   "🧵 ثريد",
+    "facebook":  "👍 فيس بوك",
+}
+
 # ─── Cloudinary (اختياري: لرفع شعارات المتاجر تلقائياً) ──────────────────────
 try:
     import cloudinary
@@ -1969,6 +1980,24 @@ if page == "إدخال بيانات الماستر":
             key="m_source_platform",
         )
 
+        # الصف 5.6: قنوات النشر — استهداف انتقائي يحترم شروط الأفلييت.
+        # المتجر يظهر فقط في القنوات المُعلَّمة. (البوت = البوت + الميني-ويب).
+        st.divider()
+        st.markdown("**📤 إرسال إلى (قنوات النشر)**")
+        st.caption(
+            "علّم القنوات التي يظهر فيها هذا المتجر فقط. لو منع المعلن تيليجرام "
+            "(مثل SHEIN/Airalo) شِل صحّ «البوت» — يبقى حصرياً على الموقع. "
+            "البحث عنه في البوت يردّ «حصري بالموقع» مع الرابط."
+        )
+        _selected_channels = st.multiselect(
+            "القنوات",
+            options=list(PUBLISH_CHANNELS.keys()),
+            default=list(PUBLISH_CHANNELS.keys()),
+            format_func=lambda k: PUBLISH_CHANNELS[k],
+            key="m_publish_channels",
+            label_visibility="collapsed",
+        )
+
         # الصف 6: شعار المتجر
         st.divider()
         st.markdown("**🖼️ شعار المتجر (اختياري)**")
@@ -2075,6 +2104,10 @@ if page == "إدخال بيانات الماستر":
                     tags_ar_lit = "{" + ",".join(selected_tags) + "}"
                     tags_en_lit = "{" + ",".join(selected_tags_en) + "}"
                     _src_val = (source_platform or "").strip() or None
+                    # قنوات النشر: نص مفصول بفواصل بترتيب ثابت. '' = لا قناة (مخفي).
+                    _channels_val = ",".join(
+                        k for k in PUBLISH_CHANNELS if k in _selected_channels
+                    )
                     cur.execute("""
                         INSERT INTO master
                             (store_id, name_en, affiliate_link, public_coupon,
@@ -2083,8 +2116,9 @@ if page == "إدخال بيانات الماستر":
                                 priority_score, discount_value, store_tags, store_tags_en,
                                 my_coupon, first_time, last_time,
                                 total_coupon_copies, total_link_clicks, is_trending,
-                                logo_url, is_promoted, source_platform, social_poster_url)
-                        VALUES (%s,%s,%s,%s, %s,%s,%s,%s, %s, %s,%s,%s,%s, %s,%s,%s, 0,0,'عادي', %s, %s, %s, %s)
+                                logo_url, is_promoted, source_platform, social_poster_url,
+                                publish_channels)
+                        VALUES (%s,%s,%s,%s, %s,%s,%s,%s, %s, %s,%s,%s,%s, %s,%s,%s, 0,0,'عادي', %s, %s, %s, %s, %s)
                         RETURNING id
                     """, (
                         store_id, name_en, aff_link, pub_coupon,
@@ -2096,6 +2130,7 @@ if page == "إدخال بيانات الماستر":
                         False,  # is_promoted: يُفعَّل لاحقاً من صفحة «🎬 إضافة استوري»
                         _src_val,
                         final_poster_url or None,
+                        _channels_val,
                     ))
                     new_master_id = cur.fetchone()[0]
                     # Week 4 — توليد cloaked_slug للمتجر الجديد (نفس تعبير backfill في migration_012)
@@ -2193,6 +2228,28 @@ if page == "الاستعلام والتعديل":
                         help="يساعدك تعرف من أي منصة تابعة جاء كود هذا المتجر — مفيد عند تجديد الكود.",
                     )
 
+                    # الصف 5.6: قنوات النشر — استهداف انتقائي يحترم شروط الأفلييت.
+                    st.divider()
+                    st.markdown("**📤 إرسال إلى (قنوات النشر)**")
+                    st.caption(
+                        "علّم القنوات التي يظهر فيها المتجر فقط. شِل «البوت» للمتاجر التي "
+                        "يمنعها المعلن من تيليجرام — تبقى حصرية على الموقع."
+                    )
+                    _cur_channels_raw = res.get('publish_channels')
+                    if _cur_channels_raw is None:
+                        _cur_channels = list(PUBLISH_CHANNELS.keys())  # NULL = كل القنوات (توافق)
+                    else:
+                        _cur_set = {c.strip() for c in _cur_channels_raw.split(',') if c.strip()}
+                        _cur_channels = [k for k in PUBLISH_CHANNELS if k in _cur_set]
+                    u_channels = st.multiselect(
+                        "القنوات",
+                        options=list(PUBLISH_CHANNELS.keys()),
+                        default=_cur_channels,
+                        format_func=lambda k: PUBLISH_CHANNELS[k],
+                        key=f"publish_channels_edit_{search_id}",
+                        label_visibility="collapsed",
+                    )
+
                     # الصف 6: شعار المتجر
                     st.divider()
                     logo_edit_c1, logo_edit_c2 = st.columns([1, 2])
@@ -2273,6 +2330,9 @@ if page == "الاستعلام والتعديل":
                                     st.warning("⚠️ رفع البوستر فشل — Cloudinary غير مضبوط. سيُحفظ الباقي.")
                             # ملاحظة: التاقات (store_tags / store_tags_en) لا تُعدَّل من هنا
                             _u_src_val = (u_source or "").strip() or None
+                            _u_channels_val = ",".join(
+                                k for k in PUBLISH_CHANNELS if k in u_channels
+                            )
                             cur.execute("""
                                 UPDATE master SET
                                     store_id=%s, name_en=%s,
@@ -2285,7 +2345,8 @@ if page == "الاستعلام والتعديل":
                                     logo_url=%s,
                                     social_poster_url=%s,
                                     is_promoted=%s,
-                                    source_platform=%s
+                                    source_platform=%s,
+                                    publish_channels=%s
                                 WHERE id=%s
                             """, (
                                 u_store, u_name_en,
@@ -2299,6 +2360,7 @@ if page == "الاستعلام والتعديل":
                                 final_poster_url or None,
                                 bool(u_promoted),
                                 _u_src_val,
+                                _u_channels_val,
                                 search_id,
                             ))
                             conn.commit()

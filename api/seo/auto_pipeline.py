@@ -47,6 +47,9 @@ def select_top_demand_stores(cur, n: int) -> list[dict]:
           AND a.action_time > NOW() - INTERVAL '24 hours'
           AND m.public_coupon IS NOT NULL AND m.public_coupon <> ''
           AND COALESCE(m.is_suspended, FALSE) = FALSE
+          -- يحترم قنوات النشر: لا نولّد صفحة SEO عامة لمتجر مخفيّ عن الموقع
+          -- (مثل متجر منعه المعلن من القناة، أو حصري للبوت). NULL = كل القنوات.
+          AND (m.publish_channels IS NULL OR m.publish_channels ILIKE '%%website%%')
         GROUP BY m.id, store_name
         ORDER BY demand DESC
         LIMIT %s

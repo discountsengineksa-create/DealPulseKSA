@@ -1062,6 +1062,7 @@ def _load_and_show_codes(user_id, lang):
             SELECT * FROM master
             WHERE (last_time IS NULL OR last_time >= CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
+              AND (publish_channels IS NULL OR publish_channels ILIKE '%bot%')
             ORDER BY
                 CASE WHEN is_trending = 'ترند 🔥' THEN 1 ELSE 2 END,
                 priority_score DESC
@@ -1100,6 +1101,7 @@ def _load_and_show_featured(user_id, lang):
             JOIN fav_counts fc ON fc.store_id = m.store_id
             WHERE (m.last_time IS NULL OR m.last_time >= CURRENT_DATE)
               AND NOT COALESCE(m.is_suspended, FALSE)
+              AND (m.publish_channels IS NULL OR m.publish_channels ILIKE '%bot%')
             ORDER BY fc.fav_count DESC, m.store_id ASC
             LIMIT 10
         """)
@@ -1185,6 +1187,7 @@ def _load_tag_stores(user_id, lang, tag):
             )
             AND (last_time IS NULL OR last_time >= CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
+              AND (publish_channels IS NULL OR publish_channels ILIKE '%%bot%%')
             ORDER BY
                 CASE WHEN is_trending = 'ترند 🔥' THEN 1 ELSE 2 END,
                 priority_score DESC
@@ -1214,7 +1217,9 @@ def fetch_api_results(query: str, limit: int = 30, lang: str = "ar") -> list | N
     try:
         resp = requests.get(
             _API_SEARCH_URL,
-            params={"q": query, "limit": limit, "lang": lang},
+            # channel=bot: نتائج البوت تُقصَر على متاجر قناة البوت/الميني فقط
+            # (تحترم شروط الأفلييت التي تمنع تيليجرام).
+            params={"q": query, "limit": limit, "lang": lang, "channel": "bot"},
             timeout=5,
         )
         resp.raise_for_status()
@@ -1258,6 +1263,8 @@ def _db_search(search_term: str) -> list:
             SELECT * FROM master
             WHERE (last_time IS NULL OR last_time >= CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
+              -- قناة البوت فقط (NULL = كل القنوات). يطابق فلتر الـ API channel=bot.
+              AND (publish_channels IS NULL OR publish_channels ILIKE '%%bot%%')
               AND (   store_id                              ILIKE %s
                    OR COALESCE(name_en,        '')          ILIKE %s
                    OR COALESCE(store_tags,     '')          ILIKE %s
@@ -1275,6 +1282,39 @@ def _db_search(search_term: str) -> list:
     except Exception as e:
         print(f"⚠️ _db_search: {e}")
         return []
+
+
+def _db_search_website_exclusive(search_term: str) -> dict | None:
+    """يبحث عن متجر مطابق **منشور على الموقع لكنه مخفي عن البوت** (قناة البوت
+    غير مفعّلة). يُستخدم في الـfallback: لو منع المعلن تيليجرام، نوجّه المستخدم
+    لصفحة المتجر على الموقع بدل ما نقول «لا نتائج». يرجع أول صف أو None."""
+    try:
+        conn = get_db_connection()
+        cur  = conn.cursor(cursor_factory=extras.DictCursor)
+        like = f"%{search_term}%"
+        like_no_ws = f"%{''.join(search_term.split())}%"
+        cur.execute("""
+            SELECT store_id, name_en FROM master
+            WHERE (last_time IS NULL OR last_time >= CURRENT_DATE)
+              AND NOT COALESCE(is_suspended, FALSE)
+              -- منشور على الموقع، وغير منشور على البوت (حصري للموقع)
+              AND publish_channels IS NOT NULL
+              AND publish_channels ILIKE '%%website%%'
+              AND publish_channels NOT ILIKE '%%bot%%'
+              AND (   store_id                              ILIKE %s
+                   OR COALESCE(name_en,        '')          ILIKE %s
+                   OR COALESCE(store_tags,     '')          ILIKE %s
+                   OR COALESCE(store_tags_en,  '')          ILIKE %s
+                   OR REPLACE(store_id,                  ' ', '') ILIKE %s
+                   OR REPLACE(COALESCE(name_en,    ''), ' ', '') ILIKE %s)
+            LIMIT 1
+        """, (like, like, like, like, like_no_ws, like_no_ws))
+        row = cur.fetchone()
+        release_conn(conn)
+        return dict(row) if row else None
+    except Exception as e:
+        print(f"⚠️ _db_search_website_exclusive: {e}")
+        return None
 
 
 def _process_search(message):
@@ -1328,6 +1368,31 @@ def _process_search(message):
             )
         _edit_nav(user_id, err_msg, _kb_cancel(lang))
     else:
+        # قبل رسالة «لا نتائج»: هل المتجر موجود لكنه حصري على الموقع؟
+        # (منعه المعلن من تيليجرام) — نوجّه المستخدم لصفحته على الموقع.
+        _excl = _db_search_website_exclusive(search_term.lower())
+        if _excl:
+            _name = (_excl.get('name_en') or _excl.get('store_id')) if lang == 'en' \
+                    else _excl.get('store_id')
+            from urllib.parse import quote
+            _store_url = f"{WEBSITE_URL}/store/{quote(_excl.get('store_id') or '')}"
+            if lang == 'ar':
+                excl_msg = (
+                    f"🔒 *{_name}* متوفّر **حصرياً على موقعنا**\n\n"
+                    f"تقدر تفتح المتجر وتاخذ الكود مباشرة من الزر تحت 👇"
+                )
+                _open_btn = "🌐 افتح على الموقع"
+            else:
+                excl_msg = (
+                    f"🔒 *{_name}* is available **exclusively on our website**\n\n"
+                    f"Open the store and grab the code from the button below 👇"
+                )
+                _open_btn = "🌐 Open on website"
+            _kb = types.InlineKeyboardMarkup()
+            _kb.add(types.InlineKeyboardButton(_open_btn, url=_store_url))
+            _kb.add(types.InlineKeyboardButton(TEXTS['back_btn'][lang], callback_data='nav:menu'))
+            _edit_nav(user_id, excl_msg, _kb)
+            return
         if lang == 'ar':
             no_results_msg = (
                 f"❌ ما وجدنا نتائج لـ *{search_term}*\n\n"
@@ -2207,6 +2272,7 @@ def _load_favorites(user_id, lang):
             )
               AND (m.last_time IS NULL OR m.last_time >= CURRENT_DATE)
               AND NOT COALESCE(m.is_suspended, FALSE)
+              AND (m.publish_channels IS NULL OR m.publish_channels ILIKE '%%bot%%')
             ORDER BY (
                 SELECT MAX(uf.created_at) FROM user_favorites uf
                 WHERE uf.telegram_id = %s AND uf.store_id = m.store_id

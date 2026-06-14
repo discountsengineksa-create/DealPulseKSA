@@ -1347,7 +1347,7 @@ function buildLink(item) {
 async function ensureDetail(s) {
     if (!s || s._full) return s;
     try {
-        const r = await fetch(`${API_BASE}/coupons/detail/${s.id}?lang=${LANG_CURRENT}`, { cache: 'no-store' });
+        const r = await fetch(`${API_BASE}/coupons/detail/${s.id}?lang=${LANG_CURRENT}&channel=bot`, { cache: 'no-store' });
         if (r.ok) {
             const d = await r.json();
             s.coupon       = d.public_coupon || '';
@@ -1376,7 +1376,7 @@ function prefetchVisibleDetails() {
 async function loadData() {
     const t0 = Date.now();
     // view=light: قائمة خفيفة لكل الكتالوج (يتحمّل 3000+). limit عالٍ يغطّي الكتالوج كاملاً.
-    const url = `${API_BASE}/coupons/?view=light&limit=5000&lang=${LANG_CURRENT}&t=${t0}&r=${Math.random().toString(36).slice(2,10)}`;
+    const url = `${API_BASE}/coupons/?view=light&limit=5000&lang=${LANG_CURRENT}&channel=bot&t=${t0}&r=${Math.random().toString(36).slice(2,10)}`;
 
     try {
         const res = await fetch(url, {
@@ -1449,7 +1449,7 @@ async function loadData() {
 
         // أبرز المتاجر: نُلصِق fav_count على المتاجر الأكثر تفضيلاً (top 10).
         // fire-and-forget — لو فشل، renderStores يرجع لـpromoted+trend.
-        fetch(`${API_BASE}/coupons/top-favorited?limit=10`).then(r => r.ok ? r.json() : null)
+        fetch(`${API_BASE}/coupons/top-favorited?limit=10&channel=bot`).then(r => r.ok ? r.json() : null)
             .then(d => {
                 const rows = (d && d.stores) || [];
                 if (!rows.length) return;

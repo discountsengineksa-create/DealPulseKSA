@@ -28,14 +28,27 @@ def _parse_tags(raw: str | None) -> list[str]:
     return [t.strip() for t in s.split(",") if t.strip()] if s else []
 
 
+# قنوات النشر (master.publish_channels) — تُمرَّر كبارامتر channel.
+# الموقع يطلب 'website' (الافتراضي)؛ الميني-ويب والبوت يطلبان 'bot'.
+# NULL في القاعدة = كل القنوات (توافق المتاجر القديمة).
+_VALID_CHANNELS = {"website", "bot", "instagram", "threads", "facebook"}
+
+
+def _channel_like(channel: str) -> str:
+    """نمط ILIKE آمن لقناة النشر (whitelist؛ غير المعروف → website)."""
+    ch = channel if channel in _VALID_CHANNELS else "website"
+    return f"%{ch}%"
+
+
 @router.get("/top-favorited")
 def get_top_favorited_stores(
     limit: int = Query(default=10, ge=1, le=20),
+    channel: str = Query(default="website"),
     conn=Depends(get_db),
 ):
     """أبرز المتاجر = أكثر المتاجر تفضيلاً عبر القنوات الثلاث (bot+miniapp+web).
     يُستخدم في الصف الأفقي تحت الستوري على الموقع/الميني. الترتيب من الأكثر
-    تفضيلاً تنازلياً؛ المتاجر المنتهية/المعلَّقة مُستثناة.
+    تفضيلاً تنازلياً؛ المتاجر المنتهية/المعلَّقة مُستثناة. ?channel=bot للميني-ويب.
     """
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -60,10 +73,11 @@ def get_top_favorited_stores(
                 JOIN fav_counts fc ON fc.store_id = m.store_id
                 WHERE (m.last_time IS NULL OR m.last_time >= CURRENT_DATE)
                   AND NOT COALESCE(m.is_suspended, FALSE)
+                  AND (m.publish_channels IS NULL OR m.publish_channels ILIKE %(chpat)s)
                 ORDER BY fc.fav_count DESC, m.store_id ASC
-                LIMIT %s
+                LIMIT %(limit)s
                 """,
-                (limit,),
+                {"limit": limit, "chpat": _channel_like(channel)},
             )
             rows = cur.fetchall()
         return {"stores": [dict(r) for r in rows]}
@@ -266,11 +280,13 @@ def get_all_coupons(
     limit: int = Query(default=50, ge=1, le=5000),     # light يسمح حتى 5000 (كتالوج كامل)
     lang: Literal["ar", "en"] = Query(default="ar"),
     view: Literal["full", "light"] = Query(default="full"),
+    channel: str = Query(default="website"),
     conn=Depends(get_db),
 ):
     """إرجاع المتاجر مرتبةً: المروّجة ثم الترند ثم بالمعرّف. ?lang=en يبدّل الحقول.
     ?view=light → قائمة خفيفة سريعة (بلا ستوري/أكواد إضافية/وصف/popularity) للكتالوج
-    الكامل (آلاف المتاجر)؛ التفاصيل تُجلب لكل متجر عبر /coupons/detail/{id}."""
+    الكامل (آلاف المتاجر)؛ التفاصيل تُجلب لكل متجر عبر /coupons/detail/{id}.
+    ?channel=bot → قائمة الميني-ويب/البوت (افتراضي website)."""
     if view == "light":
         select_clause = _select_light_clause(lang)
         pop_clause = "0 AS popularity_score"
@@ -285,6 +301,7 @@ def get_all_coupons(
         FROM master
         WHERE (last_time IS NULL OR last_time >= CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
+              AND (publish_channels IS NULL OR publish_channels ILIKE %(chpat)s)
         ORDER BY
             CASE WHEN COALESCE(is_promoted, FALSE) THEN 0 ELSE 1 END,
             CASE WHEN is_trending = 'ترند 🔥'      THEN 0 ELSE 1 END,
@@ -292,7 +309,7 @@ def get_all_coupons(
         LIMIT %(limit)s
     """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(sql, {"limit": limit})
+        cur.execute(sql, {"limit": limit, "chpat": _channel_like(channel)})
         rows = cur.fetchall()
 
     results = [
@@ -311,12 +328,14 @@ def search_coupons(
     q: str = Query(..., min_length=2, max_length=100, description="نص البحث"),
     limit: int = Query(default=20, ge=1, le=50),
     lang: Literal["ar", "en"] = Query(default="ar"),
+    channel: str = Query(default="website"),
     conn=Depends(get_db),
 ):
     """
     البحث الذكي بالـ Trigram Similarity.
     - يبحث في الحقول العربيّة والإنجليزيّة معاً (المستخدم قد يكتب بأيّ لغة).
     - ?lang=en يبدّل قيم الاستجابة للإنجليزيّة (Fallback للعربية إذا فارغة).
+    - ?channel=bot يقصر النتائج على متاجر قناة البوت/الميني (افتراضي website).
     """
     _like = f"%{q}%"
     # نُطبّع المسافات: المستخدم قد يكتب «ترنديول» والمتجر «ترند يول».
@@ -340,6 +359,7 @@ def search_coupons(
             WHERE
                 (last_time IS NULL OR last_time >= CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
+              AND (publish_channels IS NULL OR publish_channels ILIKE %(chpat)s)
                 AND (
                     store_id                       ILIKE %(like)s
                     OR COALESCE(name_en,       '') ILIKE %(like)s
@@ -362,7 +382,8 @@ def search_coupons(
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(sql, {"term": q, "like": _like,
-                          "like_no_ws": _like_no_ws, "limit": limit})
+                          "like_no_ws": _like_no_ws, "limit": limit,
+                          "chpat": _channel_like(channel)})
         rows = cur.fetchall()
 
     results = [
@@ -389,9 +410,11 @@ def search_coupons(
 def get_coupon_detail(
     store_pk: int,
     lang: Literal["ar", "en"] = Query(default="ar"),
+    channel: str = Query(default="website"),
     conn=Depends(get_db),
 ):
-    """التفاصيل الكاملة لمتجر بمعرّفه الرقمي (id)؛ يخدم «التفاصيل عند الطلب» للميني-ويب."""
+    """التفاصيل الكاملة لمتجر بمعرّفه الرقمي (id)؛ يخدم «التفاصيل عند الطلب» للميني-ويب.
+    ?channel=bot للميني-ويب (افتراضي website)."""
     sql = f"""
         SELECT
             {_select_lang_clause(lang)},
@@ -401,10 +424,11 @@ def get_coupon_detail(
         WHERE id = %(id)s
               AND (last_time IS NULL OR last_time >= CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
+              AND (publish_channels IS NULL OR publish_channels ILIKE %(chpat)s)
         LIMIT 1
     """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(sql, {"id": store_pk})
+        cur.execute(sql, {"id": store_pk, "chpat": _channel_like(channel)})
         row = cur.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="store not found")
@@ -422,9 +446,11 @@ def get_coupon_detail(
 def get_coupon_by_slug(
     slug: str,
     lang: Literal["ar", "en"] = Query(default="ar"),
+    channel: str = Query(default="website"),
     conn=Depends(get_db),
 ):
-    """التفاصيل الكاملة لمتجر بمطابقة store_id دقيقة — لصفحات المتجر في الموقع."""
+    """التفاصيل الكاملة لمتجر بمطابقة store_id دقيقة — لصفحات المتجر في الموقع.
+    افتراضي channel=website (صفحات الموقع)."""
     sql = f"""
         SELECT
             {_select_lang_clause(lang)},
@@ -434,10 +460,11 @@ def get_coupon_by_slug(
         WHERE store_id = %(slug)s
               AND (last_time IS NULL OR last_time >= CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
+              AND (publish_channels IS NULL OR publish_channels ILIKE %(chpat)s)
         LIMIT 1
     """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(sql, {"slug": slug})
+        cur.execute(sql, {"slug": slug, "chpat": _channel_like(channel)})
         row = cur.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="store not found")
