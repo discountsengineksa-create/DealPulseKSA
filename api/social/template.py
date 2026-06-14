@@ -17,7 +17,11 @@ def build_post_text(store: dict) -> str:
     discount    = (store.get("discount_value") or "").strip()
     extra       = (store.get("extra_offer") or "").strip()
     last_time   = store.get("last_time")
+    # النبذة = store_bio أولاً (وصف المتجر — المالك يكتبها هنا عادة)،
+    # وإن لم توجد نسقط على description (تفاصيل العرض).
+    bio         = (store.get("store_bio") or "").strip()
     description = (store.get("description") or "").strip()
+    nbthah      = bio or description
     link        = (store.get("affiliate_link") or "").strip()
 
     # last_time قد يكون date أو str — نحوّله لنص قصير
@@ -42,9 +46,9 @@ def build_post_text(store: dict) -> str:
         lines.append(f"تاريخ انتهاء الكوبون: {last_time_str}")
     if extra:
         lines.append(f"عرض إضافي: {extra}")
-    if description:
+    if nbthah:
         lines.append("")
-        lines.append(f"نبذة: {description}")
+        lines.append(f"نبذة: {nbthah}")
     lines.append("")
     lines.append("استفد من العرض من خلال الرابط التالي:")
     lines.append(link or "—")

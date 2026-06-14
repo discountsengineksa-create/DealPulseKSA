@@ -21,7 +21,7 @@ def _fetch_store(conn, master_id: int) -> dict | None:
             """
             SELECT id, store_id, name_en, public_coupon,
                    discount_value, extra_offer, extra_offer_en,
-                   last_time, description,
+                   last_time, description, store_bio,
                    affiliate_link, logo_url, social_poster_url
             FROM master
             WHERE id = %s
