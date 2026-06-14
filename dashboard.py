@@ -11682,26 +11682,30 @@ elif page == "استوديو المحتوى":
         f_disc_num = _font(140, weight=900)
         _center_text(draw, str(discount_value or "70%"), block_y + 50, f_disc_num, _STUDIO_EMERALD_DK)
 
-        # ─── Pill الكود (أسود ناعم) ──────────────────────────────────────
-        code_text = (code or "SAVE50").upper()
-        f_code = _font(54, weight=800)
-        cb = draw.textbbox((0, 0), code_text, font=f_code)
-        cw = cb[2] - cb[0]
-        pill_w = max(cw + 110, 320)
-        pill_h = 90
-        pill_x = (W - pill_w) // 2
-        pill_y = block_y + 220   # = 930
-        draw.rounded_rectangle(
-            [pill_x, pill_y, pill_x + pill_w, pill_y + pill_h],
-            radius=pill_h // 2, fill=_STUDIO_PILL_BG,
-        )
-        text_x = pill_x + (pill_w - cw) // 2 - cb[0]
-        text_y = pill_y + (pill_h - (cb[3] - cb[1])) // 2 - cb[1]
-        draw.text((text_x, text_y), code_text, font=f_code, fill=_STUDIO_PILL_FG)
+        # ─── Pill الكود (أسود ناعم) — يُرسم فقط لو فيه كود فعلي ──────────────
+        # متاجر بلا كود (مثل AliExpress: خصم تلقائي) لا تعرض خانة كود ولا تذييل
+        # «استخدم الكود» — بدل ما نحط كوداً وهمياً.
+        _code_clean = (code or "").strip()
+        if _code_clean:
+            code_text = _code_clean.upper()
+            f_code = _font(54, weight=800)
+            cb = draw.textbbox((0, 0), code_text, font=f_code)
+            cw = cb[2] - cb[0]
+            pill_w = max(cw + 110, 320)
+            pill_h = 90
+            pill_x = (W - pill_w) // 2
+            pill_y = block_y + 220   # = 930
+            draw.rounded_rectangle(
+                [pill_x, pill_y, pill_x + pill_w, pill_y + pill_h],
+                radius=pill_h // 2, fill=_STUDIO_PILL_BG,
+            )
+            text_x = pill_x + (pill_w - cw) // 2 - cb[0]
+            text_y = pill_y + (pill_h - (cb[3] - cb[1])) // 2 - cb[1]
+            draw.text((text_x, text_y), code_text, font=f_code, fill=_STUDIO_PILL_FG)
 
-        # نص فرعي تحت الـ pill — مكثّف ليفيت بدون قطع
-        f_tag = _font(22, weight=700)
-        _center_text(draw, _ar(tagline or "استخدم الكود عند الشراء"), pill_y + pill_h + 14, f_tag, _STUDIO_EMERALD_DK)
+            # نص فرعي تحت الـ pill — مكثّف ليفيت بدون قطع
+            f_tag = _font(22, weight=700)
+            _center_text(draw, _ar(tagline or "استخدم الكود عند الشراء"), pill_y + pill_h + 14, f_tag, _STUDIO_EMERALD_DK)
 
         # ملاحظة: الديكور ✦ موجود في خلفية logo6 — لا نرسمه يدوياً
 
@@ -11737,7 +11741,11 @@ elif page == "استوديو المحتوى":
                 discount_label_in = st.text_input("سطر فوق الرقم", value="خصم يصل إلى")
             with c2:
                 discount_value_in = st.text_input("قيمة الخصم", value="70%", help="مثل: 70%، 50 ريال، 1+1")
-            code_in = st.text_input("كود الخصم", value="SAVE50", max_chars=20)
+            code_in = st.text_input(
+                "كود الخصم", value="", max_chars=20,
+                placeholder="اتركه فاضي للمتاجر بلا كود (مثل AliExpress)",
+                help="فاضي = ما يظهر خانة كود ولا تذييل «استخدم الكود» في البوستر.",
+            )
             tagline_in = st.text_input("سطر تذييل اختياري", value="استخدم الكود عند الشراء")
 
             # ─── تنبيه عن الخلفية الرسمية ───────────────────────────────────
