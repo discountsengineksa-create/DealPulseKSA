@@ -1852,6 +1852,72 @@ if page == "إدخال بيانات الماستر":
         except:
             st.session_state.custom_tags_list_en = ["Fashion", "Perfumes", "Electronics", "Home", "Kids", "Beauty", "Travel"]
 
+    # ─── ربط ذكي AR↔EN ──────────────────────────────────────────────────
+    # قاموس مرادفات شائعة (instant، بدون LLM) — يغطي ٩٠٪ من المتاجر السعودية.
+    _TAG_AR_EN = {
+        "أزياء": "Fashion", "ملابس": "Clothing", "أحذية": "Shoes",
+        "حقائب": "Bags", "إكسسوارات": "Accessories", "ساعات": "Watches",
+        "مجوهرات": "Jewelry", "نظارات": "Eyewear",
+        "عطور": "Perfumes", "تجميل": "Beauty", "عناية": "Personal Care",
+        "مكياج": "Makeup", "شعر": "Hair Care",
+        "إلكترونيات": "Electronics", "جوالات": "Mobiles", "حاسبات": "Computers",
+        "ألعاب": "Gaming", "كاميرات": "Cameras", "صوتيات": "Audio",
+        "منزل": "Home", "أثاث": "Furniture", "مطبخ": "Kitchen",
+        "ديكور": "Decor", "أدوات منزلية": "Home Appliances",
+        "أطفال": "Kids", "مواليد": "Babies", "ألعاب أطفال": "Toys",
+        "رياضة": "Sports", "لياقة": "Fitness", "خارجية": "Outdoor",
+        "سفر": "Travel", "حجوزات": "Bookings", "طيران": "Flights",
+        "فنادق": "Hotels", "سيارات": "Cars",
+        "مطاعم": "Restaurants", "طعام": "Food", "بقالة": "Grocery",
+        "صحة": "Health", "صيدلية": "Pharmacy", "أدوية": "Medications",
+        "كتب": "Books", "تعليم": "Education", "دورات": "Courses",
+        "هدايا": "Gifts", "زهور": "Flowers",
+        "حيوانات أليفة": "Pet Supplies", "حدائق": "Garden",
+        "أدوات مكتبية": "Office Supplies", "فنون": "Arts",
+    }
+
+    # عكس القاموس للترجمة EN → AR (case-insensitive)
+    _TAG_EN_AR = {v.lower(): k for k, v in _TAG_AR_EN.items()}
+
+    def _call_translate_llm(text: str, direction: str) -> str:
+        """direction = 'ar2en' أو 'en2ar'. يستدعي Gemini → fallback OpenRouter."""
+        try:
+            import sys, pathlib
+            sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+            from api.utils.llm_client import call_llm
+            if direction == "ar2en":
+                sys_p = ("You translate Arabic e-commerce category names to concise "
+                         "standard English retail-catalog terms. Reply with ONLY the "
+                         "English term (1-3 words), no quotes, no explanation.")
+            else:
+                sys_p = ("ترجم اسم القسم التجاري الإنجليزي إلى المرادف العربي الفصيح "
+                         "المستخدم في التجارة الإلكترونية السعودية. ردّ بالكلمة العربية "
+                         "فقط (١-٣ كلمات)، بدون شرح ولا علامات اقتباس.")
+            r = call_llm(
+                purpose=f"tag_translation_{direction}",
+                system=sys_p, user=text,
+                max_tokens=20, temperature=0.1,
+            )
+            return (getattr(r, "text", "") or "").strip().strip('"\'').split("\n")[0].strip()
+        except Exception:
+            return ""
+
+    @st.cache_data(ttl=86400, show_spinner=False)
+    def _translate_tag_ar_to_en(ar_tag: str) -> str:
+        """قسم عربي → إنجليزي. mapping ثابت أولاً → LLM. cache يومي."""
+        s = (ar_tag or "").strip()
+        if not s: return ""
+        if s in _TAG_AR_EN: return _TAG_AR_EN[s]
+        return _call_translate_llm(s, "ar2en")
+
+    @st.cache_data(ttl=86400, show_spinner=False)
+    def _translate_tag_en_to_ar(en_tag: str) -> str:
+        """قسم إنجليزي → عربي. mapping ثابت أولاً → LLM. cache يومي."""
+        s = (en_tag or "").strip()
+        if not s: return ""
+        if s.lower() in _TAG_EN_AR: return _TAG_EN_AR[s.lower()]
+        return _call_translate_llm(s, "en2ar")
+
     # 2. إدارة الأقسام بلغتين (AR + EN)
     st.subheader("🏷️ إدارة الأقسام (Tags)")
 
@@ -1871,7 +1937,14 @@ if page == "إدخال بيانات الماستر":
         if st.button("➕ إضافة AR", key="add_tag_ar"):
             if new_tag_input and new_tag_input not in st.session_state.custom_tags_list:
                 st.session_state.custom_tags_list.append(new_tag_input)
-                st.toast(f"تمت إضافة '{new_tag_input}'")
+                # ربط ذكي AR↔EN: ترجم تلقائياً وأضف للقائمة الإنجليزية
+                with st.spinner("🪄 جاري ربط الترجمة الإنجليزية…"):
+                    en_translation = _translate_tag_ar_to_en(new_tag_input)
+                if en_translation and en_translation not in st.session_state.custom_tags_list_en:
+                    st.session_state.custom_tags_list_en.append(en_translation)
+                    st.toast(f"✅ {new_tag_input} ↔ {en_translation}")
+                else:
+                    st.toast(f"تمت إضافة '{new_tag_input}'")
                 st.rerun()
 
     # ─── الصف الإنجليزي ───
@@ -1890,7 +1963,14 @@ if page == "إدخال بيانات الماستر":
         if st.button("➕ Add EN", key="add_tag_en"):
             if new_tag_input_en and new_tag_input_en not in st.session_state.custom_tags_list_en:
                 st.session_state.custom_tags_list_en.append(new_tag_input_en)
-                st.toast(f"Added '{new_tag_input_en}'")
+                # ربط ذكي EN↔AR: ترجم تلقائياً وأضف للقائمة العربية
+                with st.spinner("🪄 جاري ربط الترجمة العربية…"):
+                    ar_translation = _translate_tag_en_to_ar(new_tag_input_en)
+                if ar_translation and ar_translation not in st.session_state.custom_tags_list:
+                    st.session_state.custom_tags_list.append(ar_translation)
+                    st.toast(f"✅ {new_tag_input_en} ↔ {ar_translation}")
+                else:
+                    st.toast(f"Added '{new_tag_input_en}'")
                 st.rerun()
 
     st.divider()
