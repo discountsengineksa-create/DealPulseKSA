@@ -1809,13 +1809,31 @@ if page == "إدخال بيانات الماستر":
             "m_store_id", "m_name_en", "m_aff_link", "m_pub_coupon", "m_disc_val",
             "m_extra_offer", "m_extra_offer_en", "m_store_bio", "m_store_bio_en",
             "m_description", "m_my_coupon", "m_source_platform",
-            "logo_url_add", "logo_upload_add", "is_promoted_add",
+            "logo_url_add", "poster_url_add", "is_promoted_add",
         ):
             st.session_state.pop(_k, None)
+        # رافعات الملفات (شعار/بوستر) لا تُفرَّغ بحذف المفتاح — ندوّر مفتاحها بنونس
+        st.session_state["_uploader_nonce"] = st.session_state.get("_uploader_nonce", 0) + 1
     _master_ok_msg = st.session_state.pop("_master_success_msg", None)
     if _master_ok_msg:
         st.success(_master_ok_msg)
         st.balloons()
+
+    # نونس لتدوير مفاتيح رافعات الملفات (يُفرّغها بعد كل حفظ ناجح)
+    _uploader_nonce = st.session_state.setdefault("_uploader_nonce", 0)
+
+    # فرض اتجاه LTR للحقول الإنجليزية/الروابط/الأكواد (الداشبورد RTL افتراضياً)
+    st.markdown(
+        """<style>
+        .st-key-m_name_en input, .st-key-m_extra_offer_en input,
+        .st-key-m_store_bio_en textarea, .st-key-m_aff_link input,
+        .st-key-m_pub_coupon input, .st-key-m_my_coupon input,
+        .st-key-logo_url_add input, .st-key-poster_url_add input {
+            direction: ltr !important; text-align: left !important;
+        }
+        </style>""",
+        unsafe_allow_html=True,
+    )
 
     # 1. كتالوج الأقسام (أزواج عربي↔إنجليزي) — مصدره الدائم جدول categories_tags
     def _load_tag_pairs() -> dict:
@@ -1959,7 +1977,7 @@ if page == "إدخال بيانات الماستر":
             logo_file = st.file_uploader(
                 "رفع ملف الشعار",
                 type=["png", "jpg", "jpeg", "webp"],
-                key="logo_upload_add",
+                key=f"logo_upload_add_{_uploader_nonce}",
                 help="سيُرفع تلقائياً إلى Cloudinary لو كانت الإعدادات موجودة"
             )
         with logo_col2:
@@ -1984,7 +2002,7 @@ if page == "إدخال بيانات الماستر":
             poster_file = st.file_uploader(
                 "رفع البوستر",
                 type=["png", "jpg", "jpeg", "webp"],
-                key="poster_upload_add",
+                key=f"poster_upload_add_{_uploader_nonce}",
                 help="مربّع 1080×1080 يفضّل (من زر «تحميل البوستر بالثيم» في الاستوديو)"
             )
         with poster_col2:
