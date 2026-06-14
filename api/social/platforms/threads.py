@@ -23,19 +23,19 @@ THREADS_MAX_CHARS = 500
 
 
 def _truncate_for_threads(text: str, limit: int = THREADS_MAX_CHARS) -> str:
-    """يقصّ النص لحدّ Threads (500 حرف) بذكاء: يحافظ على الرابط في النهاية
-    ويقطع من جسم النبذة لو طال. لو النص أصلاً ≤ الحد، يرجع كما هو."""
+    """Threads ما يقبل أكثر من 500 حرف. لو النص أطول، نحذف فقرة النبذة كاملة
+    (هي الفقرة الطويلة) ونبقي الـheader + بيانات العرض + الرابط — كافية للتحويل.
+    لو ما زال طويل بعدها، نقصّ بسيط من الآخر."""
     if len(text) <= limit:
         return text
-    # نحاول نحافظ على آخر فقرة (تحوي الرابط عادةً)
-    parts = text.rsplit("\n\n", 1)
-    if len(parts) == 2 and len(parts[1]) < limit - 50:
-        head, tail = parts
-        # نقتطع head ونضيف "…" قبل tail
-        keep = limit - len(tail) - 4  # 4 = "\n…\n"
-        return head[: max(50, keep)].rstrip() + "\n…\n" + tail
-    # fallback: قصّ بسيط من النهاية مع "…"
-    return text[: limit - 1].rstrip() + "…"
+    # نحذف الفقرة التي تبدأ بـ "نبذة:" — الفقرات مفصولة بـ \n\n
+    paragraphs = text.split("\n\n")
+    paragraphs = [p for p in paragraphs if not p.lstrip().startswith("نبذة:")]
+    stripped = "\n\n".join(paragraphs)
+    if len(stripped) <= limit:
+        return stripped
+    # fallback نادر: لو الـheader وحده طويل (لن يحدث عملياً)
+    return stripped[: limit - 1].rstrip() + "…"
 
 
 class ThreadsPoster(BaseSocialPoster):
