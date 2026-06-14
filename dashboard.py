@@ -11682,19 +11682,21 @@ elif page == "استوديو المحتوى":
         f_disc_num = _font(140, weight=900)
         _center_text(draw, str(discount_value or "70%"), block_y + 50, f_disc_num, _STUDIO_EMERALD_DK)
 
-        # ─── Pill الكود (أسود ناعم) — يُرسم فقط لو فيه كود فعلي ──────────────
-        # متاجر بلا كود (مثل AliExpress: خصم تلقائي) لا تعرض خانة كود ولا تذييل
-        # «استخدم الكود» — بدل ما نحط كوداً وهمياً.
+        # ─── Pill الكود + التذييل — مستقلّان ─────────────────────────────────
+        # الكود: يظهر فقط لو فيه كود فعلي (متاجر بلا كود مثل AliExpress لا تعرض
+        # خانة كود وهمية). التذييل: يظهر لو فيه نص (حتى بلا كود، مثل «استخدم
+        # الرابط عند الشراء»). الموضع يتكيّف حسب وجود خانة الكود من عدمها.
         _code_clean = (code or "").strip()
+        _tag_clean = (tagline or "").strip()
+        pill_y = block_y + 220   # = 930
+        pill_h = 90
         if _code_clean:
             code_text = _code_clean.upper()
             f_code = _font(54, weight=800)
             cb = draw.textbbox((0, 0), code_text, font=f_code)
             cw = cb[2] - cb[0]
             pill_w = max(cw + 110, 320)
-            pill_h = 90
             pill_x = (W - pill_w) // 2
-            pill_y = block_y + 220   # = 930
             draw.rounded_rectangle(
                 [pill_x, pill_y, pill_x + pill_w, pill_y + pill_h],
                 radius=pill_h // 2, fill=_STUDIO_PILL_BG,
@@ -11702,10 +11704,14 @@ elif page == "استوديو المحتوى":
             text_x = pill_x + (pill_w - cw) // 2 - cb[0]
             text_y = pill_y + (pill_h - (cb[3] - cb[1])) // 2 - cb[1]
             draw.text((text_x, text_y), code_text, font=f_code, fill=_STUDIO_PILL_FG)
+            tag_y = pill_y + pill_h + 14      # تحت الـ pill
+        else:
+            tag_y = pill_y + 30               # مكان الـ pill تقريباً (بلا كود)
 
-            # نص فرعي تحت الـ pill — مكثّف ليفيت بدون قطع
+        # التذييل الاختياري — يُرسم لو فيه نص فقط
+        if _tag_clean:
             f_tag = _font(22, weight=700)
-            _center_text(draw, _ar(tagline or "استخدم الكود عند الشراء"), pill_y + pill_h + 14, f_tag, _STUDIO_EMERALD_DK)
+            _center_text(draw, _ar(_tag_clean), tag_y, f_tag, _STUDIO_EMERALD_DK)
 
         # ملاحظة: الديكور ✦ موجود في خلفية logo6 — لا نرسمه يدوياً
 
