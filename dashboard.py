@@ -2198,29 +2198,6 @@ if page == "الاستعلام والتعديل":
             res = cur.fetchone()
         
             if res:
-                # ─── إعادة نشر السوشيال فقط (بدون مس البوت/الميني/الموقع) ─────
-                with st.expander("📣 إعادة نشر البوستر على منصات السوشيال (إصلاح الخلل في برامج التواصل)", expanded=False):
-                    st.caption(
-                        "يُعيد نشر **البوستر بالثيم** (social_poster_url) + النص الكامل "
-                        "(اسم المتجر · نسبة الخصم · الكود · تاريخ الانتهاء · العرض الإضافي · النبذة · الرابط) "
-                        "على كل منصات التواصل المربوطة. **لا يؤثر على البوت ولا الميني ولا الموقع** — "
-                        "البيانات لا تتغيّر، فقط إعادة بثّ للسوشيال."
-                    )
-                    sc1, sc2 = st.columns([2, 1])
-                    with sc1:
-                        _has_poster = bool(res.get('social_poster_url'))
-                        _has_logo   = bool(res.get('logo_url'))
-                        if _has_poster:
-                            st.success(f"✅ social_poster_url موجود — سيُنشر البوستر بالثيم.")
-                        elif _has_logo:
-                            st.warning("⚠️ ما في social_poster_url — سيُنشر الشعار النظيف فقط. ولّد البوستر من «استوديو المحتوى».")
-                        else:
-                            st.error("❌ لا يوجد بوستر ولا شعار — البث سيخفق.")
-                    with sc2:
-                        if st.button("🔄 إعادة النشر الآن", key=f"rebroadcast_{search_id}",
-                                     type="primary", width='stretch'):
-                            _trigger_social_broadcast(int(search_id))
-
                 with st.form("edit_master_arabic_columns"):
                     st.info(f"📍 تعديل بيانات متجر: {res['store_id']} (ID: {search_id})")
 
@@ -2282,6 +2259,33 @@ if page == "الاستعلام والتعديل":
                         else:
                             st.caption("لا يوجد شعار — الصق رابط في الحقل المجاور")
 
+                    # الصف 6.5: بوستر السوشيال (تعديل/استبدال)
+                    st.divider()
+                    st.markdown("**📣 بوستر الإعلان للسوشيال (مخرج «بالثيم» من الستوديو)**")
+                    st.caption(
+                        "ارفع بوستر 1080×1080 بالثيم الكامل أو الصق رابطه. هذا اللي يُنشر على "
+                        "كل منصات التواصل بدل الشعار. لو تركته فاضي = يبقى البوستر القديم كما هو."
+                    )
+                    pe1, pe2 = st.columns([1, 2])
+                    with pe1:
+                        u_poster_file = st.file_uploader(
+                            "رفع بوستر جديد",
+                            type=["png", "jpg", "jpeg", "webp"],
+                            key=f"poster_upload_edit_{search_id}",
+                            help="مربّع 1080×1080 يفضّل (من زر «تحميل البوستر بالثيم» في الاستوديو)",
+                        )
+                    with pe2:
+                        u_poster_url = st.text_input(
+                            "أو رابط البوستر مباشرة",
+                            value=res.get('social_poster_url') or '',
+                            placeholder="https://res.cloudinary.com/...",
+                            key=f"poster_url_edit_{search_id}",
+                        )
+                        if u_poster_url:
+                            st.image(u_poster_url, width=140, caption="البوستر الحالي")
+                        else:
+                            st.caption("⚠️ لا يوجد بوستر — السوشيال بينشر الشعار فقط")
+
                     # الصف 7: إشهار / إعلان مدفوع
                     st.divider()
                     current_promoted = bool(res.get('is_promoted') or False)
@@ -2312,6 +2316,16 @@ if page == "الاستعلام والتعديل":
                         if missing:
                             st.warning("⚠️ الحقول التالية إجبارية: " + " ، ".join(missing))
                         else:
+                            # ─── حل رابط البوستر (رفع جديد لو موجود) ─────────────
+                            final_poster_url = (u_poster_url or "").strip()
+                            if u_poster_file and not final_poster_url:
+                                _up_poster = _upload_social_poster(
+                                    u_poster_file.read(), (u_store or '').strip()
+                                )
+                                if _up_poster:
+                                    final_poster_url = _up_poster
+                                elif not _CLOUDINARY_OK:
+                                    st.warning("⚠️ رفع البوستر فشل — Cloudinary غير مضبوط. سيُحفظ الباقي.")
                             # ملاحظة: التاقات (store_tags / store_tags_en) لا تُعدَّل من هنا
                             _u_src_val = (u_source or "").strip() or None
                             cur.execute("""
@@ -2324,6 +2338,7 @@ if page == "الاستعلام والتعديل":
                                     priority_score=%s, discount_value=%s, my_coupon=%s,
                                     first_time=%s, last_time=%s,
                                     logo_url=%s,
+                                    social_poster_url=%s,
                                     is_promoted=%s,
                                     source_platform=%s
                                 WHERE id=%s
@@ -2336,6 +2351,7 @@ if page == "الاستعلام والتعديل":
                                 u_prio, u_disc, u_mine,
                                 u_start, u_end,
                                 u_logo.strip() or None,
+                                final_poster_url or None,
                                 bool(u_promoted),
                                 _u_src_val,
                                 search_id,
@@ -2343,10 +2359,36 @@ if page == "الاستعلام والتعديل":
                             conn.commit()
                             st.success("✅ تم تحديث البيانات بنجاح.")
                             # نشر تلقائي فقط لما الكوبون يتغير (تجديد كود)
-                            if (u_pub or '').strip() != (res.get('public_coupon') or '').strip():
+                            # أو لو البوستر اتغير (لإعادة بثّ الإعلان المرئي الجديد)
+                            _coupon_changed = (u_pub or '').strip() != (res.get('public_coupon') or '').strip()
+                            _poster_changed = (final_poster_url or '') != (res.get('social_poster_url') or '')
+                            if _coupon_changed or _poster_changed:
                                 _trigger_social_broadcast(search_id)
                             st.rerun()
-            
+
+                # ─── خارج الـform: إعادة نشر السوشيال فقط (بدون مس البيانات) ─────
+                with st.expander("📣 إعادة نشر البوستر على منصات السوشيال (إصلاح الخلل في برامج التواصل)", expanded=False):
+                    st.caption(
+                        "يُعيد نشر **البوستر بالثيم** (social_poster_url) + النص الكامل "
+                        "(اسم المتجر · نسبة الخصم · الكود · تاريخ الانتهاء · العرض الإضافي · النبذة · الرابط) "
+                        "على كل منصات التواصل المربوطة. **لا يؤثر على البوت ولا الميني ولا الموقع** — "
+                        "البيانات لا تتغيّر، فقط إعادة بثّ للسوشيال."
+                    )
+                    sc1, sc2 = st.columns([2, 1])
+                    with sc1:
+                        _has_poster = bool(res.get('social_poster_url'))
+                        _has_logo   = bool(res.get('logo_url'))
+                        if _has_poster:
+                            st.success("✅ social_poster_url موجود — سيُنشر البوستر بالثيم.")
+                        elif _has_logo:
+                            st.warning("⚠️ ما في social_poster_url — سيُنشر الشعار النظيف فقط. ولّد البوستر من «استوديو المحتوى» أو ارفعه أعلاه.")
+                        else:
+                            st.error("❌ لا يوجد بوستر ولا شعار — البث سيخفق.")
+                    with sc2:
+                        if st.button("🔄 إعادة النشر الآن", key=f"rebroadcast_{search_id}",
+                                     type="primary", width='stretch'):
+                            _trigger_social_broadcast(int(search_id))
+
                 if st.button("🗑️ حذف السجل"):
                     cur.execute("DELETE FROM master WHERE id = %s", (search_id,))
                     conn.commit()
