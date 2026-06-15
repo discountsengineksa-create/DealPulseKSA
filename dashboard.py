@@ -40,6 +40,8 @@ PUBLISH_CHANNELS = {
     "website":   "🌐 الموقع",
     "bot":       "🤖 البوت + الميني",
     "email":     "📧 البريد",
+    "telegram":  "📣 قناة تيليجرام",
+    "discord":   "💬 ديسكورد",
     "instagram": "📸 انستقرام",
     "threads":   "🧵 ثريد",
     "facebook":  "👍 فيس بوك",

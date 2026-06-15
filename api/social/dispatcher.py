@@ -14,6 +14,12 @@ from api.social.image_specs import platform_image_url
 from api.social.platforms import REGISTERED_POSTERS
 from api.social.template import build_post_text
 
+# المنصات الاجتماعية القابلة للتحكّم من نموذج الماستر (publish_channels).
+# يجب أن تطابق مفاتيح PUBLISH_CHANNELS الاجتماعية في dashboard.py.
+# منصة مُدارة غير معلَّمة لمتجر = لا تُنشَر له. المنصات غير المُدارة
+# (x/pinterest/linkedin) تُنشَر حسب التهيئة كالمعتاد (لا تُسقَط).
+_MANAGED_SOCIAL = {"telegram", "discord", "instagram", "threads", "facebook"}
+
 
 def _fetch_store(conn, master_id: int) -> dict | None:
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -22,7 +28,8 @@ def _fetch_store(conn, master_id: int) -> dict | None:
             SELECT id, store_id, name_en, public_coupon,
                    discount_value, extra_offer, extra_offer_en,
                    description, store_bio, store_tags,
-                   affiliate_link, logo_url, social_poster_url
+                   affiliate_link, logo_url, social_poster_url,
+                   publish_channels
             FROM master
             WHERE id = %s
             """,
@@ -141,11 +148,21 @@ def broadcast_to_all_platforms(master_id: int) -> None:
         # ونرجع للوقو فقط لو ما تم توليد بوستر بعد.
         base_image = store.get("social_poster_url") or store.get("logo_url")
 
+        # قنوات النشر لكل متجر: NULL = كل القنوات (توافق المتاجر القديمة).
+        raw_channels = store.get("publish_channels")
+        allowed = None if raw_channels is None else {
+            c.strip() for c in str(raw_channels).split(",") if c.strip()
+        }
+
         for poster_cls in REGISTERED_POSTERS:
             try:
                 poster = poster_cls()
             except Exception as e:
                 print(f"[social] failed to instantiate {poster_cls.__name__}: {e}")
+                continue
+            # منصة مُدارة وغير معلَّمة لهذا المتجر → تخطّاها (تحكّم القناة).
+            if (allowed is not None and poster.name in _MANAGED_SOCIAL
+                    and poster.name not in allowed):
                 continue
             image_url = platform_image_url(base_image, poster.name)  # مقاس كل منصة
             _run_one_poster(conn, master_id, store, post_text, image_url, poster)
