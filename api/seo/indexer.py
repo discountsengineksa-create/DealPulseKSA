@@ -40,7 +40,7 @@ from api.db import get_db_context
 
 _log = logging.getLogger("dp.seo.indexer")
 
-SITE_URL = os.getenv("SITE_URL", "https://dealpulseksa.com").rstrip("/")
+SITE_URL = os.getenv("SITE_URL", "https://www.dealpulseksa.com").rstrip("/")
 SEO_PAGE_PATH = os.getenv("SEO_PAGE_PATH", "/c/{slug}")
 GOOGLE_SA_JSON_RAW = os.getenv("GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON", "")
 INDEXNOW_KEY = os.getenv("INDEXNOW_KEY", "").strip()

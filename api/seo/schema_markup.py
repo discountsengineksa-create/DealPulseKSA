@@ -18,7 +18,7 @@ Schema.org JSON-LD generator — يحوّل صفحة هبوط إلى structured 
 استخدام:
     from api.seo.schema_markup import build_jsonld
     page_data = {...}  # من api/routers/seo.py
-    jsonld_dict = build_jsonld(page_data, site_url="https://dealpulseksa.com")
+    jsonld_dict = build_jsonld(page_data, site_url="https://www.dealpulseksa.com")
     # ضع نتيجة json.dumps(jsonld_dict) داخل <script type="application/ld+json">
 """
 from __future__ import annotations
@@ -28,7 +28,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
-SITE_URL = os.getenv("SITE_URL", "https://dealpulseksa.com").rstrip("/")
+SITE_URL = os.getenv("SITE_URL", "https://www.dealpulseksa.com").rstrip("/")
 SEO_PAGE_PATH = os.getenv("SEO_PAGE_PATH", "/c/{slug}")
 
 ORG_NAME_AR = "نبض الصفقات"

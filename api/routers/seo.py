@@ -142,7 +142,7 @@ def sitemap_xml(conn=Depends(get_db)):
     """
     from fastapi.responses import Response
     import os
-    site_url = os.getenv("SITE_URL", "https://dealpulseksa.com").rstrip("/")
+    site_url = os.getenv("SITE_URL", "https://www.dealpulseksa.com").rstrip("/")
     page_path_tpl = os.getenv("SEO_PAGE_PATH", "/c/{slug}")
 
     with conn.cursor() as cur:
