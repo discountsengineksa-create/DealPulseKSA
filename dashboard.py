@@ -366,6 +366,8 @@ html, body, [data-testid="stAppViewContainer"], .main, .main .block-container {{
 [data-testid="stDeployButton"],
 [data-testid="stToolbar"],
 header[data-testid="stHeader"] {{ display: none !important; }}
+/* إخفاء نص «Press Enter to submit form» الإنجليزي تحت الحقول */
+[data-testid="InputInstructions"] {{ display: none !important; }}
 </style>
 """, unsafe_allow_html=True)
 
