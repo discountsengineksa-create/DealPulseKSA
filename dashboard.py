@@ -1741,6 +1741,7 @@ _MAIN_PAGES = [
 "📦 أرشيف المنتهية",
 "جدول الأقسام", "البحث عن كود", "طلبات الأكواد", "بيانات المستخدمين",
 "مستخدمو الموقع",
+"🌐 إدارة الموقع",
 ]
 _ANALYSIS_PAGES = [
 "🎬 إضافة استوري",
@@ -6851,6 +6852,95 @@ elif page == "مستخدمو الموقع":
     finally:
         if 'conn' in locals():
             conn.close()
+
+
+# --- إدارة الموقع: أعلام تشغيل عامّة يقرأها الويب (platform_settings) ---
+elif page == "🌐 إدارة الموقع":
+    st.header("🌐 إدارة الموقع")
+    st.caption(
+        "ضوابط تشغيل موقع الويب العام. التغييرات تُحفظ في `platform_settings` "
+        "ويقرأها الموقع تلقائياً خلال ثوانٍ — بلا إعادة نشر."
+    )
+
+    # ── جدول الإعدادات + قراءة/كتابة مفتاح واحد (مكتفٍ ذاتياً) ──
+    _SM_DDL = """
+        CREATE TABLE IF NOT EXISTS platform_settings (
+            key VARCHAR(60) PRIMARY KEY, value TEXT,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_by VARCHAR(80))
+    """
+
+    def _sm_get(key: str, default: str) -> str:
+        try:
+            c = get_conn(); c.rollback()
+            cur = c.cursor()
+            cur.execute(_SM_DDL)
+            cur.execute("SELECT value FROM platform_settings WHERE key=%s", (key,))
+            row = cur.fetchone()
+            c.commit(); c.close()
+            return row[0] if row and row[0] is not None else default
+        except Exception as e:
+            st.warning(f"تعذّر قراءة الإعداد: {e}")
+            return default
+
+    def _sm_set(key: str, value: str) -> bool:
+        try:
+            c = get_conn(); c.rollback()
+            cur = c.cursor()
+            cur.execute(_SM_DDL)
+            cur.execute(
+                """INSERT INTO platform_settings (key, value, updated_at, updated_by)
+                   VALUES (%s, %s, NOW(), 'dashboard')
+                   ON CONFLICT (key) DO UPDATE
+                   SET value=EXCLUDED.value, updated_at=NOW(), updated_by='dashboard'""",
+                (key, value),
+            )
+            c.commit(); c.close()
+            return True
+        except Exception as e:
+            st.error(f"تعذّر حفظ الإعداد: {e}")
+            return False
+
+    st.subheader("🔐 بوّابة تسجيل الدخول")
+
+    # "1" (افتراضي) = البوّابة مفعّلة (الأكواد محجوبة خلف الدخول). "0" = مطفأة.
+    _gate_on = _sm_get("web_login_gate_enabled", "1") != "0"
+
+    if _gate_on:
+        st.success(
+            "🟢 **البوّابة مُفعّلة حالياً** — الزائر لازم يسجّل دخول عشان يشوف "
+            "الأكواد وينتقل للمتجر (الوضع الطبيعي)."
+        )
+    else:
+        st.warning(
+            "🔴 **البوّابة مُطفأة حالياً** — الموقع مفتوح للجميع: الأكواد تظهر بلا "
+            "تسجيل، وزر/صفحات تسجيل الدخول مخفيّة. استخدمها في مرحلة بناء "
+            "الزيارات، ثم أعِد تفعيلها لمّا توصل أرقام مطلوبة من البراندات."
+        )
+
+    st.markdown(
+        "- **مفعّلة** = نجمع حسابات (مطلوب لشروط بعض البراندات)، لكن نخسر زوّاراً "
+        "متردّدين.\n"
+        "- **مطفأة** = أقصى احتكاك صفري: كل زائر يشوف الكود فوراً — الأنسب الآن "
+        "لرفع الزيارات بسرعة."
+    )
+
+    _new_gate = st.toggle(
+        "تفعيل بوّابة تسجيل الدخول (الأكواد محجوبة خلف الدخول)",
+        value=_gate_on,
+        key="login_gate_toggle",
+    )
+
+    if _new_gate != _gate_on:
+        _label = "تفعيل" if _new_gate else "إطفاء"
+        if st.button(f"💾 حفظ — {_label} بوّابة الدخول", type="primary"):
+            if _sm_set("web_login_gate_enabled", "1" if _new_gate else "0"):
+                st.success(
+                    "✅ تم الحفظ. الموقع سيلتقط التغيير خلال ثوانٍ (يقرأ العلم "
+                    "في كل تحميل صفحة)."
+                )
+                st.rerun()
+    else:
+        st.caption("لا تغييرات غير محفوظة.")
 
 
 # --- الصفحة الثانية عشرة: تحليل المستخدمين (Users Analytics) ---

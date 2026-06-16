@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from api.db import get_db
 from api.schemas.coupon import SearchResponse, StoreResult
+from api.utils.settings import get_setting
 
 router = APIRouter(prefix="/coupons", tags=["coupons"])
 
@@ -128,6 +129,18 @@ def get_site_theme(conn=Depends(get_db)):
         except Exception:
             pass
         return {"theme": None, "visual": visual}
+
+
+@router.get("/site-flags")
+def get_site_flags():
+    """أعلام تشغيل الموقع العامة (بلا مصادقة) — يقرأها الويب في كل تحميل.
+
+    login_gate_enabled=true (الافتراضي) ⇒ بوّابة تسجيل الدخول مُفعّلة: الأكواد
+    محجوبة خلف تسجيل الدخول (السلوك الحالي). false ⇒ البوّابة مُطفأة: الموقع
+    مفتوح للجميع، الأكواد تظهر بلا تسجيل، وواجهة تسجيل الدخول مخفيّة. يتحكّم
+    فيه الأدمن من صفحة «إدارة الموقع» في الداشبورد عبر platform_settings."""
+    raw = get_setting("web_login_gate_enabled", "1")
+    return {"login_gate_enabled": (raw or "1") != "0"}
 
 
 # «الأكثر طلباً» = نقرات الرابط + نسخ الكوبون + عدد مرات البحث عن المتجر +
