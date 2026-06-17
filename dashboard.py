@@ -368,6 +368,12 @@ html, body, [data-testid="stAppViewContainer"], .main, .main .block-container {{
 header[data-testid="stHeader"] {{ display: none !important; }}
 /* إخفاء نص «Press Enter to submit form» الإنجليزي تحت الحقول */
 [data-testid="InputInstructions"] {{ display: none !important; }}
+/* إصلاح بطاقة الملف المرفوع (file chip) في RTL: نمنع تداخل اسم الملف مع زر
+   الحذف (X). نفرض LTR على البطاقة (كما صُمّمت في Streamlit) ونقصّ الاسم
+   الطويل بـellipsis، ونرفع زر الحذف ليبقى فوق كل شيء وقابلاً للضغط دائماً. */
+[data-testid="stFileChip"] {{ direction: ltr !important; text-align: left !important; }}
+[data-testid="stFileChipName"] {{ overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; min-width: 0 !important; }}
+[data-testid="stFileChipDeleteBtn"] {{ flex-shrink: 0 !important; z-index: 5 !important; position: relative !important; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -11532,6 +11538,14 @@ elif page == "استوديو المحتوى":
         except Exception:
             return str(text)
 
+    def _ar_smart(text: str) -> str:
+        """يطبّق التشكيل/الـbidi فقط لو فيه حروف عربية (مثل «50 ريال» أو
+        «توصيل مجاني»)؛ يترك اللاتيني/الأرقام («70%»، «1+1») كما هي بلا قلب."""
+        s = str(text)
+        if any("؀" <= ch <= "ۿ" for ch in s):
+            return _ar(s)
+        return s
+
     def _font(size: int, weight: int = 700) -> ImageFont.FreeTypeFont:
         """خط نوتو السعودي العربي — متغيّر الوزن. 700=Bold، 900=Black."""
         try:
@@ -11771,13 +11785,18 @@ elif page == "استوديو المحتوى":
             radius=50, outline=(142, 202, 169), width=4,
         )
 
-        # ─── كتلة الخصم تحت الكارت ───────────────────────────────────────
+        # ─── كتلة الخصم تحت الكارت — تُرسم فقط لو فيه قيمة خصم فعلية ──────────
+        # لا قيم افتراضية مفبركة: لو المالك ترك «قيمة الخصم» فاضية، ما نكتب
+        # «خصم يصل إلى 70%» من راسنا (طلب صريح: لا تختلق محتوى لم يُدخله).
         block_y = card_y + card_h + 30   # = 360 + 320 + 30 = 710
-        f_disc_lbl = _font(36, weight=700)
-        _center_text(draw, _ar(discount_label or "خصم يصل إلى"), block_y, f_disc_lbl, _STUDIO_EMERALD_DK)
-
-        f_disc_num = _font(140, weight=900)
-        _center_text(draw, str(discount_value or "70%"), block_y + 50, f_disc_num, _STUDIO_EMERALD_DK)
+        _disc_val = (discount_value or "").strip()
+        if _disc_val:
+            _disc_lbl = (discount_label or "").strip()
+            if _disc_lbl:
+                f_disc_lbl = _font(36, weight=700)
+                _center_text(draw, _ar_smart(_disc_lbl), block_y, f_disc_lbl, _STUDIO_EMERALD_DK)
+            f_disc_num = _font(140, weight=900)
+            _center_text(draw, _ar_smart(_disc_val), block_y + 50, f_disc_num, _STUDIO_EMERALD_DK)
 
         # ─── Pill الكود + التذييل — مستقلّان ─────────────────────────────────
         # الكود: يظهر فقط لو فيه كود فعلي (متاجر بلا كود مثل AliExpress لا تعرض
@@ -11788,7 +11807,10 @@ elif page == "استوديو المحتوى":
         pill_y = block_y + 220   # = 930
         pill_h = 90
         if _code_clean:
-            code_text = _code_clean.upper()
+            # العربي في خانة الكود (مثل «توصيل وتركيب مجاني») يُهيّأ تشكيلاً + bidi
+            # ولا يُحوّل لأحرف كبيرة، فلا يظهر معكوساً. اللاتيني (SALE70) يبقى upper.
+            _code_has_ar = any("؀" <= ch <= "ۿ" for ch in _code_clean)
+            code_text = _ar(_code_clean) if _code_has_ar else _code_clean.upper()
             f_code = _font(54, weight=800)
             cb = draw.textbbox((0, 0), code_text, font=f_code)
             cw = cb[2] - cb[0]
@@ -11843,7 +11865,7 @@ elif page == "استوديو المحتوى":
             with c1:
                 discount_label_in = st.text_input("سطر فوق الرقم", value="خصم يصل إلى")
             with c2:
-                discount_value_in = st.text_input("قيمة الخصم", value="70%", help="مثل: 70%، 50 ريال، 1+1")
+                discount_value_in = st.text_input("قيمة الخصم", value="", placeholder="مثل: 70%، 50 ريال، 1+1", help="اتركه فاضي = لا يظهر سطر خصم في البوستر إطلاقاً. أمثلة: 70%، 50 ريال، 1+1")
             code_in = st.text_input(
                 "كود الخصم", value="", max_chars=20,
                 placeholder="اتركه فاضي للمتاجر بلا كود (مثل AliExpress)",
