@@ -11688,6 +11688,38 @@ elif page == "استوديو المحتوى":
         except Exception as ex:
             return None, str(ex)
 
+    def _remove_solid_bg(image_bytes: bytes, tolerance: int = 45):
+        """إزالة خلفية لونية صلبة محلياً (بلا API) — مثالية للوقوهات بخلفية لون
+        واحد مثل المربّع البني. يقصّ الحشو أولاً (فيصير لون الخلفية عند الحواف)،
+        يحدّده من الزوايا، ثم flood-fill من الزوايا فيجعل المنطقة المتصلة بهذا
+        اللون شفافة — دون أن يلمس ألوان الشعار الداخلية المشابهة.
+        يرجع (None, سبب) لو الخلفية ليست لوناً صلباً (زوايا متباينة) فيتولّاها
+        remove.bg للخلفيات المعقّدة."""
+        try:
+            im = _smart_crop_logo(Image.open(io.BytesIO(image_bytes)))
+            w, h = im.size
+            rgb = im.convert("RGB")
+            corners = [
+                rgb.getpixel((0, 0)), rgb.getpixel((w - 1, 0)),
+                rgb.getpixel((0, h - 1)), rgb.getpixel((w - 1, h - 1)),
+            ]
+            ref = corners[0]
+            _chmax = lambda a, b: max(abs(a[0] - b[0]), abs(a[1] - b[1]), abs(a[2] - b[2]))
+            if any(_chmax(ref, c) > 30 for c in corners[1:]):
+                return None, "الخلفية ليست لوناً صلباً"
+            SENT = (0, 255, 1)   # لون مؤقت نادر لتعليم منطقة الخلفية
+            fill = rgb.copy()
+            for xy in ((0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)):
+                ImageDraw.floodfill(fill, xy, SENT, thresh=tolerance)
+            mask = np.all(np.asarray(fill) == np.array(SENT), axis=-1)
+            arr = np.array(im.convert("RGBA"))
+            arr[mask, 3] = 0
+            out = io.BytesIO()
+            Image.fromarray(arr, "RGBA").save(out, format="PNG")
+            return out.getvalue(), None
+        except Exception as ex:
+            return None, str(ex)
+
     def _center_text(draw: ImageDraw.ImageDraw, text: str, y: int, font, fill, canvas_w: int = _CANVAS):
         bbox = draw.textbbox((0, 0), text, font=font)
         tw = bbox[2] - bbox[0]
@@ -11895,10 +11927,17 @@ elif page == "استوديو المحتوى":
                 store_logo_bytes = store_logo_file.read() if store_logo_file else None
                 if auto_rmbg and store_logo_bytes:
                     with st.spinner("جاري إزالة الخلفية…"):
-                        _clean, _rmbg_err = _remove_bg_api(store_logo_bytes)
+                        # 1) إزالة لونية محلية أولاً — مثالية للوقوهات بخلفية لون صلب
+                        #    (مثل المربّع البني)، بلا API ولا اعتماد على رصيد remove.bg.
+                        _clean, _rmbg_err = _remove_solid_bg(store_logo_bytes)
+                        _method = "إزالة لونية محلية"
+                        # 2) خلفية معقّدة (غير صلبة) → نلجأ لـ remove.bg
+                        if not _clean:
+                            _clean, _rmbg_err = _remove_bg_api(store_logo_bytes)
+                            _method = "remove.bg"
                     if _clean:
                         store_logo_bytes = _clean
-                        st.caption("🪄 تمت إزالة الخلفية بنجاح.")
+                        st.caption(f"🪄 تمت إزالة الخلفية ({_method}).")
                     else:
                         st.warning(f"تعذّر إزالة الخلفية: {_rmbg_err} — سنستخدم الصورة كما هي.")
                 # ترتيب الأفضليّة لخلفية البوستر الرسمية:
