@@ -13641,8 +13641,9 @@ if page == "🎨 الثيمات":
     st.caption("تتحكم بكم تظهر خلفية الثيم خلف الكروت والأيقونات. التغيير يطبَّق على الموقع خلال دقيقة (Cloudflare cache + revalidate).")
 
     # تحميل الإعدادات الحالية (مع fallback لو الجدول غير موجود)
-    _vs_defaults = {"overlay_opacity": 0.35, "card_opacity": 0.42,
-                    "icon_opacity": 0.55, "blur_px": 28}
+    # الافتراضي محدّث بعد فرض أرضية CSS تمنع الكروت من النزول تحت 0.88 (راحة بصرية).
+    _vs_defaults = {"overlay_opacity": 0.55, "card_opacity": 0.92,
+                    "icon_opacity": 0.95, "blur_px": 28}
     _vs_current = dict(_vs_defaults)
     _vc = get_conn(); _vc.rollback()
     try:
@@ -13663,28 +13664,35 @@ if page == "🎨 الثيمات":
         _vc.close()
 
     with st.form("visual_settings_form"):
-        st.markdown("**كل قيمة من 0 إلى 1**:  0 = شفاف تماماً (الثيم يظهر كامل)  ·  1 = معتم (الثيم مخفي).")
+        st.markdown(
+            "**كل قيمة من 0 إلى 1**: 0 = شفاف تماماً (الثيم/اللوقو يظهر كامل) · "
+            "1 = معتم (الكرت يخفي ما تحته).")
+        st.info(
+            "🛡️ **حد أدنى محمي:** الكروت لا تنزل تحت **0.88** والأيقونات تحت **0.92** "
+            "والستارة تحت **0.45** (CSS يفرضها). لو دخلت قيمة أقل، الواجهة بتعرض الحد الأدنى "
+            "تلقائياً — هذا لمنع طغيان اللوقو/الثيم على النصوص.",
+            icon="ℹ️")
         vc1, vc2 = st.columns(2)
-        _vs_overlay = vc1.slider(
+        _vs_overlay = vc1.number_input(
             "🌫️ الستارة فوق الثيم",
-            min_value=0.00, max_value=1.00, step=0.05,
-            value=_vs_current["overlay_opacity"],
-            help="كم تخفي الستارة البيضاء/الداكنة صورة الثيم. أقل = الثيم أوضح.")
-        _vs_card = vc2.slider(
+            min_value=0.00, max_value=1.00, step=0.05, format="%.2f",
+            value=float(_vs_current["overlay_opacity"]),
+            help="كم تخفي الستارة البيضاء/الداكنة صورة الثيم/اللوقو الخلفي. أقل = الثيم أوضح. (أرضية CSS: 0.45)")
+        _vs_card = vc2.number_input(
             "🪟 خلفية الكروت",
-            min_value=0.00, max_value=1.00, step=0.05,
-            value=_vs_current["card_opacity"],
-            help="شفافية كروت الترند والمتاجر. أقل = الثيم يطلّ تحتها.")
+            min_value=0.00, max_value=1.00, step=0.05, format="%.2f",
+            value=float(_vs_current["card_opacity"]),
+            help="شفافية كروت الترند والمتاجر. أقل = الثيم يطلّ تحتها. (أرضية CSS: 0.88)")
         vc3, vc4 = st.columns(2)
-        _vs_icon = vc3.slider(
+        _vs_icon = vc3.number_input(
             "🟢 خلفية أيقونات المتاجر",
-            min_value=0.00, max_value=1.00, step=0.05,
-            value=_vs_current["icon_opacity"],
-            help="شفافية المربع/الدائرة خلف لوقو المتجر.")
-        _vs_blur = vc4.slider(
+            min_value=0.00, max_value=1.00, step=0.05, format="%.2f",
+            value=float(_vs_current["icon_opacity"]),
+            help="شفافية المربع/الدائرة خلف لوقو المتجر. (أرضية CSS: 0.92)")
+        _vs_blur = vc4.number_input(
             "💧 شدّة الـ blur (px)",
             min_value=0, max_value=60, step=2,
-            value=_vs_current["blur_px"],
+            value=int(_vs_current["blur_px"]),
             help="ضباب الزجاج خلف الكروت — يساعد على قراءة النصوص فوق أي خلفية.")
 
         sb1, sb2 = st.columns(2)
@@ -13711,7 +13719,7 @@ if page == "🎨 الثيمات":
                 _wc = get_conn(); _wc.rollback(); _wcur = _wc.cursor()
                 _wcur.execute(
                     "UPDATE site_visual_settings SET "
-                    "overlay_opacity=0.35, card_opacity=0.42, icon_opacity=0.55, "
+                    "overlay_opacity=0.55, card_opacity=0.92, icon_opacity=0.95, "
                     "blur_px=28, updated_at=NOW() WHERE id=1")
                 _wc.commit(); _wc.close()
                 st.success("✅ رجعنا للافتراضي."); st.rerun()
