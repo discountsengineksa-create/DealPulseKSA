@@ -217,6 +217,12 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
   .store-hero img{width:110px;height:110px;object-fit:contain;background:rgba(255,255,255,0.05);border-radius:18px;padding:8px}
   .store-hero h2{margin:14px 0 6px;font-size:20px;font-weight:900;color:var(--t1)}
   .store-hero p{color:var(--t3);font-size:13px;line-height:1.6}
+  /* صف الخصم السريع: زر نسخ + شارة النسبة جنبه — يحل محل سطر «الخصم» الستاتيكي. */
+  .disc-row{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin:12px 0 4px}
+  .disc-copy-btn{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:14px;border:none;cursor:pointer;font-family:var(--font);font-weight:900;font-size:15px;letter-spacing:3px;background:linear-gradient(135deg,#10b981 0%,#059669 100%);color:#fff;box-shadow:0 4px 14px rgba(16,185,129,0.35);transition:transform .2s ease, box-shadow .2s ease}
+  .disc-copy-btn:active{transform:translateY(1px);box-shadow:0 2px 8px rgba(16,185,129,0.25)}
+  .disc-copy-btn svg{width:16px;height:16px;flex-shrink:0}
+  .disc-badge{padding:8px 14px;border-radius:14px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.30);color:var(--em);font-weight:900;font-size:18px}
   .coupon-box{margin:18px 0;padding:24px 16px;border:2px dashed var(--em);border-radius:18px;text-align:center;background:rgba(16,185,129,0.06);cursor:pointer}
   .coupon-box .lbl{font-size:11px;color:var(--t3);margin-bottom:8px;letter-spacing:1px}
   .coupon-box .code{font-size:28px;font-weight:900;color:var(--em);letter-spacing:5px;font-family:monospace}
@@ -1238,11 +1244,25 @@ function renderStoreView(storeId) {
         }).join('')
         : '';
 
+    // صف الخصم السريع: زر نسخ (إذا الكود موجود) + شارة النسبة جنبه.
+    // الفكرة: المستخدم دائماً يستعجل نسخ الكود، فيقدر يعمله من الهيرو مباشرة
+    // بدون التمرير لصندوق الكوبون. وإذا ما في كوبون فقط نعرض شارة النسبة.
+    const copyIconSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+    const discRowHtml = (s.coupon || s.disc)
+        ? `<div class="disc-row">
+             ${s.coupon
+                ? `<button type="button" class="disc-copy-btn" onclick="copyCurrent()">${copyIconSvg}<span>${escHtml(s.coupon)}</span></button>`
+                : ''}
+             ${s.disc ? `<div class="disc-badge">${escHtml(s.disc)}</div>` : ''}
+           </div>`
+        : '';
+
     document.getElementById('storeBody').innerHTML = `
     <div class="store-hero">
         ${trendBadgeHtml}
         <img src="${logoSrc}" alt="${escHtml(s.name)}" onerror="this.onerror=null;this.src='logo.png'">
         <h2>${escHtml(s.name)}</h2>
+        ${discRowHtml}
         ${s.bio ? `<p>${escHtml(s.bio)}</p>` : ''}
         ${tagsHtml}
     </div>
@@ -1255,9 +1275,6 @@ function renderStoreView(storeId) {
     <div class="cta-row">
         <button class="cta-primary" onclick="openLinkCurrent()">${ST.goToStore}</button>
         <button class="cta-ghost" onclick="toggleFav(${s.id}, event)">${FAVS.has(s.store_id) ? ST.favInBtn : ST.favAddBtn}</button>
-    </div>
-    <div class="store-meta">
-        ${LANG_CURRENT==='en' ? 'Discount' : 'الخصم'}: <b style="color:var(--em)">${escHtml(s.disc)}</b>
     </div>`;
 }
 
