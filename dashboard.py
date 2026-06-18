@@ -11729,6 +11729,7 @@ elif page == "استوديو المحتوى":
         card_w: int = 620,
         card_h: int = 320,
         logo_scale: int = 80,
+        discount_font_size: int = 140,
     ) -> bytes:
         """البوستر النهائي 1080×1080 — تصميم نبض الصفقات الفاخر.
         الخلفية logo6.png مصمَّمة جاهزة (DP + 'نبض الصفقات DEAL PULSE KSA' header
@@ -11795,7 +11796,7 @@ elif page == "استوديو المحتوى":
             if _disc_lbl:
                 f_disc_lbl = _font(36, weight=700)
                 _center_text(draw, _ar_smart(_disc_lbl), block_y, f_disc_lbl, _STUDIO_EMERALD_DK)
-            f_disc_num = _font(140, weight=900)
+            f_disc_num = _font(max(20, int(discount_font_size)), weight=900)
             _center_text(draw, _ar_smart(_disc_val), block_y + 50, f_disc_num, _STUDIO_EMERALD_DK)
 
         # ─── Pill الكود + التذييل — مستقلّان ─────────────────────────────────
@@ -11866,6 +11867,12 @@ elif page == "استوديو المحتوى":
                 discount_label_in = st.text_input("سطر فوق الرقم", value="خصم يصل إلى")
             with c2:
                 discount_value_in = st.text_input("قيمة الخصم", value="", placeholder="مثل: 70%، 50 ريال، 1+1", help="اتركه فاضي = لا يظهر سطر خصم في البوستر إطلاقاً. أمثلة: 70%، 50 ريال، 1+1")
+            discount_font_size_in = st.number_input(
+                "📏 مقاس خط قيمة الخصم — اكتب الرقم", min_value=40, max_value=200,
+                value=140, step=2, key="studio_disc_font",
+                help="الافتراضي 140 مناسب للأرقام القصيرة (70%). النص الطويل مثل "
+                     "«توصيل وتركيب مجاني» يُقصّ — قلّل الرقم (مثلاً 60–80) حتى يظهر كاملاً.",
+            )
             code_in = st.text_input(
                 "كود الخصم", value="", max_chars=20,
                 placeholder="اتركه فاضي للمتاجر بلا كود (مثل AliExpress)",
@@ -11922,6 +11929,7 @@ elif page == "استوديو المحتوى":
                         tagline=tagline_in,
                         deal_pulse_logo_bytes=dp_logo_bytes,
                         logo_scale=logo_scale,
+                        discount_font_size=discount_font_size_in,
                     )
                 safe_store = "".join(c for c in (store_name_in or "store") if c.isalnum() or c in ("_", "-"))[:40] or "store"
                 safe_code  = "".join(c for c in (code_in or "code") if c.isalnum())[:20] or "code"
