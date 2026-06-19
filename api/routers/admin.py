@@ -308,7 +308,7 @@ def run_reel_batch(
                                OR 'instagram' = ANY(
                                    string_to_array(COALESCE(publish_channels,''), ',')
                                ))
-                        ORDER BY COALESCE(last_modified, NOW()) DESC, id DESC
+                        ORDER BY id DESC
                         LIMIT %s
                     )
                     UPDATE master SET last_reeled_at = NULL
