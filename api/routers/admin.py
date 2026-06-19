@@ -274,6 +274,63 @@ def broadcast(
     return {"status": "queued", "master_id": master_id}
 
 
+@router.post("/social/test-story/{master_id}")
+@limiter.limit(LIMIT_ADMIN)
+def test_story(
+    master_id: int,
+    request: Request,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """نشر ستوري واحدة لمتجر للتحقّق من إصلاح المقاس 9:16.
+
+    تنفيذ متزامن (لا خيط خلفي) — يرجّع نتيجة Graph API مباشرةً مع
+    الرابط النهائي للصورة + post_id. مفيد لتأكيد أن الستوري تظهر فعلاً
+    على البروفايل (حلقة ملوّنة) قبل إطلاق broadcast كامل.
+    """
+    _verify_admin(x_admin_secret)
+    from api.db import get_db_context
+    from api.social.image_specs import platform_image_url
+    from api.social.platforms.instagram import InstagramPoster
+    from psycopg2.extras import RealDictCursor
+
+    with get_db_context() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT id, store_id, social_poster_url, logo_url "
+                "FROM master WHERE id = %s",
+                (master_id,),
+            )
+            store = cur.fetchone()
+    if not store:
+        raise HTTPException(status_code=404, detail=f"master {master_id} not found")
+
+    poster = InstagramPoster()
+    if not poster.is_configured():
+        raise HTTPException(status_code=503, detail="instagram poster not configured")
+
+    story_image_url = platform_image_url(
+        store.get("social_poster_url") or store.get("logo_url"),
+        "instagram_story",
+    )
+    if not story_image_url:
+        raise HTTPException(status_code=400, detail="no image url for this store")
+
+    result = poster.post_story(story_image_url)
+    from api.utils.ops import audit_log
+    audit_log(action="test_story", target=str(master_id),
+              meta={"ok": not result.error})
+
+    return {
+        "master_id": master_id,
+        "store_id": store["store_id"],
+        "story_image_url": story_image_url,
+        "platform_post_id": result.platform_post_id,
+        "error": result.error,
+        "hint": "افتح إنستقرام @dealpulseksa الآن — لازم تشوف حلقة ملوّنة "
+                "حول صورة البروفايل. لو ما ظهرت خلال دقيقة، الستوري رُفضت من إنستقرام.",
+    }
+
+
 @router.post("/social/run-reel-batch")
 @limiter.limit(LIMIT_ADMIN)
 def run_reel_batch(
