@@ -156,9 +156,10 @@ def _run_instagram_extended(
        - Slide 2: بطاقة «كيف تستخدم الكود؟» مولَّدة بـPIL، تُرفع لـCloudinary
                    وتُخزَّن بـpublic_id ثابت (إعادة البث = نفس الرابط)
        لو فشلت الشريحة الثانية → نسقط على single-image (لا نُسقط المنشور كاملاً)
-    2) Story:
-       - بعد نجاح Feed، ننشر نفس البوستر كـStory (24h انكشاف إضافي + ~2-3x وصول)
-       - يُسجَّل في social_posts_log بـplatform='instagram_story'
+    2) Reel جماعي (تلقائي بعد كل بث ناجح): انظر الجزء الأخير من الدالة.
+
+    ملاحظة: الستوري التلقائية أُلغيت بقرار المالك (٢٠٢٦-٠٦-١٩) —
+    الستوري تُنشَر يدوياً من تطبيق إنستقرام. الكود محذوف لا معطّل.
     """
     # سجّل صف Feed مسبقاً (للحالات اللي تطلع failed قبل النشر)
     log_id = _insert_log(
@@ -217,46 +218,30 @@ def _run_instagram_extended(
         print(f"[social] instagram feed crashed: {traceback.format_exc()}")
         return
 
-    # ── 3) Story (24h) — انكشاف إضافي بنفس البوستر ───────────────
-    # ⚠️ Stories تحتاج 9:16 (1080×1920) لا يُكيّفه إنستقرام تلقائياً —
-    # الـcontainer يُقبل ويُنشر بـpost_id صالح، لكن الصورة المربّعة تظهر
-    # «فاضية/بيضاء» في تطبيق إنستقرام. لذلك نُمرّر variant مخصّص بمقاس
-    # 9:16 مع c_pad,b_white يحشو الأبيض حول البوستر الأصلي المربّع.
-    story_image_url = platform_image_url(
-        store.get("social_poster_url") or store.get("logo_url"),
-        "instagram_story",
-    )
-    story_log_id = _insert_log(
-        conn, master_id=master_id, store_id=store["store_id"],
-        platform="instagram_story", post_text=post_text, image_url=story_image_url,
-    )
-    conn.commit()
+    # ── 3) Batch Reel — كل بث ناجح يضيف هذا المتجر لقائمة انتظار الريل،
+    #    ولما توصل ٦+ متاجر منتظرين → ينتج Reel متعدّد (٦ متاجر × ٥ ثوان).
+    #
+    #    إعادة `last_reeled_at = NULL` للمتجر الحالي تضمن إن «كل ٦ بثّات
+    #    = ريل تلقائي» يشتغل دائماً، حتى لو المتجر سبق ودخل ريلاً قبل سنة.
+    #    التحديث/إعادة البث على نفس المتجر = إشارة «الكوبون تجدّد، يستاهل
+    #    يدخل ريل جديد».
     try:
-        story_result = poster.post_story(story_image_url) if story_image_url else PostResult(
-            error="no image for story"
-        )
-        if story_result.error:
-            _update_log(conn, story_log_id, status="failed",
-                        error_message=story_result.error)
-        else:
-            _update_log(conn, story_log_id, status="sent",
-                        platform_post_id=story_result.platform_post_id or "")
-    except Exception as e:
-        _update_log(conn, story_log_id, status="failed",
-                    error_message=f"{type(e).__name__}: {e}")
-        print(f"[social] instagram story crashed: {traceback.format_exc()}")
-    finally:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE master SET last_reeled_at = NULL WHERE id = %s",
+                (master_id,),
+            )
         conn.commit()
-
-    # ── 4) Batch Reel — بعد كل بث ناجح، افحص قائمة الانتظار:
-    #    لو وصلنا 6+ متاجر منتظرين → ينتج Reel متعدّد (6 متاجر/5 ثوان لكل)،
-    #    لو 12 منتظرين → 2 ريلز متتاليين، لو <6 → لا شي (ينتظر السادس بصبر).
+    except Exception as e:
+        # فشل الإعادة لا يجب أن يُلغي البث الناجح — نلوغ ونمشي
+        conn.rollback()
+        print(f"[social] reset last_reeled_at failed for {master_id}: {e}")
     try:
         produced = run_pending_batches(conn)
         if produced:
             print(f"[social] reels_batch produced {produced} reel(s)")
     except Exception as e:
-        # فشل الـbatch لا يجب أن يُلغي نجاح الـFeed/Story — نلوغ ونمشي
+        # فشل الـbatch لا يجب أن يُلغي نجاح الـFeed — نلوغ ونمشي
         print(f"[social] reels_batch crashed: {type(e).__name__}: {e}")
 
 
