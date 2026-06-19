@@ -56,6 +56,19 @@ _API_SEARCH_URL = _API_BASE + "/api/v1/coupons/search"
 # الموقع الإلكتروني (زر مباشر في القائمة)
 WEBSITE_URL = os.getenv("WEBSITE_URL", "https://www.dealpulseksa.com")
 
+# واتساب نبض الصفقات — صيغة دولية بدون "+".
+# ⚠️ يجب أن يكون مسجَّلاً كحساب WhatsApp Business باسم «نبض الصفقات» ليظهر
+# الاسم للعميل بدل الرقم الخام في قائمة محادثاته.
+WHATSAPP_NUMBER = os.getenv("WHATSAPP_NUMBER", "966534448900")
+WHATSAPP_MSG_AR = "السلام عليكم، عندي استفسار بخصوص نبض الصفقات"
+WHATSAPP_MSG_EN = "Hi, I'd like to inquire about Deal Pulse KSA"
+
+
+def _whatsapp_url(lang: str) -> str:
+    from urllib.parse import quote
+    msg = WHATSAPP_MSG_EN if lang == "en" else WHATSAPP_MSG_AR
+    return f"https://wa.me/{WHATSAPP_NUMBER}?text={quote(msg)}"
+
 bot = telebot.TeleBot(TOKEN)
 
 
@@ -310,6 +323,7 @@ TEXTS = {
     'request_err':       {'ar': '⚠️ تعذّر تسجيل الطلب الآن. حاول مرة ثانية.',
                           'en': '⚠️ Could not save the request now. Please try again.'},
     'menu_support':      {'ar': 'تواصل معنا',           'en': 'Contact Us'},
+    'menu_whatsapp':     {'ar': '💬 واتساب',             'en': '💬 WhatsApp'},
     'support_prompt':    {'ar': 'أهلاً بك في دعم نبض الصفقات.\n'
                                 'يرجى إرسال استفسارك أو وصف المشكلة بالتفصيل، وسيقوم فريق الدعم بمراجعتها والرد عليك في أقرب وقت ممكن.',
                           'en': 'Welcome to Deal Pulse support.\n'
@@ -744,7 +758,11 @@ def _kb_main(lang):
         types.InlineKeyboardButton(TEXTS['menu_request'][lang], callback_data='nav:request'),
     )
     kb.add(types.InlineKeyboardButton(TEXTS['menu_website'][lang], url=WEBSITE_URL))
-    kb.add(types.InlineKeyboardButton(TEXTS['menu_support'][lang], callback_data='nav:support'))
+    # واتساب + تواصل عبر البوت — جنباً إلى جنب: العميل يختار قناته المفضّلة
+    kb.add(
+        types.InlineKeyboardButton(TEXTS['menu_whatsapp'][lang], url=_whatsapp_url(lang)),
+        types.InlineKeyboardButton(TEXTS['menu_support'][lang], callback_data='nav:support'),
+    )
     kb.add(types.InlineKeyboardButton(TEXTS['menu_end'][lang], callback_data='nav:end'))
     return kb
 
