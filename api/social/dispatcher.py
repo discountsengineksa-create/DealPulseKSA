@@ -218,15 +218,21 @@ def _run_instagram_extended(
         return
 
     # ── 3) Story (24h) — انكشاف إضافي بنفس البوستر ───────────────
+    # ⚠️ Stories تحتاج 9:16 (1080×1920) لا يُكيّفه إنستقرام تلقائياً —
+    # الـcontainer يُقبل ويُنشر بـpost_id صالح، لكن الصورة المربّعة تظهر
+    # «فاضية/بيضاء» في تطبيق إنستقرام. لذلك نُمرّر variant مخصّص بمقاس
+    # 9:16 مع c_pad,b_white يحشو الأبيض حول البوستر الأصلي المربّع.
+    story_image_url = platform_image_url(
+        store.get("social_poster_url") or store.get("logo_url"),
+        "instagram_story",
+    )
     story_log_id = _insert_log(
         conn, master_id=master_id, store_id=store["store_id"],
-        platform="instagram_story", post_text=post_text, image_url=image_url,
+        platform="instagram_story", post_text=post_text, image_url=story_image_url,
     )
     conn.commit()
     try:
-        # Story لا تقبل caption — نمرّر البوستر الأصلي (mod-square كافٍ؛
-        # Instagram يُكيّفه تلقائياً لـ9:16 بهامش).
-        story_result = poster.post_story(image_url) if image_url else PostResult(
+        story_result = poster.post_story(story_image_url) if story_image_url else PostResult(
             error="no image for story"
         )
         if story_result.error:

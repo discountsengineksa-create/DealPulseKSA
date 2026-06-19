@@ -10,7 +10,12 @@ from __future__ import annotations
 # المفاتيح تطابق BaseSocialPoster.name لكل منصة بالضبط.
 PLATFORM_IMAGE_SPECS: dict[str, dict[str, int]] = {
     "facebook":  {"w": 1200, "h": 630},   # عرضي
-    "instagram": {"w": 1080, "h": 1080},  # مربّع
+    "instagram": {"w": 1080, "h": 1080},  # مربّع — Feed
+    # ⚠️ Stories لا تُعرض مربّعة — رغم أن Graph API يقبل الـcontainer ويرجّع
+    # post_id صالح، الصورة المربّعة تظهر فاضية/بيضاء في تطبيق إنستقرام.
+    # 1080×1920 (9:16) هو المقاس الإلزامي. c_pad يحشو الجوانب بالأبيض لتظهر
+    # الصورة المربّعة الأصلية وسط Story بأمان.
+    "instagram_story": {"w": 1080, "h": 1920},
     "threads":   {"w": 1080, "h": 1080},  # مربّع
     "telegram":  {"w": 1280, "h": 1280},  # مربّع (قناة)
     "discord":   {"w": 1024, "h": 1024},  # مربّع (embed)
