@@ -274,6 +274,73 @@ def broadcast(
     return {"status": "queued", "master_id": master_id}
 
 
+@router.post("/social/run-reel-batch")
+@limiter.limit(LIMIT_ADMIN)
+def run_reel_batch(
+    request: Request,
+    force_reset: int = Query(
+        default=0, ge=0, le=6,
+        description="عدد المتاجر التي تُصفَّر last_reeled_at قبل التشغيل "
+                    "(أحدث n متاجر). 0 = استخدم المنتظرين الفعليين فقط."
+    ),
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """يطلق Reel جماعي فوراً.
+
+    لو الـpool الفعلي (last_reeled_at IS NULL) أقل من 6 → استخدم
+    `?force_reset=6` ليُصفَّر آخر 6 متاجر (بحسب أحدث تحديث) ثم يدخلون
+    في batch جديد. مفيد عندما تكون كل المتاجر سبق ودخلوا ريل سابقاً
+    لكن كوبوناتهم تجدّدت.
+    """
+    _verify_admin(x_admin_secret)
+    from api.db import get_db_context
+    from api.social.reels_batch import run_pending_batches
+
+    reset_count = 0
+    if force_reset > 0:
+        with get_db_context() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    WITH recent AS (
+                        SELECT id FROM master
+                        WHERE (publish_channels IS NULL
+                               OR 'instagram' = ANY(
+                                   string_to_array(COALESCE(publish_channels,''), ',')
+                               ))
+                        ORDER BY COALESCE(last_modified, NOW()) DESC, id DESC
+                        LIMIT %s
+                    )
+                    UPDATE master SET last_reeled_at = NULL
+                    WHERE id IN (SELECT id FROM recent)
+                    RETURNING id
+                    """,
+                    (force_reset,),
+                )
+                reset_count = len(cur.fetchall())
+            conn.commit()
+
+    # شغّل البث في خيط خلفي — إنشاء MP4 + رفع Cloudinary + Graph API قد
+    # يستغرق 30-60 ثانية. لا نريد timeout على HTTP.
+    def _bg():
+        from api.db import get_db_context as gdb
+        try:
+            with gdb() as c:
+                count = run_pending_batches(c)
+                print(f"[admin] manual reel_batch produced {count} reel(s)")
+        except Exception as e:
+            print(f"[admin] manual reel_batch crashed: {type(e).__name__}: {e}")
+
+    threading.Thread(target=_bg, daemon=True).start()
+    from api.utils.ops import audit_log
+    audit_log(action="run_reel_batch", target=f"force_reset={force_reset}")
+    return {
+        "status": "queued",
+        "force_reset_applied": reset_count,
+        "hint": "تابع social_posts_log بعد ~60 ثانية — صف جديد بـplatform='instagram_reel_batch'.",
+    }
+
+
 @router.post("/trigger-directive")
 @limiter.limit(LIMIT_ADMIN)
 def trigger_directive(
