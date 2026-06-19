@@ -270,15 +270,26 @@ def render_batch_mp4(stores: list[dict]) -> bytes:
 # ════════════════════════════════════════════════════════════════════════
 # 3) Upload — Cloudinary video
 # ════════════════════════════════════════════════════════════════════════
-def upload_reel_video(mp4_bytes: bytes, slug: str) -> str | None:
-    """يرفع MP4 إلى Cloudinary بـresource_type='video'. يُرجع secure_url أو None."""
+def upload_reel_video(mp4_bytes: bytes, slug: str) -> tuple[str | None, str | None]:
+    """يرفع MP4 إلى Cloudinary بـresource_type='video'.
+
+    Returns:
+        (secure_url, None) عند النجاح
+        (None, error_message) عند الفشل — حتى نسجّل السبب الفعلي في DB.
+
+    تغييرات حاسمة:
+    1. نستعمل upload() لا upload_large() — الأخيرة chunked وتتوقّع file path وليس bytes.
+       MP4 الخاص بنا ~5MB، upload() الكافي ويقبل file-like object.
+    2. نلفّ bytes في BytesIO — Cloudinary Python SDK يتوقّع file-like للفيديو.
+    3. نرجع تفاصيل الخطأ بدل None صامت — يصل لـsocial_posts_log.error_message.
+    """
     if not os.getenv("CLOUDINARY_CLOUD_NAME"):
-        return None
+        return None, "CLOUDINARY_CLOUD_NAME not set"
     try:
         import cloudinary
         import cloudinary.uploader
-    except ImportError:
-        return None
+    except ImportError as e:
+        return None, f"cloudinary import: {e}"
 
     cloudinary.config(
         cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
@@ -286,16 +297,23 @@ def upload_reel_video(mp4_bytes: bytes, slug: str) -> str | None:
         api_secret=os.getenv("CLOUDINARY_API_SECRET"),
     )
     try:
-        result = cloudinary.uploader.upload_large(
-            mp4_bytes,
+        file_obj = io.BytesIO(mp4_bytes)
+        result = cloudinary.uploader.upload(
+            file_obj,
             public_id=f"reels/batch_{slug}",
             resource_type="video",
             overwrite=True,
+            chunk_size=6_000_000,  # 6MB chunk داخلياً — يكفي لـmp4 الكامل
         )
-        return result.get("secure_url")
+        url = result.get("secure_url")
+        if not url:
+            return None, f"cloudinary returned no URL: {result}"
+        return url, None
     except Exception as e:
-        print(f"[reels_batch] cloudinary video upload failed: {e}")
-        return None
+        # نرجع التفاصيل الفعلية: نوع الخطأ + الرسالة + أول 200 حرف لو طويلة
+        err = f"{type(e).__name__}: {str(e)[:300]}"
+        print(f"[reels_batch] cloudinary video upload failed: {err}")
+        return None, err
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -386,10 +404,11 @@ def run_pending_batches(conn) -> int:
         try:
             mp4 = render_batch_mp4(batch)
             slug = f"{int(time.time())}_{anchor['id']}"
-            video_url = upload_reel_video(mp4, slug)
+            video_url, upload_err = upload_reel_video(mp4, slug)
             if not video_url:
+                # نلوغ السبب الفعلي بدل رسالة عامة
                 _update_log(conn, log_id, status="failed",
-                            error_message="cloudinary video upload failed")
+                            error_message=f"cloudinary upload: {upload_err}")
                 conn.commit()
                 _release_batch(conn, [s["id"] for s in batch])
                 break
