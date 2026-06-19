@@ -94,6 +94,11 @@ pandas==3.0.2
 
 pillow==11.1.0
 
+# توليد Reels Instagram (multi-store batch): video MP4 من بوسترات المتاجر +
+# انتقالات بسيطة. imageio-ffmpeg يحمل ffmpeg في الـwheel — لا يحتاج binary خارجي.
+imageio==2.34.2
+imageio-ffmpeg==0.5.1
+
 arabic-reshaper==3.0.0
 
 python-bidi==0.4.2
