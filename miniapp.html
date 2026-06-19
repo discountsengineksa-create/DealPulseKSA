@@ -1643,9 +1643,10 @@ async function reportCodeMiniapp(store_id, ev) {
 }
 
 // ═══ الدعم الفني — يفتح bottom sheet ويرسل لـ /track/support ═══
-// رابط واتساب المختصر لـ WhatsApp Business «نبض الصفقات» — يخفي الرقم
-// ويعرض اسم البزنس. الرسالة الافتراضية مضبوطة في تطبيق Business نفسه.
-const WHATSAPP_LINK = 'https://wa.me/message/7MKFJOMBC3LIC1';
+// نقطة تحويل على دومين نبض الصفقات (307 → Short Link). يُخفي wa.me
+// من شريط العنوان قبل الانتقال، ويوحّد كل قنوات «تواصل عبر واتساب»
+// على endpoint واحد قابل للتغيير لاحقاً من السيرفر.
+const WHATSAPP_LINK = 'https://api.dealpulseksa.com/r/whatsapp';
 
 function openSupport() {
     const ST = STRINGS[LANG_CURRENT];

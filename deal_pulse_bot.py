@@ -56,13 +56,10 @@ _API_SEARCH_URL = _API_BASE + "/api/v1/coupons/search"
 # الموقع الإلكتروني (زر مباشر في القائمة)
 WEBSITE_URL = os.getenv("WEBSITE_URL", "https://www.dealpulseksa.com")
 
-# رابط واتساب المختصر لـ WhatsApp Business «نبض الصفقات».
-# نستعمل صيغة wa.me/message/CODE لأنها:
-#   - تخفي الرقم الخام في الـpreview عند iOS وAndroid
-#   - تعرض اسم البزنس مباشرةً
-# الرسالة الافتراضية مضبوطة في تطبيق WhatsApp Business نفسه
-# (أدوات الأعمال → رابط مختصر)، لا عبر ?text=.
-WHATSAPP_LINK = os.getenv("WHATSAPP_LINK", "https://wa.me/message/7MKFJOMBC3LIC1")
+# نقطة تحويل على دومين نبض الصفقات تحوّل (307) إلى Short Link.
+# توحّد كل قنوات «تواصل عبر واتساب» على endpoint واحد ويُخفي wa.me
+# من preview الزر قبل لحظة الانتقال إلى التطبيق.
+WHATSAPP_LINK = os.getenv("WHATSAPP_LINK", "https://api.dealpulseksa.com/r/whatsapp")
 
 bot = telebot.TeleBot(TOKEN)
 
