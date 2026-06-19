@@ -59,7 +59,7 @@ WEBSITE_URL = os.getenv("WEBSITE_URL", "https://www.dealpulseksa.com")
 # واتساب نبض الصفقات — صيغة دولية بدون "+".
 # ⚠️ يجب أن يكون مسجَّلاً كحساب WhatsApp Business باسم «نبض الصفقات» ليظهر
 # الاسم للعميل بدل الرقم الخام في قائمة محادثاته.
-WHATSAPP_NUMBER = os.getenv("WHATSAPP_NUMBER", "966534448900")
+WHATSAPP_NUMBER = os.getenv("WHATSAPP_NUMBER", "966560084445")
 WHATSAPP_MSG_AR = "السلام عليكم، عندي استفسار بخصوص نبض الصفقات"
 WHATSAPP_MSG_EN = "Hi, I'd like to inquire about Deal Pulse KSA"
 
