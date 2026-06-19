@@ -388,22 +388,26 @@ def run_pending_batches(conn) -> int:
         if not batch:
             break  # أقل من 6 منتظرين — نتوقّف
 
-        # سجّل صف log للـReel المجمَّع (نستعمل master_id لأقدم متجر فقط
-        # لربط الصف بمفتاح أجنبي صحيح — store_id يحمل أسماء كل الـ6 في details)
-        anchor = batch[-1]   # أقدم متجر في الـbatch (LIFO → آخر العنصر)
+        # سجّل صف log للـReel المجمَّع. نختار «cover_anchor» = أول متجر
+        # في الـbatch (أحدث master_id) لأن صورته ستكون غلاف الـReel على إنستقرام
+        # — نريد الأحدث/الأنشط ظاهراً في الـgrid، لا الأقدم.
+        # «db_anchor» = آخر متجر (أقدم master_id) للربط بمفتاح أجنبي صحيح فقط
+        # — لا يؤثّر على ما يراه المستخدم.
+        cover_anchor = batch[0]    # الأحدث — يصير غلاف الـReel
+        db_anchor    = batch[-1]   # الأقدم — يصير master_id في social_posts_log
         log_id = _insert_log(
             conn,
-            master_id=anchor["id"],
+            master_id=db_anchor["id"],
             store_id=", ".join(s["store_id"] for s in batch),
             platform="instagram_reel_batch",
             post_text=build_batch_caption(batch),
-            image_url=anchor.get("social_poster_url"),
+            image_url=cover_anchor.get("social_poster_url"),
         )
         conn.commit()
 
         try:
             mp4 = render_batch_mp4(batch)
-            slug = f"{int(time.time())}_{anchor['id']}"
+            slug = f"{int(time.time())}_{db_anchor['id']}"
             video_url, upload_err = upload_reel_video(mp4, slug)
             if not video_url:
                 # نلوغ السبب الفعلي بدل رسالة عامة
@@ -415,7 +419,7 @@ def run_pending_batches(conn) -> int:
 
             caption = build_batch_caption(batch)
             cover = platform_image_url(
-                anchor.get("social_poster_url") or anchor.get("logo_url"),
+                cover_anchor.get("social_poster_url") or cover_anchor.get("logo_url"),
                 "instagram",
             )
             result = poster.post_reel(caption, video_url, cover_url=cover)
