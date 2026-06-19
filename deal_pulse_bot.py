@@ -56,18 +56,13 @@ _API_SEARCH_URL = _API_BASE + "/api/v1/coupons/search"
 # الموقع الإلكتروني (زر مباشر في القائمة)
 WEBSITE_URL = os.getenv("WEBSITE_URL", "https://www.dealpulseksa.com")
 
-# واتساب نبض الصفقات — صيغة دولية بدون "+".
-# ⚠️ يجب أن يكون مسجَّلاً كحساب WhatsApp Business باسم «نبض الصفقات» ليظهر
-# الاسم للعميل بدل الرقم الخام في قائمة محادثاته.
-WHATSAPP_NUMBER = os.getenv("WHATSAPP_NUMBER", "966560084445")
-WHATSAPP_MSG_AR = "السلام عليكم، عندي استفسار بخصوص نبض الصفقات"
-WHATSAPP_MSG_EN = "Hi, I'd like to inquire about Deal Pulse KSA"
-
-
-def _whatsapp_url(lang: str) -> str:
-    from urllib.parse import quote
-    msg = WHATSAPP_MSG_EN if lang == "en" else WHATSAPP_MSG_AR
-    return f"https://wa.me/{WHATSAPP_NUMBER}?text={quote(msg)}"
+# رابط واتساب المختصر لـ WhatsApp Business «نبض الصفقات».
+# نستعمل صيغة wa.me/message/CODE لأنها:
+#   - تخفي الرقم الخام في الـpreview عند iOS وAndroid
+#   - تعرض اسم البزنس مباشرةً
+# الرسالة الافتراضية مضبوطة في تطبيق WhatsApp Business نفسه
+# (أدوات الأعمال → رابط مختصر)، لا عبر ?text=.
+WHATSAPP_LINK = os.getenv("WHATSAPP_LINK", "https://wa.me/message/7MKFJOMBC3LIC1")
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -760,7 +755,7 @@ def _kb_main(lang):
     kb.add(types.InlineKeyboardButton(TEXTS['menu_website'][lang], url=WEBSITE_URL))
     # واتساب + تواصل عبر البوت — جنباً إلى جنب: العميل يختار قناته المفضّلة
     kb.add(
-        types.InlineKeyboardButton(TEXTS['menu_whatsapp'][lang], url=_whatsapp_url(lang)),
+        types.InlineKeyboardButton(TEXTS['menu_whatsapp'][lang], url=WHATSAPP_LINK),
         types.InlineKeyboardButton(TEXTS['menu_support'][lang], callback_data='nav:support'),
     )
     kb.add(types.InlineKeyboardButton(TEXTS['menu_end'][lang], callback_data='nav:end'))

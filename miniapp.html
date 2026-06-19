@@ -1643,18 +1643,17 @@ async function reportCodeMiniapp(store_id, ev) {
 }
 
 // ═══ الدعم الفني — يفتح bottom sheet ويرسل لـ /track/support ═══
-// ⚠️ يجب أن يكون مسجَّلاً كـWhatsApp Business باسم «نبض الصفقات» وإلا يظهر للعميل كرقم خام.
-const WHATSAPP_NUMBER = '966560084445';
+// رابط واتساب المختصر لـ WhatsApp Business «نبض الصفقات» — يخفي الرقم
+// ويعرض اسم البزنس. الرسالة الافتراضية مضبوطة في تطبيق Business نفسه.
+const WHATSAPP_LINK = 'https://wa.me/message/7MKFJOMBC3LIC1';
 
 function openSupport() {
     const ST = STRINGS[LANG_CURRENT];
     document.getElementById('supTitle').textContent = ST.supTitle;
     // innerHTML لأن النص يحتوي <br> (نص i18n ثابت — ليس مدخلات مستخدم)
     document.getElementById('supSub').innerHTML = ST.supSub;
-    // زر الواتساب — نبني الـURL وقت الفتح ليتضمّن نص اللغة الحالية
-    const waMsg = encodeURIComponent(ST.supWhatsappMsg);
-    const waLink = document.getElementById('supWhatsapp');
-    waLink.href = `https://wa.me/${WHATSAPP_NUMBER}?text=${waMsg}`;
+    // زر الواتساب — رابط مختصر ثابت (الرسالة الافتراضية من تطبيق Business)
+    document.getElementById('supWhatsapp').href = WHATSAPP_LINK;
     document.getElementById('supWhatsappLabel').textContent = ST.supWhatsapp;
     document.getElementById('supOr').textContent = ST.supOr;
     const ta = document.getElementById('supText');
