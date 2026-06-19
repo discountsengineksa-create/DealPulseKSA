@@ -109,7 +109,9 @@
       "Bash(curl -s \"https://api.dealpulseksa.com/api/v1/trend/weekly?source=web\")",
       "Bash(curl -s \"https://www.dealpulseksa.com/\" -H \"Cache-Control: no-cache\" -o /tmp/page.html)",
       "Read(//tmp/**)",
-      "Bash(curl -sI \"https://www.dealpulseksa.com/\")"
+      "Bash(curl -sI \"https://www.dealpulseksa.com/\")",
+      "WebFetch(domain:salla.sa)",
+      "WebFetch(domain:mtjr.at)"
     ],
     "additionalDirectories": [
       "C:\\Users\\PC\\Desktop\\dealpulseksa-web\\lib",
