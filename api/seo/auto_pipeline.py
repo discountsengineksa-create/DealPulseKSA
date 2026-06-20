@@ -113,7 +113,9 @@ def auto_publish(cur, cap: int) -> list[dict]:
     البوابات: كوبون فعّال + حد أدنى طول + **تفرّد** (لا ننشر صفحة شبه مطابقة لمنشورة)."""
     cur.execute(
         """
-        SELECT p.id, p.slug, p.lang, p.target_keyword, p.title_meta
+        SELECT p.id, p.slug, p.lang, p.target_keyword, p.title_meta,
+               COALESCE(NULLIF(m.name_en, ''), m.store_id) AS store_name,
+               m.store_id
         FROM seo_landing_pages p
         JOIN master m ON m.id = p.master_id
         WHERE p.status = 'draft'
@@ -193,6 +195,29 @@ def run_daily_seo_cycle(force: bool = False) -> dict:
                     _log.warning("indexnow failed for %s: %s", p["slug"], ex)
         except Exception as ex:  # noqa: BLE001
             _log.warning("indexer import failed: %s", ex)
+
+    # إشعار إيميل بالمتاجر المولّدة وروابطها (best-effort — لا يكسر الدورة).
+    # يُرسل فقط عند نشر صفحات؛ المستلِم OPS_ALERT_EMAIL (افتراضي بريد العمليات).
+    if published:
+        try:
+            from api.utils.email_alerts import send_ops_alert
+            from urllib.parse import quote
+            from html import escape as _esc
+            site = os.getenv("SITE_URL", "https://www.dealpulseksa.com").rstrip("/")
+            rows = "".join(
+                f'<li><b>{_esc(p.get("store_name") or p.get("target_keyword") or p["slug"])}</b> '
+                f'<span style="color:#6B7280">({_esc(p.get("lang", ""))})</span> — '
+                f'<a href="{site}/c/{quote(p["slug"])}">{_esc(p["slug"])}</a></li>'
+                for p in published
+            )
+            send_ops_alert(
+                subject=f"صفحات SEO جديدة: {len(published)} صفحة",
+                body_html=f"<p>تم نشر <b>{len(published)}</b> صفحة هبوط جديدة اليوم:</p><ul>{rows}</ul>",
+                severity="info",
+            )
+            _log.info("seo email notify sent: %d pages", len(published))
+        except Exception as ex:  # noqa: BLE001
+            _log.warning("seo email notify failed: %s", ex)
 
     try:
         from api.utils.ops import audit_log
