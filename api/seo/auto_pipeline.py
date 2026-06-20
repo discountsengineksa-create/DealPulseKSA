@@ -2,7 +2,7 @@
 محرّك SEO الأوتوماتيكي (المرحلة 1) — توليد + نشر صفحات هبوط يومياً بلا تدخّل بشري.
 
 يُشغَّل 3 صباحاً (Riyadh) من المجدول (api/workers/scheduler.py):
-  1. اختيار أكثر المتاجر طلباً أمس (نسخ/نقر من action_logs) — بكوبون فعّال فقط.
+  1. اختيار المتاجر الجديدة (بلا صفحة منشورة) مرتّبة بالشعبية الكلية — بكوبون فعّال فقط.
   2. ربطها بمناسبة سعودية قادمة خلال 14 يوم (seasonal_events.occasion_date).
   3. إنشاء seo_generation_jobs (الكلمة المستهدفة تتضمّن المناسبة إن وُجدت).
   4. التوليد عبر الـ LLM (generator.process_pending_jobs) — يطبّق الحظر على
@@ -35,24 +35,29 @@ OCCASION_WINDOW_DAYS = 14
 
 
 def select_top_demand_stores(cur, n: int) -> list[dict]:
-    """أكثر المتاجر طلباً (نسخ كوبون + نقر رابط) خلال آخر 24 ساعة — بكوبون فعّال فقط."""
+    """المتاجر المؤهّلة للتوليد — **الجديدة أولاً** (بلا صفحة منشورة) مرتّبة بالشعبية
+    الكلية (نقرات + نسخ ×2). تغطية كاملة: لا تعتمد على طلب آخر 24 ساعة.
+    بوابات White-Hat: كوبون فعّال + غير موقوف + قناة website + seo_enabled (قائمة المنع).
+    المتاجر المُغطّاة (لها صفحة منشورة) لا تُرجَع — دورة التحديث مرحلة منفصلة."""
     cur.execute(
         """
         SELECT m.id,
                COALESCE(NULLIF(m.name_en, ''), m.store_id) AS store_name,
-               COUNT(*) AS demand
-        FROM action_logs a
-        JOIN master m ON m.store_id = a.store_id
-        WHERE a.action_type IN ('copy_coupon', 'click_link')
-          AND a.action_time > NOW() - INTERVAL '24 hours'
-          AND m.public_coupon IS NOT NULL AND m.public_coupon <> ''
+               (COALESCE(m.total_link_clicks, 0)
+                + COALESCE(m.total_coupon_copies, 0) * 2) AS demand
+        FROM master m
+        WHERE m.public_coupon IS NOT NULL AND m.public_coupon <> ''
           AND COALESCE(m.is_suspended, FALSE) = FALSE
           -- يحترم قنوات النشر: لا نولّد صفحة SEO عامة لمتجر مخفيّ عن الموقع
           -- (مثل متجر منعه المعلن من القناة، أو حصري للبوت). NULL = كل القنوات.
           AND (m.publish_channels IS NULL OR m.publish_channels ILIKE '%%website%%')
-          -- سماح SEO لكل متجر: معلنون يمنعون SEO على البراند (AliExpress) → نستثنيه.
+          -- قائمة المنع: معلن يمنع SEO على البراند → نستثنيه نهائياً (خطر حظر).
           AND COALESCE(m.seo_enabled, TRUE) = TRUE
-        GROUP BY m.id, store_name
+          -- التغطية أولاً: فقط المتاجر اللي ما لها صفحة منشورة بعد.
+          AND NOT EXISTS (
+              SELECT 1 FROM seo_landing_pages p
+              WHERE p.master_id = m.id AND p.status = 'published'
+          )
         ORDER BY demand DESC
         LIMIT %s
         """,
@@ -114,6 +119,8 @@ def auto_publish(cur, cap: int) -> list[dict]:
         WHERE p.status = 'draft'
           AND m.public_coupon IS NOT NULL AND m.public_coupon <> ''
           AND COALESCE(m.is_suspended, FALSE) = FALSE
+          -- قائمة المنع: لا ننشر صفحة لمتجر مُعطّل SEO (خط الدفاع الأخير).
+          AND COALESCE(m.seo_enabled, TRUE) = TRUE
           AND array_length(regexp_split_to_array(trim(p.body_markdown), '\\s+'), 1) >= %s
         ORDER BY p.id ASC
         """,

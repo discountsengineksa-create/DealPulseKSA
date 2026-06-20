@@ -484,6 +484,19 @@ def seo_publish(
 
     with get_db_context() as conn:
         with conn.cursor() as cur:
+            # قائمة المنع: لا تنشر صفحة لمتجر مُعطّل SEO (خطر حظر المعلن).
+            cur.execute(
+                "SELECT COALESCE(m.seo_enabled, TRUE) "
+                "FROM seo_landing_pages p JOIN master m ON m.id = p.master_id "
+                "WHERE p.id = %s",
+                (page_id,),
+            )
+            _chk = cur.fetchone()
+            if _chk and _chk[0] is False:
+                raise HTTPException(
+                    status_code=403,
+                    detail="هذا المتجر ممنوع من نشر صفحات SEO (seo_enabled=FALSE)",
+                )
             cur.execute(
                 "UPDATE seo_landing_pages SET status='published', published_at=NOW() "
                 "WHERE id=%s AND status<>'published' RETURNING slug",
@@ -1342,6 +1355,7 @@ def seo_seed_custom(
                        COALESCE(NULLIF(name_en, ''), store_id) AS display_name
                 FROM master
                 WHERE COALESCE(affiliate_link, '') <> ''
+                  AND COALESCE(seo_enabled, TRUE) = TRUE
                 ORDER BY (COALESCE(total_link_clicks, 0) + COALESCE(total_coupon_copies, 0) * 2) DESC NULLS LAST
                 LIMIT %s
                 """,

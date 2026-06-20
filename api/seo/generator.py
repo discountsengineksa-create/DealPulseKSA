@@ -420,7 +420,8 @@ def _generate_one(job_id: int) -> bool:
                        m.store_id, m.name_en, m.store_bio, m.store_bio_en,
                        m.discount_value, m.public_coupon,
                        m.extra_offer, m.extra_offer_en,
-                       m.store_tags, m.store_tags_en
+                       m.store_tags, m.store_tags_en,
+                       COALESCE(m.seo_enabled, TRUE) AS seo_enabled
                 FROM seo_generation_jobs j
                 JOIN master m ON m.id = j.matched_master_id
                 WHERE j.id = %s
@@ -431,6 +432,10 @@ def _generate_one(job_id: int) -> bool:
 
     if not job:
         _mark_failed(job_id, "job or matched store not found")
+        return False
+    # قائمة المنع: متجر مُعطّل SEO لا يُولَّد له إطلاقاً (نقطة اختناق تحمي كل المسارات).
+    if not job["seo_enabled"]:
+        _mark_failed(job_id, "store SEO disabled (blocklist) — skipped")
         return False
 
     # 1) العربية — الأساس
