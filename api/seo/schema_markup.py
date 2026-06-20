@@ -34,8 +34,8 @@ SEO_PAGE_PATH = os.getenv("SEO_PAGE_PATH", "/c/{slug}")
 
 ORG_NAME_AR = "نبض الصفقات"
 ORG_NAME_EN = "DealPulse KSA"
-ORG_DESC_AR = "منصة سعودية متخصّصة في كوبونات وخصومات أكثر من 300 متجر، تشمل المواسم الكبرى والعروض اليومية."
-ORG_DESC_EN = "Saudi platform specialized in verified discount codes from 300+ stores, including major-season offers and daily deals."
+ORG_DESC_AR = "منصة سعودية لكوبونات وخصومات عشرات المتاجر — تشمل البراندات العالمية والمحلية والمتاجر السعودية، مع عروض المواسم الكبرى والصفقات اليومية."
+ORG_DESC_EN = "Saudi platform for discount codes from dozens of stores — spanning international and local brands and Saudi retailers, with major-season offers and daily deals."
 ORG_LOGO = f"{SITE_URL}/logo.png"
 
 KSA_LANGS = ["ar", "en"]
