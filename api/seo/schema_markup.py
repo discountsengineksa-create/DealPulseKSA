@@ -27,6 +27,7 @@ import os
 import re
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import quote
 
 SITE_URL = os.getenv("SITE_URL", "https://www.dealpulseksa.com").rstrip("/")
 SEO_PAGE_PATH = os.getenv("SEO_PAGE_PATH", "/c/{slug}")
@@ -120,7 +121,7 @@ def _build_organization(lang: str = "ar") -> dict:
 def _build_breadcrumb(page: dict, lang: str) -> dict:
     home_label = "الرئيسية" if lang == "ar" else "Home"
     cat = _category_from_tags(page.get("store_tags"))
-    store_label = page.get("store_name") or page.get("store_id") or page.get("target_keyword", "")
+    store_id = page.get("store_id")
     page_label = page.get("title_meta") or page.get("target_keyword", "")
 
     items: list[dict] = [
@@ -132,17 +133,23 @@ def _build_breadcrumb(page: dict, lang: str) -> dict:
             "@type":    "ListItem",
             "position": pos,
             "name":     cat,
-            "item":     f"{SITE_URL}/category/{cat}",
+            "item":     f"{SITE_URL}/category/{quote(cat, safe='')}",
+        })
+        pos += 1
+    # مستوى المتجر — يُضاف فقط عند وجود متجر مرتبط، مع رابطه (item). أي عنصر غير
+    # أخير بلا item يُبطِل المسار كاملاً في Google (هذا كان سبب «الحقل item غير
+    # مضمَّن»). والترميز يحمي من المسافات/العربية في store_id (مثل «عود رويال»).
+    if store_id:
+        items.append({
+            "@type":    "ListItem",
+            "position": pos,
+            "name":     page.get("store_name") or store_id,
+            "item":     f"{SITE_URL}/store/{quote(store_id, safe='')}",
         })
         pos += 1
     items.append({
         "@type":    "ListItem",
         "position": pos,
-        "name":     store_label,
-    })
-    items.append({
-        "@type":    "ListItem",
-        "position": pos + 1,
         "name":     page_label,
         "item":     _abs_url(page["slug"]),
     })
