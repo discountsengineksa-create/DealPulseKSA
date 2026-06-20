@@ -176,7 +176,14 @@ def _parse_json(text: str) -> Optional[dict]:
             pass
 
     # 5) Last resort: regex لاستخراج الحقول مباشرة
-    # نقبل الـ job لو حصلنا على body_markdown على الأقل
+    # نقبل الـ job لو حصلنا على body_markdown على الأقل.
+    # ملاحظة: unicode_escape يُفسد الحروف العربية، فنستخدم فكّ هروب يدوي آمن
+    # للتسلسلات الشائعة فقط (\n \t \" \\) بدون لمس بايتات UTF-8.
+    def _safe_unescape(s: str) -> str:
+        return (s.replace('\\r', '').replace('\\n', '\n')
+                 .replace('\\t', '\t').replace('\\"', '"')
+                 .replace('\\\\', '\\'))
+
     extracted: dict[str, Any] = {}
     for field in ("title_meta", "description_meta"):
         m = re.search(
@@ -184,21 +191,16 @@ def _parse_json(text: str) -> Optional[dict]:
             t, re.DOTALL,
         )
         if m:
-            extracted[field] = m.group(1).encode().decode("unicode_escape", errors="ignore")
+            extracted[field] = _safe_unescape(m.group(1))
 
-    # body_markdown قد يحتوي newlines حرفية — نستخرج بطريقة أكثر تساهلاً
-    body_match = re.search(
-        r'"body_markdown"\s*:\s*"(.*?)"\s*(?:,|\}|$)',
-        t, re.DOTALL,
-    )
+    # body_markdown هو آخر حقل في المخطط → نلتقط بجشع حتى النهاية، فنتحمّل
+    # علامات اقتباس " غير مهرّبة داخل النص (السبب الشائع لفشل Gemini) + البتر.
+    body_match = re.search(r'"body_markdown"\s*:\s*"(.*)', t, re.DOTALL)
     if body_match:
-        body_raw = body_match.group(1)
-        # decode escape sequences لو موجودة
-        try:
-            body_raw = body_raw.encode().decode("unicode_escape", errors="ignore")
-        except Exception:
-            pass
-        extracted["body_markdown"] = body_raw
+        body_raw = body_match.group(1).rstrip()
+        # أزِل إغلاق JSON النهائي إن وُجد:  "}  أو  "
+        body_raw = re.sub(r'"\s*\}?\s*$', '', body_raw)
+        extracted["body_markdown"] = _safe_unescape(body_raw)
 
     return extracted if extracted.get("body_markdown") else None
 
