@@ -37,7 +37,7 @@ BILINGUAL_ENABLED = os.getenv("SEO_BILINGUAL", "1") == "1"
 # ملاحظة حرجة: العربية في JSON تستهلك 3-4 tokens لكل كلمة (Unicode + escape).
 # 1000 كلمة عربية في JSON ≈ 3500-4000 token output. السقف الأصلي 2400 كان
 # يقطع النص في المنتصف ويكسر JSON → كل الـ jobs تفشل. 5000 يعطي هامش أمان.
-MAX_TOKENS = int(os.getenv("SEO_MAX_TOKENS", "5000"))
+MAX_TOKENS = int(os.getenv("SEO_MAX_TOKENS", "8000"))  # مساحة لتفكير 2.5 + عربية ثقيلة بالتوكنز
 
 
 # ─── System prompts ─────────────────────────────────────────────────────────
@@ -337,34 +337,41 @@ def _generate_page_for_lang(job: dict, lang: str, job_id: int) -> tuple[bool, Op
     user_prompt = _build_user_prompt(job, lang)
     prompt_hash = hashlib.sha256((system + user_prompt).encode("utf-8")).digest()
 
-    res = call_llm(
-        purpose=f"seo_copy_{lang}",
-        system=system,
-        user=user_prompt,
-        max_tokens=MAX_TOKENS,
-        temperature=0.6,
-    )
+    # إعادة المحاولة عند الفشل العابر (التوليد عشوائي): JSON غير صالح/بتر/رد فارغ
+    # غالباً تنجح المحاولة الثانية. نتوقّف فوراً لو السبب نضوب الميزانية (لا فائدة).
+    res = None
+    data: Optional[dict] = None
+    diag = ""
+    for attempt in range(2):
+        res = call_llm(
+            purpose=f"seo_copy_{lang}",
+            system=system,
+            user=user_prompt,
+            max_tokens=MAX_TOKENS,
+            temperature=0.6,
+        )
+        diag = f"provider={res.provider} model={res.model}"
 
-    # نُسجّل الـ provider/model دائماً للتشخيص (حتى عند الفشل)
-    diag = f"provider={res.provider} model={res.model}"
+        if res.refused_by_guardian:
+            reason = f"{diag} REFUSED_BY_GUARDIAN (daily LLM budget exhausted)"
+            _log.warning("LLM refused for job=%s lang=%s: %s", job_id, lang, reason)
+            return False, None, reason  # نضوب الميزانية — الإعادة بلا فائدة
 
-    if res.refused_by_guardian:
-        reason = f"{diag} REFUSED_BY_GUARDIAN (daily LLM budget exhausted)"
-        _log.warning("LLM refused for job=%s lang=%s: %s", job_id, lang, reason)
-        return False, None, reason
+        if res.text:
+            data = _parse_json(res.text)
+            if data and data.get("body_markdown"):
+                break  # نجح
+        _log.warning("seo gen attempt %d failed for job=%s lang=%s (%s) — retrying",
+                     attempt + 1, job_id, lang, diag)
 
-    if not res.text:
-        # رجعت سلسلة فارغة — نحتاج تفاصيل
-        reason = f"{diag} EMPTY_RESPONSE err={(res.error or 'no_error_msg')[:200]}"
-        _log.warning("LLM empty for job=%s lang=%s: %s", job_id, lang, reason)
-        return False, None, reason
-
-    data = _parse_json(res.text)
     if not data or not data.get("body_markdown"):
-        # JSON parse فشل — نحفظ بداية النص للتشخيص
-        preview = (res.text or "")[:300].replace("\n", " ")
-        reason = f"{diag} JSON_PARSE_FAIL len={len(res.text)} preview={preview}"
-        _log.warning("Unparseable JSON for job=%s lang=%s: %s", job_id, lang, reason)
+        # فشل بعد كل المحاولات — نحفظ سبباً دقيقاً للتشخيص (للوحة الوظائف الفاشلة)
+        if res is not None and not res.text:
+            reason = f"{diag} EMPTY_RESPONSE err={(res.error or 'no_error_msg')[:200]}"
+        else:
+            preview = (res.text or "")[:300].replace("\n", " ") if res else ""
+            reason = f"{diag} JSON_PARSE_FAIL len={len(res.text) if res else 0} preview={preview}"
+        _log.warning("seo gen failed after retries for job=%s lang=%s: %s", job_id, lang, reason)
         return False, None, reason
 
     title = (data.get("title_meta") or "")[:180]
