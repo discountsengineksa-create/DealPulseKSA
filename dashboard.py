@@ -11872,7 +11872,7 @@ elif page == "استوديو المحتوى":
         return out.getvalue()
 
     # ─── واجهة المستخدم ─────────────────────────────────────────────────────────
-    tab_design, tab_archive = st.tabs(["🎨 مصمم البوستر", "🗂️ أرشيف التصاميم"])
+    tab_design, tab_content, tab_archive = st.tabs(["🎨 مصمم البوستر", "🎬 ريلز المحتوى", "🗂️ أرشيف التصاميم"])
 
     with tab_design:
         col_form, col_prev = st.columns([1, 1.1])
@@ -12004,6 +12004,58 @@ elif page == "استوديو المحتوى":
                     st.caption("ارفعه في «إدخال بيانات الماستر» → حقل «📣 بوستر الإعلان للسوشيال».")
             else:
                 st.info("اضغط «توليد البوسترين» لرؤية المعاينة. ستحصل على **صورتين**: شعار نظيف 1080×1080 + بوستر بالثيم بنفس المقاس. كلتاهما تُحمَّل لجهازك (أنت تختار مكان الحفظ).")
+
+    with tab_content:
+        st.markdown("##### 🎬 ريلز المحتوى — كاروسيلات نمو بالهوية الفاخرة")
+        st.caption(
+            "محتوى نصائح/تفاعل/مواسم بقالب Dark Luxe (1080×1350). اختر مفهوماً، ولّد، "
+            "ونزّل الشرائح وانشرها كاروسيل على إنستقرام. هذا محرّك المتابعين (غير منشورات الكوبونات)."
+        )
+        try:
+            from api.social.content_reels import CONCEPTS as _CONCEPTS, render_content_slides as _render_reel
+        except Exception as _e:
+            _CONCEPTS, _render_reel = [], None
+            st.error(f"تعذّر تحميل مولّد المحتوى: {_e}")
+
+        if _CONCEPTS and _render_reel:
+            _idx = st.selectbox(
+                "اختر مفهوم الريل", range(len(_CONCEPTS)),
+                format_func=lambda i: f"{i + 1}. {_CONCEPTS[i]['title']}",
+                key="content_concept_idx",
+            )
+            _cpt = _CONCEPTS[_idx]
+            st.caption(
+                f"العمود: {_cpt.get('kicker', '')} · {len(_cpt.get('points', []))} نقاط · "
+                f"{len(_cpt.get('points', [])) + 2} شريحة"
+            )
+            if st.button("✨ توليد شرائح الريل", type="primary", width='stretch', key="gen_content_reel"):
+                with st.spinner("جاري رسم الشرائح بالهوية الفاخرة…"):
+                    st.session_state["content_slides"] = _render_reel(_cpt)
+                    st.session_state["content_slides_idx"] = _idx
+
+            _slides = st.session_state.get("content_slides")
+            if _slides and st.session_state.get("content_slides_idx") == _idx:
+                import zipfile
+                _zbuf = io.BytesIO()
+                with zipfile.ZipFile(_zbuf, "w") as _zf:
+                    for _i, _b in enumerate(_slides):
+                        _zf.writestr(f"reel_{_idx + 1:02d}_slide_{_i + 1}.png", _b)
+                st.download_button(
+                    "📦 تحميل كل الشرائح (ZIP)", data=_zbuf.getvalue(),
+                    file_name=f"content_reel_{_idx + 1:02d}.zip", mime="application/zip",
+                    type="primary", width='stretch', key="dl_content_zip",
+                )
+                _cols = st.columns(3)
+                for _i, _b in enumerate(_slides):
+                    with _cols[_i % 3]:
+                        st.image(_b, width='stretch')
+                        st.download_button(
+                            f"تحميل شريحة {_i + 1}", data=_b,
+                            file_name=f"reel_{_idx + 1:02d}_slide_{_i + 1}.png", mime="image/png",
+                            width='stretch', key=f"dl_content_{_idx}_{_i}",
+                        )
+            elif not _slides:
+                st.info("اختر مفهوماً واضغط «توليد شرائح الريل» لرؤية الكاروسيل بالهوية الفاخرة.")
 
     with tab_archive:
         st.markdown("##### آخر التصاميم")
