@@ -8,7 +8,6 @@ Schema.org JSON-LD generator — يحوّل صفحة هبوط إلى structured 
 
 الأنواع المُولَّدة لكل صفحة:
   • Article          → نوع المحتوى الرئيسي
-  • Offer            → الكوبون نفسه (سعر، عملة، صلاحية)
   • Organization     → DealPulse KSA كمُصدر
   • BreadcrumbList   → مسار الصفحة (Home > Category > Store)
   • FAQPage          → الأسئلة المستخرجة من body_markdown (لو وُجدت)
@@ -180,37 +179,10 @@ def _build_article(page: dict, lang: str) -> dict:
     return article
 
 
-def _build_offer(page: dict, lang: str) -> dict | None:
-    """يبني Offer schema لو في كوبون فعلي + اسم متجر."""
-    if not page.get("store_id") and not page.get("store_name"):
-        return None
-
-    coupon_code = page.get("public_coupon") or "AUTO_APPLIED"
-    offer: dict[str, Any] = {
-        "@type":         "Offer",
-        "@id":           f"{_abs_url(page['slug'])}#offer",
-        "name":          page.get("title_meta") or page.get("target_keyword", ""),
-        "description":   page.get("description_meta") or "",
-        "url":           _abs_url(page["slug"]),
-        "availability":  "https://schema.org/InStock",
-        "priceCurrency": "SAR",
-        "seller": {
-            "@type": "Organization",
-            "name":  page.get("store_name") or page.get("store_id"),
-        },
-        "category":      _category_from_tags(page.get("store_tags")) or "Discount Coupon",
-        "areaServed":    KSA_AREA,
-    }
-    if page.get("discount_value"):
-        # discount_value قد يكون "20%" أو "50 SAR" — نتركه نصاً
-        offer["priceSpecification"] = {
-            "@type":             "PriceSpecification",
-            "description":       f"Discount: {page['discount_value']}",
-        }
-    # IMPORTANT: للكوبونات حقيقية، نضيف couponCode
-    if coupon_code and coupon_code != "AUTO_APPLIED":
-        offer["couponCode"] = coupon_code
-    return offer
+# ملاحظة: لا نولّد Offer/Product للكوبونات. الكوبون كود خصم لا منتج بسعر، وقوقل
+# يطالب Offer/Product بحقل price (خطأ «price ناقص» في تقارير Merchant/Product).
+# اختلاق سعر = فبركة، والكوبون أصلاً بلا Rich Result عبر Offer. نكتفي بأنواع
+# صالحة تعطي نتائج غنية فعلاً: Article + FAQPage + BreadcrumbList + Organization.
 
 
 def _build_faq(faqs: list[dict]) -> dict | None:
@@ -247,10 +219,6 @@ def build_jsonld(page: dict, *, site_url: str | None = None) -> dict:
         _build_article(page, lang),
         _build_breadcrumb(page, lang),
     ]
-
-    offer = _build_offer(page, lang)
-    if offer:
-        graph.append(offer)
 
     faqs = _extract_faqs(page.get("body_markdown") or "")
     faq_block = _build_faq(faqs)
