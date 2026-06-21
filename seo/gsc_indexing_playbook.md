@@ -36,29 +36,51 @@
 - [ ] `https://www.dealpulseksa.com/how-it-works`
 - [ ] `https://www.dealpulseksa.com/about` (تُفهرس أصلاً — لتأكيد العلامة)
 
-## الطبقة 1 — اليوم 2–3: صفحات الطلب العالي (Money pages)
-رتّب حسب الطلب الحقيقي (من `keyword_demand_ksa`): **نون · نمشي · اي هيرب · علي اكسبرس · ستايلي · جرير**.
-لكل براند من هذول، أرسل (لو الصفحة موجودة ومُفعّلة `seo_enabled`):
-- [ ] صفحة الهبوط: `…/c/{slug-البراند}`  ← اسحب القائمة الفعلية من `/sitemap.xml` (ابحث عن `/c/`)
-- [ ] صفحة المتجر: `…/store/{store_id-البراند}`
+## الطبقة 1 — اليوم 2: صفحات الطلب العالي (Money pages)
+أعلى طلب من `keyword_demand_ksa` والموجود فعلاً بالكتالوج = **نون · نمشي · علي اكسبرس · علي بابا · سيدار · H&M**.
+> ⚠️ هذول عندهم `/store/` فقط — **ما تولّدت لهم صفحات `/c/`** بعد (رغم تفعيل seo_enabled). توليد `/c/` لنون/نمشي = مهمة قادمة.
+- [ ] `https://www.dealpulseksa.com/store/%D9%86%D9%88%D9%86`  (نون)
+- [ ] `https://www.dealpulseksa.com/store/%D9%86%D9%85%D8%B4%D9%8A`  (نمشي)
+- [ ] `https://www.dealpulseksa.com/store/%D8%B9%D9%84%D9%8A%20%D8%A7%D9%83%D8%B3%D8%A8%D8%B1%D8%B3`  (علي اكسبرس)
+- [ ] `https://www.dealpulseksa.com/store/%D8%B9%D9%84%D9%8A%20%D8%A8%D8%A7%D8%A8%D8%A7`  (علي بابا)
+- [ ] `https://www.dealpulseksa.com/store/%D8%B3%D9%8A%D8%AF%D8%A7%D8%B1`  (سيدار)
+- [ ] `https://www.dealpulseksa.com/store/%D8%A7%D8%AA%D8%B4%20%D8%A7%D9%86%D8%AF%20%D8%A7%D9%85`  (H&M)
+- [ ] `https://www.dealpulseksa.com/blog/best-coupons-saudi-arabia-2026`
+- [ ] `https://www.dealpulseksa.com/blog/how-to-shop-online-saudi`
+- [ ] `https://www.dealpulseksa.com/blog/vitamin-d-guide-saudi-arabia`
+- [ ] `https://www.dealpulseksa.com/blog/oud-perfume-guide-saudi-arabia`
 
-> ملاحظة: في آخر جلسة فُعّل SEO لـ **نون ونمشي** — ابدأ بهما. اي هيرب يجي مع بناء الهَب (الأولوية القادمة).
+## الطبقة 2 — اليوم 3: صفحات الهبوط /c/ العربية (محتوى فريد قابل للفهرسة)
+- [ ] `https://www.dealpulseksa.com/c/%D9%83%D9%88%D8%AF-%D8%AE%D8%B5%D9%85-toyou-2026`  (تويو)
+- [ ] `https://www.dealpulseksa.com/c/%D9%83%D9%88%D8%AF-%D8%AE%D8%B5%D9%85-elegant-hub-2026`  (إليجنت هاب)
+- [ ] `https://www.dealpulseksa.com/c/%D9%83%D9%88%D8%AF-%D8%AE%D8%B5%D9%85-golden-flora-2026`  (قولدن فلورا)
+- [ ] `https://www.dealpulseksa.com/c/%D9%83%D9%88%D8%AF-%D8%AE%D8%B5%D9%85-top-beauty-2026`  (توب بيوتي)
+- [ ] `https://www.dealpulseksa.com/c/%D9%83%D9%88%D8%AF-%D8%AE%D8%B5%D9%85-al-makhmaliyah-2026`  (المخملية)
+- [ ] `https://www.dealpulseksa.com/c/%D9%83%D9%88%D8%AF-%D8%AE%D8%B5%D9%85-qatret-asal-2026`  (قطرة عسل)
+- [ ] `https://www.dealpulseksa.com/c/%D9%83%D9%88%D8%AF-%D8%AE%D8%B5%D9%85-carxtreme-2026`  (كاركستريم)
+- [ ] `https://www.dealpulseksa.com/c/%D9%83%D9%88%D8%AF-%D8%AE%D8%B5%D9%85-wolfix-2026`  (وولفيكس)
+- [ ] `https://www.dealpulseksa.com/c/%D9%83%D9%88%D8%AF-%D8%AE%D8%B5%D9%85-sweater-2026`  (سويتر)
+- [ ] `https://www.dealpulseksa.com/c/%D9%83%D9%88%D8%AF-%D8%AE%D8%B5%D9%85-metrobrazil-2026`  (مترو البرازيل)
 
-## الطبقة 2 — اليوم 4–7: المحتوى (يبني السلطة الموضوعية)
-عنقود المكمّلات الصحية + العنقود المحلي (من `health_content_cluster` و`domain_authority_plan`):
-- [ ] `…/blog/vitamin-d-guide-saudi-arabia`
-- [ ] `…/blog/collagen-guide-saudi-arabia`
-- [ ] `…/blog/magnesium-guide-saudi-arabia`
-- [ ] `…/blog/omega-3-guide-saudi-arabia`
-- [ ] `…/blog/whey-protein-guide-saudi-arabia`
-- [ ] `…/blog/oud-perfume-guide-saudi-arabia`
-- [ ] (بقية مقالات العنقود + العبايات + التجميل — 10/يوم)
-- [ ] أبرز 3–4 تصنيفات: `…/category/{tag}` (عطور، مكمّلات، أزياء…)
+## الطبقة 3 — اليوم 4: أبرز التصنيفات
+- [ ] `https://www.dealpulseksa.com/category/%D8%A3%D8%B2%D9%8A%D8%A7%D8%A1`  (أزياء)
+- [ ] `https://www.dealpulseksa.com/category/%D8%B9%D8%B7%D9%88%D8%B1`  (عطور)
+- [ ] `https://www.dealpulseksa.com/category/%D9%85%D9%83%D9%8A%D8%A7%D8%AC`  (مكياج)
+- [ ] `https://www.dealpulseksa.com/category/%D8%AA%D8%AC%D9%85%D9%8A%D9%84`  (تجميل)
+- [ ] `https://www.dealpulseksa.com/category/%D8%A7%D9%84%D9%83%D8%AA%D8%B1%D9%88%D9%86%D9%8A%D8%A7%D8%AA`  (الكترونيات)
+- [ ] `https://www.dealpulseksa.com/category/%D8%AC%D9%88%D8%A7%D9%84%D8%A7%D8%AA`  (جوالات)
+- [ ] `https://www.dealpulseksa.com/category/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA`  (عبايات)
+- [ ] `https://www.dealpulseksa.com/category/%D8%B9%D9%88%D8%AF%20%D9%88%20%D8%A8%D8%AE%D9%88%D8%B1`  (عود وبخور)
+- [ ] `https://www.dealpulseksa.com/category/%D9%85%D8%AC%D9%88%D9%87%D8%B1%D8%A7%D8%AA`  (مجوهرات)
+- [ ] `https://www.dealpulseksa.com/category/%D8%AC%D9%85%D8%A7%D9%84%20%D9%88%D8%B9%D9%86%D8%A7%D9%8A%D8%A9%20%D8%B4%D8%AE%D8%B5%D9%8A%D8%A9`  (جمال وعناية)
 
-## الطبقة 3 — الأسبوع 2: الباقي على دفعات
-- [ ] بقية صفحات `/c/` (10/يوم)
-- [ ] بقية المتاجر `/store/…` الأكمل بياناتٍ أولاً (10/يوم)
-- [ ] بقية التصنيفات
+## الطبقة 4 — الأسبوع 2: الباقي على دفعات (10/يوم)
+اسحبها بالترتيب من `/sitemap.xml`:
+- [ ] **بقية المدوّنة** (عنقود المكمّلات): collagen · magnesium · omega-3 · vitamin-c · probiotics · hair-vitamins · creatine · multivitamin · whey-protein · beauty-skincare-guide · abaya-buying-guide · ramadan-deals-guide
+- [ ] **بقية صفحات `/c/` العربية**: قطرة-عس · (وأي جديد يتولّد)
+- [ ] **بقية المتاجر** `/store/…` (≈27) — الأكمل بياناتٍ أولاً
+- [ ] **بقية التصنيفات** (≈18)
+- [ ] **(اختياري) صفحات `/c/` الإنجليزية** (`…-en`) — أولوية أدنى (جمهور المغتربين فقط، لا يوجد مسار /en بعد)
 
 ---
 
