@@ -363,13 +363,32 @@ def _build_text_instagram(store: dict) -> str:
     nbthah      = bio or description
 
     # ── الـHook: أول سطرين هما اللي يبان في الـfeed قبل «عرض المزيد» ──
-    # نضع الرقم/الخصم أولاً لو موجود (scroll-stopper)، ثم نداء الحفظ.
+    # نضع الرقم/الخصم أولاً (scroll-stopper). نوّع الخطّاف لكسر رتابة الفيد —
+    # اختيار ثابت لكل متجر (حسب اسمه+خصمه)، فيبقى متّسقاً للمتجر ومتنوّعاً عبر المتاجر.
+    def _pick(options: list[str]) -> str:
+        seed = f"{name}|{discount}|{extra}"
+        return options[sum(ord(c) for c in seed) % len(options)]
+
     if discount:
-        hook = f"كود خصم {name} — {discount} 🔥"
+        hook = _pick([
+            f"كود خصم {name} — {discount} 🔥",
+            f"وفّر {discount} على {name} بكود واحد 🔥",
+            f"لا تشتري من {name} قبل ما تاخذ كود الخصم 🔥",
+            f"{discount} خصم على {name} — الكود تحت 👇",
+            f"خصم {discount} ينتظرك في {name} 🔥",
+        ])
     elif extra:
-        hook = f"عرض حصري من {name} — {extra} 🔥"
+        hook = _pick([
+            f"عرض حصري من {name} — {extra} 🔥",
+            f"{extra} في {name} — لا يفوتك 🔥",
+            f"لا تشتري من {name} قبل ما تشوف هذا العرض 🔥",
+        ])
     else:
-        hook = f"كوبون {name} — وفّر أكثر على مشترياتك 🔥"
+        hook = _pick([
+            f"كوبون {name} — وفّر أكثر على مشترياتك 🔥",
+            f"لا تشتري من {name} بدون كود الخصم 🔥",
+            f"أحدث كود خصم {name} — جرّبه الحين 🔥",
+        ])
 
     lines: list[str] = [
         hook,
