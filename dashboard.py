@@ -7580,11 +7580,67 @@ elif page == "تحليل المستخدمين":
                     ORDER BY al.action_time DESC LIMIT 1
                 ) cty ON TRUE
                 WHERE TRUE {_stat('wu')} {_compl(web_complete)} {_lang('wu')} {_gender('web')} {_age('web')} {_city_clause()} {_storestat('web')} {_store_clause('web')} {_action_clause('web')} {_fav_clause('web','store',fav_store)} {_fav_clause('web','category',fav_cat)} {_category_clause('web')} {_story_clause('web')} {_trend_clause('web')}"""
+            # ── الزائر المجهول كـ«مستخدم» (realm='anon') ─────────────────────
+            # هويته = visitor_id (بصمة ثابتة) من حركات الموقع بلا تسجيل. نعامله
+            # كمستخدم: سلوكه الكامل (نسخ/نقر/بحث/مشاهدة/أقسام/ترند) + مدينته + آخر
+            # ظهور. حقول الملف (اسم/إيميل/جنس/عمر) فاضية لأنه ما سجّل، والمفضلة/
+            # الستوري صفر (مقفولة بتسجيل حالياً — مرحلة لاحقة). 37 عمود مطابق لـ web.
+            anon_sql = """
+                SELECT 'anon' AS realm, av.visitor_id::text AS person_id,
+                       NULL::text AS handle, ('زائر ' || left(av.visitor_id::text,8)) AS name,
+                       NULL::text AS email, NULL::text AS phone, NULL::text AS gender,
+                       NULL::text AS lang, NULL::int AS age, NULL::date AS birth_date,
+                       (SELECT al.city FROM action_logs al WHERE al.visitor_id = av.visitor_id
+                          AND al.city IS NOT NULL AND al.city <> ''
+                          AND al.is_proxy IS NOT TRUE AND al.is_datacenter IS NOT TRUE
+                          ORDER BY al.action_time DESC LIMIT 1) AS city,
+                       av.last_seen, FALSE AS is_complete,
+                       (SELECT string_agg(DISTINCT s.store_id, ', ') FROM action_logs s
+                          WHERE s.visitor_id = av.visitor_id AND s.source='web' AND s.store_id IS NOT NULL) AS stores,
+                       (SELECT string_agg(DISTINCT split_part(ad.details,'tag:',2), ', ') FROM action_logs ad
+                          WHERE ad.visitor_id = av.visitor_id AND ad.source='web' AND ad.action_type='view_tag'
+                            AND split_part(ad.details,'tag:',2) <> '') AS categories,
+                       (SELECT COUNT(*) FROM action_logs av2 WHERE av2.visitor_id = av.visitor_id AND av2.source='web' AND av2.action_type='view_tag') AS n_cat_click,
+                       0::bigint AS n_cat_search,
+                       (SELECT COUNT(*) FROM action_logs ac WHERE ac.visitor_id = av.visitor_id AND ac.source='web' AND ac.action_type='copy_coupon') AS n_copy,
+                       (SELECT COUNT(*) FROM action_logs ac WHERE ac.visitor_id = av.visitor_id AND ac.source='web' AND ac.action_type='click_link') AS n_click,
+                       (SELECT COUNT(*) FROM action_logs ac WHERE ac.visitor_id = av.visitor_id AND ac.source='web' AND ac.action_type='search') AS n_search,
+                       0::bigint AS n_story, 0::bigint AS n_story_trend, 0::bigint AS n_story_normal,
+                       NULL::text AS story_trend_stores, NULL::text AS story_normal_stores,
+                       (SELECT COUNT(*) FROM action_logs al WHERE al.visitor_id = av.visitor_id AND al.source='web' AND al.story_view_id IS NOT NULL AND al.action_type='click_link')  AS n_story_click,
+                       (SELECT COUNT(*) FROM action_logs al WHERE al.visitor_id = av.visitor_id AND al.source='web' AND al.story_view_id IS NOT NULL AND al.action_type='copy_coupon') AS n_story_copy,
+                       0::bigint AS n_fav_store, 0::bigint AS n_fav_cat,
+                       NULL::text AS fav_stores, NULL::text AS fav_cats,
+                       (SELECT string_agg(DISTINCT at2.store_id, ', ') FROM action_logs at2 WHERE at2.visitor_id = av.visitor_id AND at2.source='web' AND at2.action_type IN ('click_link','copy_coupon') AND at2.details='trend:daily' AND at2.store_id IS NOT NULL) AS trend_d_stores,
+                       (SELECT COUNT(*) FROM action_logs at2 WHERE at2.visitor_id = av.visitor_id AND at2.source='web' AND at2.action_type='click_link' AND at2.details='trend:daily') AS n_td_click,
+                       (SELECT COUNT(*) FROM action_logs at2 WHERE at2.visitor_id = av.visitor_id AND at2.source='web' AND at2.action_type='copy_coupon' AND at2.details='trend:daily') AS n_td_copy,
+                       (SELECT string_agg(DISTINCT at2.store_id, ', ') FROM action_logs at2 WHERE at2.visitor_id = av.visitor_id AND at2.source='web' AND at2.action_type IN ('click_link','copy_coupon') AND at2.details='trend:weekly' AND at2.store_id IS NOT NULL) AS trend_w_stores,
+                       (SELECT COUNT(*) FROM action_logs at2 WHERE at2.visitor_id = av.visitor_id AND at2.source='web' AND at2.action_type='click_link' AND at2.details='trend:weekly') AS n_tw_click,
+                       (SELECT COUNT(*) FROM action_logs at2 WHERE at2.visitor_id = av.visitor_id AND at2.source='web' AND at2.action_type='copy_coupon' AND at2.details='trend:weekly') AS n_tw_copy
+                FROM (SELECT visitor_id, MAX(action_time) AS last_seen FROM action_logs
+                      WHERE source='web' AND user_id IS NULL AND visitor_id IS NOT NULL
+                      GROUP BY visitor_id) av"""
+
+            # نُدرج المجهول فقط حين لا يوجد فلتر يعجز عن تقييمه inline (ملف شخصي/
+            # سلوك). الافتراضي (بلا فلاتر) = يظهر؛ أول ما تفلتر = نخفيه بدل عرضه
+            # خطأً. (يُحسّن بفلترة inline لاحقاً.)
+            _anon_ok = (status == "all" and complete == "all"
+                        and lang in ("none", "all") and gender in ("none", "all")
+                        and age in ("none", "all") and not city
+                        and store_status in ("none", "all") and not store
+                        and action in ("none", "all") and fav_store in ("none", "all")
+                        and fav_cat in ("none", "all") and not category
+                        and story in ("none", "all") and trend in ("none", "all"))
+
             params = []
             if src is None:                       # الكل
                 sql = tg_sql + " UNION ALL " + web_unlinked
+                if _anon_ok:
+                    sql += " UNION ALL " + anon_sql
             elif "web" in src:                    # الموقع
                 sql = web_all
+                if _anon_ok:
+                    sql += " UNION ALL " + anon_sql
             else:                                 # بوت / ميني-ويب
                 sql = tg_sql + """
                   AND EXISTS (SELECT 1 FROM action_logs al
@@ -7618,7 +7674,8 @@ elif page == "تحليل المستخدمين":
         else:
             _disp = df_users.copy()
             _disp["النوع"]  = _disp["realm"].map(
-                {"tg": "🤖 تيليجرام", "web": "🌐 موقع"}).fillna(_disp["realm"])
+                {"tg": "🤖 تيليجرام", "web": "🌐 موقع",
+                 "anon": "👤 زائر مجهول"}).fillna(_disp["realm"])
             _disp["الملف"]  = _disp["is_complete"].map(
                 {True: "✅ مكتمل", False: "⛔ ناقص"})
             _disp["الجنس"]  = _disp["gender"].map(
