@@ -159,3 +159,23 @@ class StoryViewRequest(BaseModel):
 class StoryViewResponse(BaseModel):
     ok: bool
     view_id: str
+
+
+# ─── زيارة موقع على مستوى الجلسة (Migration 060) ────────────────────────────
+class VisitRequest(BaseModel):
+    """تسجيل زيارة موقع — مرة واحدة لكل جلسة تصفّح.
+
+    العميل يولّد visit_id (UUID v4) ويخزّنه في sessionStorage، فلا يُرسل إلا
+    مرة لكل جلسة. الزائر غير المسجّل user_id=NULL؛ المسجّل = web_users.id.
+    referrer هو document.referrer الخام — السيرفر يصنّفه (بحث/سوشال/مباشر).
+    """
+    visit_id:     str = Field(..., min_length=36, max_length=36, description="UUID v4 يولّده العميل")
+    landing_path: Optional[str] = Field(None, max_length=300, description="أول مسار دخل عليه")
+    referrer:     Optional[str] = Field(None, max_length=500, description="document.referrer الخام")
+    source:       Literal["web"] = "web"
+    user_id:      Optional[int] = Field(None, ge=1, description="web_users.id لو مسجّل")
+
+
+class VisitResponse(BaseModel):
+    ok: bool
+    visit_id: str

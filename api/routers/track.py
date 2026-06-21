@@ -13,6 +13,7 @@ from api.schemas.track import (
     StoryViewRequest, StoryViewResponse,
     SetLangRequest, SetLangResponse,
     SupportRequest, SupportResponse,
+    VisitRequest, VisitResponse,
 )
 from api.utils.geo_extractor import extract as extract_geo
 from api.utils.fraud_scoring import compute_quality_score
@@ -30,6 +31,8 @@ LIMIT_TRACK_REQUEST_CODE = "5/minute"
 LIMIT_TRACK_REPORT       = "3/minute"
 # فتح ستوري: 60/دقيقة — طبيعي لجلسة تصفّح نشطة (يفتح/يغلق بسرعة).
 LIMIT_TRACK_STORY_VIEW   = "60/minute"
+# زيارة موقع: مرة واحدة لكل جلسة، لكن نسمح 20/دقيقة لكل IP (شبكات مشتركة/NAT).
+LIMIT_TRACK_VISIT        = "20/minute"
 
 _log = logging.getLogger("dp.track")
 router = APIRouter(prefix="/track", tags=["tracking"])
@@ -523,3 +526,95 @@ def set_lang(payload: SetLangRequest, request: Request, conn=Depends(get_db)):
             )
 
     return SetLangResponse(ok=True, lang=payload.lang, source=payload.source)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# تسجيل زيارة موقع على مستوى الجلسة (Migration 060) — «نبض الزوّار»
+# ════════════════════════════════════════════════════════════════════════════
+from urllib.parse import urlparse  # noqa: E402 (محلي بالـendpoint — لا يستخدمه غيره)
+
+# تصنيف مصدر الإحالة بحدّ النقطة (label-aware) لتفادي مطابقات substring الخاطئة
+# (مثل "x.com" داخل "wix.com"). نطابق على وسم نطاق كامل أو نطاق قصير معروف.
+_SEARCH_LABELS = {"google", "bing", "yahoo", "duckduckgo", "yandex", "baidu"}
+_SOCIAL_LABELS = {
+    "instagram", "facebook", "fb", "twitter", "tiktok", "youtube", "youtu",
+    "snapchat", "threads", "linkedin", "pinterest", "reddit", "whatsapp", "telegram",
+}
+# نطاقات قصيرة (وسمها الأول ليس اسم البراند) — تُطابق كنطاق كامل.
+_SOCIAL_FULL = {"x.com", "t.co", "t.me", "fb.com", "youtu.be", "lnkd.in"}
+
+
+def _strip_www(host: str) -> str:
+    return host[4:] if host.startswith("www.") else host
+
+
+def _classify_referrer(referrer: str | None, site_host: str | None) -> tuple[str, str | None]:
+    """يُرجع (kind, host) من الإحالة الخام.
+
+    kind: 'direct' (بلا إحالة) · 'internal' (تنقّل داخل الموقع) ·
+          'search' (محرّك بحث) · 'social' (منصة تواصل) · 'referral' (موقع آخر).
+    """
+    if not referrer:
+        return "direct", None
+    try:
+        host = _strip_www((urlparse(referrer).hostname or "").lower())
+    except Exception:
+        host = ""
+    if not host:
+        return "direct", None
+    if site_host and (host == site_host or host.endswith("." + site_host)):
+        return "internal", host
+    # وسوم النطاق (l.instagram.com → {l, instagram, com}) للمطابقة على حدّ نقطة
+    labels = set(host.split("."))
+    if host in _SOCIAL_FULL or labels & _SOCIAL_LABELS:
+        return "social", host
+    if labels & _SEARCH_LABELS:
+        return "search", host
+    return "referral", host
+
+
+@router.post("/visit", response_model=VisitResponse, status_code=201)
+@limiter.limit(LIMIT_TRACK_VISIT)
+def log_visit(payload: VisitRequest, request: Request, conn=Depends(get_db)):
+    """تسجيل زيارة موقع — صف واحد لكل جلسة في web_visits.
+
+    على عكس action_logs (حدث صريح لكل نقر/نسخ)، هذا يلتقط مجرد المرور بالموقع
+    حتى لو لم يتفاعل الزائر إطلاقاً — يسدّ الفجوة التي كانت تُخفي الزوّار عن
+    الداشبورد. الإثراء الجغرافي + الجودة من نفس مسار action_logs، و visit_id
+    الفريد يجعل الـ ping idempotent (إعادة الإرسال لا تُكرّر الصف).
+    """
+    geo = extract_geo(request)
+    quality, is_dc, _is_proxy = compute_quality_score(geo)
+
+    site_host = _strip_www((urlparse(str(request.headers.get("origin") or "")).hostname or "").lower())
+    ref_kind, ref_host = _classify_referrer(payload.referrer, site_host or None)
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO web_visits (
+                visit_id, user_id, source,
+                referrer_kind, referrer_host, landing_path,
+                ip_hash, user_agent_hash,
+                country_code, region_code, city, device_class, asn,
+                is_datacenter, cf_bot_score, quality_score
+            )
+            VALUES (
+                %s::uuid, %s, %s,
+                %s, %s, %s,
+                decode(%s, 'hex'), decode(%s, 'hex'),
+                %s, %s, %s, %s, %s,
+                %s, %s, %s
+            )
+            ON CONFLICT (visit_id) DO NOTHING
+            """,
+            (
+                payload.visit_id, payload.user_id, payload.source,
+                ref_kind, ref_host, payload.landing_path,
+                geo.ip_hash, geo.ua_hash,
+                geo.country_code, geo.region_code, geo.city, geo.device_class, geo.asn,
+                is_dc, geo.cf_bot_score, quality,
+            ),
+        )
+
+    return VisitResponse(ok=True, visit_id=payload.visit_id)

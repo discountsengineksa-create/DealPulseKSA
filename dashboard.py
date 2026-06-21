@@ -1754,6 +1754,7 @@ _ANALYSIS_PAGES = [
 "🎬 تحليلات الستوري",
 "تحليل المتاجر", "تحليل الأقسام",
 "تحليل طلبات الأكواد", "تحليل المستخدمين",
+"👣 زوّار الموقع",
 ]
 _OTHER_PAGES = [
 "📣 بلاغات الأكواد",  # ← Migration 029: بلاغات لا يعمل + إدارة المتاجر المسحوبة
@@ -8912,6 +8913,177 @@ elif page == "تحليل المستخدمين":
                         "role": "assistant", "content": _ai_summary,
                         "sql": _ai_sql, "df": _ai_df,
                     })
+
+# ════════════════════════════════════════════════════════════════════════════
+# صفحة 👣 زوّار الموقع (Web Visits) — Migration 060
+# يقرأ web_visits فقط (مستقلّ تماماً عن فلاتر «تحليل المستخدمين»). يُظهر كل من
+# مرّ بالموقع حتى لو لم يتفاعل (نسخ/نقر) — الفجوة التي كانت تُخفي الزوّار سابقاً.
+# البوتات مفلترة افتراضياً (quality_score ≥ 50). أعمدة SQL إنجليزية ثم تُترجم
+# للعربية في pandas (نمط المشروع — معرّفات SQL العربية تُسبّب خطأ صياغة).
+# ════════════════════════════════════════════════════════════════════════════
+elif page == "👣 زوّار الموقع":
+    page_title("👣", "زوّار الموقع",
+               "كل من مرّ بالموقع — حتى لو ما تفاعل. صف واحد لكل جلسة، والبوتات مفلترة افتراضياً.")
+
+    conn = get_conn()
+    conn.autocommit = True   # قراءة فقط — يمسح أي transaction معلّقة
+
+    # الجدول قد لا يكون موجوداً قبل تطبيق migration 060
+    try:
+        _wv_exists = bool(pd.read_sql(
+            "SELECT to_regclass('public.web_visits') IS NOT NULL AS ok", conn
+        ).iloc[0]["ok"])
+    except Exception:
+        _wv_exists = False
+
+    if not _wv_exists:
+        conn.close()
+        st.info("📭 جدول الزيارات (web_visits) غير موجود بعد. طبّق المايقريشن:\n\n"
+                "`python api/run_migration.py migration_060_web_visits.sql`")
+        st.stop()
+
+    # ── ضوابط ──────────────────────────────────────────────────────────────
+    _wv_today = date.today()
+    cc1, cc2, cc3, cc4 = st.columns([2, 2, 1.4, 1])
+    with cc1:
+        wv_from = st.date_input("📅 من تاريخ", value=_wv_today - timedelta(days=30),
+                                max_value=_wv_today, key="wv_from")
+    with cc2:
+        wv_to = st.date_input("📅 إلى تاريخ", value=_wv_today,
+                              min_value=wv_from, max_value=_wv_today, key="wv_to")
+    with cc3:
+        wv_bots = st.toggle("يشمل البوتات", value=False, key="wv_bots",
+                            help="افتراضياً نعرض الزوّار الحقيقيين فقط (جودة ≥ 50)")
+    with cc4:
+        st.markdown("&nbsp;", unsafe_allow_html=True)
+        if st.button("🔄 تحديث", key="wv_refresh"):
+            st.rerun()
+
+    _q = "" if wv_bots else "AND quality_score >= 50"   # نص ثابت — لا مدخل مستخدم
+    _p = {"f": wv_from, "t": wv_to}
+
+    # ── KPIs سريعة (اليوم / 7 / 30 يوم — مستقلّة عن نطاق التاريخ) ────────────
+    _k = pd.read_sql(f"""
+        SELECT
+          COUNT(*) FILTER (WHERE created_at::date = CURRENT_DATE)       AS today,
+          COUNT(*) FILTER (WHERE created_at::date >= CURRENT_DATE - 6)  AS d7,
+          COUNT(*) FILTER (WHERE created_at::date >= CURRENT_DATE - 29) AS d30,
+          COUNT(*) FILTER (WHERE created_at::date >= CURRENT_DATE - 29
+                             AND user_id IS NOT NULL)                   AS d30_reg
+        FROM web_visits
+        WHERE TRUE {_q}
+    """, conn).iloc[0]
+    _reg_pct = (100 * _k["d30_reg"] / _k["d30"]) if _k["d30"] else 0
+
+    k1, k2, k3, k4 = st.columns(4)
+    with k1:
+        kpi_card("📅", "زوّار اليوم", f"{int(_k['today']):,}")
+    with k2:
+        kpi_card("🗓️", "آخر 7 أيام", f"{int(_k['d7']):,}", accent="info")
+    with k3:
+        kpi_card("📆", "آخر 30 يوم", f"{int(_k['d30']):,}", accent="info")
+    with k4:
+        kpi_card("🔐", "نسبة المسجّلين", f"{_reg_pct:.0f}%", accent="emerald",
+                 note="من زوّار آخر 30 يوم")
+
+    st.divider()
+    st.caption(f"📊 التحليل التالي ضمن النطاق المختار: {wv_from} ← {wv_to}")
+
+    # ── ملخّص النطاق ────────────────────────────────────────────────────────
+    _r = pd.read_sql(f"""
+        SELECT
+          COUNT(*)                                    AS visits,
+          COUNT(DISTINCT ip_hash)                     AS unique_ip,
+          COUNT(*) FILTER (WHERE user_id IS NOT NULL) AS registered
+        FROM web_visits
+        WHERE created_at::date BETWEEN %(f)s AND %(t)s {_q}
+    """, conn, params=_p).iloc[0]
+
+    if not int(_r["visits"]):
+        conn.close()
+        st.warning("ما في زيارات مسجّلة في هذا النطاق. لو الموقع نُشر للتو، انتظر "
+                   "أول زائر — أو وسّع التواريخ / فعّل «يشمل البوتات».")
+        st.stop()
+
+    m1, m2, m3 = st.columns(3)
+    with m1:
+        kpi_card("👣", "إجمالي الزيارات", f"{int(_r['visits']):,}")
+    with m2:
+        kpi_card("🧑", "زوّار فريدون (IP)", f"{int(_r['unique_ip']):,}", accent="info")
+    with m3:
+        kpi_card("📝", "زيارات لمسجّلين", f"{int(_r['registered']):,}", accent="emerald")
+
+    # ── الخط الزمني اليومي ──────────────────────────────────────────────────
+    _daily = pd.read_sql(f"""
+        SELECT created_at::date AS d, COUNT(*) AS visits
+        FROM web_visits
+        WHERE created_at::date BETWEEN %(f)s AND %(t)s {_q}
+        GROUP BY 1 ORDER BY 1
+    """, conn, params=_p)
+    if not _daily.empty:
+        _daily.columns = ["اليوم", "زيارات"]
+        st.markdown("#### 📈 الزيارات يومياً")
+        _figd = px.area(_daily, x="اليوم", y="زيارات", markers=True)
+        _figd.update_traces(line_color=BRAND["emerald"])
+        _figd.update_layout(height=300, margin=dict(t=10, b=10, l=10, r=10))
+        st.plotly_chart(_figd, use_container_width=True)
+
+    # ── المصدر + الجهاز ─────────────────────────────────────────────────────
+    g1, g2 = st.columns(2)
+    with g1:
+        st.markdown("#### 🌐 مصدر الزيارة")
+        _src = pd.read_sql(f"""
+            SELECT COALESCE(referrer_kind, 'unknown') AS kind, COUNT(*) AS cnt
+            FROM web_visits
+            WHERE created_at::date BETWEEN %(f)s AND %(t)s {_q}
+            GROUP BY 1 ORDER BY cnt DESC
+        """, conn, params=_p)
+        _SRC_AR = {"search": "🔍 بحث", "social": "📱 سوشال", "direct": "↗️ مباشر",
+                   "internal": "🔁 داخلي", "referral": "🔗 موقع آخر", "unknown": "غير معروف"}
+        if not _src.empty:
+            _src["kind"] = _src["kind"].map(lambda x: _SRC_AR.get(x, x))
+            _src.columns = ["المصدر", "عدد"]
+            _figs = px.pie(_src, names="المصدر", values="عدد", hole=0.45)
+            _figs.update_layout(height=300, margin=dict(t=10, b=10, l=10, r=10))
+            st.plotly_chart(_figs, use_container_width=True)
+    with g2:
+        st.markdown("#### 📱 الجهاز")
+        _dev = pd.read_sql(f"""
+            SELECT COALESCE(NULLIF(device_class, ''), 'unknown') AS device, COUNT(*) AS cnt
+            FROM web_visits
+            WHERE created_at::date BETWEEN %(f)s AND %(t)s {_q}
+            GROUP BY 1 ORDER BY cnt DESC
+        """, conn, params=_p)
+        if not _dev.empty:
+            _dev.columns = ["الجهاز", "عدد"]
+            _figv = px.pie(_dev, names="الجهاز", values="عدد", hole=0.45)
+            _figv.update_layout(height=300, margin=dict(t=10, b=10, l=10, r=10))
+            st.plotly_chart(_figv, use_container_width=True)
+
+    # ── المدن + صفحات الدخول ────────────────────────────────────────────────
+    t1, t2 = st.columns(2)
+    with t1:
+        st.markdown("#### 📍 أهم المدن")
+        _cit = pd.read_sql(f"""
+            SELECT COALESCE(NULLIF(city, ''), 'غير معروف') AS city, COUNT(*) AS visits
+            FROM web_visits
+            WHERE created_at::date BETWEEN %(f)s AND %(t)s {_q}
+            GROUP BY 1 ORDER BY visits DESC LIMIT 12
+        """, conn, params=_p)
+        _cit.columns = ["المدينة", "زيارات"]
+        st.dataframe(_cit, use_container_width=True, hide_index=True)
+    with t2:
+        st.markdown("#### 🚪 صفحات الدخول الأكثر")
+        _land = pd.read_sql(f"""
+            SELECT COALESCE(NULLIF(landing_path, ''), '/') AS path, COUNT(*) AS visits
+            FROM web_visits
+            WHERE created_at::date BETWEEN %(f)s AND %(t)s {_q}
+            GROUP BY 1 ORDER BY visits DESC LIMIT 12
+        """, conn, params=_p)
+        _land.columns = ["الصفحة", "زيارات"]
+        st.dataframe(_land, use_container_width=True, hide_index=True)
+
+    conn.close()
 
 # ════════════════════════════════════════════════════════════════════════════
 # صفحة 🎯 بناء الشرائح (Segment Builder)
