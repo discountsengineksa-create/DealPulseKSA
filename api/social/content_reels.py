@@ -220,6 +220,43 @@ def render_content_slides(concept: ContentConcept) -> list[bytes]:
     return slides
 
 
+def render_image_slide(image_bytes: bytes, text: str, kicker: str | None = None) -> bytes | None:
+    """يضع صورة مرفوعة داخل القالب الفاخر (cover) + تعتيم متدرّج + لوقو + نص فوقها.
+
+    تتأقلم أي صورة (منتج/خلفية/لقطة) على نفس الهوية: تُقصّ لملء 1080×1350، طبقة
+    تعتيم زمردية-فحمية (أقوى أسفل لقراءة النص)، اللوقو أعلى، والنص في الثلث السفلي.
+    يُرجع None لو PIL مفقود."""
+    try:
+        from PIL import Image, ImageDraw, ImageOps
+    except ImportError:
+        return None
+    img = ImageOps.fit(Image.open(io.BytesIO(image_bytes)).convert("RGB"),
+                       (W, H), method=Image.LANCZOS).convert("RGBA")
+    overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    od = ImageDraw.Draw(overlay)
+    for y in range(H):
+        a = 70                                   # تعتيم عام خفيف
+        if y > H * 0.42:                          # أقوى أسفل (منطقة النص)
+            a += int(165 * (y - H * 0.42) / (H * 0.58))
+        if y < H * 0.20:                          # لمسة أعلى (وضوح اللوقو)
+            a += int(70 * (1 - y / (H * 0.20)))
+        od.line([(0, y), (W, y)], fill=(4, 18, 13, min(a, 240)))
+    img.alpha_composite(overlay)
+    _logo(img, 132, 84)
+    draw = ImageDraw.Draw(img)
+    ft = _font(72)
+    lines = _wrap(draw, text, ft, W - 2 * MARGIN)
+    lh, block = 96, len(lines) * 96
+    y0 = H - 230 - block
+    if kicker:
+        fk = _font(38)
+        ks = _shape_ar(kicker)
+        draw.text((_cx(draw, ks, fk), y0 - 64), ks, font=fk, fill=EMERALD_BRIGHT)
+    _draw_lines(draw, lines, ft, y0, WHITE, lh)
+    _footer(draw)
+    return _png(img)
+
+
 # ─── مكتبة مفاهيم النمو (20 ريل، بلا رموز) ─────────────────────────────────
 CONCEPTS: list[ContentConcept] = [
     {"kicker": "نصائح توفير", "title": "ثلاثة أخطاء تخليك تدفع زيادة وأنت تتسوق أونلاين",

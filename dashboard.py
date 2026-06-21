@@ -12008,54 +12008,96 @@ elif page == "استوديو المحتوى":
     with tab_content:
         st.markdown("##### 🎬 ريلز المحتوى — كاروسيلات نمو بالهوية الفاخرة")
         st.caption(
-            "محتوى نصائح/تفاعل/مواسم بقالب Dark Luxe (1080×1350). اختر مفهوماً، ولّد، "
-            "ونزّل الشرائح وانشرها كاروسيل على إنستقرام. هذا محرّك المتابعين (غير منشورات الكوبونات)."
+            "قالب Dark Luxe (1080×1350) بهوية نبض الصفقات — محرّك المتابعين (غير منشورات "
+            "الكوبونات). اختر مفهوماً جاهزاً، أو اكتب مفهومك، أو ارفع صورة وتكتب عليها."
         )
         try:
-            from api.social.content_reels import CONCEPTS as _CONCEPTS, render_content_slides as _render_reel
+            from api.social.content_reels import (
+                CONCEPTS as _CONCEPTS,
+                render_content_slides as _render_reel,
+                render_image_slide as _render_img,
+            )
         except Exception as _e:
-            _CONCEPTS, _render_reel = [], None
+            _CONCEPTS, _render_reel, _render_img = [], None, None
             st.error(f"تعذّر تحميل مولّد المحتوى: {_e}")
 
-        if _CONCEPTS and _render_reel:
-            _idx = st.selectbox(
-                "اختر مفهوم الريل", range(len(_CONCEPTS)),
-                format_func=lambda i: f"{i + 1}. {_CONCEPTS[i]['title']}",
-                key="content_concept_idx",
-            )
-            _cpt = _CONCEPTS[_idx]
-            st.caption(
-                f"العمود: {_cpt.get('kicker', '')} · {len(_cpt.get('points', []))} نقاط · "
-                f"{len(_cpt.get('points', [])) + 2} شريحة"
-            )
-            if st.button("✨ توليد شرائح الريل", type="primary", width='stretch', key="gen_content_reel"):
-                with st.spinner("جاري رسم الشرائح بالهوية الفاخرة…"):
-                    st.session_state["content_slides"] = _render_reel(_cpt)
-                    st.session_state["content_slides_idx"] = _idx
-
-            _slides = st.session_state.get("content_slides")
-            if _slides and st.session_state.get("content_slides_idx") == _idx:
-                import zipfile
-                _zbuf = io.BytesIO()
-                with zipfile.ZipFile(_zbuf, "w") as _zf:
-                    for _i, _b in enumerate(_slides):
-                        _zf.writestr(f"reel_{_idx + 1:02d}_slide_{_i + 1}.png", _b)
-                st.download_button(
-                    "📦 تحميل كل الشرائح (ZIP)", data=_zbuf.getvalue(),
-                    file_name=f"content_reel_{_idx + 1:02d}.zip", mime="application/zip",
-                    type="primary", width='stretch', key="dl_content_zip",
-                )
-                _cols = st.columns(3)
+        def _show_slides(_slides, _prefix):
+            """معاينة + تنزيل (ZIP لكل الشرائح + زر لكل شريحة)."""
+            if not _slides:
+                st.warning("ما تولّدت شرائح — راجع المدخلات.")
+                return
+            import zipfile
+            _zb = io.BytesIO()
+            with zipfile.ZipFile(_zb, "w") as _zf:
                 for _i, _b in enumerate(_slides):
-                    with _cols[_i % 3]:
-                        st.image(_b, width='stretch')
-                        st.download_button(
-                            f"تحميل شريحة {_i + 1}", data=_b,
-                            file_name=f"reel_{_idx + 1:02d}_slide_{_i + 1}.png", mime="image/png",
-                            width='stretch', key=f"dl_content_{_idx}_{_i}",
-                        )
-            elif not _slides:
-                st.info("اختر مفهوماً واضغط «توليد شرائح الريل» لرؤية الكاروسيل بالهوية الفاخرة.")
+                    _zf.writestr(f"{_prefix}_slide_{_i + 1}.png", _b)
+            st.download_button(
+                "📦 تحميل كل الشرائح (ZIP)", data=_zb.getvalue(),
+                file_name=f"{_prefix}.zip", mime="application/zip",
+                type="primary", width='stretch', key=f"dlzip_{_prefix}",
+            )
+            _cols = st.columns(3)
+            for _i, _b in enumerate(_slides):
+                with _cols[_i % 3]:
+                    st.image(_b, width='stretch')
+                    st.download_button(
+                        f"تحميل {_i + 1}", data=_b,
+                        file_name=f"{_prefix}_slide_{_i + 1}.png", mime="image/png",
+                        width='stretch', key=f"dl_{_prefix}_{_i}",
+                    )
+
+        if _render_reel:
+            _mode = st.radio(
+                "الوضع", ["📚 مفاهيم جاهزة", "✍️ اكتب مفهومك", "🖼️ صورة + نص"],
+                horizontal=True, key="content_mode",
+            )
+
+            if _mode == "📚 مفاهيم جاهزة":
+                _idx = st.selectbox(
+                    "اختر مفهوم الريل", range(len(_CONCEPTS)),
+                    format_func=lambda i: f"{i + 1}. {_CONCEPTS[i]['title']}",
+                    key="content_concept_idx",
+                )
+                _cpt = _CONCEPTS[_idx]
+                st.caption(
+                    f"العمود: {_cpt.get('kicker', '')} · {len(_cpt.get('points', []))} نقاط · "
+                    f"{len(_cpt.get('points', [])) + 2} شريحة"
+                )
+                if st.button("✨ توليد شرائح الريل", type="primary", width='stretch', key="gen_preset"):
+                    with st.spinner("جاري الرسم…"):
+                        st.session_state["cslides_preset"] = _render_reel(_cpt)
+                _show_slides(st.session_state.get("cslides_preset"), "preset")
+
+            elif _mode == "✍️ اكتب مفهومك":
+                _k = st.text_input("العمود (تصنيف صغير فوق الغلاف)", value="نبض الصفقات", key="cc_kicker")
+                _t = st.text_input("الخطّاف (عنوان الغلاف)", placeholder="مثال: ثلاث طرق توفّر فيها على طلبك", key="cc_title")
+                _p = st.text_area("النقاط — نقطة في كل سطر", placeholder="نقطة أولى\nنقطة ثانية\nنقطة ثالثة", height=150, key="cc_points")
+                _c = st.text_input("سطر الختام (CTA)", value="تابع نبض الصفقات", key="cc_cta")
+                if st.button("✨ توليد من نصك", type="primary", width='stretch', key="gen_custom"):
+                    _pts = [ln.strip() for ln in (_p or "").splitlines() if ln.strip()]
+                    if not _t.strip() or not _pts:
+                        st.warning("اكتب الخطّاف وعلى الأقل نقطة وحدة.")
+                    else:
+                        with st.spinner("جاري الرسم…"):
+                            st.session_state["cslides_custom"] = _render_reel(
+                                {"kicker": _k.strip(), "title": _t.strip(), "points": _pts, "cta": _c.strip()})
+                _show_slides(st.session_state.get("cslides_custom"), "custom")
+
+            else:  # 🖼️ صورة + نص
+                st.caption("ارفع صورة (منتج/خلفية/لقطة) — تتأقلم على القالب الفاخر مع تعتيم + لوقو، وتكتب نصك فوقها.")
+                _imgf = st.file_uploader("الصورة", type=["png", "jpg", "jpeg", "webp"], key="ci_img")
+                _ik = st.text_input("العمود (اختياري — يظهر فوق النص)", value="", placeholder="مثال: عرض اليوم", key="ci_kicker")
+                _it = st.text_area("النص فوق الصورة", placeholder="اكتب الجملة أو الخطّاف", height=110, key="ci_text")
+                if st.button("✨ توليد الشريحة", type="primary", width='stretch', key="gen_image"):
+                    if not _imgf or not _it.strip():
+                        st.warning("ارفع صورة واكتب النص.")
+                    elif _render_img is None:
+                        st.error("مولّد الصور غير متاح.")
+                    else:
+                        with st.spinner("جاري الرسم…"):
+                            _s = _render_img(_imgf.read(), _it.strip(), _ik.strip() or None)
+                            st.session_state["cslides_image"] = [_s] if _s else []
+                _show_slides(st.session_state.get("cslides_image"), "image")
 
     with tab_archive:
         st.markdown("##### آخر التصاميم")
