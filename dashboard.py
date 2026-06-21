@@ -1,4 +1,13 @@
 import os
+import time as _time
+# الداشبورد منتج سعودي يعمل على Railway (حاوية UTC). نثبّت منطقة العملية على
+# الرياض حتى ترجع دوال الوقت المحلية (date.today / datetime.now / pd.Timestamp.today)
+# توقيت الرياض بدل UTC — وإلا تتأخّر كل التواريخ يوماً كاملاً بين منتصف الليل و3
+# فجراً. tzset متاح على Linux فقط (الإنتاج)؛ على ويندوز المحلي يُتجاهل بأمان، ولذلك
+# نعتمد أيضاً على ksa_today()/ksa_now() الصريحة (UTC+3) في كل منتقيات التاريخ.
+os.environ["TZ"] = "Asia/Riyadh"
+if hasattr(_time, "tzset"):
+    _time.tzset()
 import base64
 import smtplib
 import socket
@@ -1075,6 +1084,19 @@ def kpi_card(emoji, label, value, accent="emerald", note=None):
 # ════════════════════════════════════════════════════════════════════════════
 # الأعمدة الزمنية كلها timestamptz؛ باندا يقرأها كـ UTC. الرياض = UTC+3 (بدون توقيت صيفي).
 RIYADH_TZ_OFFSET_HOURS = 3
+_RIYADH_TZ = datetime.timezone(timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
+
+
+def ksa_now():
+    """الوقت الحالي بتوقيت الرياض (naive) — مستقل عن منطقة الخادم (Railway=UTC).
+    يُحسب من UTC+3 صراحةً فلا يتأثّر بغياب tzdata أو منصّة ويندوز."""
+    return datetime.datetime.now(_RIYADH_TZ).replace(tzinfo=None)
+
+
+def ksa_today():
+    """تاريخ اليوم بتوقيت الرياض — استخدمه في كل منتقيات التاريخ بدل date.today()
+    (التي ترجع UTC على Railway فتتأخّر يوماً بين منتصف الليل و3 فجراً)."""
+    return datetime.datetime.now(_RIYADH_TZ).date()
 
 
 def _ksa_dt(s):
@@ -2988,7 +3010,7 @@ if page == "تحليل الأقسام":
         st.stop()
 
     # ── استبعاد المتاجر منتهية الكوبون (لعدّ المتاجر تحت القسم — معلومة بنيوية) ─
-    _today_d = pd.Timestamp.today().date()
+    _today_d = ksa_today()
     if "last_time" in df_master.columns:
         _lt = pd.to_datetime(df_master["last_time"], errors="coerce").dt.date
         df_master = df_master[_lt.isna() | (_lt >= _today_d)].copy()
@@ -3065,13 +3087,18 @@ if page == "تحليل الأقسام":
         search_cat = pd.DataFrame(columns=["cat_match", "adate", "platform"])
 
     # ── فلتر الفترة ──────────────────────────────────────────────────────────
+    # الحدّ الأقصى = اليوم (الرياض) دائماً، حتى يقدر المستخدم يختار بيانات اليوم
+    # ولو ما تسجّلت بعد حركة قسم اليوم. سابقاً كان max_value = أحدث تاريخ في
+    # البيانات فيُحبَس المنتقي عند آخر يوم فيه حركة (مثلاً 16) ويختفي ما بعده.
+    _today = ksa_today()
     if not df_views.empty:
-        _min_d, _max_d = df_views["adate"].min(), df_views["adate"].max()
+        _min_d = df_views["adate"].min()
     elif not search_cat.empty:
-        _min_d, _max_d = search_cat["adate"].min(), search_cat["adate"].max()
+        _min_d = search_cat["adate"].min()
     else:
-        import datetime as _dt
-        _min_d = _max_d = _dt.date.today()
+        _min_d = _today
+    _min_d = min(_min_d, _today)
+    _max_d = _today
 
     dcol1, dcol2 = st.columns([2, 3])
     with dcol1:
@@ -3768,7 +3795,7 @@ elif page == "تحليل المتاجر":
 
         # ─── نطاق التاريخ ───────────────────────────────────────
         _d1, _d2 = st.columns(2)
-        _today = date.today()
+        _today = ksa_today()
         with _d1:
             sm_date_from = st.date_input(
                 "📅 من تاريخ",
@@ -5196,7 +5223,7 @@ elif page == "🎬 تحليلات الستوري":
 
     # ─── نطاق التاريخ ────────────────────────────────────────────────
     _sv_d1, _sv_d2 = st.columns(2)
-    _sv_today = date.today()
+    _sv_today = ksa_today()
     with _sv_d1:
         sv_date_from = st.date_input(
             "📅 من تاريخ", value=_sv_today - timedelta(days=30),
@@ -7000,7 +7027,7 @@ elif page == "تحليل المستخدمين":
 
         # ── نطاق التاريخ (يحدّ كل الفلاتر تحت) ────────────────────────────
         _gd1, _gd2 = st.columns(2)
-        _gen_today = date.today()
+        _gen_today = ksa_today()
         with _gd1:
             gen_date_from = st.date_input(
                 "📅 من تاريخ", value=_gen_today - timedelta(days=30),
@@ -8187,7 +8214,7 @@ elif page == "تحليل المستخدمين":
 
                     # ── نطاق التاريخ (يفلتر كل الأحداث في الـ UNION) ──
                     _ind_c1, _ind_c2 = st.columns(2)
-                    _ind_today = date.today()
+                    _ind_today = ksa_today()
                     with _ind_c1:
                         ind_date_from = st.date_input(
                             "📅 من تاريخ",
@@ -9003,7 +9030,7 @@ elif page == "👣 زوّار الموقع":
         st.stop()
 
     # ── ضوابط ──────────────────────────────────────────────────────────────
-    _wv_today = date.today()
+    _wv_today = ksa_today()
     cc1, cc2, cc3, cc4 = st.columns([2, 2, 1.4, 1])
     with cc1:
         wv_from = st.date_input("📅 من تاريخ", value=_wv_today - timedelta(days=30),
@@ -9825,7 +9852,7 @@ elif page == "🎯 بناء الشرائح":
                 value=_days_def, key=f"{key}_d")
             new_win = {"type": "last_days", "days": int(d)}
         elif wt == "between":
-            _today = _dt.date.today()
+            _today = ksa_today()
             def _parse_date(s, fallback):
                 try: return _dt.date.fromisoformat(str(s)[:10])
                 except (ValueError, TypeError): return fallback
@@ -11380,7 +11407,7 @@ elif page == "لوحة القيادة":
                             value=False, key="cmd_show_sys")
 
     # ── فلتر الفترة (للعرض وللتحميل) ────────────────────────────────────────
-    _ksa_today = (datetime.datetime.utcnow() + timedelta(hours=3)).date()
+    _ksa_today = ksa_today()
     _dr = st.date_input(
         "📅 الفترة (من → إلى) — تُطبَّق على العرض وعلى تحميل الإكسل",
         value=(_ksa_today - timedelta(days=7), _ksa_today),
