@@ -103,7 +103,7 @@ def track_action(payload: TrackRequest, request: Request, conn=Depends(get_db)):
                 country_code, region_code, city, postal_code,
                 lat, lng, isp, asn,
                 is_datacenter, is_proxy, device_class,
-                cf_bot_score, quality_score, story_view_id
+                cf_bot_score, quality_score, story_view_id, visitor_id
             )
             VALUES (
                 %s, %s, %s, %s, %s,
@@ -111,7 +111,7 @@ def track_action(payload: TrackRequest, request: Request, conn=Depends(get_db)):
                 %s, %s, %s, %s,
                 %s, %s, %s, %s,
                 %s, %s, %s,
-                %s, %s, %s::uuid
+                %s, %s, %s::uuid, %s::uuid
             )
             ON CONFLICT (event_id) DO NOTHING
             """,
@@ -121,7 +121,7 @@ def track_action(payload: TrackRequest, request: Request, conn=Depends(get_db)):
                 geo.country_code, geo.region_code, geo.city, geo.postal_code,
                 geo.lat, geo.lng, geo.isp, geo.asn,
                 is_dc, is_proxy, geo.device_class,
-                geo.cf_bot_score, quality, payload.story_view_id,
+                geo.cf_bot_score, quality, payload.story_view_id, payload.visitor_id,
             ),
         )
 
@@ -206,7 +206,7 @@ def log_category_view(payload: CategoryViewRequest, request: Request, conn=Depen
                 country_code, region_code, city, postal_code,
                 lat, lng, isp, asn,
                 is_datacenter, is_proxy, device_class,
-                cf_bot_score, quality_score
+                cf_bot_score, quality_score, visitor_id
             )
             VALUES (
                 %s, NULL, 'view_tag', %s, %s,
@@ -214,7 +214,7 @@ def log_category_view(payload: CategoryViewRequest, request: Request, conn=Depen
                 %s, %s, %s, %s,
                 %s, %s, %s, %s,
                 %s, %s, %s,
-                %s, %s
+                %s, %s, %s::uuid
             )
             ON CONFLICT (event_id) DO NOTHING
             """,
@@ -224,7 +224,7 @@ def log_category_view(payload: CategoryViewRequest, request: Request, conn=Depen
                 geo.country_code, geo.region_code, geo.city, geo.postal_code,
                 geo.lat, geo.lng, geo.isp, geo.asn,
                 is_dc, is_proxy, geo.device_class,
-                geo.cf_bot_score, quality,
+                geo.cf_bot_score, quality, payload.visitor_id,
             ),
         )
     return CategoryViewResponse(ok=True, tag=tag)
@@ -277,7 +277,7 @@ def log_search(payload: SearchLogRequest, request: Request, conn=Depends(get_db)
                     country_code, region_code, city, postal_code,
                     lat, lng, isp, asn,
                     is_datacenter, is_proxy, device_class,
-                    cf_bot_score, quality_score
+                    cf_bot_score, quality_score, visitor_id
                 )
                 VALUES (
                     %s, %s, 'search', %s, %s,
@@ -285,7 +285,7 @@ def log_search(payload: SearchLogRequest, request: Request, conn=Depends(get_db)
                     %s, %s, %s, %s,
                     %s, %s, %s, %s,
                     %s, %s, %s,
-                    %s, %s
+                    %s, %s, %s::uuid
                 )
                 ON CONFLICT (event_id) DO NOTHING
                 """,
@@ -297,7 +297,7 @@ def log_search(payload: SearchLogRequest, request: Request, conn=Depends(get_db)
                     geo.country_code, geo.region_code, geo.city, geo.postal_code,
                     geo.lat, geo.lng, geo.isp, geo.asn,
                     is_dc, is_proxy, geo.device_class,
-                    geo.cf_bot_score, quality,
+                    geo.cf_bot_score, quality, payload.visitor_id,
                 ),
             )
     return SearchLogResponse(ok=True, keyword=payload.keyword)

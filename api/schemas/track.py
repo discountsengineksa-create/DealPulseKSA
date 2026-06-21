@@ -14,6 +14,7 @@ class TrackRequest(BaseModel):
                     داخل ستوري (نسخ/زيارة من فيوور الستوري).
     """
     user_id: Optional[int] = Field(None, ge=0, description="ID المستخدم (telegram_id أو web_users.id)")
+    visitor_id: Optional[str] = Field(None, min_length=36, max_length=36, description="UUID بصمة الزائر المجهول (localStorage) — هوية حتى بلا تسجيل")
     store_id: str = Field(..., min_length=1, max_length=200)
     action: Literal["click_link", "copy_coupon", "search", "view_store", "view_trend"]
     details: Optional[str] = Field(None, max_length=500)
@@ -58,6 +59,7 @@ class CategoryViewRequest(BaseModel):
     tag:     str = Field(..., min_length=1, max_length=120, description="اسم القسم")
     source:  Literal["web", "telegram_miniapp", "bot", "dashboard"] = "web"
     user_id: Optional[int] = Field(None, ge=0, description="telegram_id أو web_users.id لو معروف")
+    visitor_id: Optional[str] = Field(None, min_length=36, max_length=36, description="UUID بصمة الزائر المجهول (للموقع)")
 
 
 class CategoryViewResponse(BaseModel):
@@ -74,6 +76,7 @@ class SearchLogRequest(BaseModel):
     platform: Literal["Web", "Bot", "Dashboard", "Miniapp"] = "Web"
     user_email: Optional[str] = None
     user_id: Optional[int] = None
+    visitor_id: Optional[str] = Field(None, min_length=36, max_length=36, description="UUID بصمة الزائر المجهول (للموقع)")
 
 
 class SearchLogResponse(BaseModel):
