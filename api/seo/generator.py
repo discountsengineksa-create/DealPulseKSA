@@ -38,6 +38,9 @@ BILINGUAL_ENABLED = os.getenv("SEO_BILINGUAL", "1") == "1"
 # 1000 كلمة عربية في JSON ≈ 3500-4000 token output. السقف الأصلي 2400 كان
 # يقطع النص في المنتصف ويكسر JSON → كل الـ jobs تفشل. 5000 يعطي هامش أمان.
 MAX_TOKENS = int(os.getenv("SEO_MAX_TOKENS", "8000"))  # مساحة لتفكير 2.5 + عربية ثقيلة بالتوكنز
+# هدف طول التوليد — أعلى من بوّابة النشر (MIN_BODY_WORDS=350) بهامش أمان. الموديل
+# أحياناً يبخل رغم طلب 600-1000 → نعيد المحاولة ونحتفظ بأطول ناتج نظيف.
+MIN_GEN_WORDS = int(os.getenv("SEO_MIN_GEN_WORDS", "450"))
 
 
 # ─── System prompts ─────────────────────────────────────────────────────────
@@ -60,6 +63,9 @@ SYSTEM_PROMPT_AR = """أنت كاتب محتوى SEO محترف لمنصة DealP
    + كلمة جذب (أحدث/حصري/2026/خصم).
 5. description_meta: 140-155 محرفاً، يلخّص العرض ويحثّ على النقر بـ CTA واضح.
 6. لا تخترع نِسَب خصم غير معطاة؛ استخدم المعطيات فقط (الكود/العرض/العرض الإضافي).
+   وإن كان public_coupon كوداً فعلياً (غير فارغ وغير «.») فاذكره **حرفياً** داخل
+   خطوات استخدام الكود (مثل «أدخل الكود ‎CMN10‎»)، ولا تستخدم الكلمة المستهدفة
+   نفسها كأنها الكود.
 7. لا تذكر منافسين أو منصّات أخرى.
 8. **التزم بفئة المتجر الفعلية**: اكتب فقط عن المنتجات/الفئات التي يبيعها المتجر
    فعلاً حسب (store_tags و store_bio) المعطاة. لا تخترع فئات أو منتجات لا يبيعها
@@ -95,7 +101,9 @@ Writing rules:
    + a hook word (latest / exclusive / 2026 / discount).
 5. description_meta: 140-155 chars, summarizes the offer with clear CTA.
 6. Do not invent discount percentages not provided; use only the given data
-   (the code / offer / extra offer).
+   (the code / offer / extra offer). If public_coupon is a real code (not empty
+   and not "."), cite it verbatim inside the "how to use" steps (e.g., "enter code
+   CMN10"); never present the target keyword itself as if it were the code.
 7. Do not name competitors or other platforms.
 8. **Stay strictly within the store's real category**: write only about products/
    categories the store actually sells per the given store_tags and store_bio.
@@ -341,8 +349,10 @@ def _generate_page_for_lang(job: dict, lang: str, job_id: int) -> tuple[bool, Op
     # غالباً تنجح المحاولة الثانية. نتوقّف فوراً لو السبب نضوب الميزانية (لا فائدة).
     res = None
     data: Optional[dict] = None
+    best_data: Optional[dict] = None
+    best_words = -1
     diag = ""
-    for attempt in range(2):
+    for attempt in range(3):
         res = call_llm(
             purpose=f"seo_copy_{lang}",
             system=system,
@@ -358,11 +368,27 @@ def _generate_page_for_lang(job: dict, lang: str, job_id: int) -> tuple[bool, Op
             return False, None, reason  # نضوب الميزانية — الإعادة بلا فائدة
 
         if res.text:
-            data = _parse_json(res.text)
-            if data and data.get("body_markdown"):
-                break  # نجح
+            cand = _parse_json(res.text)
+            if cand and cand.get("body_markdown"):
+                body = cand["body_markdown"]
+                words = len(re.findall(r"\S+", body))
+                # حارس جودة: أحرف سيريلية/صينية = هلوسة موديل عشوائية → ارفض وأعد
+                has_foreign = bool(re.search(r"[Ѐ-ӿ一-鿿]", body))
+                # احتفظ بأطول ناتج نظيف عبر المحاولات (احتياط لو كلها قصيرة)
+                if not has_foreign and words > best_words:
+                    best_data, best_words = cand, words
+                # نجاح كامل: طويل بما يكفي + نظيف
+                if words >= MIN_GEN_WORDS and not has_foreign:
+                    break
+                _log.info("seo gen attempt %d short/dirty job=%s lang=%s "
+                          "(words=%d foreign=%s) — retrying",
+                          attempt + 1, job_id, lang, words, has_foreign)
+                continue
         _log.warning("seo gen attempt %d failed for job=%s lang=%s (%s) — retrying",
                      attempt + 1, job_id, lang, diag)
+
+    # أفضل ناتج عبر المحاولات (الأطول النظيف) — أفضل من رفض الـ job كلياً
+    data = best_data
 
     if not data or not data.get("body_markdown"):
         # فشل بعد كل المحاولات — نحفظ سبباً دقيقاً للتشخيص (للوحة الوظائف الفاشلة)
