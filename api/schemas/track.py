@@ -169,7 +169,8 @@ class VisitRequest(BaseModel):
     مرة لكل جلسة. الزائر غير المسجّل user_id=NULL؛ المسجّل = web_users.id.
     referrer هو document.referrer الخام — السيرفر يصنّفه (بحث/سوشال/مباشر).
     """
-    visit_id:     str = Field(..., min_length=36, max_length=36, description="UUID v4 يولّده العميل")
+    visit_id:     str = Field(..., min_length=36, max_length=36, description="UUID v4 للجلسة (sessionStorage)")
+    visitor_id:   Optional[str] = Field(None, min_length=36, max_length=36, description="UUID بصمة متصفّح ثابتة (localStorage) — تمييز العائدين")
     landing_path: Optional[str] = Field(None, max_length=300, description="أول مسار دخل عليه")
     referrer:     Optional[str] = Field(None, max_length=500, description="document.referrer الخام")
     source:       Literal["web"] = "web"

@@ -9083,6 +9083,94 @@ elif page == "👣 زوّار الموقع":
         _land.columns = ["الصفحة", "زيارات"]
         st.dataframe(_land, use_container_width=True, hide_index=True)
 
+    # ── 🔁 الزوّار والعائدون (هوية ثابتة عبر visitor_id) ────────────────────
+    st.divider()
+    st.markdown("### 🔁 الزوّار والعائدون")
+
+    _has_visitor = bool(pd.read_sql("""
+        SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                       WHERE table_name='web_visits' AND column_name='visitor_id') AS ok
+    """, conn).iloc[0]["ok"])
+    if not _has_visitor:
+        st.info("ℹ️ لتمييز العائدين بدقّة (بصمة متصفّح ثابتة) طبّق: "
+                "`python api/run_migration.py migration_061_web_visits_visitor_id.sql` — "
+                "حتى ذلك الحين الهوية تعتمد على ip_hash (تقريبية).")
+
+    # تعبير الهوية بالأولوية: مسجّل ← بصمة ثابتة ← IP. نصوص ثابتة (لا مدخل مستخدم).
+    if _has_visitor:
+        _who = "COALESCE('u:'||user_id, 'v:'||visitor_id::text, 'ip:'||encode(ip_hash,'hex'))"
+        _label = ("CASE WHEN user_id IS NOT NULL THEN '🔐 مسجّل #'||user_id "
+                  "WHEN visitor_id IS NOT NULL THEN '👤 زائر '||left(visitor_id::text,8) "
+                  "ELSE '🌐 '||COALESCE(left(encode(ip_hash,'hex'),8),'مجهول') END")
+    else:
+        _who = "COALESCE('u:'||user_id, 'ip:'||encode(ip_hash,'hex'))"
+        _label = ("CASE WHEN user_id IS NOT NULL THEN '🔐 مسجّل #'||user_id "
+                  "ELSE '🌐 '||COALESCE(left(encode(ip_hash,'hex'),8),'مجهول') END")
+
+    _vis = pd.read_sql(f"""
+        WITH ident AS (
+            SELECT {_who} AS who
+            FROM web_visits
+            WHERE created_at::date BETWEEN %(f)s AND %(t)s {_q}
+        ), per AS (
+            SELECT who, COUNT(*) AS c FROM ident GROUP BY who
+        )
+        SELECT COUNT(*) AS uniq,
+               COUNT(*) FILTER (WHERE c > 1) AS returners,
+               COALESCE(SUM(c), 0) AS visits
+        FROM per
+    """, conn, params=_p).iloc[0]
+    _uniq = int(_vis["uniq"]); _ret = int(_vis["returners"]); _vts = int(_vis["visits"])
+    _ret_pct = (100 * _ret / _uniq) if _uniq else 0
+    _avg = (_vts / _uniq) if _uniq else 0
+
+    v1, v2, v3, v4 = st.columns(4)
+    with v1:
+        kpi_card("🧑", "زوّار فريدون", f"{_uniq:,}")
+    with v2:
+        kpi_card("🔁", "عائدون (>1 زيارة)", f"{_ret:,}", accent="info")
+    with v3:
+        kpi_card("📈", "نسبة العودة", f"{_ret_pct:.0f}%", accent="emerald")
+    with v4:
+        kpi_card("📊", "متوسط الزيارات/زائر", f"{_avg:.1f}")
+
+    # أكثر الزوّار تكراراً (نفس الشخص دخل كم مرة)
+    st.markdown("#### 🏅 أكثر الزوّار تكراراً")
+    _top = pd.read_sql(f"""
+        SELECT MAX({_label}) AS visitor,
+               COUNT(*) AS visits,
+               to_char(MIN(created_at), 'YYYY-MM-DD HH24:MI') AS first_seen,
+               to_char(MAX(created_at), 'YYYY-MM-DD HH24:MI') AS last_seen,
+               MAX(NULLIF(city, '')) AS city,
+               MAX(device_class) AS device
+        FROM web_visits
+        WHERE created_at::date BETWEEN %(f)s AND %(t)s {_q}
+        GROUP BY {_who}
+        ORDER BY visits DESC, last_seen DESC
+        LIMIT 20
+    """, conn, params=_p)
+    if not _top.empty:
+        _top.columns = ["الزائر", "زيارات", "أول زيارة", "آخر زيارة", "المدينة", "الجهاز"]
+        st.dataframe(_top, use_container_width=True, hide_index=True)
+
+    # سجل الزيارات الخام — كل زيارة على حدة (للتدقيق)
+    with st.expander("🧾 سجل الزيارات الخام (آخر 50)"):
+        _log = pd.read_sql(f"""
+            SELECT to_char(created_at, 'MM-DD HH24:MI') AS t,
+                   {_label} AS visitor,
+                   COALESCE(NULLIF(city, ''), '؟') AS city,
+                   COALESCE(device_class, '؟') AS device,
+                   COALESCE(referrer_kind, '؟') AS src,
+                   COALESCE(NULLIF(landing_path, ''), '/') AS landing,
+                   quality_score AS q
+            FROM web_visits
+            WHERE created_at::date BETWEEN %(f)s AND %(t)s {_q}
+            ORDER BY created_at DESC
+            LIMIT 50
+        """, conn, params=_p)
+        _log.columns = ["الوقت", "الزائر", "المدينة", "الجهاز", "المصدر", "صفحة الدخول", "الجودة"]
+        st.dataframe(_log, use_container_width=True, hide_index=True)
+
     conn.close()
 
 # ════════════════════════════════════════════════════════════════════════════

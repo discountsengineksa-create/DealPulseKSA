@@ -593,14 +593,14 @@ def log_visit(payload: VisitRequest, request: Request, conn=Depends(get_db)):
         cur.execute(
             """
             INSERT INTO web_visits (
-                visit_id, user_id, source,
+                visit_id, visitor_id, user_id, source,
                 referrer_kind, referrer_host, landing_path,
                 ip_hash, user_agent_hash,
                 country_code, region_code, city, device_class, asn,
                 is_datacenter, cf_bot_score, quality_score
             )
             VALUES (
-                %s::uuid, %s, %s,
+                %s::uuid, %s::uuid, %s, %s,
                 %s, %s, %s,
                 decode(%s, 'hex'), decode(%s, 'hex'),
                 %s, %s, %s, %s, %s,
@@ -609,7 +609,7 @@ def log_visit(payload: VisitRequest, request: Request, conn=Depends(get_db)):
             ON CONFLICT (visit_id) DO NOTHING
             """,
             (
-                payload.visit_id, payload.user_id, payload.source,
+                payload.visit_id, payload.visitor_id, payload.user_id, payload.source,
                 ref_kind, ref_host, payload.landing_path,
                 geo.ip_hash, geo.ua_hash,
                 geo.country_code, geo.region_code, geo.city, geo.device_class, geo.asn,
