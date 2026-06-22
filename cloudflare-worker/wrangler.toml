@@ -24,8 +24,11 @@ pattern = "api.dealpulseksa.com/go/*"
 zone_name = "dealpulseksa.com"
 
 # ─── Variables (public — تُكتب على CF dashboard وفي الكود) ─────────────
+# ⚠️ ORIGIN_BASE = أصل Railway مباشرةً (وليس api.dealpulseksa.com — هذا الدومين
+# نفسه يمرّ عبر الـWorker، فتوجيهه إليه = حلقة لا نهائية). الأصل غير مُدرَج في
+# zone dealpulseksa.com فلا يعترضه الـWorker.
 [vars]
-ORIGIN_BASE = "API_BASE_URL = "https://api.dealpulseksa.com""
+ORIGIN_BASE = "https://dealpulseksa-production.up.railway.app"
 LOG_LEVEL = "info"
 
 # ─── Secrets (سرية — تُضاف عبر wrangler) ───────────────────────────────
