@@ -4096,16 +4096,17 @@ elif page == "تحليل المتاجر":
 
         if not df_logs.empty:
             ev = df_logs.copy()
-            # بصمة الزائر المجهول: نُفضّل visitor_id (localStorage ثابت يصل مع كل
-            # حركة) على ip_hex (يعتمد على هيدر Cloudflare وكثيراً يكون NULL → كان
-            # يدمج كل الزوّار في «زائر» واحدة بلا تمييز). ندمجه في ip_hex حتى تبقى
-            # كل منطق التجميع/الهوية/الملف أدناه بلا تغيير، لكن بتمييز كل زائر.
+            # بصمة الزائر المجهول: نُفضّل visitor_id (localStorage ثابت، يبقى عبر
+            # تغيّر الـIP ويصل مع النسخ والنقر معاً) ثم نسقط لـ ip_hex (بصمة IP).
+            # نكتبها في عمود ip_hex حتى يبقى منطق التجميع/الهوية/الملف أدناه بلا
+            # تغيير. بدون هذا يُدمج كل الزوّار في «زائر» واحدة، أو يتشظّى الزائر
+            # الواحد بين بصمة IP (نقر /go) وبصمة localStorage (نسخ /track).
             if "visitor_id" in ev.columns:
-                _vid = ev["visitor_id"].astype("string").str.strip()
-                _vid = _vid.where(_vid.notna() & (_vid != "") & (_vid.str.lower() != "nan"))
-                _ipx = ev["ip_hex"].astype("string").str.strip()
-                _no_ip = _ipx.isna() | (_ipx == "") | (_ipx.str.lower() == "nan")
-                ev.loc[_no_ip & _vid.notna(), "ip_hex"] = _vid[_no_ip & _vid.notna()]
+                def _norm_fp(col):
+                    s = ev[col].astype("string").str.strip()
+                    return s.where(s.notna() & (s != "") & (s.str.lower() != "nan"))
+                _fp = _norm_fp("visitor_id").fillna(_norm_fp("ip_hex"))
+                ev["ip_hex"] = _fp.astype(object).where(_fp.notna(), None)
             # توحيد المستخدم المعروف: لو user_id معروف نتجاهل ip_hex حتى لا يقسّم
             # نفس مستخدم البوت لصفّين (نسخ/بحث بدون IP، ونقر عبر /go/{slug} مع IP).
             ev.loc[ev["user_id"].notna(), "ip_hex"] = None

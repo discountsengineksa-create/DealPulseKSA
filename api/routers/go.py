@@ -19,6 +19,7 @@ GET /go/{slug}
 from __future__ import annotations
 
 import logging
+import uuid as _uuid
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -69,13 +70,16 @@ def _cache_store(slug: str, master_id: int, store_id: str, link: str) -> None:
         pass
 
 
-def _challenge_page(slug: str, s: str, u: str = "") -> str:
+def _challenge_page(slug: str, s: str, u: str = "", v: str = "") -> str:
     """صفحة تحدّي JS — تُعيد التوجيه لنفس الرابط مع h=1 لإثبات تشغيل JS."""
     safe_slug = "".join(c for c in slug if c.isalnum())
     safe_src = "".join(c for c in (s or "") if c.isalnum()) or "web"
     safe_u = "".join(c for c in (u or "") if c.isdigit())
+    # visitor_id = UUID (hex + شرطات) — نُبقيه عبر التحدّي حتى لا تفقد النقرة بصمتها.
+    safe_v = "".join(c for c in (v or "") if c.isalnum() or c == "-")[:36]
     u_q = f"&u={safe_u}" if safe_u else ""
-    target = f"/go/{safe_slug}?s={safe_src}&h=1{u_q}"
+    v_q = f"&v={safe_v}" if safe_v else ""
+    target = f"/go/{safe_slug}?s={safe_src}&h=1{u_q}{v_q}"
     return f"""<!doctype html>
 <html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -120,6 +124,7 @@ def cloaked_redirect(
     s: str = "web",
     h: str = "0",
     u: str = "",
+    v: str = "",
     ctx: str = "",
     conn=Depends(get_db),
 ):
@@ -152,12 +157,20 @@ def cloaked_redirect(
     source = {"bot": "bot", "miniapp": "telegram_miniapp"}.get(s, "web")
     # u = معرّف مستخدم تيليجرام (يمرّره البوت/الميني) → يربط النقرة + المدينة بالشخص
     click_user_id = int(u) if (u or "").isdigit() else None
+    # v = بصمة الزائر المجهول (UUID من localStorage، يمرّرها الموقع) → تُوحّد نقرات
+    # /go للزائر المجهول بهوية واحدة في التحليلات. نتحقق من الشكل قبل ::uuid.
+    def _valid_uuid(x: str) -> bool:
+        try:
+            _uuid.UUID(str(x)); return True
+        except (ValueError, AttributeError, TypeError):
+            return False
+    visitor_id = v if _valid_uuid(v) else None
 
     # 3) Bot Challenge — مشكوك فيه ولم يُثبت JS بعد → صفحة تحدّي (بلا تسجيل/تحويل)
     if quality < QUALITY_THRESHOLD and not js_passed:
         _log.info("Bot challenge served: store=%s slug=%s quality=%d asn=%s",
                   store_id, slug, quality, geo.asn)
-        return HTMLResponse(_challenge_page(slug, s, u))
+        return HTMLResponse(_challenge_page(slug, s, u, v))
 
     # 4) مسموح — سجّل النقرة (idempotent). العدّاد يرتفع للجودة العالية فقط.
     counted = quality >= QUALITY_THRESHOLD
@@ -175,14 +188,14 @@ def cloaked_redirect(
                 country_code, region_code, city, postal_code,
                 lat, lng, isp, asn,
                 is_datacenter, is_proxy, device_class,
-                cf_bot_score, quality_score
+                cf_bot_score, quality_score, visitor_id
             ) VALUES (
                 %s, %s, 'click_link', %s, %s,
                 %s::uuid, decode(%s, 'hex'), decode(%s, 'hex'),
                 %s, %s, %s, %s,
                 %s, %s, %s, %s,
                 %s, %s, %s,
-                %s, %s
+                %s, %s, %s::uuid
             )
             ON CONFLICT (event_id) DO NOTHING
             """,
@@ -193,7 +206,7 @@ def cloaked_redirect(
                 geo.country_code, geo.region_code, geo.city, geo.postal_code,
                 geo.lat, geo.lng, geo.isp, geo.asn,
                 is_dc, is_proxy, geo.device_class,
-                geo.cf_bot_score, quality,
+                geo.cf_bot_score, quality, visitor_id,
             ),
         )
         if counted:
