@@ -1132,7 +1132,8 @@ def _sa_load_actions() -> pd.DataFrame:
                    a.is_datacenter, a.is_proxy, a.quality_score,
                    a.city          AS geo_city,                 -- web geo (من إثراء action_logs)
                    a.country_code,
-                   encode(a.ip_hash, 'hex') AS ip_hex,          -- بصمة ثابتة لزائر الويب المجهول
+                   encode(a.ip_hash, 'hex') AS ip_hex,          -- بصمة IP (تعتمد على Cloudflare، قد تكون NULL)
+                   a.visitor_id::text       AS visitor_id,      -- بصمة localStorage الثابتة لزائر الويب المجهول (أوثق)
                    bu.device_type, bu.city AS bu_city, bu.country, bu.lang,
                    bu.username     AS bu_username,              -- هوية تيليجرام
                    wu.display_name AS web_name,                 -- هوية الويب المسجّل
@@ -4095,6 +4096,16 @@ elif page == "تحليل المتاجر":
 
         if not df_logs.empty:
             ev = df_logs.copy()
+            # بصمة الزائر المجهول: نُفضّل visitor_id (localStorage ثابت يصل مع كل
+            # حركة) على ip_hex (يعتمد على هيدر Cloudflare وكثيراً يكون NULL → كان
+            # يدمج كل الزوّار في «زائر» واحدة بلا تمييز). ندمجه في ip_hex حتى تبقى
+            # كل منطق التجميع/الهوية/الملف أدناه بلا تغيير، لكن بتمييز كل زائر.
+            if "visitor_id" in ev.columns:
+                _vid = ev["visitor_id"].astype("string").str.strip()
+                _vid = _vid.where(_vid.notna() & (_vid != "") & (_vid.str.lower() != "nan"))
+                _ipx = ev["ip_hex"].astype("string").str.strip()
+                _no_ip = _ipx.isna() | (_ipx == "") | (_ipx.str.lower() == "nan")
+                ev.loc[_no_ip & _vid.notna(), "ip_hex"] = _vid[_no_ip & _vid.notna()]
             # توحيد المستخدم المعروف: لو user_id معروف نتجاهل ip_hex حتى لا يقسّم
             # نفس مستخدم البوت لصفّين (نسخ/بحث بدون IP، ونقر عبر /go/{slug} مع IP).
             ev.loc[ev["user_id"].notna(), "ip_hex"] = None
