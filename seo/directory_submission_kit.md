@@ -37,6 +37,10 @@
   free — with a Telegram bot for quick access. Covers major sale seasons (White Friday,
   Ramadan, National Day) and daily deals.
 
+### للأدلّة الإنجليزية — حقول جاهزة (الصق كما هي)
+- **Business Offer/Highlights:** Daily-updated, hand-verified discount codes and exclusive deals from dozens of stores — completely free, plus a Telegram bot for instant access.
+- **Tags:** discount codes, coupons, promo codes, Saudi deals, offers, Noon coupon, Namshi coupon, Saudi coupons, online shopping
+
 ---
 
 ## ⚠️ ملاحظة الإيميل (يحسمها المالك قبل البدء)
