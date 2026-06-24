@@ -23,6 +23,14 @@
 | **الشعار** | https://www.dealpulseksa.com/logo.png |
 | **كلمات مفتاحية** | كوبونات خصم، أكواد خصم، عروض السعودية، تخفيضات، صفقات، كوبون نون، كوبون نمشي، Saudi coupons, discount codes KSA |
 
+### NAP الموحّد (الصق نفسه حرفياً في كل دليل — لا تغيّره)
+- **Contact Person:** Salah Asiri
+- **Phone:** +966 53 444 8900
+- **Province / City:** Riyadh Province — الرياض
+- **Address:** Riyadh, Saudi Arabia  (منصّة أونلاين — بلا شارع/مبنى مفبرك)
+- **Email (public):** dealpulseksa@gmail.com
+- **Map marker:** وسط الرياض تقريبياً
+
 ### وصف قصير (سطر — لخانة الـ tagline/بحث)
 - **AR:** منصة الكوبونات والصفقات الذكية في السعودية — أكواد خصم محدّثة يومياً ومجرّبة.
 - **EN:** Saudi Arabia's smart coupons & deals platform — daily-updated, hand-verified codes.
