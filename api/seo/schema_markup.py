@@ -9,8 +9,8 @@ Schema.org JSON-LD generator — يحوّل صفحة هبوط إلى structured 
 الأنواع المُولَّدة لكل صفحة:
   • Article          → نوع المحتوى الرئيسي
   • Organization     → DealPulse KSA كمُصدر
-  • BreadcrumbList   → مسار الصفحة (Home > Category > Store)
   • FAQPage          → الأسئلة المستخرجة من body_markdown (لو وُجدت)
+  (مسار التنقّل BreadcrumbList تُصدره الواجهة app/c/[slug] — مصدر واحد مُرمَّز صالح.)
 
 كل ذلك في JSON-LD واحد @graph (الأسلوب المفضّل لـ Google 2024+).
 
@@ -85,21 +85,9 @@ def _extract_faqs(body_markdown: str, max_faqs: int = 6) -> list[dict]:
     return faqs
 
 
-def _category_from_tags(store_tags: str | None) -> str | None:
-    """يستخرج أول tag كـ category — بسيط ومحسوب."""
-    if not store_tags:
-        return None
-    # store_tags بصيغة '{a,b,c}'
-    s = store_tags.strip('{} ')
-    if not s:
-        return None
-    first = s.split(',', 1)[0].strip().strip('"')
-    return first or None
-
-
 def _abs_url(slug: str) -> str:
-    """URL مطلق للصفحة على الموقع."""
-    return f"{SITE_URL}{SEO_PAGE_PATH.format(slug=slug)}"
+    """URL مطلق للصفحة — الـ slug مُرمَّز (عربي/مسافات) ليكون URL صالحاً يطابق canonical."""
+    return f"{SITE_URL}{SEO_PAGE_PATH.format(slug=quote(slug, safe=''))}"
 
 
 # ─── Builders for each schema type ──────────────────────────────────────────
@@ -115,45 +103,6 @@ def _build_organization(lang: str = "ar") -> dict:
         "areaServed":  KSA_AREA,
         "knowsLanguage": KSA_LANGS,
     }
-
-
-def _build_breadcrumb(page: dict, lang: str) -> dict:
-    home_label = "الرئيسية" if lang == "ar" else "Home"
-    cat = _category_from_tags(page.get("store_tags"))
-    store_id = page.get("store_id")
-    page_label = page.get("title_meta") or page.get("target_keyword", "")
-
-    items: list[dict] = [
-        {"@type": "ListItem", "position": 1, "name": home_label, "item": SITE_URL},
-    ]
-    pos = 2
-    if cat:
-        items.append({
-            "@type":    "ListItem",
-            "position": pos,
-            "name":     cat,
-            "item":     f"{SITE_URL}/category/{quote(cat, safe='')}",
-        })
-        pos += 1
-    # مستوى المتجر — يُضاف فقط عند وجود متجر مرتبط، مع رابطه (item). أي عنصر غير
-    # أخير بلا item يُبطِل المسار كاملاً في Google (هذا كان سبب «الحقل item غير
-    # مضمَّن»). والترميز يحمي من المسافات/العربية في store_id (مثل «عود رويال»).
-    if store_id:
-        items.append({
-            "@type":    "ListItem",
-            "position": pos,
-            "name":     page.get("store_name") or store_id,
-            "item":     f"{SITE_URL}/store/{quote(store_id, safe='')}",
-        })
-        pos += 1
-    items.append({
-        "@type":    "ListItem",
-        "position": pos,
-        "name":     page_label,
-        "item":     _abs_url(page["slug"]),
-    })
-
-    return {"@type": "BreadcrumbList", "itemListElement": items}
 
 
 def _build_article(page: dict, lang: str) -> dict:
@@ -214,10 +163,11 @@ def build_jsonld(page: dict, *, site_url: str | None = None) -> dict:
     """
     lang = page.get("lang") or "ar"
 
+    # لا BreadcrumbList هنا — الواجهة (app/c/[slug]) تُصدر المسار الوحيد المُرمَّز
+    # الصالح؛ إصدار الباكند سابقاً حمل رابطاً عربياً خاماً أبطل المسار في GSC.
     graph: list[dict] = [
         _build_organization(lang),
         _build_article(page, lang),
-        _build_breadcrumb(page, lang),
     ]
 
     faqs = _extract_faqs(page.get("body_markdown") or "")
