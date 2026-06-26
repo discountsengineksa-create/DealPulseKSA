@@ -101,6 +101,7 @@ def _upload_social_poster(file_bytes: bytes, store_slug: str) -> str | None:
             file_bytes,
             public_id=f"store_posters/{store_slug}",
             overwrite=True,
+            invalidate=True,
             transformation=[{"width": 1600, "height": 1600, "crop": "limit"}],
         )
         return result.get("secure_url")
@@ -2373,8 +2374,11 @@ if page == "الاستعلام والتعديل":
                             st.warning("⚠️ الحقول التالية إجبارية: " + " ، ".join(missing))
                         else:
                             # ─── حل رابط البوستر (رفع جديد لو موجود) ─────────────
+                            # الملف المرفوع له الأولوية على حقل الرابط لأن الحقل
+                            # معبّأ افتراضياً بالرابط القديم — لو فحصنا "and not final_poster_url"
+                            # ما راح يُرفع الجديد أبداً والقديم يبقى في DB.
                             final_poster_url = (u_poster_url or "").strip()
-                            if u_poster_file and not final_poster_url:
+                            if u_poster_file:
                                 _up_poster = _upload_social_poster(
                                     u_poster_file.read(), (u_store or '').strip()
                                 )
@@ -2424,7 +2428,9 @@ if page == "الاستعلام والتعديل":
                             # نشر تلقائي فقط لما الكوبون يتغير (تجديد كود)
                             # أو لو البوستر اتغير (لإعادة بثّ الإعلان المرئي الجديد)
                             _coupon_changed = (u_pub or '').strip() != (res.get('public_coupon') or '').strip()
-                            _poster_changed = (final_poster_url or '') != (res.get('social_poster_url') or '')
+                            # رفع ملف جديد يحسب «تغيير» حتى لو الرابط نفسه
+                            # (Cloudinary overwrite=True يبقي نفس الـURL لكن المحتوى تغيّر)
+                            _poster_changed = bool(u_poster_file) or (final_poster_url or '') != (res.get('social_poster_url') or '')
                             if _coupon_changed or _poster_changed:
                                 _trigger_social_broadcast(search_id)
                             st.rerun()
