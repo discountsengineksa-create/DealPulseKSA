@@ -314,19 +314,7 @@ TEXTS = {
                           'en': '✅ Your request has been saved! We will try to provide the code soon.'},
     'request_err':       {'ar': '⚠️ تعذّر تسجيل الطلب الآن. حاول مرة ثانية.',
                           'en': '⚠️ Could not save the request now. Please try again.'},
-    'menu_support':      {'ar': 'تواصل معنا',           'en': 'Contact Us'},
     'menu_whatsapp':     {'ar': '💬 واتساب',             'en': '💬 WhatsApp'},
-    'support_prompt':    {'ar': 'أهلاً بك في دعم نبض الصفقات.\n'
-                                'يرجى إرسال استفسارك أو وصف المشكلة بالتفصيل، وسيقوم فريق الدعم بمراجعتها والرد عليك في أقرب وقت ممكن.',
-                          'en': 'Welcome to Deal Pulse support.\n'
-                                'Please send your question or describe the issue in detail, and our support team will review it and reply to you as soon as possible.'},
-    'support_empty':     {'ar': '⚠️ ما استلمت رسالتك. اكتب مشكلتك وحاول مرة ثانية.',
-                          'en': '⚠️ No message received. Please type your issue and try again.'},
-    'support_saved':     {'ar': '✅ وصلتنا رسالتك! فريق الدعم بيتواصل معك هنا قريباً. 🙏',
-                          'en': '✅ We received your message! Support will get back to you here soon. 🙏'},
-    'support_err':       {'ar': '⚠️ تعذّر إرسال رسالتك الآن. حاول مرة ثانية بعد لحظات.',
-                          'en': '⚠️ Could not send your message now. Please try again shortly.'},
-    'support_reply_hdr': {'ar': '*رد فريق الدعم:*',  'en': '*Support team reply:*'},
     'back_msg':          {'ar': '🏠 رجعناك للقائمة الرئيسية.',
                           'en': '🏠 Back to the main menu.'},
     'tag_header':        {'ar': '📂 متاجر قسم: *{tag}*',
@@ -750,11 +738,7 @@ def _kb_main(lang):
         types.InlineKeyboardButton(TEXTS['menu_request'][lang], callback_data='nav:request'),
     )
     kb.add(types.InlineKeyboardButton(TEXTS['menu_website'][lang], url=WEBSITE_URL))
-    # واتساب + تواصل عبر البوت — جنباً إلى جنب: العميل يختار قناته المفضّلة
-    kb.add(
-        types.InlineKeyboardButton(TEXTS['menu_whatsapp'][lang], url=WHATSAPP_LINK),
-        types.InlineKeyboardButton(TEXTS['menu_support'][lang], callback_data='nav:support'),
-    )
+    kb.add(types.InlineKeyboardButton(TEXTS['menu_whatsapp'][lang], url=WHATSAPP_LINK))
     kb.add(types.InlineKeyboardButton(TEXTS['menu_end'][lang], callback_data='nav:end'))
     return kb
 
@@ -1450,38 +1434,6 @@ def _process_request(message):
         _edit_nav(user_id, t(user_id, 'request_err'), _kb_cancel(lang))
 
 
-def _process_support(message):
-    """يلتقط رسالة الدعم من المستخدم ويحفظها في support_tickets (source='bot').
-    الأدمن يرى الرسالة في «مركز الدعم» بالداشبورد ويرد، ويُسلَّم الرد عبر البوت."""
-    user_id  = message.from_user.id
-    lang     = get_lang(user_id)
-    username = message.from_user.username or ""
-    text     = (message.text or "").strip()
-    try:
-        bot.delete_message(message.chat.id, message.message_id)
-    except Exception:
-        pass
-    if not text:
-        _edit_nav(user_id, t(user_id, 'support_empty'), _kb_cancel(lang))
-        return
-    try:
-        conn = get_db_connection()
-        cur  = conn.cursor()
-        cur.execute("""
-            INSERT INTO support_tickets
-                (source, telegram_id, username, message, status, created_at)
-            VALUES ('bot', %s, %s, %s, 'open', NOW())
-        """, (user_id, username, text))
-        conn.commit()
-        release_conn(conn)
-        log_action(None, 'support_msg', user_id=user_id, details=text[:120])
-        _update_nav(user_id, state='menu')
-        _edit_nav(user_id, t(user_id, 'support_saved'), _kb_main(lang))
-    except Exception as e:
-        print(f"⚠️ _process_support: {e}")
-        _edit_nav(user_id, t(user_id, 'support_err'), _kb_cancel(lang))
-
-
 # ============================================================
 #  Lang Picker + Welcome Image
 # ============================================================
@@ -1655,50 +1607,20 @@ def _start_session(message):
 #  Message Handlers
 # ============================================================
 
-def _start_support_deeplink(message):
-    """دخول من زر دعم الموقع (deep-link ?start=support) → يضع المستخدم بوضع الدعم
-    مباشرة. هكذا «يصير مكتمل» (نلتقط هويته) ويقدر فريق الدعم يرد عليه عبر البوت."""
-    user_id = message.from_user.id
-    chat_id = message.chat.id
-    try:
-        register_or_update_user(message)
-        log_action(None, 'start', user_id=user_id, details='via:web_support')
-    except Exception as e:
-        print(f"⚠️ support deeplink register: {e}")
-    try:
-        lang = get_lang(user_id)
-    except Exception:
-        lang = 'ar'
-    try:
-        sent = bot.send_message(chat_id, t(user_id, 'support_prompt'),
-                                reply_markup=_kb_cancel(lang))
-        _update_nav(user_id, chat_id=chat_id, msg_id=sent.message_id, state='support')
-    except Exception as e:
-        print(f"⚠️ support deeplink prompt: {e}")
-        _start_session(message)  # fallback للقائمة العادية
-
-
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    # deep-link: «/start support» (من زر دعم الموقع) → دخول مباشر لوضع الدعم
-    _parts = (message.text or "").split(maxsplit=1)
-    if len(_parts) > 1 and _parts[1].strip().startswith("support"):
-        _start_support_deeplink(message)
-        return
     _start_session(message)
 
 
 @bot.message_handler(commands=['chatid'])
 def send_chatid(message):
-    """يعطي رقم المحادثة الحالية — لإعداد قروب الدعم (ADMIN_CHAT_ID).
-    استخدمه داخل قروب الدعم (بعد إضافة البوت) للحصول على رقم القروب."""
+    """يعطي رقم المحادثة الحالية — لإعداد ADMIN_CHAT_ID (للإشعارات الإدارية)."""
     cid = message.chat.id
     ctype = message.chat.type  # private / group / supergroup
     bot.reply_to(
         message,
         f"🆔 *رقم هذه المحادثة:*\n`{cid}`\n\nالنوع: {ctype}\n\n"
-        f"ضع هذا الرقم في متغيّر البيئة *ADMIN\\_CHAT\\_ID* لخدمة البوت على Railway "
-        f"حتى تصل تذاكر الدعم هنا.",
+        f"ضع هذا الرقم في متغيّر البيئة *ADMIN\\_CHAT\\_ID* لخدمة البوت على Railway.",
         parse_mode="Markdown")
 
 
@@ -1743,8 +1665,6 @@ def handle_text(message):
         _process_search(message)
     elif state == 'request':
         _process_request(message)
-    elif state == 'support':
-        _process_support(message)
     elif message.text.strip():
         # نص عادي بدون حالة بحث → بحث مباشر تلقائي
         if not nav.get('msg_id'):
@@ -1868,10 +1788,6 @@ def handle_nav(call):
     elif action == 'request':
         _update_nav(user_id, state='request')
         _edit_nav(user_id, t(user_id, 'request_prompt'), _kb_cancel(lang))
-
-    elif action == 'support':
-        _update_nav(user_id, state='support')
-        _edit_nav(user_id, t(user_id, 'support_prompt'), _kb_cancel(lang))
 
     elif action == 'favs':
         _load_favorites(user_id, lang)
