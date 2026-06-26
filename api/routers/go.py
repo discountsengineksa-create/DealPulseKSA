@@ -19,7 +19,9 @@ GET /go/{slug}
 from __future__ import annotations
 
 import logging
+import os
 import uuid as _uuid
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -37,6 +39,39 @@ router = APIRouter(prefix="/go", tags=["cloaking"])
 
 # نفس عتبة /track — تحت هذا الحد لا نُحدّث العدّادات ونطلب تحدّي JS
 QUALITY_THRESHOLD = 50
+
+
+# ─── Amazon Associates: tag-swap حسب قناة النقرة ─────────────────────────────
+# نستبدل ?tag= على روابط amazon.* حسب مصدر النقرة بحيث تُسند العمولة للقناة
+# الصحيحة (الموقع/الميني/البوت) دون تعديل affiliate_link في DB.
+# Tag map يأتي من Railway env vars؛ لو غير مضبوط للقناة، يُبقى الرابط كما هو
+# (fail-open — لا نكسر نقرة لو env فاضي).
+_AMAZON_TAG_ENV_KEY = {
+    "web":              "AMAZON_TAG_WEB",
+    "telegram_miniapp": "AMAZON_TAG_MINIAPP",
+    "bot":              "AMAZON_TAG_BOT",
+}
+
+
+def _swap_amazon_tag(url: str, source: str) -> str:
+    """يبدّل/يضيف معامل tag لروابط amazon.* فقط. غير-أمازون تمرّ كما هي."""
+    if not url:
+        return url
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return url
+    host = (parsed.netloc or "").lower()
+    # كل نطاقات أمازون الإقليمية: amazon.sa / amazon.com / amazon.ae …
+    if "amazon." not in host:
+        return url
+    env_key = _AMAZON_TAG_ENV_KEY.get(source)
+    new_tag = os.getenv(env_key) if env_key else None
+    if not new_tag:
+        return url  # ENV فاضي لهذه القناة → لا تعديل
+    qs = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    qs["tag"] = new_tag
+    return urlunparse(parsed._replace(query=urlencode(qs)))
 
 # ─── Redis cache for slug→(store_id, affiliate_link) ─────────────────────────
 # يُسرّع التحويلات الشائعة (نفس الـ slug آلاف المرات في الدقيقة).
@@ -235,8 +270,12 @@ def cloaked_redirect(
     if not target_url:
         return HTMLResponse(_not_found_page(), status_code=404)
 
-    # 7) تحويل 302 — رابط الأفلييت في الترويسة فقط، بلا كاش ولا referrer
-    resp = RedirectResponse(url=target_url, status_code=302)
+    # 7) tag-swap لأمازون حسب القناة. (لا يلمس روابط غير-أمازون، ولا يلمس
+    #    أمازون لو ENV الخاص بالقناة غير مضبوط.)
+    final_url = _swap_amazon_tag(target_url, source)
+
+    # 8) تحويل 302 — رابط الأفلييت في الترويسة فقط، بلا كاش ولا referrer
+    resp = RedirectResponse(url=final_url, status_code=302)
     resp.headers["Cache-Control"] = "no-store"
     resp.headers["Referrer-Policy"] = "no-referrer"
     return resp
