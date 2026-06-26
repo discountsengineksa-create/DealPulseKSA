@@ -2343,6 +2343,15 @@ if page == "الاستعلام والتعديل":
                         else:
                             st.caption("⚠️ لا يوجد بوستر — السوشيال بينشر الشعار فقط")
 
+                    # حذف البوستر الحالي قبل الحفظ — يُفرّغ social_poster_url من DB
+                    # ويعطي الأولوية للملف المرفوع (لو موجود) بعد إفراغ الحقل النصي.
+                    u_poster_delete = st.checkbox(
+                        "🗑️ احذف البوستر الحالي عند الحفظ",
+                        key=f"poster_delete_{search_id}",
+                        value=False,
+                        help="فعّل لو ما يقبل البوستر الجديد. عند الضغط على «حفظ» سيُمسَح الحالي من DB، ثم يُرفع الجديد لو أرفقته.",
+                    )
+
                     # الصف 7: إشهار / إعلان مدفوع
                     st.divider()
                     current_promoted = bool(res.get('is_promoted') or False)
@@ -2373,11 +2382,14 @@ if page == "الاستعلام والتعديل":
                         if missing:
                             st.warning("⚠️ الحقول التالية إجبارية: " + " ، ".join(missing))
                         else:
-                            # ─── حل رابط البوستر (رفع جديد لو موجود) ─────────────
-                            # الملف المرفوع له الأولوية على حقل الرابط لأن الحقل
-                            # معبّأ افتراضياً بالرابط القديم — لو فحصنا "and not final_poster_url"
-                            # ما راح يُرفع الجديد أبداً والقديم يبقى في DB.
-                            final_poster_url = (u_poster_url or "").strip()
+                            # ─── حل رابط البوستر (حذف/رفع جديد لو موجود) ─────────────
+                            # 1) لو فُعّل الحذف: نُفرّغ الحقل النصي قبل أي شيء
+                            # 2) الملف المرفوع له الأولوية على حقل الرابط (الحقل معبّأ
+                            #    بالرابط القديم افتراضياً — بدون هذه الأولوية الرفع ينقفز)
+                            if u_poster_delete:
+                                final_poster_url = ""
+                            else:
+                                final_poster_url = (u_poster_url or "").strip()
                             if u_poster_file:
                                 _up_poster = _upload_social_poster(
                                     u_poster_file.read(), (u_store or '').strip()
