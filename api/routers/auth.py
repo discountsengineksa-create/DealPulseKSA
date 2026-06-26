@@ -156,20 +156,16 @@ def register(payload: RegisterRequest, request: Request, conn=Depends(get_db)):
             cur.execute(
                 """
                 INSERT INTO web_users (
-                    phone_number, email, display_name, city, country, lang,
-                    gender, birth_date, telegram_username, consent_at,
+                    phone_number, email, country, lang,
+                    gender, consent_at,
                     password_hash, last_ip, last_seen, status
-                ) VALUES (%s, %s, %s, %s, 'SA', 'ar', %s, %s, %s, NOW(), %s, %s, NOW(), 'Active')
+                ) VALUES (%s, %s, 'SA', 'ar', %s, NOW(), %s, %s, NOW(), 'Active')
                 RETURNING *
                 """,
                 (
                     payload.phone_number,
                     email_lower,
-                    payload.display_name,
-                    payload.city,
                     payload.gender,
-                    payload.birth_date,
-                    payload.telegram_username,
                     pw_hash,
                     client_ip,
                 ),

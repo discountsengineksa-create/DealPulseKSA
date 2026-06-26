@@ -55,35 +55,17 @@ def _normalize_phone(v: str) -> str:
 
 # ─── Register ──────────────────────────────────────────────────────────────
 class RegisterRequest(BaseModel):
-    """طلب إنشاء حساب جديد."""
-    display_name: str = Field(..., min_length=2, max_length=100, description="الاسم الكامل")
+    """طلب إنشاء حساب جديد. الحقول الأساسية فقط: جوال، إيميل، جنس."""
     phone_number: str = Field(..., description="رقم الجوال (يقبل 5XXXXXXXX أو +9665XXXXXXXX)")
     email: EmailStr = Field(..., description="الإيميل")
     password: str = Field(..., min_length=6, max_length=128, description="كلمة المرور (6 أحرف على الأقل)")
-    city: str = Field(..., min_length=2, max_length=50, description="المدينة")
     gender: Literal["male", "female"] = Field(..., description="الجنس: male أو female")
-    birth_date: date = Field(..., description="تاريخ الميلاد (YYYY-MM-DD)")
     consent: bool = Field(..., description="موافقة PDPL على سياسة الخصوصية (إلزامي)")
-    telegram_username: Optional[str] = Field(
-        None,
-        max_length=33,
-        description="اختياري: اسم مستخدم تيليجرام (لربط الحساب مع نشاطك في البوت)",
-    )
 
     @field_validator("phone_number")
     @classmethod
     def _phone(cls, v: str) -> str:
         return _normalize_phone(v)
-
-    @field_validator("display_name", "city")
-    @classmethod
-    def _trim(cls, v: str) -> str:
-        return v.strip()
-
-    @field_validator("birth_date")
-    @classmethod
-    def _birth_date(cls, v: date) -> date:
-        return _validate_age_range(v)
 
     @field_validator("consent")
     @classmethod
@@ -91,11 +73,6 @@ class RegisterRequest(BaseModel):
         if v is not True:
             raise ValueError("يجب الموافقة على سياسة الخصوصية قبل إنشاء الحساب")
         return v
-
-    @field_validator("telegram_username")
-    @classmethod
-    def _tg(cls, v: Optional[str]) -> Optional[str]:
-        return _normalize_telegram_username(v)
 
 
 class TokenResponse(BaseModel):
