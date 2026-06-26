@@ -93,15 +93,20 @@ def _upload_logo(file_bytes: bytes, store_slug: str) -> str | None:
 def _upload_social_poster(file_bytes: bytes, store_slug: str) -> str | None:
     """رفع بوستر السوشيال (الـthemed من الستوديو) إلى Cloudinary — base عالية الدقة.
     api/social/image_specs.py يشتقّ مقاسات المنصات الـ8 من هذا الـURL عبر transforms.
-    يُعيد secure_url أو None."""
+    يُعيد secure_url أو None.
+
+    كل رفع = public_id فريد بختم زمني → رابط جديد كلياً. هذا يكسر كاش Cloudinary CDN
+    وكاش Instagram/Meta نهائياً. القديم يبقى محفوظ تحت رابطه القديم (للأرشيف)،
+    لكن master.social_poster_url ينتقل للجديد فوراً.
+    """
     if not _CLOUDINARY_OK:
         return None
     try:
+        _ts = int(_time.time())
         result = cloudinary.uploader.upload(
             file_bytes,
-            public_id=f"store_posters/{store_slug}",
-            overwrite=True,
-            invalidate=True,
+            public_id=f"store_posters/{store_slug}/v{_ts}",
+            overwrite=False,
             transformation=[{"width": 1600, "height": 1600, "crop": "limit"}],
         )
         return result.get("secure_url")
@@ -2343,15 +2348,6 @@ if page == "الاستعلام والتعديل":
                         else:
                             st.caption("⚠️ لا يوجد بوستر — السوشيال بينشر الشعار فقط")
 
-                    # حذف البوستر الحالي قبل الحفظ — يُفرّغ social_poster_url من DB
-                    # ويعطي الأولوية للملف المرفوع (لو موجود) بعد إفراغ الحقل النصي.
-                    u_poster_delete = st.checkbox(
-                        "🗑️ احذف البوستر الحالي عند الحفظ",
-                        key=f"poster_delete_{search_id}",
-                        value=False,
-                        help="فعّل لو ما يقبل البوستر الجديد. عند الضغط على «حفظ» سيُمسَح الحالي من DB، ثم يُرفع الجديد لو أرفقته.",
-                    )
-
                     # الصف 7: إشهار / إعلان مدفوع
                     st.divider()
                     current_promoted = bool(res.get('is_promoted') or False)
@@ -2382,14 +2378,11 @@ if page == "الاستعلام والتعديل":
                         if missing:
                             st.warning("⚠️ الحقول التالية إجبارية: " + " ، ".join(missing))
                         else:
-                            # ─── حل رابط البوستر (حذف/رفع جديد لو موجود) ─────────────
-                            # 1) لو فُعّل الحذف: نُفرّغ الحقل النصي قبل أي شيء
-                            # 2) الملف المرفوع له الأولوية على حقل الرابط (الحقل معبّأ
-                            #    بالرابط القديم افتراضياً — بدون هذه الأولوية الرفع ينقفز)
-                            if u_poster_delete:
-                                final_poster_url = ""
-                            else:
-                                final_poster_url = (u_poster_url or "").strip()
+                            # ─── حل رابط البوستر (رفع جديد لو موجود) ─────────────
+                            # الملف المرفوع له الأولوية المطلقة على حقل الرابط.
+                            # الرفع يولّد رابط جديد فريد (timestamped public_id) فينكسر
+                            # كاش Cloudinary + Instagram تلقائياً — لا حاجة لحذف يدوي.
+                            final_poster_url = (u_poster_url or "").strip()
                             if u_poster_file:
                                 _up_poster = _upload_social_poster(
                                     u_poster_file.read(), (u_store or '').strip()
