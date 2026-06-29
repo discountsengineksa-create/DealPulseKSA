@@ -11,11 +11,15 @@ font = "sans serif"
 toolbarMode = "viewer"
 showErrorDetails = true
 
-# Cross-Origin / XSRF: نُبقي الحمايتين مفعّلتين (آمن) وهما متوافقتان فلا يظهر
-# تحذير. التحذير الأحمر يظهر فقط عند enableCORS=false مع enableXsrfProtection=true.
-# لا تضع enableCORS=false هنا ولا في أمر التشغيل.
+# Cross-Origin / XSRF خلف بروكسي Railway:
+#   - نُبقي enableCORS=true (حماية cross-origin + لا يظهر «التحذير الأحمر»
+#     الذي يظهر فقط عند enableCORS=false). لا تضع enableCORS=false إطلاقاً.
+#   - نُطفئ enableXsrfProtection لأن نقطة رفع الملفات (/_stcore/upload_file)
+#     محميّة بتوكن XSRF يفشل تطابقه/تنتهي صلاحيته خلف بروكسي Railway → يظهر
+#     أيقونة خطأ حمراء على الملف المرفوع («فشل الرفع») حتى لملف 1.4MB صغير.
+#     إطفاؤه يصلح رفع صور الثيمات/الشعارات. المقايضة مقبولة: الداشبورد للمشرف فقط.
 [server]
 enableCORS = true
-enableXsrfProtection = true
+enableXsrfProtection = false
 # headless مهم على Railway (بدون متصفّح للبدء التلقائي)
 headless = true
