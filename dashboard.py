@@ -1789,7 +1789,7 @@ _OTHER_PAGES = [
 "📣 بلاغات الأكواد",  # ← Migration 029: بلاغات لا يعمل + إدارة المتاجر المسحوبة
 "🎯 بناء الشرائح", "مركز الإشعارات", "لوحة القيادة", "مركز الدعم",
 "استوديو المحتوى", "🎨 الثيمات",
-"محرّك SEO", "📈 أداء SEO", "📤 الصفحات المنشورة", "🎯 محرك الفرص", "سجل التدقيق",
+"محرّك SEO", "📈 أداء SEO", "🔎 الفهرسة", "📤 الصفحات المنشورة", "🎯 محرك الفرص", "سجل التدقيق",
 "🛰️ متابعة المنصة",
 "🩺 تشخيص النشر",
 ]
@@ -13070,6 +13070,187 @@ elif page == "📈 أداء SEO":
 # ─────────────────────────────────────────────────────────────────────────────
 # 📤 الصفحات المنشورة — متابعة حالة صفحات SEO بعد النشر
 # ─────────────────────────────────────────────────────────────────────────────
+elif page == "🔎 الفهرسة":
+    st.header("🔎 الفهرسة")
+    st.caption("كل روابط الموقع من sitemap الحيّ — انسخ، أرسِل للفهرسة في Search Console، "
+               "ثم علّمها «تمّت» لتختفي. أي رابط جديد يدخل الموقع يظهر هنا تلقائياً.")
+
+    import os as _os
+    import re as _re
+    from urllib.parse import unquote as _unquote
+    idx_site = _os.getenv("SITE_URL", "https://www.dealpulseksa.com").rstrip("/")
+
+    # ─── جلب كل روابط sitemap (مع متابعة sitemap index إن وُجد) — يُخزَّن للجلسة ──
+    def _fetch_sitemap_urls(base):
+        import requests as _rq
+        order, seen = [], set()
+        queue = [f"{base}/sitemap.xml"]
+        done = set()
+        while queue:
+            sm = queue.pop(0)
+            if sm in done:
+                continue
+            done.add(sm)
+            try:
+                txt = _rq.get(sm, timeout=25).text
+            except Exception:
+                continue
+            locs = [m.strip() for m in
+                    _re.findall(r"<loc>\s*(.*?)\s*</loc>", txt, _re.I | _re.S)]
+            if "<sitemapindex" in txt.lower():
+                queue.extend(locs)                       # ملف فهرس → اتبع الأبناء
+                continue
+            for u in locs:
+                if u not in seen:
+                    seen.add(u)
+                    order.append(u)
+        return order
+
+    top1, top2 = st.columns([1, 3])
+    with top1:
+        if st.button("🔄 تحديث الروابط", width='stretch'):
+            st.session_state.pop("idx_sitemap_urls", None)
+            st.rerun()
+    if "idx_sitemap_urls" not in st.session_state:
+        with st.spinner("جلب الروابط من sitemap..."):
+            st.session_state["idx_sitemap_urls"] = _fetch_sitemap_urls(idx_site)
+    idx_all_urls = st.session_state["idx_sitemap_urls"]
+
+    if not idx_all_urls:
+        st.error("⚠️ تعذّر جلب أي رابط من sitemap. تأكد أن الموقع يعمل: "
+                 f"`{idx_site}/sitemap.xml`")
+    else:
+        # ─── حالة المعالَجة من القاعدة ────────────────────────────────────────
+        idx_acted = {}   # url -> status
+        try:
+            _c = get_conn()
+            try:
+                _c.rollback()
+                with _c.cursor() as _cur:
+                    _cur.execute("SELECT url, status FROM seo_index_queue")
+                    idx_acted = {r[0]: r[1] for r in _cur.fetchall()}
+            finally:
+                _c.close()
+        except Exception as e:
+            st.error(f"تعذّر قراءة جدول الفهرسة (هل طُبّق migration 063؟): {e}")
+
+        idx_pending = [u for u in idx_all_urls if u not in idx_acted]
+        idx_done    = [u for u, s in idx_acted.items() if s == "indexed"]
+        idx_ignored = [u for u, s in idx_acted.items() if s == "ignored"]
+
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("📄 إجمالي الروابط", len(idx_all_urls))
+        m2.metric("⏳ بانتظار الفهرسة", len(idx_pending))
+        m3.metric("✅ تمّت", len(idx_done))
+        m4.metric("🚫 متجاهَلة", len(idx_ignored))
+
+        if len(idx_all_urls):
+            _pct = round(len(idx_done) / len(idx_all_urls) * 100)
+            st.progress(min(_pct, 100) / 100,
+                        text=f"تقدّم الفهرسة اليدوية: {_pct}%")
+
+        with st.expander("ℹ️ طريقة العمل (مهم)"):
+            st.markdown(
+                "1. انسخ الرابط (زر النسخ في ركن الصندوق).\n"
+                "2. افتح [Google Search Console](https://search.google.com/search-console) "
+                "→ الصق الرابط في شريط **URL Inspection** أعلى الصفحة.\n"
+                "3. اضغط **Request Indexing** (طلب الفهرسة).\n"
+                "4. ارجع هنا واضغط **✓ فُهرست** فيختفي الرابط.\n\n"
+                "⚠️ Google يحدّ الطلبات اليدوية بنحو **10–15 رابط/يوم**. اشتغل على دفعات. "
+                "الصفحات اللي ما تبي تفهرسها (خصوصية/شروط) علّمها **🚫 تجاهل**."
+            )
+
+        idx_tab_pending, idx_tab_done = st.tabs(
+            [f"⏳ بانتظار الفهرسة ({len(idx_pending)})",
+             f"📁 المعالَجة ({len(idx_done) + len(idx_ignored)})"])
+
+        # ─── تبويب المعلّقة ───────────────────────────────────────────────────
+        with idx_tab_pending:
+            if not idx_pending:
+                st.success("🎉 ما في روابط معلّقة — كل شي في sitemap تمّت معالجته.")
+            else:
+                idx_q = st.text_input("🔍 فلترة بالرابط", key="idx_filter",
+                                      placeholder="مثال: /store/  أو  /c/  أو اسم متجر")
+                _view = [u for u in idx_pending
+                         if not idx_q or idx_q.lower() in _unquote(u).lower()]
+                st.caption(f"معروض: {len(_view)} من {len(idx_pending)} رابط معلّق")
+
+                _per = 25
+                _npages = max(1, (len(_view) + _per - 1) // _per)
+                _pg = st.number_input("صفحة", min_value=1, max_value=_npages,
+                                      value=1, step=1, key="idx_page")
+                _slice = _view[(_pg - 1) * _per: _pg * _per]
+
+                for u in _slice:
+                    _label = _unquote(u).replace(idx_site, "") or "/"
+                    with st.container(border=True):
+                        st.caption(f"🔗 {_label}")
+                        st.code(u, language=None)        # زر نسخ أصلي من Streamlit
+                        b1, b2, _ = st.columns([1, 1, 3])
+                        with b1:
+                            if st.button("✓ فُهرست", key=f"idx_done_{u}",
+                                         width='stretch', type="primary"):
+                                try:
+                                    _c = get_conn()
+                                    try:
+                                        with _c.cursor() as _cur:
+                                            _cur.execute(
+                                                "INSERT INTO seo_index_queue (url, status) "
+                                                "VALUES (%s, 'indexed') "
+                                                "ON CONFLICT (url) DO UPDATE SET "
+                                                "status='indexed', marked_at=NOW()", (u,))
+                                        _c.commit()
+                                    finally:
+                                        _c.close()
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"فشل الحفظ: {e}")
+                        with b2:
+                            if st.button("🚫 تجاهل", key=f"idx_ign_{u}",
+                                         width='stretch'):
+                                try:
+                                    _c = get_conn()
+                                    try:
+                                        with _c.cursor() as _cur:
+                                            _cur.execute(
+                                                "INSERT INTO seo_index_queue (url, status) "
+                                                "VALUES (%s, 'ignored') "
+                                                "ON CONFLICT (url) DO UPDATE SET "
+                                                "status='ignored', marked_at=NOW()", (u,))
+                                        _c.commit()
+                                    finally:
+                                        _c.close()
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"فشل الحفظ: {e}")
+
+        # ─── تبويب المعالَجة (مراجعة + تراجع) ─────────────────────────────────
+        with idx_tab_done:
+            if not idx_acted:
+                st.info("لا توجد روابط معالَجة بعد.")
+            else:
+                for u in sorted(idx_acted, key=lambda x: idx_acted[x]):
+                    _st = idx_acted[u]
+                    _badge = "✅ فُهرست" if _st == "indexed" else "🚫 متجاهَل"
+                    c1, c2 = st.columns([5, 1])
+                    with c1:
+                        st.caption(f"{_badge} · {_unquote(u).replace(idx_site, '') or '/'}")
+                    with c2:
+                        if st.button("↩️ تراجع", key=f"idx_undo_{u}",
+                                     width='stretch'):
+                            try:
+                                _c = get_conn()
+                                try:
+                                    with _c.cursor() as _cur:
+                                        _cur.execute(
+                                            "DELETE FROM seo_index_queue WHERE url=%s", (u,))
+                                    _c.commit()
+                                finally:
+                                    _c.close()
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"فشل: {e}")
+
 elif page == "📤 الصفحات المنشورة":
     st.header("📤 الصفحات المنشورة")
     st.caption("متابعة صفحات SEO بعد النشر — رابط الصفحة الحيّة، حالة Google، فهرسة سريعة.")
