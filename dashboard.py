@@ -379,21 +379,32 @@ html, body, [data-testid="stAppViewContainer"], .main, .main .block-container {{
     background: linear-gradient(180deg, {_BRAND_BG_ALT_EARLY} 0%, {_BRAND_BG_EARLY} 60%, {_BRAND_BORDER_EARLY} 100%) !important;
 }}
 [data-testid="stSidebar"] * {{ color: {_BRAND_TEXT_EARLY} !important; text-align: right !important; }}
+/* الهيدر وشريط الأدوات: نُبقيهما في الشجرة لأن زرّ فتح القائمة (stExpandSidebarButton)
+   يُرسم بداخلهما — لكن نجعلهما شفافين بلا ارتفاع ونخفي بقية عناصرهما فقط. */
+header[data-testid="stHeader"] {{
+    background: transparent !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    box-shadow: none !important;
+    pointer-events: none !important;
+}}
+[data-testid="stToolbar"] {{ background: transparent !important; pointer-events: none !important; }}
 [data-testid="stDeployButton"],
-[data-testid="stToolbar"],
-header[data-testid="stHeader"] {{ display: none !important; }}
+[data-testid="stMainMenu"],
+[data-testid="stStatusWidget"] {{ display: none !important; }}
 /* زرّ طيّ القائمة الجانبية (السهم داخلها) — نُظهره ليتمكّن المستخدم من إخفائها */
 [data-testid="stSidebarCollapseButton"] {{
     display: inline-flex !important;
     visibility: visible !important;
     opacity: 1 !important;
 }}
-/* زرّ فتح القائمة بعد طيّها — يُرسم مستقلاً عن الهيدر. نثبّته أعلى اليمين (RTL)
-   ونجعله بارزاً فوق كل شيء ليظهر بوضوح على الجوال ولا يختفي خلف المحتوى. */
+/* زرّ فتح القائمة بعد طيّها. نثبّته أعلى اليمين (RTL) بارزاً فوق كل شيء،
+   ونعيد pointer-events لأن الهيدر/التولبار مطفأة النقر. */
 [data-testid="stExpandSidebarButton"] {{
     display: inline-flex !important;
     visibility: visible !important;
     opacity: 1 !important;
+    pointer-events: auto !important;
     position: fixed !important;
     top: 0.6rem !important;
     right: 0.6rem !important;
@@ -543,6 +554,7 @@ opacity: 1 !important;
 display: inline-flex !important;
 visibility: visible !important;
 opacity: 1 !important;
+pointer-events: auto !important;
 position: fixed !important;
 top: 0.6rem !important;
 right: 0.6rem !important;
@@ -576,10 +588,19 @@ padding: 0 !important;
 overflow: hidden !important;
 }}
 
-/* ── إخفاء زر Deploy وشريط الهيدر العلوي ── */
-[data-testid="stDeployButton"] {{ display: none !important; }}
-[data-testid="stToolbar"] {{ display: none !important; }}
-header[data-testid="stHeader"] {{ display: none !important; }}
+/* ── الهيدر/شريط الأدوات: نُبقيهما في الشجرة (لأن زرّ فتح القائمة بداخلهما)
+   لكن شفافين بلا ارتفاع، ونخفي بقية العناصر (Deploy/القائمة/مؤشّر التشغيل) فقط ── */
+header[data-testid="stHeader"] {{
+background: transparent !important;
+height: 0 !important;
+min-height: 0 !important;
+box-shadow: none !important;
+pointer-events: none !important;
+}}
+[data-testid="stToolbar"] {{ background: transparent !important; pointer-events: none !important; }}
+[data-testid="stDeployButton"],
+[data-testid="stMainMenu"],
+[data-testid="stStatusWidget"] {{ display: none !important; }}
 
 /* ── إخفاء أيقونة Material Icons في كل الواجهة ──
 (تظهر كنص حرفي keyboard_arrow_down/keyboard_ar... لأن قاعدة
