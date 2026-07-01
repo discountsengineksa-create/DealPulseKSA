@@ -343,7 +343,9 @@ st.set_page_config(
 page_title="نبض الصفقات KSA | DEAL PULSE",
 page_icon="🟢",
 layout="wide",
-initial_sidebar_state="expanded",
+# auto: تنطوي القائمة الجانبية تلقائياً على شاشات الجوال (فلا تغطّي المحتوى)
+# وتبقى مفتوحة على الكمبيوتر. زرّا الطيّ/الفتح مفعّلان أدناه للتبديل اليدوي.
+initial_sidebar_state="auto",
 )
 
 # اختيار المظهر: ليلي افتراضي. يُقرأ من مفتاح زر التبديل في الشريط الجانبي
@@ -377,10 +379,39 @@ html, body, [data-testid="stAppViewContainer"], .main, .main .block-container {{
     background: linear-gradient(180deg, {_BRAND_BG_ALT_EARLY} 0%, {_BRAND_BG_EARLY} 60%, {_BRAND_BORDER_EARLY} 100%) !important;
 }}
 [data-testid="stSidebar"] * {{ color: {_BRAND_TEXT_EARLY} !important; text-align: right !important; }}
-[data-testid="stSidebarCollapseButton"],
 [data-testid="stDeployButton"],
 [data-testid="stToolbar"],
 header[data-testid="stHeader"] {{ display: none !important; }}
+/* زرّ طيّ القائمة الجانبية (السهم داخلها) — نُظهره ليتمكّن المستخدم من إخفائها */
+[data-testid="stSidebarCollapseButton"] {{
+    display: inline-flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}}
+/* زرّ فتح القائمة بعد طيّها — يُرسم مستقلاً عن الهيدر. نثبّته أعلى اليمين (RTL)
+   ونجعله بارزاً فوق كل شيء ليظهر بوضوح على الجوال ولا يختفي خلف المحتوى. */
+[data-testid="stExpandSidebarButton"] {{
+    display: inline-flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: fixed !important;
+    top: 0.6rem !important;
+    right: 0.6rem !important;
+    left: auto !important;
+    z-index: 1000000 !important;
+    background: {_BRAND_BG_ALT_EARLY} !important;
+    border: 1px solid {_BRAND_BORDER_EARLY} !important;
+    border-radius: 10px !important;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.28) !important;
+}}
+/* على الجوال: نكبّر مساحة اللمس لزرّي الطيّ/الفتح لسهولة الضغط */
+@media (max-width: 768px) {{
+    [data-testid="stSidebarCollapseButton"] button,
+    [data-testid="stExpandSidebarButton"] {{
+        min-width: 2.6rem !important;
+        min-height: 2.6rem !important;
+    }}
+}}
 /* إخفاء نص «Press Enter to submit form» الإنجليزي تحت الحقول */
 [data-testid="InputInstructions"] {{ display: none !important; }}
 /* إصلاح بطاقة الملف المرفوع (file chip) في RTL: نمنع تداخل اسم الملف مع زر
