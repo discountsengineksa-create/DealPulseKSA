@@ -575,10 +575,18 @@ font-family: Cairo العالمية تطغى على خط Material Symbols Rounde
 span[data-testid="stIconMaterial"] {{
 display: none !important;
 }}
-/* استثناء: نُبقي سهم زرّي طيّ/فتح القائمة الجانبية ظاهراً (وإلا صار الزر فارغاً) */
+/* استثناء: نُبقي سهم زرّي طيّ/فتح القائمة الجانبية ظاهراً، ونفرض خط أيقونات
+   Material Symbols Rounded عليه صراحةً — وإلا طغى خط Cairo العام وظهر النص
+   الحرفي (keyboard_double_arrow_left) بدل رمز السهم. */
 [data-testid="stSidebarCollapseButton"] span[data-testid="stIconMaterial"],
 [data-testid="stExpandSidebarButton"] span[data-testid="stIconMaterial"] {{
 display: inline-flex !important;
+font-family: 'Material Symbols Rounded' !important;
+font-weight: normal !important;
+font-style: normal !important;
+-webkit-font-feature-settings: 'liga' !important;
+font-feature-settings: 'liga' !important;
+-webkit-font-smoothing: antialiased !important;
 }}
 
 /* ── نصوص الـ Sidebar العامة ── */
