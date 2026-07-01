@@ -561,6 +561,20 @@ min-width: 2.6rem !important;
 min-height: 2.6rem !important;
 }}
 }}
+/* ── الطيّ الفعلي للقائمة (RTL) ──
+   القائمة مقلوبة على اليمين (right:0)، وحركة الطي الافتراضية في Streamlit
+   مصمّمة لقائمة على اليسار فتدفعها للجهة الخطأ وتبقى ظاهرة. عند حالة الطي
+   (aria-expanded=false) نجبر عرضها على صفر ونقصّ محتواها فتختفي فعلاً وتسترجع
+   الشاشة مساحتها؛ يعاد فتحها بزر stExpandSidebarButton الثابت أعلى اليمين. */
+[data-testid="stSidebar"][aria-expanded="false"] {{
+transform: translateX(100%) !important;
+min-width: 0 !important;
+width: 0 !important;
+max-width: 0 !important;
+margin: 0 !important;
+padding: 0 !important;
+overflow: hidden !important;
+}}
 
 /* ── إخفاء زر Deploy وشريط الهيدر العلوي ── */
 [data-testid="stDeployButton"] {{ display: none !important; }}
