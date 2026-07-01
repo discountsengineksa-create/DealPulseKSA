@@ -532,9 +532,34 @@ box-shadow: 0 2px 10px rgba(16,185,129,0.18) !important;
 padding-top: 0px !important;
 }}
 
-/* ── إخفاء زر طي الـ Sidebar بالكامل ── */
+/* ── زرّ طيّ القائمة الجانبية (السهم داخلها) — نُظهره ليُخفي المستخدم القائمة ── */
 [data-testid="stSidebarCollapseButton"] {{
-display: none !important;
+display: inline-flex !important;
+visibility: visible !important;
+opacity: 1 !important;
+}}
+/* ── زرّ فتح القائمة بعد طيّها — يُثبَّت أعلى اليمين (RTL) بارزاً فوق كل شيء ── */
+[data-testid="stExpandSidebarButton"] {{
+display: inline-flex !important;
+visibility: visible !important;
+opacity: 1 !important;
+position: fixed !important;
+top: 0.6rem !important;
+right: 0.6rem !important;
+left: auto !important;
+z-index: 1000000 !important;
+background: {BRAND["bg_alt"]} !important;
+border: 1px solid {BRAND["border_soft"]} !important;
+border-radius: 10px !important;
+box-shadow: 0 2px 10px rgba(0,0,0,0.28) !important;
+}}
+/* على الجوال: نكبّر مساحة اللمس لسهولة الضغط بالإصبع */
+@media (max-width: 768px) {{
+[data-testid="stSidebarCollapseButton"] button,
+[data-testid="stExpandSidebarButton"] {{
+min-width: 2.6rem !important;
+min-height: 2.6rem !important;
+}}
 }}
 
 /* ── إخفاء زر Deploy وشريط الهيدر العلوي ── */
@@ -549,6 +574,11 @@ font-family: Cairo العالمية تطغى على خط Material Symbols Rounde
 [data-testid="stSidebar"] span[data-testid="stIconMaterial"],
 span[data-testid="stIconMaterial"] {{
 display: none !important;
+}}
+/* استثناء: نُبقي سهم زرّي طيّ/فتح القائمة الجانبية ظاهراً (وإلا صار الزر فارغاً) */
+[data-testid="stSidebarCollapseButton"] span[data-testid="stIconMaterial"],
+[data-testid="stExpandSidebarButton"] span[data-testid="stIconMaterial"] {{
+display: inline-flex !important;
 }}
 
 /* ── نصوص الـ Sidebar العامة ── */
