@@ -3217,8 +3217,10 @@ if page == "تحليل الأقسام":
     _max_d = _today
 
     dcol1, dcol2 = st.columns([2, 3])
+    # تهيئة القيمة مرّة واحدة بلا value= مع key= (تفادي عدم تزامن المعروض/المُرجَّع)
+    st.session_state.setdefault("ca_dates", (_min_d, _max_d))
     with dcol1:
-        _dr = st.date_input("📅 الفترة (من → إلى):", value=(_min_d, _max_d),
+        _dr = st.date_input("📅 الفترة (من → إلى):",
                             min_value=_min_d, max_value=_max_d, key="ca_dates")
     d_start, d_end = (_dr if isinstance(_dr, (list, tuple)) and len(_dr) == 2 else (_min_d, _max_d))
     if not df_views.empty:
@@ -5922,10 +5924,14 @@ elif page == "البحث عن كود":
             _min_d = df_search['search_date'].min().date() if df_search['search_date'].notna().any() else date.today()
             _max_d = df_search['search_date'].max().date() if df_search['search_date'].notna().any() else date.today()
             fdc1, fdc2 = st.columns(2)
+            st.session_state.setdefault("search_filter_from", _min_d)
+            st.session_state.setdefault("search_filter_to", _max_d)
             with fdc1:
-                f_from = st.date_input("📅 من تاريخ:", value=_min_d, key="search_filter_from")
+                f_from = st.date_input("📅 من تاريخ:", key="search_filter_from")
             with fdc2:
-                f_to   = st.date_input("📅 إلى تاريخ:", value=_max_d, key="search_filter_to")
+                f_to   = st.date_input("📅 إلى تاريخ:", key="search_filter_to")
+            if f_from > f_to:
+                f_from, f_to = f_to, f_from
 
             mask = (
                 df_search['search_date'].dt.date >= f_from
@@ -6109,10 +6115,14 @@ elif page == "طلبات الأكواد":
             _min_d = req_df["تاريخ الطلب"].min().date() if req_df["تاريخ الطلب"].notna().any() else date.today()
             _max_d = req_df["تاريخ الطلب"].max().date() if req_df["تاريخ الطلب"].notna().any() else date.today()
             fc1, fc2 = st.columns(2)
+            st.session_state.setdefault("req_filter_from", _min_d)
+            st.session_state.setdefault("req_filter_to", _max_d)
             with fc1:
-                rf_from = st.date_input("📅 من تاريخ:", value=_min_d, key="req_filter_from")
+                rf_from = st.date_input("📅 من تاريخ:", key="req_filter_from")
             with fc2:
-                rf_to   = st.date_input("📅 إلى تاريخ:", value=_max_d, key="req_filter_to")
+                rf_to   = st.date_input("📅 إلى تاريخ:", key="req_filter_to")
+            if rf_from > rf_to:
+                rf_from, rf_to = rf_to, rf_from
 
             mask_date = (
                 req_df["تاريخ الطلب"].dt.date >= rf_from
@@ -6592,10 +6602,14 @@ elif page == "تحليل طلبات الأكواد":
         _min_d = df_req["requested_at"].min().date() if df_req["requested_at"].notna().any() else date.today()
         _max_d = df_req["requested_at"].max().date() if df_req["requested_at"].notna().any() else date.today()
         fc1, fc2, fc3 = st.columns([2, 2, 3])
+        st.session_state.setdefault("req_an_from", _min_d)
+        st.session_state.setdefault("req_an_to", _max_d)
         with fc1:
-            d_from = st.date_input("📅 من تاريخ:", value=_min_d, key="req_an_from")
+            d_from = st.date_input("📅 من تاريخ:", key="req_an_from")
         with fc2:
-            d_to   = st.date_input("📅 إلى تاريخ:", value=_max_d, key="req_an_to")
+            d_to   = st.date_input("📅 إلى تاريخ:", key="req_an_to")
+        if d_from > d_to:
+            d_from, d_to = d_to, d_from
         with fc3:
             src_choice = st.radio("المصدر:", ["الكل", "🤖 البوت", "🌐 الموقع"],
                                   horizontal=True, key="req_an_src")
@@ -7163,16 +7177,18 @@ elif page == "تحليل المستخدمين":
         # ── نطاق التاريخ (يحدّ كل الفلاتر تحت) ────────────────────────────
         _gd1, _gd2 = st.columns(2)
         _gen_today = ksa_today()
+        st.session_state.setdefault("gen_date_from", _gen_today - timedelta(days=30))
+        st.session_state.setdefault("gen_date_to", _gen_today)
         with _gd1:
             gen_date_from = st.date_input(
-                "📅 من تاريخ", value=_gen_today - timedelta(days=30),
-                max_value=_gen_today, key="gen_date_from",
+                "📅 من تاريخ", max_value=_gen_today, key="gen_date_from",
             )
         with _gd2:
             gen_date_to = st.date_input(
-                "📅 إلى تاريخ", value=_gen_today,
-                min_value=gen_date_from, max_value=_gen_today, key="gen_date_to",
+                "📅 إلى تاريخ", max_value=_gen_today, key="gen_date_to",
             )
+        if gen_date_from > gen_date_to:
+            gen_date_from, gen_date_to = gen_date_to, gen_date_from
 
         st.divider()
 
@@ -8350,18 +8366,20 @@ elif page == "تحليل المستخدمين":
                     # ── نطاق التاريخ (يفلتر كل الأحداث في الـ UNION) ──
                     _ind_c1, _ind_c2 = st.columns(2)
                     _ind_today = ksa_today()
+                    st.session_state.setdefault("ind_date_from", _ind_today - timedelta(days=90))
+                    st.session_state.setdefault("ind_date_to", _ind_today)
                     with _ind_c1:
                         ind_date_from = st.date_input(
                             "📅 من تاريخ",
-                            value=_ind_today - timedelta(days=90),
                             max_value=_ind_today, key="ind_date_from",
                         )
                     with _ind_c2:
                         ind_date_to = st.date_input(
-                            "📅 إلى تاريخ", value=_ind_today,
-                            min_value=ind_date_from,
+                            "📅 إلى تاريخ",
                             max_value=_ind_today, key="ind_date_to",
                         )
+                    if ind_date_from > ind_date_to:
+                        ind_date_from, ind_date_to = ind_date_to, ind_date_from
                     _ind_t_from = pd.Timestamp(ind_date_from).strftime("%Y-%m-%d 00:00:00")
                     _ind_t_to   = (pd.Timestamp(ind_date_to) + pd.Timedelta(days=1)
                                    ).strftime("%Y-%m-%d 00:00:00")
@@ -9167,12 +9185,14 @@ elif page == "👣 زوّار الموقع":
     # ── ضوابط ──────────────────────────────────────────────────────────────
     _wv_today = ksa_today()
     cc1, cc2, cc3, cc4 = st.columns([2, 2, 1.4, 1])
+    st.session_state.setdefault("wv_from", _wv_today - timedelta(days=30))
+    st.session_state.setdefault("wv_to", _wv_today)
     with cc1:
-        wv_from = st.date_input("📅 من تاريخ", value=_wv_today - timedelta(days=30),
-                                max_value=_wv_today, key="wv_from")
+        wv_from = st.date_input("📅 من تاريخ", max_value=_wv_today, key="wv_from")
     with cc2:
-        wv_to = st.date_input("📅 إلى تاريخ", value=_wv_today,
-                              min_value=wv_from, max_value=_wv_today, key="wv_to")
+        wv_to = st.date_input("📅 إلى تاريخ", max_value=_wv_today, key="wv_to")
+    if wv_from > wv_to:
+        wv_from, wv_to = wv_to, wv_from
     with cc3:
         wv_bots = st.toggle("يشمل البوتات", value=False, key="wv_bots",
                             help="افتراضياً نعرض الزوّار الحقيقيين فقط (جودة ≥ 50)")
@@ -11543,9 +11563,9 @@ elif page == "لوحة القيادة":
 
     # ── فلتر الفترة (للعرض وللتحميل) ────────────────────────────────────────
     _ksa_today = ksa_today()
+    st.session_state.setdefault("cmd_range", (_ksa_today - timedelta(days=7), _ksa_today))
     _dr = st.date_input(
         "📅 الفترة (من → إلى) — تُطبَّق على العرض وعلى تحميل الإكسل",
-        value=(_ksa_today - timedelta(days=7), _ksa_today),
         max_value=_ksa_today, key="cmd_range", format="YYYY-MM-DD")
     if isinstance(_dr, (list, tuple)) and len(_dr) == 2:
         d_from, d_to = _dr
