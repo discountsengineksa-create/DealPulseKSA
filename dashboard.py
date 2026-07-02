@@ -3912,16 +3912,20 @@ elif page == "تحليل المتاجر":
         # ─── نطاق التاريخ ───────────────────────────────────────
         _d1, _d2 = st.columns(2)
         _today = ksa_today()
+        # نُهيّئ القيم مرّة واحدة في session_state (النمط الموصى به) ولا نمرّر
+        # value= مع key= معاً: هذا الاقتران يسبّب عدم تزامن — الودجت يَعرض اختيار
+        # المستخدم بينما يُرجّع للكود القيمة الافتراضية، فيُفلتَر بمدى خاطئ.
+        st.session_state.setdefault("sm_date_from", _today - timedelta(days=30))
+        st.session_state.setdefault("sm_date_to", _today)
         with _d1:
             sm_date_from = st.date_input(
-                "📅 من تاريخ",
-                value=_today - timedelta(days=30),
-                max_value=_today, key="sm_date_from")
+                "📅 من تاريخ", max_value=_today, key="sm_date_from")
         with _d2:
             sm_date_to = st.date_input(
-                "📅 إلى تاريخ", value=_today,
-                min_value=sm_date_from, max_value=_today,
-                key="sm_date_to")
+                "📅 إلى تاريخ", max_value=_today, key="sm_date_to")
+        # حماية من انعكاس المدى (من > إلى) بعد فكّ اقتران min_value
+        if sm_date_from > sm_date_to:
+            sm_date_from, sm_date_to = sm_date_to, sm_date_from
 
         st.divider()
 
@@ -5351,16 +5355,20 @@ elif page == "🎬 تحليلات الستوري":
     # ─── نطاق التاريخ ────────────────────────────────────────────────
     _sv_d1, _sv_d2 = st.columns(2)
     _sv_today = ksa_today()
+    # نفس علاج تبويب «تحليل المتاجر»: تهيئة session_state مرّة واحدة بلا value=
+    # لتفادي عدم تزامن القيمة المعروضة مع القيمة المُرجَّعة للفلترة.
+    st.session_state.setdefault("sv_date_from", _sv_today - timedelta(days=30))
+    st.session_state.setdefault("sv_date_to", _sv_today)
     with _sv_d1:
         sv_date_from = st.date_input(
-            "📅 من تاريخ", value=_sv_today - timedelta(days=30),
-            max_value=_sv_today, key="sv_date_from",
+            "📅 من تاريخ", max_value=_sv_today, key="sv_date_from",
         )
     with _sv_d2:
         sv_date_to = st.date_input(
-            "📅 إلى تاريخ", value=_sv_today,
-            min_value=sv_date_from, max_value=_sv_today, key="sv_date_to",
+            "📅 إلى تاريخ", max_value=_sv_today, key="sv_date_to",
         )
+    if sv_date_from > sv_date_to:
+        sv_date_from, sv_date_to = sv_date_to, sv_date_from
 
     st.divider()
 
