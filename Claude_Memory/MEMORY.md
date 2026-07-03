@@ -66,4 +66,5 @@
 - [No Triple Backticks in blog.ts Template Literals](feedback_no_backticks_in_template_literals.md) — ``` داخل body يكسر SWC parser ويعطّل كل المقالات بعده — استخدم `inline` أو `-` لـ list
 - [Memory Sync via Junction](memory_sync_junction.md) — ذاكرة واحدة داخل الريبو (Claude_Memory/) + junction على كل جهاز؛ تتزامن مع git pull/push؛ لا تفرّع بعد اليوم
 - [Blog AliExpress Cluster](blog_aliexpress_cluster.md) — 150 مقال قطع سيارات كانت مكسورة (‏\n حرفية) وأُصلح العرض؛ الأسعار وصفية؛ توصية بالتنقية+noindex؛ أصل /calendar وفكّ يُتمه
-- [Blog Home Furniture Cluster](blog_home_furniture_cluster.md) — عنقود أثاث ٦ مقالات (هَب + كنب/سرير/سفرة/دولاب/خارجي) بصوت خبير ٢٠ سنة، مربوطة بسيدار؛ web 92f541f
+- [Blog Home Furniture Cluster](blog_home_furniture_cluster.md) — عنقود أثاث ١٩ مقال (هَب + ٣ لكل ٦ أقسام: كنب/سرير/سفرة/دولاب/خارجي/مكتب) بصوت خبير ٢٠ سنة؛ web 97a1c5a
+- [Blog Toys Cluster Progress](blog_toys_cluster_progress.md) — عنقود ألعاب مستهدَف ٧٢ مقال (٢٤ قسم × ٣)؛ منجَز ١٠/٧٢ (Pillar+STEM+قطيفة+رضّع)؛ باقي ٦٢ مرتّبة بأولويات
