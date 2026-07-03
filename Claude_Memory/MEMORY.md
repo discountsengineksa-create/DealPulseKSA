@@ -65,3 +65,4 @@
 - [Treat User as Senior Engineer](feedback_senior_engineer.md) — خبير ٢٠+ سنة. لا فلسفة، لا خيارات، لا أساسيات. اقرأ، حدّد، نفّذ مباشرة
 - [No Triple Backticks in blog.ts Template Literals](feedback_no_backticks_in_template_literals.md) — ``` داخل body يكسر SWC parser ويعطّل كل المقالات بعده — استخدم `inline` أو `-` لـ list
 - [Memory Sync via Junction](memory_sync_junction.md) — ذاكرة واحدة داخل الريبو (Claude_Memory/) + junction على كل جهاز؛ تتزامن مع git pull/push؛ لا تفرّع بعد اليوم
+- [Blog AliExpress Cluster](blog_aliexpress_cluster.md) — 150 مقال قطع سيارات كانت مكسورة (‏\n حرفية) وأُصلح العرض؛ الأسعار وصفية؛ توصية بالتنقية+noindex؛ أصل /calendar وفكّ يُتمه
