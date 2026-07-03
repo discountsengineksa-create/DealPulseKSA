@@ -1,0 +1,32 @@
+---
+name: weeks-roadmap
+description: Multi-week AI/infra build roadmap for DealPulse KSA — canonical plan file location and per-week progress
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: d792b52b-d4e4-42fe-9487-c9efc5418c2d
+---
+
+The canonical week-by-week build roadmap lives in **`weeks plan.txt`** at the repo root (`c:\Users\PC\Desktop\Discounts_Engine\weeks plan.txt`). It is a *schema map* — what tables/columns each week needs. Do NOT guess week contents from code; read this file.
+
+**Why:** I once inferred Week 4 was "SEO trend matching" from code hints — wrong. The user's actual roadmap says Week 4 = Affiliate Cloaking. Always check `weeks plan.txt` first.
+
+Progress (as of 2026-05-22):
+- **Week 1** ✅ Geo enrichment + velocity snapshots + Financial Guardian — `migration_010`, `api/utils/`.
+- **Week 2** ✅ Velocity aggregator + spike detector + email dispatcher — `api/workers/` (no new tables).
+- **Week 3** ✅ LLM directive generator + semantic cache — `migration_011`, `api/utils/llm_service.py`. NOTE deviation: used exact-hash cache, deferred pgvector/embeddings to "Week 3.5" (roadmap originally specced `vector(1024)` + hnsw).
+- **Week 4** ✅ Affiliate Cloaking + Bot Challenge — `migration_012` (`master.cloaked_slug`), `api/routers/go.py` (`/go/{slug}`), commit `c4e4c4d`. Cloak URL = `api.dealpulseksa.com/go/{slug}` (CF worker enriches it).
+- **Week 5-6** ✅ Dynamic SEO Page Generator — `migration_013` (5 tables, user-authored) + `migration_014` (indexes/dedup), `api/seo/` (trends→matcher→generator→indexer) + `api/routers/seo.py`, commit `3444926`. Generation gated by `SEO_AUTOGEN_ENABLED` (now =1 on Railway); manual trigger `POST /api/v1/admin/seo-run`. Frontend `/c/[slug]` route DONE in dealpulseksa-web (commit `f30c787`) — fetches `/api/v1/seo/pages/{slug}`, renders markdown in Lux style + deal CTA + JSON-LD + sitemap. Backend `d849a0b` added store fields to the endpoint. NOTE: generated pages are `draft`; only `published` ones show on the site — publish via `POST /api/v1/admin/seo-publish/{id}`.
+- **Week 7-8** ✅ Social Listener + Auto-Responder — `migration_015` (4 tables + seed terms/templates), `api/social_listener/` (ingest→scorer→responder→poster), `POST /api/v1/social/ingest` for external automation (Zapier/Make), admin controls (social-run/pending/approve/reject), scheduler job every 10m. Posting via `SOCIAL_POST_WEBHOOK` or manual approve. Commit `aea62da`. NOTE: scorer helpers must stay row-type agnostic (called with RealDictCursor — `zip(cols,row)`/`row[0]` break on RealDictRow).
+- **Dashboard control panel** (commit `aea62da`): two new pages — "محرّك SEO" (review/publish drafts, 1-click) and "الرصد الاجتماعي" (review/approve/reject replies). Both drive the production admin API via `_admin_get`/`_admin_post` (INTERNAL_API_URL + ADMIN_SHARED_SECRET) so they work whether the dashboard runs locally or on Railway. Full automation, no terminal needed.
+- Cross-cutting ✅ (commit `bf9bbae`, migration_016): `alert_quiet_hours` (alert_dispatcher holds email during active windows, KSA tz), `ai_experiments`+`ai_experiment_events` (responder logs A/B impression per social reply), `pdpl_audit_log` (audit_log() from admin mutations). Helpers in `api/utils/ops.py`. Admin endpoints + dashboard page "التدقيق والتجارب". Also fixed unused `seo_landing_pages.last_indexed_at`.
+
+**Production activation (2026-05-22):** migrations 012/013/014/015 all applied to Railway prod; `SEO_AUTOGEN_ENABLED=1` set. All endpoints verified live (health, /seo/pages, /admin/seo-drafts, /admin/social-pending, /social/ingest). Social pipeline verified end-to-end live (LLM-free). Fixed a malformed local `.env` line (`INTERNAL_API_URL=INTERNAL_API_URL=...` → single) that would break the dashboard's SEO/social pages locally.
+
+**LLM is now MULTI-PROVIDER (commits `7a73f2a` + `bf9bbae`):** order is Gemini → **Groq** → OpenRouter(chain). Diagnosed prod: Gemini 429 (quota) AND every OpenRouter `:free` model 404/429 (OpenRouter free tier gutted — llama-3.3-70b:free is 429-throttled, gemma/qwen/gemini-exp:free are 404 "no endpoints"). So a free-tier-only OpenRouter can't power generation. **Solution = Groq** (`api.groq.com/openai/v1`, OpenAI-compatible, genuinely free + generous on llama-3.3-70b-versatile). `_call_openai_compatible()` is shared by Groq+OpenRouter. **✅ RESOLVED (2026-05-23): `GROQ_API_KEY` IS set on Railway and verified live.** `POST /api/v1/admin/trigger-directive` on prod returned `provider:"groq"`, `model:"llama-3.3-70b-versatile"`, `cost_usd:0.0`, `fallback_used:true`, `is_mock:false` (3 real Arabic directives). `POST /api/v1/admin/seo-run?batch=1` returned `generation:{processed:1,generated:1,failed:0}` → draft persisted. So both SEO generation + directives work for free in prod. `fallback_used:true` means Gemini (primary) is still skipped/429 — Groq carries everything, by design. Do NOT add a mock fallback to SEO.
+
+**✅ NO mojibake bug — FALSE ALARM (2026-05-23, retracted same day):** I first reported SEO slugs as mojibake (`شاهد`→`ط´ط§ظ‡`), but it was a **diagnostic-tool artifact, not a data bug**. Root cause of the false reading: piping `curl` output through `python -m json.tool` on the user's **Arabic Windows** — Python decoded stdin as CP1256 instead of UTF-8, corrupting the *display* of already-correct data. Proof: fetching `/admin/seo-drafts` to a file and decoding the raw bytes explicitly as UTF-8 gives `\xd8\xb4\xd8\xa7\xd9\x87` = codepoints `0x634 0x627 0x647` = clean «شاه». Local `direct_search` is also verified proper Arabic (UTF8/UTF8/UTF8 connection). **LESSON: on Arabic Windows, never judge Arabic correctness through a `json.tool`/stdout pipe — decode raw bytes as UTF-8 explicitly (read to file or `sys.stdin.buffer`).** No code fix was needed; `client_encoding` is fine as-is.
+
+**SOCIAL_POST_WEBHOOK live (Make.com):** user set it on Railway; verified live — `/admin/social-approve` returns `via:'webhook', code:200`, i.e., approving a reply actually posts it through Make. Auto-responder posting is fully wired.
+
+**How to apply:** Migrations are applied MANUALLY per env (not auto). Production (Railway) had 009/010/011 already; **the local dev DB was behind** — applied 009, 010, 012 to local during the Week-4 session. After each migration commit, run it on Railway: `psql "$DATABASE_URL" -f migration_0NN_*.sql`. The Cloudflare worker changes need `wrangler deploy` to take effect. See [[project-overview-—-dealpulse-ksa]].

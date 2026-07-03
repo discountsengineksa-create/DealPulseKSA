@@ -1,0 +1,48 @@
+# Project Memory Index
+
+- [Project Overview](project_overview.md) — DealPulse KSA: 3-component architecture, DB schema, Railway deployment
+- [Setup Guide](setup_guide.md) — How to run locally on a new machine (dependencies, env vars, migrations)
+- [Bug Fixes Log](bug_fixes.md) — All bugs fixed and why, so we don't reintroduce them
+- [User Preferences](user_preferences.md) — How the user likes to work
+- [AI Mastery Goal](user_ai_mastery_goal.md) — wants a universal reusable prompt across all AI platforms/domains; into prompt engineering; give honest expert feedback
+- [Regression Audit First](feedback_regression_audit.md) — when user says "it worked before you changed it", check my own recent diffs first; no speculative code changes
+- [Contact Emails](contact_emails.md) — Personal vs brand ops mailbox (spelled `dealpulesksa@gmail.com`)
+- [Weeks Roadmap](weeks_roadmap.md) — `weeks plan.txt` is the canonical week-by-week schema plan; per-week progress (W1-4 done)
+- [Store Analytics BI Suite](store_analytics_bi.md) — rebuilt «تحليل المتاجر» (4 sub-tabs) + why AI tab uses Groq via REST (no local openai SDK)
+- [Analysis Rebuild Strategy](analysis_rebuild_strategy.md) — tearing down + rebuilding the 6 analysis pages; 3 monetization trajectories + zero-fakery / enterprise due-diligence mandate
+- [Git Sync Workflow](git_sync_workflow.md) — two machines: pull before work, push after every change; ask which branch (main = Railway prod deploy)
+- [Railway Deployment](railway_deployment.md) — 2 services from one repo (API=Dockerfile/req-railway/py3.12; dashboard=Dockerfile.dashboard/req.txt/py3.13) + CORS/secret/logging gotchas
+- [Single Source of Truth](single_source_of_truth.md) — ONE DB (Railway Postgres) + ONE dashboard (Railway-hosted); local test DB deleted, .env points only to Railway
+- [Unified Favorites](unified_favorites.md) — user_favorites SSOT table (dual-write w/ manual_favorites) across bot+miniapp+web; notifications phase deferred (last_notified_at ready)
+- [Zero Friction Onboarding](feedback_zero_friction.md) — في B2C المبكر، اجمع البيانات عند نقطة قيمة (action-gated) لا عند الدخول؛ منافسو السوق بلا احتكاك = الميزة التنافسية
+- [Always Publish When Done](feedback_always_publish.md) — user wants auto commit+push on task finish; main = prod deploy, don't ask
+- [Reconcile Web Repo Separately](reconcile_web_repo_separately.md) — dealpulseksa-web is its own repo; can be behind remote even when main repo is synced; fetch it first
+- [Platform Monitoring](platform_monitoring.md) — منظومة «متابعة المنصة»: صفحة داشبورد + ضوابط + تقرير صحة بالإيميل + مراقبة أداء API (latency/5xx)
+- [Mastermind Prompt](mastermind_prompt.md) — «العقل المدبر» برومنت التشغيل المرن: موقع الملف + كيف أتصرّف عند «فعّل العقل المدبر»
+- [Data Trust: Geo/Device](data_trust_geo_device.md) — bot_users.city/country/device_type مفبركة بالكود؛ المدينة الحقيقية من web_users.city أو action_logs.city فقط
+- [Users Analytics Rules](users_analytics_rules.md) — قواعد العدّ/الهوية/الجغرافيا المعتمدة لقسم تحليل المستخدمين (تبويبان: عام/فردي)
+- [Support System](support_system.md) — نظام الدعم: وسيط Telegram Bot API (بلا قروبات/أرقام/webhook)؛ بوت+ميني+API يكتبون support_tickets والداشبورد يرد بالتوكن؛ migration 039؛ الويب باقٍ
+- [SEO White-Hat Only](seo_white_hat_only.md) — قيد إلزامي: كل شغل SEO White-Hat فقط (لا Black-Hat)؛ محرّك أوتوماتيكي ببوابات (كوبون فعّال/تفرّد/سقف يومي/blocklist)؛ SEO_AUTO_PUBLISH_ENABLED على DEALPULSEKSA
+- [Google Keyword Planner](google_ads_keyword_planner.md) — تكامل Ads API في محرك الفرص؛ MCC 857-047-5609 مباشرة؛ v21؛ Basic Access قيد المراجعة (≈2026-06-12)؛ المتغيّرات على DEALPULSEKSA
+- [Social Listening Deferred](social_listening_deferred.md) — قسما الرصد الاجتماعي/رادار الصفقات مؤجَّلان (حذف أو اشتراك)؛ مصدراهما ميتان (RSS محذوف، Reddit محظور)؛ رصد IG/FB/Threads بكلمة مفتاحية مستحيل رسمياً
+- [Story System Design](story_system_design.md) — نظام ستوري المتاجر: جدول story_slides، نموذج متداخل (حلقة/متجر، شرائح متتابعة)، فيديو يكمّل مدّته + صوت، Cloudinary f_auto+poster، web createPortal z-[60]
+- [No Dead Code or Premature Optimization](feedback_no_dead_code.md) — المستخدم يرفض الكود الميّت/الوهمي/الاستباقي؛ كل سطر حقيقي وموصول ومبرّر ببوتلنك فعلي
+- [Bot Capacity & Scaling Roadmap](bot_capacity_scaling.md) — سقف تيليجرام ~30/ث للبوت الواحد؛ ضبط 16 عامل/طابور 12k؛ الطموح: الأول بالسعودية+الإمارات؛ مسار Redis/sharding
+- [🔒 BOT FROZEN](bot_frozen_lock.md) — البوت مجمّد (2026-06-10، tag bot-locked-2026-06-10)؛ لا تعديل لـ deal_pulse_bot.py/bot_app.py إلا بإذن صريح لكل تغيير
+- [DB Foundation Audit](db_foundation_audit.md) — مخطط القاعدة (~76 جدول/42% فارغة)؛ العدّادات الحيّة total_*؛ ميت مؤكّد (users_master + أعمدة راكدة) جاهز للحذف بإذن+نسخة؛ دَيْن النوع (is_trending/priority_score) محجوب بتجميد البوت
+- [Admitad Affiliate Setup](admitad_affiliate_setup.md) — منصة الأفلييت Admitad؛ مساحتان (تيليجرام + ويب موثّقة DealPulseKSA)؛ كل برنامج له بوّابتان: نوع الترافيك (Messengers محظور غالباً→الموقع لا البوت) + حجم الجمهور (SHEIN=10k)؛ ابدأ بالسهل (AliExpress/سفر/Airalo)
+- [Publish Channels Feature](publish_channels_feature.md) — master.publish_channels لاستهداف القنوات لكل متجر (website/bot/social)؛ يحترم شروط الأفلييت؛ API بارامتر channel (افتراضي website)؛ بوت+ميني+SEO يفلترون؛ fallback «حصري بالموقع»
+- [Health Content Cluster](health_content_cluster.md) — 10 مقالات مكمّلات بمدوّنة الويب (lib/blog.ts) لفتح تصنيف iHerb «محتوى» 5%؛ كود مكافآت QQC1568 على الروابط؛ معايير الكتابة + العنقود التالي
+- [Salla Affiliate Channel](salla_affiliate_channel.md) — سلة قناة أفلييت محلية (خصم عميل حقيقي + عمولة، بلا بوّابة ترافيك)؛ تحلّ رفض عمالقة Admitad؛ منتقياً لا جامعاً + عنقود محتوى محلي (عود/تمور/عبايات)؛ ✅ قُبلت 2026-06-18
+- [Store Selection Criterion](feedback_store_selection.md) — معرفة السعودي + ملاءمة السياق تغلب العمولة/الخصم؛ أبقِ المعروف (Alibaba/Sedar/H&M) واحذف الغريب (Oman Air/RaynaTours)
+- [Domain Authority Plan](domain_authority_plan.md) — خطة سلطة الدومين (White-Hat): الربط الداخلي منجز (متجر↔/c/ + شبك /c/)؛ المتبقّي عناقيد محتوى/Schema/روابط خلفية
+- [CodeMap Affiliate Channel](codemap_affiliate_channel.md) — قناة أفلييت ثانية (كوبونات فقط بلا روابط تتبّع)؛ براندات كبيرة معروفة نون/نمشي/ستايلي؛ تكمّل سلة وتحلّ بوّابة Admitad
+- [Marketing Skills Toolkit](marketing_skills_toolkit.md) — ركّبنا 17 skill منتقاة من coreyhaines31/marketingskills عام في ~/.claude/skills لدفعة سلطة الدومين؛ المخرجات تُعاد عربي/سعودي + White-Hat
+- [SEO Indexation Status](seo_indexation_status.md) — GSC 2026-06-21: 4/139 مفهرسة فقط؛ حصار موقع جديد + صفر باكلينك؛ الأولوية طلب فهرسة+روابط خلفية لا Schema
+- [Affiliate PPC Brand Restrictions](affiliate_ppc_brand_restrictions.md) — نمشي وغيره يمنع المزايدة المدفوعة على اسمه؛ SEO عضوي مسموح؛ seo_enabled=ON بلا أي إعلان مدفوع على اسم براند
+- [Keyword Demand (KSA)](keyword_demand_ksa.md) — الطلب مركّز على البراندات الكبيرة (نون/نمشي/اي هيرب/امازون/شي إن 10K-100K)؛ متاجرك الصغيرة ~10-100؛ اي هيرب أسرع مكسب (أفلييت جاهز)
+- [Instagram Content Engine](instagram_content_engine.md) — محرّك ريلز محتوى فاخر Dark Luxe (content_reels.py + تبويب الاستوديو 3 أوضاع) + تنويع كابشن؛ @dealpulseksa 5 متابعين؛ الستوريات التلقائية وقفت (غير مُشخَّصة)
+- [Competitor Landscape](competitor_landscape.md) — منافسو الكوبونات السعوديون (الموفّر القائد)؛ لا منافسة على الكلمات الكبيرة قريباً؛ الفجوات: التحقّق/تيليجرام/النيش المحلي/AEO
+- [Web Visits Tracking](web_visits_tracking.md) — نبض الزوّار: تتبّع زيارات الموقع على مستوى الجلسة (web_visits/Migration 060) منفصل عن action_logs؛ بوتات مفلترة q≥50؛ النشر يستلزم تطبيق المايقريشن قبل الـ API
+- [Web Login Gate Model](web_login_gate_model.md) — الموقع مفتوح حالياً (web_login_gate_enabled=0)؛ الأكواد/الزيارة للجميع، والستوري (محجوبة بالكامل) والمفضلة للمسجّلين فقط؛ auth-gate يفصل codeUnlocked عن isAuthed؛ حركات المجهول تُحتسب بـ visitor_id
+- [Content/Programmatic Strategy](content_programmatic_strategy.md) — قرار «عربي فقط لا /en» (الإنجليزي noindex بقرارهم)؛ محرّك category-content + هَب روابط الأقسام + 19 مقال عربي بربط داخلي لمتاجر حقيقية؛ لا 1000 صفحة رقيقة
