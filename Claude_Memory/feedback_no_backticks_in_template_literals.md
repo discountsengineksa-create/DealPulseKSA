@@ -8,8 +8,8 @@ originSessionId: 55f414d0-ba1d-432d-bde6-f036ad762470
 
 ## الفخّان
 
-### 1) Triple Backticks في Template Literals
-لا تكتب ``` (code fence) داخل body template literal — يفسّرها SWC كنهاية template literal مبكرة.
+### 1) Backticks داخل Template Literals (Triple أو Single)
+لا تكتب ``` (code fence) **ولا حتى backtick واحد** داخل body template literal — أيّ backtick يُنهي الـtemplate literal مبكراً ويكسر SWC parser. **حادثة 2026-07-03**: `#SaudiToyCollectors` داخل مقال kids-toys-plush-fashion-doll كسر البناء (اكتشفه tsc check). الحلّ: استخدم علامات اقتباس عادية "..." أو حروف الاقتباس العربية «...» أو أيّ محارف بديلة — لا backtick أبداً داخل body.
 
 ### 2) Apostrophe غير محمي في Single-Quoted Strings
 لا تكتب `'` (مثل `Pandora's`, `Land Cruiser's`, `don't`, `it's`) داخل single-quoted body — اكتبها `\'` بدلاً.
