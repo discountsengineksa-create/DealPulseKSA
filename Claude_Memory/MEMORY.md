@@ -11,14 +11,17 @@
 - [Store Analytics BI Suite](store_analytics_bi.md) — rebuilt «تحليل المتاجر» (4 sub-tabs) + why AI tab uses Groq via REST (no local openai SDK)
 - [Analysis Rebuild Strategy](analysis_rebuild_strategy.md) — tearing down + rebuilding the 6 analysis pages; 3 monetization trajectories + zero-fakery / enterprise due-diligence mandate
 - [Git Sync Workflow](git_sync_workflow.md) — two machines: pull before work, push after every change; ask which branch (main = Railway prod deploy)
-- [Railway Deployment](railway_deployment.md) — 2 services from one repo (API=Dockerfile/req-railway/py3.12; dashboard=Dockerfile.dashboard/req.txt/py3.13) + CORS/secret/logging gotchas
+- [Railway Production Deployment](railway_deployment.md) — DealPulseKSA unified service URL, stable rollback tag, BotFather setup — plus legacy 2-service Dockerfile/CORS/secret/logging gotchas
+- [Railway Scheduler Worker](railway_scheduler_worker.md) — separate config file pattern, 5-min cron minimum, healthcheck override
 - [Single Source of Truth](single_source_of_truth.md) — ONE DB (Railway Postgres) + ONE dashboard (Railway-hosted); local test DB deleted, .env points only to Railway
 - [Unified Favorites](unified_favorites.md) — user_favorites SSOT table (dual-write w/ manual_favorites) across bot+miniapp+web; notifications phase deferred (last_notified_at ready)
 - [Zero Friction Onboarding](feedback_zero_friction.md) — في B2C المبكر، اجمع البيانات عند نقطة قيمة (action-gated) لا عند الدخول؛ منافسو السوق بلا احتكاك = الميزة التنافسية
 - [Always Publish When Done](feedback_always_publish.md) — user wants auto commit+push on task finish; main = prod deploy, don't ask
+- [Always Push, Never Leave Work Local](feedback_always_push.md) — user works on multiple devices; commit+push everything, never stash, pull at session start
 - [Reconcile Web Repo Separately](reconcile_web_repo_separately.md) — dealpulseksa-web is its own repo; can be behind remote even when main repo is synced; fetch it first
 - [Platform Monitoring](platform_monitoring.md) — منظومة «متابعة المنصة»: صفحة داشبورد + ضوابط + تقرير صحة بالإيميل + مراقبة أداء API (latency/5xx)
 - [Mastermind Prompt](mastermind_prompt.md) — «العقل المدبر» برومنت التشغيل المرن: موقع الملف + كيف أتصرّف عند «فعّل العقل المدبر»
+- [العقل المدبر — البروتوكول التشغيلي](protocol_mastermind.md) — نواة + بروتوكول انخراط (٠–٥ أسئلة) + ٤ أوضاع + ٤ نداءات بالاسم (محامي الشيطان/٣ مسارات/مراجعة ذاتية/الأفضلية العالمية)
 - [Data Trust: Geo/Device](data_trust_geo_device.md) — bot_users.city/country/device_type مفبركة بالكود؛ المدينة الحقيقية من web_users.city أو action_logs.city فقط
 - [Users Analytics Rules](users_analytics_rules.md) — قواعد العدّ/الهوية/الجغرافيا المعتمدة لقسم تحليل المستخدمين (تبويبان: عام/فردي)
 - [Support System](support_system.md) — نظام الدعم: وسيط Telegram Bot API (بلا قروبات/أرقام/webhook)؛ بوت+ميني+API يكتبون support_tickets والداشبورد يرد بالتوكن؛ migration 039؛ الويب باقٍ
@@ -42,7 +45,22 @@
 - [Affiliate PPC Brand Restrictions](affiliate_ppc_brand_restrictions.md) — نمشي وغيره يمنع المزايدة المدفوعة على اسمه؛ SEO عضوي مسموح؛ seo_enabled=ON بلا أي إعلان مدفوع على اسم براند
 - [Keyword Demand (KSA)](keyword_demand_ksa.md) — الطلب مركّز على البراندات الكبيرة (نون/نمشي/اي هيرب/امازون/شي إن 10K-100K)؛ متاجرك الصغيرة ~10-100؛ اي هيرب أسرع مكسب (أفلييت جاهز)
 - [Instagram Content Engine](instagram_content_engine.md) — محرّك ريلز محتوى فاخر Dark Luxe (content_reels.py + تبويب الاستوديو 3 أوضاع) + تنويع كابشن؛ @dealpulseksa 5 متابعين؛ الستوريات التلقائية وقفت (غير مُشخَّصة)
+- [Instagram Growth Engine](ig_growth_engine.md) — caption SEO + carousel/story/reel auto-publish + /ig bio page + keyword bank لكل فئة سعودية
+- [IG Publishing Policy (Stories Manual, Reels Auto-6)](ig_publish_policy.md) — قرار 2026-06-19: الستوري التلقائية ملغاة، الريل يُنتَج كل 6 بثّات تراكمياً
 - [Competitor Landscape](competitor_landscape.md) — منافسو الكوبونات السعوديون (الموفّر القائد)؛ لا منافسة على الكلمات الكبيرة قريباً؛ الفجوات: التحقّق/تيليجرام/النيش المحلي/AEO
 - [Web Visits Tracking](web_visits_tracking.md) — نبض الزوّار: تتبّع زيارات الموقع على مستوى الجلسة (web_visits/Migration 060) منفصل عن action_logs؛ بوتات مفلترة q≥50؛ النشر يستلزم تطبيق المايقريشن قبل الـ API
 - [Web Login Gate Model](web_login_gate_model.md) — الموقع مفتوح حالياً (web_login_gate_enabled=0)؛ الأكواد/الزيارة للجميع، والستوري (محجوبة بالكامل) والمفضلة للمسجّلين فقط؛ auth-gate يفصل codeUnlocked عن isAuthed؛ حركات المجهول تُحتسب بـ visitor_id
 - [Content/Programmatic Strategy](content_programmatic_strategy.md) — قرار «عربي فقط لا /en» (الإنجليزي noindex بقرارهم)؛ محرّك category-content + هَب روابط الأقسام + 19 مقال عربي بربط داخلي لمتاجر حقيقية؛ لا 1000 صفحة رقيقة
+- [Website Design Preferences](website_design_preferences.md) — Apple-style aesthetic, logo watermark background, Firebase OTP for dealpulseksa.com
+- [Website Project](website_project.md) — Next.js repo location, Firebase project ID, deployment status checklist
+- [Website SEO Engine](website_seo_engine.md) — lib/seo modules, BILINGUAL_ENABLED toggle, revalidate/indexnow API, env vars
+- [Check .env Before Infra Suggestions](feedback_check_env_first.md) — config issues: read .env + diagnostic endpoints FIRST, then suggest Railway changes
+- [master.store_id Not Unique](db_master_duplicate_store_id.md) — duplicate "نون" (ids 8, 21) blocks UNIQUE/FK on master(store_id); dedupe pending
+- [Local DB Is Detached From Railway Prod](db_local_vs_railway.md) — localhost = dummy/test only؛ الإنتاج عبر DATABASE_URL في .env (٤٢ متجر)
+- [No Philosophy — Just Execute](feedback_no_philosophy.md) — no multi-option questions, no planning preambles; start executing on the clearest piece, ask one short text question only when truly blocked
+- [Never Write to DB Without Explicit Permission](feedback_no_db_writes_without_permission.md) — INSERT/UPDATE/DELETE على discounts_engine يحتاج إذن صريح للعملية؛ "يلا نبدا" ليس إذن كتابة
+- [Store Analytics Final Structure](analytics_store_structure.md) — 6 sections + columns + subset semantics + إجمالي formula; «أبرز» = top favorites across bot+miniapp+web
+- [Trend System Architecture (Final)](trend_architecture_final.md) — ١٤ قرار معماري نهائي للترند: نوافذ، حشو، تداخل، تثبيتات، فلاتر الستوري، تسجيل النقر، debounce بحث
+- [Trend Uses source='all' Everywhere](trend_source_all.md) — DB واحد، الترند موحّد. لا تجزئة per-platform. البوت بلا ستوري
+- [Treat User as Senior Engineer](feedback_senior_engineer.md) — خبير ٢٠+ سنة. لا فلسفة، لا خيارات، لا أساسيات. اقرأ، حدّد، نفّذ مباشرة
+- [No Triple Backticks in blog.ts Template Literals](feedback_no_backticks_in_template_literals.md) — ``` داخل body يكسر SWC parser ويعطّل كل المقالات بعده — استخدم `inline` أو `-` لـ list
