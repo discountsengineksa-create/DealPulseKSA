@@ -64,3 +64,4 @@
 - [Trend Uses source='all' Everywhere](trend_source_all.md) — DB واحد، الترند موحّد. لا تجزئة per-platform. البوت بلا ستوري
 - [Treat User as Senior Engineer](feedback_senior_engineer.md) — خبير ٢٠+ سنة. لا فلسفة، لا خيارات، لا أساسيات. اقرأ، حدّد، نفّذ مباشرة
 - [No Triple Backticks in blog.ts Template Literals](feedback_no_backticks_in_template_literals.md) — ``` داخل body يكسر SWC parser ويعطّل كل المقالات بعده — استخدم `inline` أو `-` لـ list
+- [Memory Sync via Junction](memory_sync_junction.md) — ذاكرة واحدة داخل الريبو (Claude_Memory/) + junction على كل جهاز؛ تتزامن مع git pull/push؛ لا تفرّع بعد اليوم
