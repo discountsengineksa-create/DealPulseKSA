@@ -1,5 +1,10 @@
 coqui-tts>=0.24.2
+# coqui-tts's metadata under-pins transformers; the tortoise autoregressive
+# layer imports transformers.pytorch_utils.isin_mps_friendly which only exists
+# on transformers>=4.44. Pin explicitly so fresh installs don't fail.
+transformers>=4.44
 torch>=2.1
+torchaudio>=2.1
 soundfile>=0.12.1
 numpy>=1.24
 lameenc>=1.7.0
