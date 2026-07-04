@@ -54,8 +54,9 @@
 | # | الهدف | الطبقة | الحالة | dofollow? | تاريخ |
 |---|-------|--------|--------|-----------|--------|
 | 1 | **Trustpilot** (business profile موثّق DNS) | — | ✅ **مكتمل** | dofollow متوقّع | 2026-07-04 |
-| 2 | X/Twitter profile | A | ☐ | nofollow | |
-| 3 | Saudi Bizness | B | ⛔ معطوب (صفحة بيضا عند الإرسال ×20) | — | |
+| 2 | **AlternativeTo** (حساب+ملف جاهز، الإضافة موقوفة بعطلة نهاية الأسبوع) | A(web) | ⏳ **يُقدَّم الإثنين 2026-07-06** («Suggest new application») | — | 2026-07-04 |
+| 3 | X/Twitter profile | A | ☐ | nofollow | |
+| 4 | Saudi Bizness | B | ⛔ معطوب (صفحة بيضا عند الإرسال ×20) | — | |
 | 3 | List In Saudi | B | ☐ | تحقّق | |
 | 4 | Salla Partners profile | C | ☐ | تحقّق | |
 | 5 | مورد «تقويم تخفيضات السعودية» (/calendar) | D | ✅ نُشر — يحتاج ترويج | dofollow متوقّع | 2026-07-03 |
