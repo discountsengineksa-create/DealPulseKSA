@@ -69,3 +69,4 @@
 - [🛡️ Content Guardrails Playbook](content_guardrails_playbook.md) — قواعد إلزامية لأي Claude يكتب محتوى: استثناءات سلامة العلامة/YMYL/سلامة حرجة + صفر فبركة + جودة + تنسيق الجهازين + الربط الداخلي للمتاجر + الصراحة الاستراتيجية (باكلينك لا صفحات أكثر)
 - [Blog Home Furniture Cluster](blog_home_furniture_cluster.md) — عنقود أثاث ١٩ مقال (هَب + ٣ لكل ٦ أقسام: كنب/سرير/سفرة/دولاب/خارجي/مكتب) بصوت خبير ٢٠ سنة؛ web 97a1c5a
 - [Blog Toys Cluster Progress](blog_toys_cluster_progress.md) — عنقود ألعاب مستهدَف ٧٢ مقال (٢٤ قسم × ٣)؛ منجَز ١٠/٧٢ (Pillar+STEM+قطيفة+رضّع)؛ باقي ٦٢ مرتّبة بأولويات
+- [Domain Canonical Trap](domain_canonical_trap.md) — الصح dealpulseksa.com (حيّ)، التوأم dealpulesksa.com ميّت؛ لا تحكم على هجاء من لقطة مضغوطة — احسمه بـcurl/DNS؛ Trustpilot أول باكلينك مكتمل (2026-07-04)
