@@ -70,3 +70,4 @@
 - [Blog Home Furniture Cluster](blog_home_furniture_cluster.md) — عنقود أثاث ١٩ مقال (هَب + ٣ لكل ٦ أقسام: كنب/سرير/سفرة/دولاب/خارجي/مكتب) بصوت خبير ٢٠ سنة؛ web 97a1c5a
 - [Blog Toys Cluster Progress](blog_toys_cluster_progress.md) — عنقود ألعاب مستهدَف ٧٢ مقال (٢٤ قسم × ٣)؛ منجَز ١٠/٧٢ (Pillar+STEM+قطيفة+رضّع)؛ باقي ٦٢ مرتّبة بأولويات
 - [Domain Canonical Trap](domain_canonical_trap.md) — الصح dealpulseksa.com (حيّ)، التوأم dealpulesksa.com ميّت؛ لا تحكم على هجاء من لقطة مضغوطة — احسمه بـcurl/DNS؛ Trustpilot أول باكلينك مكتمل (2026-07-04)
+- [Local TTS Engine — XTTS v2](tts_engine_xtts_v2.md) — بديل ElevenLabs محلي بالكامل على Coqui XTTS v2 (عربي أصيل + voice cloning)؛ Kokoro مرفوض (بلا عربية)؛ FastAPI في tts/service.py

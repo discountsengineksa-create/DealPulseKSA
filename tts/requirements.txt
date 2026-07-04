@@ -1,0 +1,9 @@
+coqui-tts>=0.24.2
+torch>=2.1
+soundfile>=0.12.1
+numpy>=1.24
+lameenc>=1.7.0
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+python-multipart>=0.0.9

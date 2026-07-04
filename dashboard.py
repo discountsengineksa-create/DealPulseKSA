@@ -1892,7 +1892,7 @@ _ANALYSIS_PAGES = [
 _OTHER_PAGES = [
 "📣 بلاغات الأكواد",  # ← Migration 029: بلاغات لا يعمل + إدارة المتاجر المسحوبة
 "🎯 بناء الشرائح", "مركز الإشعارات", "لوحة القيادة", "مركز الدعم",
-"استوديو المحتوى", "🎨 الثيمات",
+"استوديو المحتوى", "🎬 استوديو الريلز", "🎨 الثيمات",
 "محرّك SEO", "📈 أداء SEO", "🔎 الفهرسة", "📤 الصفحات المنشورة", "🎯 محرك الفرص", "سجل التدقيق",
 "🛰️ متابعة المنصة",
 "🩺 تشخيص النشر",
@@ -12642,6 +12642,189 @@ elif page == "استوديو المحتوى":
 
 
 
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 🎬 استوديو الريلز — بناء ريل واحد يدوياً: نصّ → صوت XTTS محلي → تنزيل
+# مستقل تماماً عن reels_batch (الأوتوماتيكي كل ٦ متاجر). صحن رمل يدوي.
+# ─────────────────────────────────────────────────────────────────────────────
+elif page == "🎬 استوديو الريلز":
+    from pathlib import Path as _RP
+
+    page_title("🎬", "استوديو الريلز — نصّ → صوت عربي محلي")
+    st.caption(
+        "اختَر متجرًا (أو ابدأ بنصّ حرّ)، ولّد الصوت بمحرّك XTTS v2 محلياً بلا API خارجي، "
+        "ثم نزّل الـ MP3 لدمجه في الفيديو. البتش الأوتوماتيكي كل ٦ متاجر يبقى كما هو."
+    )
+
+    # ─── 0) الاعتماديات — استيراد كسول حتى لا يكسر الداشبورد لو ما ثبّت المحرّك ─
+    _tts_ok = True
+    _tts_err = ""
+    try:
+        from tts.service import (
+            DEFAULT_LANG as _TTS_DLANG,
+            DEFAULT_VOICE as _TTS_DVOICE,
+            OUTPUT_DIR as _TTS_OUT,
+            SAMPLE_RATE as _TTS_SR,
+            STUDIO_SPEAKERS as _TTS_STUDIO,
+            SUPPORTED_LANGS as _TTS_LANGS,
+            _list_reference_voices as _tts_ref_clips,
+        )
+    except ImportError as _e:
+        _tts_ok = False
+        _tts_err = str(_e)
+
+    if not _tts_ok:
+        st.error(
+            "محرّك الصوت غير مثبّت بعد. من مجلد المشروع شغّل:\n\n"
+            "```\npowershell -ExecutionPolicy Bypass -File tts\\install_windows.ps1\n```\n\n"
+            f"سبب فشل الاستيراد: `{_tts_err}`"
+        )
+        st.stop()
+
+    # ─── 1) اختيار المتجر (اختياري) — يعبّي قالب النص تلقائياً ────────────────
+    _rc = get_conn(); _rc.rollback()
+    try:
+        _stores = pd.read_sql(
+            "SELECT id, store_id, name_en, public_coupon, discount_value, extra_offer "
+            "FROM master ORDER BY id DESC LIMIT 300",
+            _rc,
+        )
+    finally:
+        _rc.close()
+
+    _store_opts = ["— بدون متجر (نصّ حرّ) —"] + [
+        f"#{int(r.id)} · {(r.store_id or r.name_en or 'بلا اسم')}"
+        for r in _stores.itertuples()
+    ]
+    _sel = st.selectbox("🏬 المتجر (اختياري)", _store_opts, key="reel_store_pick")
+
+    def _reel_template(row) -> str:
+        name = (row.store_id or row.name_en or "").strip()
+        disc = (row.discount_value or "").strip() if isinstance(row.discount_value, str) else str(row.discount_value or "")
+        code = (row.public_coupon or "").strip() if isinstance(row.public_coupon, str) else ""
+        extra = (row.extra_offer or "").strip() if isinstance(row.extra_offer, str) else ""
+        parts = [f"نبض الصفقات يقدّم لك {name}." if name else "نبض الصفقات."]
+        if disc:  parts.append(f"خصم يصل إلى {disc} على طلبك.")
+        if code:  parts.append(f"استخدم كود {code} عند إتمام الشراء.")
+        if extra: parts.append(extra)
+        parts.append("الرابط في البايو، والصفقة موثّقة.")
+        return " ".join(parts)
+
+    _default_script = ""
+    if _sel and _sel != _store_opts[0]:
+        try:
+            _sid = int(_sel.split("·", 1)[0].strip().lstrip("#"))
+            _row = _stores.loc[_stores["id"] == _sid].iloc[0]
+            _default_script = _reel_template(_row)
+        except Exception:
+            _default_script = ""
+
+    # زر ثابت لإعادة تحميل قالب المتجر داخل الـ textarea
+    if st.button("↻ استخدم قالب المتجر", disabled=not _default_script,
+                 help="يستبدل النصّ الحالي بقالب مبني على بيانات المتجر"):
+        st.session_state["reel_script_area"] = _default_script
+
+    # ─── 2) محرّر النصّ ──────────────────────────────────────────────────────
+    _script = st.text_area(
+        "📝 نصّ الريل",
+        value=st.session_state.get("reel_script_area", _default_script),
+        key="reel_script_area",
+        height=180,
+        max_chars=2000,
+        help="حتى ٢٠٠٠ حرف. المحرّك يقسّم النصّ لجمل تلقائياً (يفهم .!?؟؛).",
+    )
+    st.caption(f"🔡 عدد الحروف: {len(_script)} / 2000")
+
+    # ─── 3) الصوت + اللغة + السرعة ───────────────────────────────────────────
+    _voice_opts: list[str] = []
+    for _label, _voices in _TTS_STUDIO.items():
+        for _v in _voices:
+            _voice_opts.append(f"{_v}  ·  {_label}")
+    for _c in _tts_ref_clips():
+        _voice_opts.append(f"{_c}  ·  مقطع مرجعي مخصّص")
+
+    _default_voice_idx = next(
+        (i for i, v in enumerate(_voice_opts) if v.startswith(_TTS_DVOICE)), 0
+    )
+
+    _c1, _c2, _c3 = st.columns([2, 1, 1])
+    with _c1:
+        _pick = st.selectbox("🎙️ الصوت", _voice_opts,
+                              index=_default_voice_idx, key="reel_voice_pick")
+        _voice = _pick.split("·", 1)[0].strip()
+    with _c2:
+        _langs_sorted = sorted(_TTS_LANGS)
+        _lang = st.selectbox("🌐 اللغة", _langs_sorted,
+                              index=_langs_sorted.index(_TTS_DLANG),
+                              key="reel_lang_pick")
+    with _c3:
+        _speed = st.slider("⚡ السرعة", 0.7, 1.3, 1.0, 0.05, key="reel_speed_pick")
+
+    st.markdown("---")
+
+    # ─── 4) توليد الصوت — تحميل الموديل كسول مع cache_resource ──────────────
+    @st.cache_resource(show_spinner="جارٍ تحميل نموذج XTTS v2 لأول مرّة (~2GB)…")
+    def _warm_xtts():
+        from tts.service import get_tts
+        return get_tts()
+
+    _gen = st.button(
+        "🎬 ولّد الصوت",
+        type="primary",
+        use_container_width=True,
+        disabled=not _script.strip(),
+    )
+
+    if _gen:
+        from tts.service import encode_mp3 as _mp3, synthesize as _syn
+        _warm_xtts()  # يسخّن الـ pipeline مرّة واحدة
+        with st.spinner("جارٍ التوليد…"):
+            try:
+                _audio = _syn(_script, voice=_voice, language=_lang, speed=_speed)
+                _fname = f"reel_manual_{int(_time.time())}.mp3"
+                _fpath = _TTS_OUT / _fname
+                _mp3(_audio, _fpath)
+                st.session_state["reel_last_file"] = str(_fpath)
+                st.session_state["reel_last_dur"]  = round(len(_audio) / _TTS_SR, 2)
+                st.success(f"✅ جاهز — المدّة {st.session_state['reel_last_dur']} ث · الملف: {_fname}")
+            except Exception as _err:
+                st.error(f"فشل التوليد: {_err}")
+
+    # ─── 5) معاينة + تنزيل آخر ملف مولَّد ───────────────────────────────────
+    _last = st.session_state.get("reel_last_file")
+    if _last and _RP(_last).is_file():
+        st.markdown("### 🔊 المعاينة")
+        st.audio(_last, format="audio/mp3")
+        _ca, _cb, _cc = st.columns([1, 1, 1])
+        with _ca:
+            with open(_last, "rb") as _fh:
+                st.download_button(
+                    "⬇️ تنزيل MP3", _fh, file_name=_RP(_last).name,
+                    mime="audio/mpeg", use_container_width=True,
+                )
+        with _cb:
+            st.metric("المدّة", f"{st.session_state.get('reel_last_dur', 0)} ث")
+        with _cc:
+            st.metric("الحجم", f"{round(_RP(_last).stat().st_size / 1024)} KB")
+
+    # ─── 6) سجلّ آخر ١٠ ملفات يدوية ────────────────────────────────────────
+    _hist = sorted(
+        _TTS_OUT.glob("reel_manual_*.mp3"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )[:10]
+    if _hist:
+        with st.expander(f"📁 سجلّ آخر {len(_hist)} ملفات يدوية", expanded=False):
+            for _p in _hist:
+                _hc = st.columns([4, 1, 1])
+                _hc[0].text(_p.name)
+                _hc[1].text(f"{round(_p.stat().st_size / 1024)} KB")
+                with open(_p, "rb") as _fh2:
+                    _hc[2].download_button(
+                        "⬇️", _fh2, file_name=_p.name,
+                        mime="audio/mpeg", key=f"reel_dl_{_p.name}",
+                    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
