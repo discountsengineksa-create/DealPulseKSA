@@ -1,95 +1,74 @@
 ---
 name: blog_toys_cluster_progress
-description: تقدّم عنقود مقالات الألعاب (المستهدَف ٧٢ مقال = ٢٤ قسم فرعي × ٣) — ما أُنجز وما تبقّى للجلسات القادمة
+description: تقدّم عنقود مقالات الألعاب (المستهدَف ٧٢ مقال = ٢٤ قسم فرعي × ٣) + قسم الهواتف والإكسسوارات القادم
 metadata:
   type: project
 originSessionId: 3dc0c514-5670-41ee-9878-deb2d28e48c2
 ---
-**التاريخ:** 2026-07-03. **الطلب:** ٧٢ مقال ألعاب (٢٤ قسم من AliExpress × ٣ لكل قسم) بصوت خبير ٢٠ سنة، بادئة `kids-toys-` لعمل bonus الـHub، متاجر مركزية: **ماماز آند باباز** (١٥٪ أوّل طلب) + **بيتي شوب** (١٠٪) + **نون** (٥٪) + **علي إكسبريس**.
+**التاريخ:** 2026-07-04. **الطلب:** ٧٢ مقال ألعاب (٢٤ قسم × ٣) بصوت خبير، بادئة `kids-toys-`، متاجر: ماماز آند باباز/بيتي شوب/نون/علي إكسبريس. **بعد الانتهاء:** قسم الهواتف والإكسسوارات بنفس المنهج.
 
-## المُنجَز (١٠/٧٢)
+## المُنجَز (٢٨/٧٢)
 
-### دفعة ١ (web `a6b0554`) — Pillar + STEM
-1. `kids-toys-buying-guide-saudi-arabia` — Pillar شامل (سلامة CE/EN71/ASTM/GSO، BPA-Free، عمر، بطاريات، متانة)
-2. `kids-toys-stem-educational-guide-saudi-arabia`
-3. `kids-toys-robotics-coding-guide-saudi-arabia`
-4. `kids-toys-science-experiments-guide-saudi-arabia`
+### الأقسام الفرعية المكتملة (٩ من ٢٤):
+1. **Pillar** (١): kids-toys-buying-guide-saudi-arabia
+2. **STEM** (٣): stem-educational, robotics-coding, science-experiments
+3. **قطيفة** (٣): plush-stuffed, plush-safety-cleaning, plush-fashion-doll
+4. **رضّع** (٣): baby-newborn, baby-teething-sensory, baby-milestone-6-18m
+5. **مطبخ لعب** (٣): play-kitchen, play-food-utensils, tea-set-baking
+6. **لعب أدوار مهنية** (٣): role-play, doctor-medical-kit, tools-workshop
+7. **فنون وإبداع** (٣): arts-crafts, crayons-markers, playdough-clay
+8. **حركة/خارجي** (٣): gross-motor-outdoor, bikes-scooters, ride-on
+9. **دمى الأطفال** (٣): baby-dolls, baby-doll-accessories, baby-doll-stroller-nursery
+10. **طاولة/بطاقات/شطرنج** (٣): board-games, card-games, chess-strategy
 
-### دفعة ٢ (web `3206bcb`) — قطيفة
-5. `kids-toys-plush-stuffed-guide-saudi-arabia`
-6. `kids-toys-plush-safety-cleaning-guide-saudi-arabia`
-7. `kids-toys-plush-fashion-doll-guide-saudi-arabia`
+## المتبقّي (٤٤/٧٢) — ١٥ قسم فرعي × ٣
 
-### دفعة ٣ (web `5c84e8c`) — رضّع
-8. `kids-toys-baby-newborn-guide-saudi-arabia`
-9. `kids-toys-baby-teething-sensory-guide-saudi-arabia`
-10. `kids-toys-baby-milestone-6-18m-guide-saudi-arabia`
-
-## المتبقّي (٦٢/٧٢) — ٢١ قسم فرعي × ٣
-
-**أولوية أولى (طلب سعودي عالٍ):**
-- دمى الطفل والولد الجديد (baby-dolls) — ٣
-- المطبخ والطعام والخدمات المنزلية (play-kitchen) — ٣
-- لعب الأدوار المهنية والحياة (role-play) — ٣
-- الفنون والإبداع (arts-crafts) — ٣
-- الحركة والنشاط الإجمالي (gross-motor / outdoor) — ٣
+**أولوية أولى:**
 - إلكترونيات الأطفال (kids-electronics) — ٣
-
-**أولوية ثانية:**
-- ألعاب الطاولة والبطاقات (board-card-games) — ٣
+- مركبات RC (rc-vehicles) — ٣
 - شخصيات الحيوانات والديناصورات (animals-dinosaurs) — ٣
 - اللغة ومحو الأمية (language-literacy) — ٣
-- مركبات RC الأرضية (rc-vehicles) — ٣
-- الألعاب البصرية والعلمية (visual-scientific) — ٣
 
-**أولوية ثالثة:**
-- بيوت الدمى والأثاث (dollhouses) — ٣
+**أولوية ثانية:**
+- الألعاب البصرية والعلمية (visual-scientific) — ٣
+- بيوت الدمى (dollhouses) — ٣
 - ألعاب كلاسيكية وحركة (classic-action) — ٣
 - مجموعات متقدمة وموضوعية (themed-sets) — ٣
+
+**أولوية ثالثة (نيتش):**
 - الحيل السحرية والدعائم (magic-props) — ٣
 - الدمى والمسارح (puppets-theater) — ٣
-
-**أولوية رابعة (نيتش):**
 - ملابس وإكسسوارات الدمى (doll-clothes) — ٣
 - دمى الموضة والتحصيل (fashion-collectible-dolls) — ٣
 - شخصيات الأنمي وACG (anime-acg) — ٣
-- ACG ومقتنيات الألعاب (acg-collectibles) — ٣
-- سلاسل المفاتيح والقلائد القطيفة (plush-keychains) — ٣
+- ACG ومقتنيات (acg-collectibles) — ٣
+- سلاسل المفاتيح القطيفة (plush-keychains) — ٣
+
+## القسم القادم بعد الألعاب: الهواتف والإكسسوارات
+
+المستخدم أرسل شاشة قسم AliExpress للهواتف (2026-07-04) — نفس المنهج ٣ مقالات لكل قسم فرعي:
+- الهواتف المحمولة، حافظات (واقية/موضة/محافظ/مخصّصة/مزخرفة)
+- شواحن ومحولات، بنوك طاقة، كابلات
+- ملحقات SIM
+- ملحقات التصوير (فلاشات/عدسات/سلفي/حوامل)
+- واقيات الشاشة، مبردات الهاتف، أدوات النقر التلقائي، معززات الإشارة
 
 ## قواعد الكتابة المستقرّة
 
-- **بادئة `kids-toys-`** لتفعيل bonus الـHub في `getRelatedPosts`.
-- **صوت خبير ٢٠+ سنة:** شهادات (CE/EN71/ASTM)، ألوان طلاء (Water-Based Non-Toxic)، خامات (BPA-Free، Phthalate-Free، Food-Grade Silicone)، مقاييس ديسيبل (<٦٠ للأصوات)، أعمار محدّدة بشرح تنموي.
-- **الأسعار وصفية ٤ فئات** (اقتصادية/متوسّطة/متقدّمة/فاخرة) بلا أرقام مفبركة.
-- **الربط الداخلي:** كل مقال يشير للـPillar (`kids-toys-buying-guide`) + مقالَين شقيقَين + [ماماز آند باباز] + [بيتي شوب] + `/calendar`.
-- **صيغة body:** template literal بأسطر حقيقية، صفر triple backticks، **صفر backtick واحد داخل body** (سبب كسر SWC parser — دُوّن في [feedback_no_backticks](feedback_no_backticks_in_template_literals.md)).
-- **علي إكسبريس:** ينبّه دائماً بـ«⚠️ تحقّق من شهادات السلامة» لتحسّس المستخدم.
+- بادئة `kids-toys-` (والقسم القادم `phone-accessories-` أو مشابه).
+- **صفر backtick** داخل body (حتى واحد يكسر SWC — حادثة 2026-07-03).
+- أسعار وصفية ٤ فئات (اقتصادية/متوسّطة/متقدّمة/فاخرة).
+- ربط داخلي: Pillar + شقيقتان + متاجر + `/calendar`.
 
-## هيكل المقال النموذجي
+## دَرس التزامن بين الجهازين
 
-1. مقدّمة سياقية (١-٢ فقرة)
-2. أنواع المنتج (٣-٦ فئات جدولية)
-3. جدول مقارنة (Markdown table)
-4. اعتبارات السلامة والعمر
-5. اختبارات جودة قبل الشراء
-6. أخطاء شائعة
-7. أسعار وصفية (٤ فئات)
-8. متاجر
-9. أسئلة شائعة (٥-٦ أسئلة)
-10. خلاصة + روابط داخلية
+الجهاز الآخر يدفع بشكل نشط للغاية (أزياء رجالية/نسائية، أحذية، جمال، مجوهرات). **قبل كل دفعة:** `git fetch && git log --oneline HEAD..origin/main`. **عند التعارض:** استخرج المقالات كنصّ، `reset --hard origin/main`، أعِد الإدخال قبل `];`. نمط ثابت بلا فقد للعمل.
 
 ## عند استئناف الجلسة
 
-1. اقرأ هذه الوثيقة + [feedback_no_backticks](feedback_no_backticks_in_template_literals.md).
-2. `git -C dealpulseksa-web pull` (تأكّد آخر نسخة).
+1. `git pull` في dealpulseksa-web أوّلاً.
+2. اقرأ هذه الوثيقة + [feedback_no_backticks](feedback_no_backticks_in_template_literals.md).
 3. اقرأ آخر مقال في `blog.ts` عشان تُحسّ النغمة.
 4. استمرّ من "أولوية أولى" أعلاه، ٣ مقالات لكل دفعة.
 5. `tsc --noEmit` بعد كل دفعة قبل الدفع.
 6. حدّث هذه الوثيقة بعد كل دفعة.
-
-## المتاجر (URLs المستخدَمة)
-
-- ماماز آند باباز: `/store/%D9%85%D8%A7%D9%85%D8%A7%D8%B2%20%D8%A2%D9%86%D8%AF%20%D8%A8%D8%A7%D8%A8%D8%A7%D8%B2`
-- بيتي شوب: `/store/%D8%A8%D9%8A%D8%AA%D9%8A%20%D8%B4%D9%88%D8%A8`
-- نون: `/store/%D9%86%D9%88%D9%86`
-- علي إكسبريس: `/store/%D8%B9%D9%84%D9%8A%20%D8%A7%D9%83%D8%B3%D8%A8%D8%B1%D8%B3`
