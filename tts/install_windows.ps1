@@ -19,9 +19,10 @@ $env:COQUI_TOS_AGREED = "1"
 
 if (-not $SkipTorch) {
     $index = if ($Gpu) { "https://download.pytorch.org/whl/cu121" } else { "https://download.pytorch.org/whl/cpu" }
-    Write-Host "==> Installing torch ($(if($Gpu){'CUDA 12.1'}else{'CPU'}) wheel)" -ForegroundColor Cyan
+    Write-Host "==> Installing torch + torchaudio ($(if($Gpu){'CUDA 12.1'}else{'CPU'}) wheel)" -ForegroundColor Cyan
     python -m pip install --upgrade pip
-    python -m pip install torch --index-url $index
+    # torchaudio is a hard dep of coqui-tts (xtts loader imports it at module init).
+    python -m pip install torch torchaudio --index-url $index
 }
 
 Write-Host "==> Installing coqui-tts + FastAPI stack" -ForegroundColor Cyan
