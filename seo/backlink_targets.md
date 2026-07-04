@@ -59,6 +59,7 @@
 | 3b | **BotoStore** (دليل بوت — اكتشاف البوت لا سلطة الموقع) | بوت | ✅ **مُقدَّم** (طابور فحص) | رابط t.me | 2026-07-04 |
 | 3c | **b2bMap** (Saudi Arabia supplier listing) | B | ✅ **مُقدَّم** (Awaiting Approval — أيام) | dofollow متوقّع | 2026-07-04 |
 | — | **SaudiaYP** | B | ⛔ **متجاوز — مدفوع 20$** (سلطة ضعيفة، عائد سيّئ، لا تدفع) | — | 2026-07-04 |
+| 3d | **listinsaudi** (Saudi directory — مجاني) | B | ✅ **مُسجَّل** (ينقص تفعيل إيميل) | dofollow متوقّع | 2026-07-04 |
 | 4 | **AlternativeTo** (حساب+ملف جاهز، الإضافة موقوفة بعطلة نهاية الأسبوع) | A(web) | ⏳ **يُقدَّم الإثنين 2026-07-06** («Suggest new application») | — | 2026-07-04 |
 | 3 | X/Twitter profile | A | ☐ | nofollow | |
 | 4 | Saudi Bizness | B | ⛔ معطوب (صفحة بيضا عند الإرسال ×20) | — | |
