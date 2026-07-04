@@ -56,6 +56,7 @@
 | 1 | **Trustpilot** (business profile موثّق DNS) | — | ✅ **مكتمل** | dofollow متوقّع | 2026-07-04 |
 | 2 | **Crunchbase** (Organization profile) | — | ✅ **مُقدَّم** (يظهر خلال دقائق/مراجعة) | nofollow (كيان قوي) | 2026-07-04 |
 | 3 | **Brownbook** (listing + claimed) | B | ✅ **مكتمل** (حيّ خلال ~10د، claimed) | dofollow متوقّع | 2026-07-04 |
+| 3b | **BotoStore** (دليل بوت — اكتشاف البوت لا سلطة الموقع) | بوت | ✅ **مُقدَّم** (طابور فحص) | رابط t.me | 2026-07-04 |
 | 4 | **AlternativeTo** (حساب+ملف جاهز، الإضافة موقوفة بعطلة نهاية الأسبوع) | A(web) | ⏳ **يُقدَّم الإثنين 2026-07-06** («Suggest new application») | — | 2026-07-04 |
 | 3 | X/Twitter profile | A | ☐ | nofollow | |
 | 4 | Saudi Bizness | B | ⛔ معطوب (صفحة بيضا عند الإرسال ×20) | — | |
