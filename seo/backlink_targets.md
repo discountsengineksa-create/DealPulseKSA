@@ -53,8 +53,9 @@
 ## جدول المتابعة
 | # | الهدف | الطبقة | الحالة | dofollow? | تاريخ |
 |---|-------|--------|--------|-----------|--------|
-| 1 | X/Twitter profile | A | ☐ | nofollow | |
-| 2 | Saudi Bizness | B | ☐ | تحقّق | |
+| 1 | **Trustpilot** (business profile موثّق DNS) | — | ✅ **مكتمل** | dofollow متوقّع | 2026-07-04 |
+| 2 | X/Twitter profile | A | ☐ | nofollow | |
+| 3 | Saudi Bizness | B | ⛔ معطوب (صفحة بيضا عند الإرسال ×20) | — | |
 | 3 | List In Saudi | B | ☐ | تحقّق | |
 | 4 | Salla Partners profile | C | ☐ | تحقّق | |
 | 5 | مورد «تقويم تخفيضات السعودية» (/calendar) | D | ✅ نُشر — يحتاج ترويج | dofollow متوقّع | 2026-07-03 |

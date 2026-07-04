@@ -17,7 +17,7 @@
 | **الموقع** | https://www.dealpulseksa.com |
 | **التصنيف** | تسوّق / كوبونات وخصومات (Shopping · Coupons & Deals · Internet Services) |
 | **الدولة/النطاق** | السعودية — منصّة أونلاين تخدم كل المملكة |
-| **الإيميل** | dealpulseksa@gmail.com  ⚠️ (المنشور على الموقع — راجع الملاحظة أدناه) |
+| **الإيميل** | dealpulseksa@gmail.com  ✅ (مؤكّد المالك 2026-07-04 — صندوق حقيقي + يطابق الموقع) |
 | **تيليجرام** | https://t.me/DealPulseksa_bot |
 | **إنستقرام** | https://www.instagram.com/dealpulseksa |
 | **الشعار** | https://www.dealpulseksa.com/logo.png |
@@ -51,10 +51,12 @@
 
 ---
 
-## ⚠️ ملاحظة الإيميل (يحسمها المالك قبل البدء)
-استخدمت `dealpulseksa@gmail.com` لأنه **المنشور على الموقع** (schema + الفوتر) → يحفظ تطابق NAP
-مع ما يراه قوقل. إن كان صندوق التشغيل الفعلي بهجاء مختلف (`dealpulesksa@gmail.com`)، **وحّد
-الاثنين أولاً** (حدّث الموقع أو استخدم المنشور) — لا تخلط الهجاءين عبر الأدلّة.
+## ✅ الإيميل محسوم (2026-07-04)
+NAP email = **`dealpulseksa@gmail.com`** (بهجاء `dealpulse`) — أكّد المالك أنه صندوق حقيقي
+يستقبل الرسائل، وهو نفسه المنشور على الموقع (schema + الفوتر + faq + `lib/seo/constants.ts`)
+→ تطابق NAP كامل مع ما يراه قوقل. الصقه حرفياً في كل دليل.
+⚠️ **لا تخلطه** مع صندوق التنبيهات الداخلي `dealpulesksa@gmail.com` (بهجاء `dealpules`، بلا "e"
+قبل الـk) — ذاك للتنبيهات التشغيلية فقط (`OPS_ALERT_EMAIL`)، **لا يدخل الأدلّة أبداً**.
 
 ## قائمة الأدلّة (طبقة الأساسات)
 - [ ] saudibizness.com — ADD BUSINESS (Post for Free) ← **نبدأ بها**
