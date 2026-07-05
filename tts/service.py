@@ -32,9 +32,12 @@ say the word and I'll swap the engine for Facebook MMS-TTS Arabic.
 
 from __future__ import annotations
 
+import glob
 import logging
 import os
 import re
+import shutil
+import subprocess
 import tempfile
 import uuid
 from pathlib import Path
@@ -196,6 +199,58 @@ def _list_reference_voices() -> list[str]:
         {p.stem for p in REF_VOICE_DIR.iterdir()
          if p.is_file() and p.suffix.lower() in {".wav", ".mp3", ".flac", ".ogg"}}
     )
+
+
+def _find_ffmpeg() -> str | None:
+    """Locate an ffmpeg binary: PATH first, then the winget install dir."""
+    exe = shutil.which("ffmpeg")
+    if exe:
+        return exe
+    # winget (Gyan.FFmpeg) drops the binary here; PATH may not be refreshed yet
+    # in an already-running process, so fall back to a glob.
+    root = os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\WinGet\Packages")
+    hits = glob.glob(os.path.join(root, "Gyan.FFmpeg*", "**", "bin", "ffmpeg.exe"),
+                     recursive=True)
+    return hits[0] if hits else None
+
+
+def ffmpeg_available() -> bool:
+    return _find_ffmpeg() is not None
+
+
+def import_reference_clip(data: bytes, orig_name: str, voice_name: str,
+                          start: float = 0.0, duration: float = 20.0) -> Path:
+    """Extract a clean mono reference clip from an uploaded audio/video file.
+
+    Runs ffmpeg to pull `duration` seconds starting at `start`, downmixed to
+    mono at the XTTS sample rate, and stores it as
+    reference_voices/<voice_name>.wav so it shows up as a cloneable voice.
+    Works for both audio (mp3/wav/m4a/…) and video (mp4/mov/…) inputs.
+    """
+    ff = _find_ffmpeg()
+    if not ff:
+        raise RuntimeError(
+            "ffmpeg غير متوفّر. ثبّته: winget install --id Gyan.FFmpeg، "
+            "ثم أعد تشغيل الداشبورد."
+        )
+    # sanitize name → keep Arabic letters, word chars, space, dash
+    safe = re.sub(r"[^\w؀-ۿ \-]", "", voice_name or "").strip()
+    if not safe:
+        raise ValueError("اسم الصوت مطلوب.")
+    suffix = Path(orig_name).suffix or ".bin"
+    tmp = OUTPUT_DIR / f"_upload_{uuid.uuid4().hex}{suffix}"
+    tmp.write_bytes(data)
+    out = REF_VOICE_DIR / f"{safe}.wav"
+    try:
+        cmd = [ff, "-y", "-ss", f"{max(0.0, start):.3f}", "-t", f"{max(1.0, duration):.3f}",
+               "-i", str(tmp), "-vn", "-ac", "1", "-ar", str(SAMPLE_RATE),
+               "-c:a", "pcm_s16le", str(out)]
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode != 0 or not out.is_file() or out.stat().st_size == 0:
+            raise RuntimeError(f"ffmpeg فشل: {(res.stderr or '')[-400:]}")
+    finally:
+        tmp.unlink(missing_ok=True)
+    return out
 
 
 # ─── Synthesis ────────────────────────────────────────────────────────

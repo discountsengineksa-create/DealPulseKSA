@@ -12669,6 +12669,8 @@ elif page == "🎬 استوديو الريلز":
             STUDIO_SPEAKERS as _TTS_STUDIO,
             SUPPORTED_LANGS as _TTS_LANGS,
             _list_reference_voices as _tts_ref_clips,
+            ffmpeg_available as _tts_ffmpeg_ok,
+            import_reference_clip as _tts_import_clip,
         )
     except ImportError as _e:
         _tts_ok = False
@@ -12735,6 +12737,46 @@ elif page == "🎬 استوديو الريلز":
         help="حتى ٢٠٠٠ حرف. المحرّك يقسّم النصّ لجمل تلقائياً (يفهم .!?؟؛).",
     )
     st.caption(f"🔡 عدد الحروف: {len(_script)} / 2000")
+
+    # ─── 2.5) استنساخ صوت: ارفع مقطع/فيديو → يُستخرج ويصير صوتاً جاهزاً ────────
+    with st.expander("🎧 استنساخ صوت جديد — ارفع مقطع صوتي أو فيديو"):
+        if not _tts_ffmpeg_ok():
+            st.warning(
+                "لاستخراج الصوت من الفيديو تحتاج ffmpeg. ثبّته مرّة واحدة:\n\n"
+                "```\nwinget install --id Gyan.FFmpeg\n```\n\n"
+                "ثم أعد تشغيل الداشبورد. (رفع ملف صوتي WAV/MP3 جاهز يعمل بلا ffmpeg أيضاً.)"
+            )
+        st.caption(
+            "ارفع مقطعاً فيه **صوت واحد واضح بلا موسيقى/ضجيج** (٦–٣٠ ثانية أفضل). "
+            "نأخذ نافذة من المقطع، ننظّفها إلى WAV مونو، وتصير صوتاً تختاره بالأسفل. "
+            "استعمل صوتك أو صوتاً وافق صاحبه — لا أصوات مشاهير بلا إذن."
+        )
+        _up = st.file_uploader(
+            "المقطع (صوت أو فيديو)",
+            type=["mp4", "mov", "mkv", "webm", "avi", "m4a", "mp3", "wav", "flac", "ogg", "aac"],
+            key="reel_voice_upload",
+        )
+        _uc1, _uc2, _uc3 = st.columns([2, 1, 1])
+        with _uc1:
+            _clip_name = st.text_input("اسم الصوت", key="reel_clip_name",
+                                       placeholder="مثال: صوتي")
+        with _uc2:
+            _clip_start = st.number_input("يبدأ عند (ث)", min_value=0.0, value=0.0,
+                                          step=1.0, key="reel_clip_start")
+        with _uc3:
+            _clip_dur = st.number_input("المدّة (ث)", min_value=3.0, max_value=60.0,
+                                        value=20.0, step=1.0, key="reel_clip_dur")
+        if st.button("⬇️ استخرج وأضِف الصوت", disabled=not (_up and _clip_name.strip()),
+                     key="reel_clip_import"):
+            try:
+                with st.spinner("جارٍ استخراج الصوت…"):
+                    _saved = _tts_import_clip(
+                        _up.getvalue(), _up.name, _clip_name.strip(),
+                        start=float(_clip_start), duration=float(_clip_dur),
+                    )
+                st.success(f"✅ أُضيف الصوت «{_saved.stem}» — اختره من قائمة الأصوات بالأسفل.")
+            except Exception as _err:
+                st.error(f"فشل الاستخراج: {_err}")
 
     # ─── 3) الصوت + اللغة + السرعة ───────────────────────────────────────────
     _voice_opts: list[str] = []
