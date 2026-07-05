@@ -19,21 +19,26 @@ $env:COQUI_TOS_AGREED = "1"
 
 if (-not $SkipTorch) {
     $index = if ($Gpu) { "https://download.pytorch.org/whl/cu121" } else { "https://download.pytorch.org/whl/cpu" }
-    Write-Host "==> Installing torch + torchaudio ($(if($Gpu){'CUDA 12.1'}else{'CPU'}) wheel)" -ForegroundColor Cyan
+    Write-Host "==> Installing torch + torchaudio 2.8.x ($(if($Gpu){'CUDA 12.1'}else{'CPU'}) wheel)" -ForegroundColor Cyan
     python -m pip install --upgrade pip
     # torchaudio is a hard dep of coqui-tts (xtts loader imports it at module init).
-    python -m pip install torch torchaudio --index-url $index
+    # Pin the 2.8 line: torch 2.9+ makes coqui-tts hard-require `torchcodec`
+    # (+ system FFmpeg), which has no reliable Windows wheel. See tts\requirements.txt.
+    python -m pip install "torch==2.8.*" "torchaudio==2.8.*" --index-url $index
 }
 
 Write-Host "==> Installing coqui-tts + FastAPI stack" -ForegroundColor Cyan
 python -m pip install -r tts\requirements.txt
 
 Write-Host "==> Warming XTTS v2 (first run downloads ~1.9 GB model)" -ForegroundColor Cyan
+# Route through tts.service, NOT `from TTS.api import TTS` directly: the service
+# module installs the transformers isin_mps_friendly shim and the NUMBA_CACHE_DIR
+# redirect that a raw TTS import would miss (and then crash on).
 python -c @"
 import os
 os.environ['COQUI_TOS_AGREED'] = '1'
-from TTS.api import TTS
-_ = TTS('tts_models/multilingual/multi-dataset/xtts_v2')
+from tts.service import get_tts
+get_tts()
 print('XTTS v2 OK')
 "@
 

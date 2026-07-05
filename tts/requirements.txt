@@ -1,17 +1,26 @@
-coqui-tts>=0.24.2
-# coqui-tts's tortoise autoregressive layer imports
-# transformers.pytorch_utils.isin_mps_friendly, which exists ONLY in the
-# window transformers 4.41–4.49. It was added in 4.41 and removed in 4.50+
-# (MPS friendliness became implicit). Pin the safe middle.
-transformers>=4.44,<4.50
-# transformers 4.4x hard-pins tokenizers 0.20.x. If pip already resolved
-# tokenizers to a newer major (0.21+/0.22+) from an older transformers install,
-# it won't downgrade on its own — pin it too.
-tokenizers>=0.20,<0.21
-torch>=2.1
-torchaudio>=2.1
+# DealPulse local TTS stack — Coqui XTTS v2 (Arabic-capable), Python 3.13 native.
+#
+# HISTORY / WHY THESE VERSIONS:
+#   Older coqui-tts (<0.25) drags in `encodec`, which has NO wheel/sdist for
+#   Python 3.13 → `pip install` dies with ResolutionImpossible before it even
+#   reaches lameenc (hence the misleading "No module named 'lameenc'" error).
+#   Older coqui-tts also imported transformers.pytorch_utils.isin_mps_friendly,
+#   removed in transformers 4.50+, which forced brittle `transformers<4.50` pins.
+#   coqui-tts 0.27.x drops encodec, targets transformers 5.x, and ships 3.13
+#   wheels for the whole tree — so we pin FORWARD, not backward.
+coqui-tts>=0.27.5
+# transformers/tokenizers are resolved transitively by coqui-tts 0.27.x
+# (transformers 5.x + tokenizers 0.22.x, both with cp313 wheels). Do NOT re-pin
+# them to an older window — that reintroduces the encodec / isin_mps_friendly trap.
+# torch is capped BELOW 2.9 on purpose: from PyTorch 2.9, coqui-tts's importer
+# hard-requires the `torchcodec` library (+ system FFmpeg) for audio IO and
+# raises ImportError without it. torchcodec has no reliable Windows wheel, so we
+# stay on the 2.8.x line, where coqui-tts uses torchaudio's built-in IO. The
+# transformers.pytorch_utils.isin_mps_friendly shim in service.py needs torch>=2.4.
+torch>=2.6,<2.9
+torchaudio>=2.6,<2.9
 soundfile>=0.12.1
-numpy>=1.24
+numpy>=1.26
 lameenc>=1.7.0
 fastapi>=0.115
 uvicorn[standard]>=0.30

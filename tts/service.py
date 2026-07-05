@@ -35,6 +35,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import tempfile
 import uuid
 from pathlib import Path
 from threading import Lock
@@ -42,13 +43,44 @@ from threading import Lock
 # Auto-accept XTTS v2 CPML terms so headless boot doesn't prompt.
 os.environ.setdefault("COQUI_TOS_AGREED", "1")
 
+# librosa's numba-JIT'd DSP kernels default their compile cache into
+# site-packages/librosa/__pycache__, which is often read-only or stale and, on
+# Windows, can crash llvmlite's module serializer ("LLVMPY_CloneModule ...
+# No name entry found", WinError 0xe06d7363). Redirect the cache to a writable,
+# persistent, per-user dir so the first compile is cached cleanly and reused.
+os.environ.setdefault(
+    "NUMBA_CACHE_DIR", str(Path(tempfile.gettempdir()) / "dealpulse_numba_cache")
+)
+Path(os.environ["NUMBA_CACHE_DIR"]).mkdir(parents=True, exist_ok=True)
+
 import lameenc
 import numpy as np
 import torch
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from TTS.api import TTS
+
+# ── transformers compat shim ──────────────────────────────────────────
+# coqui-tts's tortoise layer hard-imports `isin_mps_friendly` from
+# transformers.pytorch_utils. That helper existed only in transformers
+# 4.41–4.49 and was dropped in 4.50+, yet coqui-tts 0.27.x still requires
+# transformers>=4.57 (which no longer ships it) — an upstream mismatch that
+# makes `from TTS.api import TTS` fail on any modern transformers. The helper
+# was always just a torch.isin wrapper with an MPS fallback (see the upstream
+# "TODO: use torch.isin from Pytorch 2.4" comment), so on torch>=2.4 we can
+# provide an equivalent ourselves and stay decoupled from the transformers
+# version entirely.
+import transformers.pytorch_utils as _tf_pytorch_utils  # noqa: E402
+
+if not hasattr(_tf_pytorch_utils, "isin_mps_friendly"):
+    def _isin_mps_friendly(elements: "torch.Tensor", test_elements: "torch.Tensor") -> "torch.Tensor":
+        if elements.device.type == "mps":  # pre-2.4 MPS lacked torch.isin
+            return (elements.unsqueeze(-1) == test_elements).any(dim=-1)
+        return torch.isin(elements, test_elements)
+
+    _tf_pytorch_utils.isin_mps_friendly = _isin_mps_friendly
+
+from TTS.api import TTS  # noqa: E402  (must follow the shim above)
 
 log = logging.getLogger("dealpulse.tts")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
