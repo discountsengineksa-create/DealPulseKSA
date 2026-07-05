@@ -4,6 +4,10 @@ coqui-tts>=0.24.2
 # window transformers 4.41–4.49. It was added in 4.41 and removed in 4.50+
 # (MPS friendliness became implicit). Pin the safe middle.
 transformers>=4.44,<4.50
+# transformers 4.4x hard-pins tokenizers 0.20.x. If pip already resolved
+# tokenizers to a newer major (0.21+/0.22+) from an older transformers install,
+# it won't downgrade on its own — pin it too.
+tokenizers>=0.20,<0.21
 torch>=2.1
 torchaudio>=2.1
 soundfile>=0.12.1
