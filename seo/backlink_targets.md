@@ -67,6 +67,8 @@
 | 6 | **F6S** (ناشئة، f6s.com/deal-pulse-ksa) | نيش | ✅ **مكتمل** (auto-save، search visibility ON) | dofollow متوقّع | 2026-07-04 |
 | — | **StartupBlink** | نيش | ⛔ **متجاوز** (يشترط إيميل بنطاق الموقع @dealpulseksa.com؛ ما عندنا — جيميل فقط) | — | 2026-07-04 |
 | — | **Magnitt** | نيش | ⛔ **متجاوز — مدفوع** (منصّة بيانات مستثمرين، Book a Demo فقط) | — | 2026-07-04 |
+| — | **Slant.co** | نيش | ⛔ **متجاوز** (500 Internal Server Error + بلا تصنيف «coupon»؛ نيش منتجات تقنية لا كوبونات) | — | 2026-07-05 |
+| — | **G2 / Capterra / GetApp / SaaSworthy / Crozdesk** | نيش | ⛔ **متجاوز** (أدلّة برمجيات B2B مؤسسات — تتطلّب كونك بائع SaaS؛ موقع كوبونات استهلاكي يُرفض/بلا تصنيف) | — | 2026-07-05 |
 | 4 | **AlternativeTo** (حساب+ملف جاهز، الإضافة موقوفة بعطلة نهاية الأسبوع) | A(web) | ⏳ **يُقدَّم الإثنين 2026-07-06** («Suggest new application») | — | 2026-07-04 |
 | 3 | X/Twitter profile | A | ☐ | nofollow | |
 | 4 | Saudi Bizness | B | ⛔ معطوب (صفحة بيضا عند الإرسال ×20) | — | |
