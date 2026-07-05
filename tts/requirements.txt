@@ -1,14 +1,15 @@
 coqui-tts>=0.24.2
 # Coqui-tts is unmaintained (2024) and its metadata under-pins the whole
-# HuggingFace stack. Empirically-safe pin set for XTTS v2 on Windows:
-#   - transformers must be in [4.41, 4.50): 4.41 added isin_mps_friendly,
-#     4.50 removed it. XTTS's tortoise layer needs it.
-#   - transformers 4.46 hard-requires tokenizers 0.20.x and
-#     huggingface-hub >=0.23.2,<1.0.
-# All three must be pinned together — bumping one alone breaks the others.
-transformers==4.46.3
-tokenizers==0.20.3
-huggingface-hub>=0.23.2,<1.0
+# HuggingFace stack. Real compatibility window for XTTS v2:
+#   - transformers needs BOTH transformers.utils.isin_mps_friendly
+#     (added 4.41, REMOVED 4.50) AND transformers.utils.import_utils.
+#     is_torch_greater_or_equal (ADDED 4.47).
+#     → hard window: [4.47, 4.50). Pin 4.49.0 (last in window).
+#   - transformers 4.49 pulls tokenizers 0.21.x + huggingface-hub 0.28.x.
+# All must be pinned together; bumping one alone breaks the others.
+transformers==4.49.0
+tokenizers==0.21.1
+huggingface-hub==0.28.1
 torch>=2.1
 torchaudio>=2.1
 soundfile>=0.12.1
