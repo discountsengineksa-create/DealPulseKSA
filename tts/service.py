@@ -254,6 +254,22 @@ def import_reference_clip(data: bytes, orig_name: str, voice_name: str,
 
 
 # ─── Synthesis ────────────────────────────────────────────────────────
+# XTTS decoding defaults (temperature 0.65 / repetition_penalty 2.0) leave the
+# Arabic output jittery and robotic. These values calm it down: a lower
+# temperature reduces random prosody wobble, a much higher repetition_penalty
+# kills the stutter/echo artefacts XTTS is prone to, and top_k/top_p trim the
+# long tail that produces the "AI" warble. We do our own sentence chunking, so
+# enable_text_splitting stays off.
+GEN_TUNING = {
+    "temperature": float(os.getenv("TTS_TEMPERATURE", "0.55")),
+    "length_penalty": float(os.getenv("TTS_LENGTH_PENALTY", "1.0")),
+    "repetition_penalty": float(os.getenv("TTS_REPETITION_PENALTY", "6.0")),
+    "top_k": int(os.getenv("TTS_TOP_K", "40")),
+    "top_p": float(os.getenv("TTS_TOP_P", "0.80")),
+    "enable_text_splitting": False,
+}
+
+
 def synthesize(text: str, voice: str, language: str, speed: float) -> np.ndarray:
     tts = get_tts()
     ref_wav = _resolve_reference_wav(voice)
@@ -261,7 +277,8 @@ def synthesize(text: str, voice: str, language: str, speed: float) -> np.ndarray
 
     with _tts_lock:
         for chunk in chunk_text(text, language):
-            kwargs: dict = {"text": chunk, "language": language, "speed": speed}
+            kwargs: dict = {"text": chunk, "language": language, "speed": speed,
+                            **GEN_TUNING}
             if ref_wav is not None:
                 kwargs["speaker_wav"] = str(ref_wav)
             elif voice in _ALL_STUDIO:
