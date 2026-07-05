@@ -1,13 +1,14 @@
 coqui-tts>=0.24.2
-# coqui-tts's tortoise autoregressive layer imports
-# transformers.pytorch_utils.isin_mps_friendly, which exists ONLY in the
-# window transformers 4.41–4.49. It was added in 4.41 and removed in 4.50+
-# (MPS friendliness became implicit). Pin the safe middle.
-transformers>=4.44,<4.50
-# transformers 4.4x hard-pins tokenizers 0.20.x. If pip already resolved
-# tokenizers to a newer major (0.21+/0.22+) from an older transformers install,
-# it won't downgrade on its own — pin it too.
-tokenizers>=0.20,<0.21
+# Coqui-tts is unmaintained (2024) and its metadata under-pins the whole
+# HuggingFace stack. Empirically-safe pin set for XTTS v2 on Windows:
+#   - transformers must be in [4.41, 4.50): 4.41 added isin_mps_friendly,
+#     4.50 removed it. XTTS's tortoise layer needs it.
+#   - transformers 4.46 hard-requires tokenizers 0.20.x and
+#     huggingface-hub >=0.23.2,<1.0.
+# All three must be pinned together — bumping one alone breaks the others.
+transformers==4.46.3
+tokenizers==0.20.3
+huggingface-hub>=0.23.2,<1.0
 torch>=2.1
 torchaudio>=2.1
 soundfile>=0.12.1
