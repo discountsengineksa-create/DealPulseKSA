@@ -1,0 +1,18 @@
+---
+name: mirror-audit-judge-agents-by-trace-not-claim
+description: "When comparing/tuning agents (incl. yourself), audit by the raw tool-call trace symmetrically; defer to whoever's numbers are better"
+metadata: 
+  node_type: memory
+  type: feedback
+  originSessionId: dcbefbd3-090a-4777-a5f7-85c964c50ca9
+---
+
+عند تشخيص أو مقارنة أداء agent (بما فيهم أنت نفسك)، **الحكم بالـ trace الخام لا بالادّعاء**، و**بشكل متماثل** — لا تدقّق agent وتعفي نفسك.
+
+**Why:** طلبنا من Claude الجهاز الثاني تشخيص هدره للتوكِنز؛ فطلب بحق أن نطبّق نفس الأسئلة السبعة على الجلسة الحالية (الأول)، لأن حكماً أحادياً متحيّز. وقال صراحةً: «لو طلعت أرقامي أسوأ منه يصير هو المرجع لا أنا، وأتعلّم من أسلوبه». هذا أصدق من «أنا فهمته أضبطه».
+
+**How to apply:**
+- عند مقارنة أساليب عمل: اطلب الـ trace الفعلي (استدعاء + سبب، بالترتيب) لا ملخّصاً — الملخّص يخفي قراءة ملف كامل / `grep` خام / تكرار محاولة بمعاملات مختلفة.
+- طبّق نفس التدقيق على نفسك واعترف بهدرك الحقيقي (مثال هذه الجلسة: استخدمتُ `grep -r` خام مرّتين فانتهت مهلته — كان يجب استخدام أداة `Grep`).
+- الأفضلية للأرقام لا للأقدمية/المنصب — تعلّم من الأكفأ أياً كان.
+- مرتبط بـ [[feedback_output_over_engineering]] و [[feedback_senior_engineer]]. القسم §٤.٥ في `AGENT_PLAYBOOK.md` صيغ ليكون معياراً متماثلاً على الاثنين.
