@@ -1,15 +1,13 @@
 ---
-name: Local TTS Engine — XTTS v2
-description: Local TTS for DealPulse runs on Coqui XTTS v2 (Arabic + voice cloning), not Kokoro
+name: Local TTS Engine — XTTS v2 (REMOVED 2026-07-06)
+description: The local XTTS v2 TTS engine + Reels Studio page were built then fully removed — Arabic quality too weak; do not rebuild free-local, go premium API
 type: project
 originSessionId: ce97ea79-0034-4f51-b8fb-e7e36536ea26
 ---
-Local text-to-speech for DealPulse (بديل ElevenLabs) is built on **Coqui XTTS v2**, exposed via FastAPI at `tts/service.py`, port 8770.
+**STATUS: REMOVED 2026-07-06.** The local Coqui XTTS v2 TTS engine (`tts/` dir) and the «🎬 استوديو الريلز» dashboard page were deleted from root at the user's explicit request ("احذف استديو الريل ... من جذوره"). Do NOT rebuild the free-local approach.
 
-**Why:** Kokoro-82M was the first pick but has zero Arabic support (9 languages: a/b/e/f/h/i/j/p/z — `a` is American English not Arabic; confirmed against `hexgrad/Kokoro-82M/VOICES.md` on 2026-07-04). XTTS v2 speaks Arabic natively and supports zero-shot voice cloning from a 6–30s reference clip — which is how we hit the "professional restrained tone" brief without paying for ElevenLabs.
+**Why it was removed:** After getting XTTS v2 installed and generating on Python 3.13 (the install itself was a hard 5-layer fight — see git history commits 01ed10b/32d6c27), the user judged the actual **voice output** 0/100: it sounded robotic/"AI", not the «فخم» broadcast quality he pictured, and nowhere near his real vision of a **طبق الأصل (near-identical) replica of a real voice** that he could then remix/tune. Param tuning (temperature/repetition_penalty), voice-clone upload + ffmpeg extraction, and a planned Demucs vocal-isolation step were all built or offered — none of it changes the fundamental ceiling.
 
-**How to apply:**
-- Any future TTS work → extend `tts/service.py`, don't propose a new engine
-- If someone suggests Kokoro/Piper/MMS for Arabic, remind them Kokoro is English-only and XTTS is already installed
-- License caveat: XTTS v2 is CPML (non-commercial default). Coqui shut down 2024 so enforcement is nil, but if commercial legality gets flagged, the pre-planned fallback is Facebook MMS-TTS Arabic (Apache-2.0, lower quality)
-- Voice modes: (1) built-in studio speaker like `Damien Black`, or (2) drop WAV/MP3 into `tts/reference_voices/` and pass filename stem as `voice`
+**The honest lesson (do not relitigate):** In 2026 there is **no free, fully-local Arabic TTS engine that sounds premium**. XTTS zero-shot cloning from a short clip captures rough timbre only, never a طبق-الأصل replica, and its Arabic is a notch below its English. The user's two requirements — (1) fully local/free, (2) premium/replica voice — are mutually exclusive with open-source tools. The real path to his vision is a **premium neural API**: ElevenLabs (incl. Professional Voice Cloning, needs ~30 min clean audio) for closest-to-replica, or **Azure Neural Arabic** (Hamed/Zariyah) / Amazon Polly (Hala/Zayd) for premium narration at ~fractions of a cent per reel. If TTS is ever revisited, start there — not local. See [[feedback_output_over_engineering]].
+
+**What still exists on the machine (not in repo):** ffmpeg was installed via `winget install Gyan.FFmpeg` (general-purpose, harmless to keep). The ~2.1GB XTTS model cache at `%LOCALAPPDATA%\tts\` is now orphaned — safe to delete to reclaim disk. Kokoro was rejected earlier for zero Arabic support (still true).

@@ -1,6 +1,0 @@
-# Drop reference audio clips here (6–30s, WAV or MP3, clean/mono/16-24 kHz).
-# Filename becomes the voice ID passed to /tts (without extension).
-#
-# Example:
-#   tts/reference_voices/anchor_male_calm.wav
-#   → POST /tts { "voice": "anchor_male_calm", "text": "...", "language": "ar" }
