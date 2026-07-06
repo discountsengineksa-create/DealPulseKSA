@@ -72,3 +72,4 @@
 - [Domain Canonical Trap](domain_canonical_trap.md) — الصح dealpulseksa.com (حيّ)، التوأم dealpulesksa.com ميّت؛ لا تحكم على هجاء من لقطة مضغوطة — احسمه بـcurl/DNS؛ Trustpilot أول باكلينك مكتمل (2026-07-04)
 - [Local TTS Engine — XTTS v2 (REMOVED)](tts_engine_xtts_v2.md) — بُني ثم حُذف بالكامل 2026-07-06؛ جودة العربي المحلي ضعيفة؛ لا تُعِد بناء محلي-مجاني — الطريق الصحيح API عصبي مدفوع (ElevenLabs/Azure)
 - [Judge by Output, Not Engineering Effort](feedback_output_over_engineering.md) — المستخدم يقيّم بالمخرَج النهائي لا بصعوبة السباكة؛ اكشف سقف جودة الأداة بصراحة قبل البناء عليها
+- [Voice Bible](voice_bible.md) — نموذج الصوت التحريري للمقالات: عيّنة حقيقية مشرَّحة (فيتامين د) + الـ DNA؛ قلّد العيّنة لا القواعد النظرية وحدها
