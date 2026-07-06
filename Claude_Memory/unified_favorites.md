@@ -9,10 +9,13 @@ metadata:
 
 نظام المفضلة الموحّد (wave منفّذ 2026-05-31، commit `1bca207` backend + `a2c38d5` web).
 
-**القرار المعماري:** جدول `user_favorites` مُطبّع = مصدر الحقيقة الوحيد (SSOT) للتحليل
-والتنبيهات. أعمدة `manual_favorites TEXT[]` على `bot_users`/`web_users` **تبقى** كـ cache
-بالكتابة المزدوجة (dual-write) — لم تُحذف حتى لا تنكسر الواجهات القائمة (getFavorites بالموقع،
-بطاقة المستخدم بالداشبورد، استنتاج البوت `fav_store_inferred`).
+**القرار المعماري:** جدول `user_favorites` مُطبّع = مصدر الحقيقة الوحيد (SSOT) للتحليل والتنبيهات.
+
+**⚠️ تصحيح (مُتحقَّق 2026-07-06، امتحان القدرة Q3):** الكتابة المزدوجة لـ `manual_favorites`
+**لم تعد موجودة في الكود** — `grep "(INSERT|UPDATE|DELETE).*manual_favorites"` عبر كل `*.py` = صفر.
+الكتابة الوحيدة الآن إلى `user_favorites` (في `api/routers/users.py`: INSERT أسطر 38/48/78/89،
+DELETE 61/66/103/109). أعمدة `manual_favorites TEXT[]` صارت **legacy للقراءة فقط** (قد تُقرأ في
+واجهات قديمة لكن لا تُحدَّث). الوصف القديم أدناه («تبقى بالكتابة المزدوجة») **بطل** — أثق بالكود لا بالذاكرة الأقدم.
 
 **الجدول:** `platform('bot'|'web'|'miniapp')` + (`web_user_id` أو `telegram_id`، CHECK مالك واحد
 بالضبط) + `store_id` (بلا FK لـ master لأنه غير فريد) + `created_at` + `last_notified_at`.
