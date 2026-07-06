@@ -2,6 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> 🧠 **READ FIRST, EVERY SESSION: [`AGENT_PLAYBOOK.md`](AGENT_PLAYBOOK.md).** It is
+> the working method the owner expects — diagnose root cause not symptoms, verify
+> end-to-end, be honest about ceilings, and keep the shared `Claude_Memory/` up to
+> date. The difference between solving a problem in one pass vs. failing six times
+> is that playbook, not raw intelligence. Also read `Claude_Memory/MEMORY.md` (the
+> memory index) and open any entry relevant to your task before touching code.
+
 ## Running the Project
 
 ```bash
