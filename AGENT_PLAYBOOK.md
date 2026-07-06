@@ -91,7 +91,7 @@ STOP=${NEXT:-$(wc -l < lib/blog.ts)}          # نطاق أمتن: من الـ s
 A(){ sed -n "${START},${STOP}p" lib/blog.ts; } # جسم المقال
 echo "١) روابط سليمة:"; A|grep -oE '/blog/[a-z0-9-]+'|sort -u|while read t; do grep -q "slug: '${t#/blog/}'" lib/blog.ts && echo "  ✓ ${t#/blog/}"||echo "  ✗ مكسور ${t#/blog/}"; done
 echo "٢) غير يتيم (≥2): $(grep -c "$S" lib/blog.ts)"
-echo "٣) فبركة ريال (=0): $(A|grep -cE '[0-9]+ ?ريال|[0-9]+ ?SAR')"
+echo "٣) فبركة ريال (=0): $(A|grep -cE '[٠١٢٣٤٥٦٧٨٩0-9]+ ?(ريال|SAR|﷼)')"  # عربي-هندي + لاتيني
 echo "٤) بنية: جدول=$(A|grep -cE '^\|.*\|') FAQ=$(A|grep -c 'أسئلة شائعة') إفصاح=$(A|grep -c 'إفصاح')"
 BL=$(A|grep -oE '/blog/[a-z0-9-]+'|sort -u|wc -l); ST=$(A|grep -oE '/store/[^)\"]+'|sort -u|wc -l)
 echo "   روابط: blog=$BL store=$ST المجموع=$((BL+ST)) (٩–١٣)"
