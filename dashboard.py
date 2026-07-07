@@ -9473,11 +9473,15 @@ elif page == "👣 زوّار الموقع":
             },
         )
 
-        _n_reg  = int(_visitors_today["reg_name"].notna().sum()
-                      | _visitors_today["reg_email"].notna().sum())
-        _n_tg   = int((_visitors_today["source"] == "telegram_miniapp").sum())
-        _n_anon = len(_visitors_today) - _n_reg - _n_tg
-        st.caption(f"📊 خلاصة النطاق: {_n_reg} مسجّل · {_n_tg} من البوت · {_n_anon} زائر مجهول.")
+        _n_reg  = int(_visitors_today["reg_email"].notna().sum())
+        _n_bot  = int(_visitors_today["bot_username"].notna().sum())
+        _n_mini = int((_visitors_today["source"] == "telegram_miniapp").sum()
+                      - _n_bot if (_visitors_today["source"] == "telegram_miniapp").sum() >= _n_bot else 0)
+        _n_anon = len(_visitors_today) - _n_reg - _n_bot - _n_mini
+        st.caption(
+            f"📊 خلاصة النطاق: {_n_reg} مسجّل · {_n_bot} يوزر بوت · "
+            f"{_n_mini} من الميني (بدون يوزر) · {_n_anon} زائر مجهول."
+        )
 
     # ── المصدر + الجهاز ─────────────────────────────────────────────────────
     g1, g2 = st.columns(2)
