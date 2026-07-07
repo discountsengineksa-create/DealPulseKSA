@@ -3,7 +3,10 @@ Compute a 0–100 quality score per event. Used downstream to weight clicks
 in velocity snapshots — a bot-generated burst won't trip the spike alert.
 
 Heuristics (subtractive; clamped to 0..100):
-  -50 if datacenter ASN
+  -60 if datacenter ASN  (was -50 until 2026-07-07: exact boundary bug — 100-50=50
+                          equals the dashboard's ">=50" pass threshold, so DC leaked
+                          through. Live evidence: 245/247 Dallas visits were DC-flagged
+                          yet passed the filter. -60 lands at 40 = clearly filtered.)
   -30 if cf_bot_score < 30 (Cloudflare flagged as bot-likely)
   -20 if device_class == 'bot'
   -5  if region_code is empty (geo failed — slight signal degradation)
@@ -52,7 +55,7 @@ def compute_quality_score(ctx: GeoContext) -> tuple[int, bool, bool]:
     proxy = False  # TODO: integrate proxycheck.io or MaxMind anonymous-IP DB
 
     if dc:
-        score -= 50
+        score -= 60
     if ctx.cf_bot_score is not None and ctx.cf_bot_score < 30:
         score -= 30
     if ctx.device_class == "bot":

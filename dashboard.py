@@ -9165,8 +9165,17 @@ elif page == "تحليل المستخدمين":
 # صفحة 👣 زوّار الموقع (Web Visits) — Migration 060
 # يقرأ web_visits فقط (مستقلّ تماماً عن فلاتر «تحليل المستخدمين»). يُظهر كل من
 # مرّ بالموقع حتى لو لم يتفاعل (نسخ/نقر) — الفجوة التي كانت تُخفي الزوّار سابقاً.
-# البوتات مفلترة افتراضياً (quality_score ≥ 50). أعمدة SQL إنجليزية ثم تُترجم
-# للعربية في pandas (نمط المشروع — معرّفات SQL العربية تُسبّب خطأ صياغة).
+#
+# فلترة الجودة (Migration 066، 2026-07-07): البوتات مفلترة افتراضياً بـ
+#   quality_score >= 50 AND is_datacenter IS NOT TRUE
+# الشرط الثاني ضروري: خوارزمية fraud_scoring كانت تُعطي DC نقطة 50 بالضبط
+# فيمرّون على حافة الفلتر. حتى بعد إصلاح الخوارزمية للـ60 (=40 نقطة)، الشرط
+# الصريح يحمي البيانات التاريخية المسجّلة قبل الإصلاح.
+#
+# تصفّح الإدمن (web_users.is_admin=TRUE) مستثنى دائماً من التحليلات — دون خيار
+# — لأن ادّراجه يشوّه «العائدون/الأكثر تكراراً» (المالك ظهر user #1 بـ16 زيارة).
+#
+# أعمدة SQL إنجليزية ثم تُترجم للعربية في pandas (نمط المشروع).
 # ════════════════════════════════════════════════════════════════════════════
 elif page == "👣 زوّار الموقع":
     page_title("👣", "زوّار الموقع",
@@ -9202,13 +9211,16 @@ elif page == "👣 زوّار الموقع":
         wv_from, wv_to = wv_to, wv_from
     with cc3:
         wv_bots = st.toggle("يشمل البوتات", value=False, key="wv_bots",
-                            help="افتراضياً نعرض الزوّار الحقيقيين فقط (جودة ≥ 50)")
+                            help="افتراضياً نستثني: quality_score < 50 أو is_datacenter=TRUE")
     with cc4:
         st.markdown("&nbsp;", unsafe_allow_html=True)
         if st.button("🔄 تحديث", key="wv_refresh"):
             st.rerun()
 
-    _q = "" if wv_bots else "AND quality_score >= 50"   # نص ثابت — لا مدخل مستخدم
+    # فلتر البوتات (تبديل) + استثناء الإدمن (دائم). كلاهما نصوص ثابتة — لا مدخل مستخدم.
+    _q_bot   = "" if wv_bots else "AND quality_score >= 50 AND is_datacenter IS NOT TRUE"
+    _q_admin = "AND (user_id IS NULL OR user_id NOT IN (SELECT id FROM web_users WHERE is_admin))"
+    _q = f"{_q_bot} {_q_admin}"
     _p = {"f": wv_from, "t": wv_to}
 
     # ── KPIs سريعة (اليوم / 7 / 30 يوم — مستقلّة عن نطاق التاريخ) ────────────
