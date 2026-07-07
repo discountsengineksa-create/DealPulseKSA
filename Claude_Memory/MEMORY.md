@@ -4,6 +4,7 @@
 - [Setup Guide](setup_guide.md) — How to run locally on a new machine (dependencies, env vars, migrations)
 - [Bug Fixes Log](bug_fixes.md) — All bugs fixed and why, so we don't reintroduce them
 - [User Preferences](user_preferences.md) — How the user likes to work
+- [🤝 Partnership Protocol](protocol_partnership.md) — ٨ أنماط أُمسك بها بالاسم + دورة انضباط رباعية + طقوس جلسة + الاتفاق الصامت + سياسة المصادر المفتوحة (2026-07-07)
 - [AI Mastery Goal](user_ai_mastery_goal.md) — wants a universal reusable prompt across all AI platforms/domains; into prompt engineering; give honest expert feedback
 - [Regression Audit First](feedback_regression_audit.md) — when user says "it worked before you changed it", check my own recent diffs first; no speculative code changes
 - [Contact Emails](contact_emails.md) — Personal vs brand ops mailbox (spelled `dealpulesksa@gmail.com`)
