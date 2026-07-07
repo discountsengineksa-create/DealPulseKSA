@@ -9293,6 +9293,8 @@ elif page == "👣 زوّار الموقع":
     # يعمل على البيانات الخام (بلا فلتر البوتات) عمداً — الهدف تصنيف كل قفزة
     # بشرية (ترويج/فيروسي) أو بوت (crawler/scraper)، لا إخفاؤها. النطاق نفس
     # المختار أعلاه. المرجع: [[bot_vs_promo_heuristic]] بعد درس ٢٦ يونيو.
+    # ملاحظة SQL: Postgres يمنع aggregate حول window (MAX(SUM() OVER())).
+    # لذلك نحسب asn_share كطبقة CTE مستقلة، ثم MAX عليها كطبقة تالية.
     _spikes = pd.read_sql("""
         WITH daily AS (
           SELECT (created_at AT TIME ZONE 'Asia/Riyadh')::date AS d,
@@ -9306,27 +9308,34 @@ elif page == "👣 زوّار الموقع":
                 BETWEEN %(f)s AND %(t)s
           GROUP BY 1
         ),
-        asn_share AS (
-          SELECT d, MAX(cnt::float / SUM(cnt) OVER (PARTITION BY d)) AS top_share
-          FROM (SELECT (created_at AT TIME ZONE 'Asia/Riyadh')::date AS d,
-                       asn, COUNT(*) AS cnt
-                FROM web_visits
-                WHERE (created_at AT TIME ZONE 'Asia/Riyadh')::date
-                      BETWEEN %(f)s AND %(t)s
-                GROUP BY 1, 2) x
+        per_asn AS (
+          SELECT (created_at AT TIME ZONE 'Asia/Riyadh')::date AS d,
+                 asn, COUNT(*) AS cnt
+          FROM web_visits
+          WHERE (created_at AT TIME ZONE 'Asia/Riyadh')::date
+                BETWEEN %(f)s AND %(t)s
+          GROUP BY 1, 2
+        ),
+        asn_share_rows AS (
+          SELECT d, cnt::float / SUM(cnt) OVER (PARTITION BY d) AS asn_share
+          FROM per_asn
+        ),
+        top_asn AS (
+          SELECT d, MAX(asn_share) AS top_share
+          FROM asn_share_rows
           GROUP BY d
         )
         SELECT d.d AS day,
                d.visits, d.uniq_v, d.uniq_asn,
                ROUND(d.dc_ratio::numeric, 2)  AS dc_ratio,
-               ROUND(a.top_share::numeric, 2) AS top_asn_share,
+               ROUND(t.top_share::numeric, 2) AS top_asn_share,
                CASE
-                 WHEN d.dc_ratio >= 0.6 OR a.top_share >= 0.7 THEN 'BOT'
-                 WHEN d.dc_ratio <= 0.15 AND a.top_share <= 0.5
+                 WHEN d.dc_ratio >= 0.6 OR t.top_share >= 0.7 THEN 'BOT'
+                 WHEN d.dc_ratio <= 0.15 AND t.top_share <= 0.5
                       AND d.uniq_asn >= 3 THEN 'HUMAN'
                  ELSE 'MIXED'
                END AS verdict
-        FROM daily d JOIN asn_share a USING(d)
+        FROM daily d JOIN top_asn t USING(d)
         WHERE d.visits >= 20
         ORDER BY d.visits DESC
     """, conn, params=_p)
