@@ -78,3 +78,4 @@
 - [Judge by Output, Not Engineering Effort](feedback_output_over_engineering.md) — المستخدم يقيّم بالمخرَج النهائي لا بصعوبة السباكة؛ اكشف سقف جودة الأداة بصراحة قبل البناء عليها
 - [Voice Bible](voice_bible.md) — نموذج الصوت التحريري للمقالات: عيّنة حقيقية مشرَّحة (فيتامين د) + الـ DNA؛ قلّد العيّنة لا القواعد النظرية وحدها
 - [Mirror Audit — Trace Not Claim](feedback_mirror_audit.md) — دقّق الـ agents (ونفسك) بالـ trace الخام بشكل متماثل؛ الأفضلية للأرقام لا المنصب
+- [Blog Internal-Link De-orphan](blog_internal_link_deorphan.md) — 65 مقال يتيم صُفِّرت (web 98b4329) بإكمال فهارس 4 pillars + hubs؛ السبب top-6 في getRelatedPosts يجوّع ذيل العنقود؛ طريقة تدقيق Node قابلة للتكرار + esbuild للتحقّق
