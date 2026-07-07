@@ -9320,7 +9320,8 @@ elif page == "👣 زوّار الموقع":
     _visitors_today = pd.read_sql("""
         WITH todays_visits AS (
           SELECT v.visitor_id, v.user_id, v.city, v.asn, v.source,
-                 v.referrer_kind, v.landing_path, v.created_at
+                 v.referrer_kind, v.referrer_host,
+                 v.landing_path, v.created_at
           FROM web_visits v
           WHERE (v.created_at AT TIME ZONE 'Asia/Riyadh')::date
                 BETWEEN %(f)s AND %(t)s
@@ -9335,6 +9336,7 @@ elif page == "👣 زوّار الموقع":
                  MAX(asn)           AS asn,
                  MAX(source)        AS source,
                  MAX(referrer_kind) AS ref_kind,
+                 MAX(referrer_host) AS ref_host,
                  (array_agg(landing_path ORDER BY created_at))[1] AS first_landing,
                  COUNT(*)           AS sessions,
                  MAX(created_at)    AS last_seen
@@ -9350,9 +9352,17 @@ elif page == "👣 زوّار الموقع":
           GROUP BY a.visitor_id
         )
         SELECT g.visitor_id::text AS vid, g.user_id,
-               wu.display_name AS reg_name, wu.email AS reg_email,
+               wu.email AS reg_email,
                wu.telegram_username AS reg_tg,
-               g.city, g.asn, g.source, g.ref_kind, g.first_landing,
+               -- يوزر التلجرام لو الزائر جاء عبر البوت/الميني وربطنا نشاطه في action_logs
+               (SELECT bu.username FROM action_logs al
+                 JOIN bot_users bu ON bu.telegram_id = al.user_id
+                WHERE al.visitor_id = g.visitor_id
+                  AND al.source IN ('bot','telegram_miniapp')
+                  AND al.user_id IS NOT NULL
+                  AND bu.username IS NOT NULL
+                LIMIT 1) AS bot_username,
+               g.city, g.asn, g.source, g.ref_kind, g.ref_host, g.first_landing,
                g.sessions, COALESCE(p.actions_today, 0) AS actions,
                g.last_seen AT TIME ZONE 'Asia/Riyadh' AS ksa_time
         FROM agg g
@@ -9366,13 +9376,17 @@ elif page == "👣 زوّار الموقع":
         st.caption("قائمة الزوّار الحقيقيين خلال النطاق أعلاه، بعد استثناء البوتات وأنت (الإدمن).")
 
         def _identity(row):
-            if pd.notna(row["reg_name"]) or pd.notna(row["reg_email"]):
-                name = row["reg_name"] if pd.notna(row["reg_name"]) else row["reg_email"]
-                tg = f" · @{row['reg_tg']}" if pd.notna(row["reg_tg"]) else ""
-                return f"🟢 مسجّل — {name}{tg}"
+            # ١) مسجّل في الموقع → الإيميل هو الهوية (بحسب طلب المالك)
+            if pd.notna(row["reg_email"]):
+                return f"🟢 {row['reg_email']}"
+            # ٢) جاء من البوت/الميني وعرفنا يوزره من bot_users
+            if pd.notna(row["bot_username"]):
+                return f"🤖 @{row['bot_username']}"
+            # ٣) جاء من الميني لكن ما ربطنا يوزره بعد
             if row["source"] == "telegram_miniapp":
-                return f"🤖 من البوت — زائر {str(row['vid'])[:8]}"
-            return f"🟡 زائر — {str(row['vid'])[:8]}"
+                return "🤖 مستخدم بوت (مجهول اليوزر)"
+            # ٤) زائر ويب مجهول
+            return "🟡 زائر"
 
         def _operator(asn):
             if pd.isna(asn) or asn == 0:
@@ -9380,15 +9394,67 @@ elif page == "👣 زوّار الموقع":
             asn = int(asn)
             return _ASN_NAMES.get(asn, f"ASN {asn}")
 
-        _REF_AR = {"search": "🔍 بحث", "social": "📱 سوشال",
-                   "direct": "↗️ مباشر", "internal": "🔁 داخلي",
-                   "referral": "🔗 موقع آخر", None: "—"}
+        # قاموس اسم المنصّة الفعلي من referrer_host (بدل «سوشال» العام)
+        _PLATFORM_NAMES = {
+            # سوشال
+            "tiktok.com": "📱 TikTok", "vm.tiktok.com": "📱 TikTok",
+            "l.tiktok.com": "📱 TikTok",
+            "instagram.com": "📱 Instagram", "l.instagram.com": "📱 Instagram",
+            "m.instagram.com": "📱 Instagram",
+            "facebook.com": "📱 Facebook", "fb.com": "📱 Facebook",
+            "l.facebook.com": "📱 Facebook", "m.facebook.com": "📱 Facebook",
+            "twitter.com": "📱 X (Twitter)", "x.com": "📱 X (Twitter)",
+            "t.co": "📱 X (Twitter)",
+            "youtube.com": "📱 YouTube", "m.youtube.com": "📱 YouTube",
+            "youtu.be": "📱 YouTube",
+            "snapchat.com": "📱 Snapchat",
+            "telegram.org": "📱 Telegram", "t.me": "📱 Telegram",
+            "whatsapp.com": "📱 WhatsApp", "wa.me": "📱 WhatsApp",
+            "linkedin.com": "📱 LinkedIn", "lnkd.in": "📱 LinkedIn",
+            "pinterest.com": "📱 Pinterest",
+            "reddit.com": "📱 Reddit",
+            "threads.net": "📱 Threads",
+            # بحث
+            "google.com": "🔍 Google", "google.com.sa": "🔍 Google",
+            "google.co.uk": "🔍 Google", "google.ae": "🔍 Google",
+            "bing.com": "🔍 Bing",
+            "yahoo.com": "🔍 Yahoo",
+            "duckduckgo.com": "🔍 DuckDuckGo",
+            "yandex.com": "🔍 Yandex", "yandex.ru": "🔍 Yandex",
+            "baidu.com": "🔍 Baidu",
+        }
+
+        def _entry_source(row):
+            """يعرض اسم المنصّة الفعلي (TikTok/Instagram/Google) بدل التصنيف العام."""
+            kind = row.get("ref_kind")
+            host = row.get("ref_host") or ""
+            if not kind:
+                return "↗️ مباشر"
+            if kind == "internal":
+                return "🔁 داخلي"
+            if kind == "direct":
+                return "↗️ مباشر"
+            # سوشال/بحث/referral: حاول ترجمة الدومين لاسم منصّة
+            if host and host in _PLATFORM_NAMES:
+                return _PLATFORM_NAMES[host]
+            # لو دومين قوقل بامتداد بلد آخر مثل google.pt → لسّه بحث لكن اسم غير محدّد
+            for dom, name in _PLATFORM_NAMES.items():
+                if host.endswith(dom):
+                    return name
+            # مصدر بحث/سوشال معروف تصنيفياً لكن الدومين غير مسجّل عندنا
+            if kind == "search":
+                return f"🔍 بحث ({host})" if host else "🔍 بحث"
+            if kind == "social":
+                return f"📱 سوشال ({host})" if host else "📱 سوشال"
+            if kind == "referral":
+                return f"🔗 {host}" if host else "🔗 موقع آخر"
+            return "—"
 
         _view = pd.DataFrame({
             "الهوية": _visitors_today.apply(_identity, axis=1),
             "المدينة": _visitors_today["city"].fillna("غير معروف"),
             "المشغّل": _visitors_today["asn"].apply(_operator),
-            "دخل من": _visitors_today["ref_kind"].map(lambda x: _REF_AR.get(x, x) if x else "—"),
+            "دخل من": _visitors_today.apply(_entry_source, axis=1),
             "أول صفحة": _visitors_today["first_landing"].fillna("/"),
             "صفحات تصفّحها": _visitors_today["actions"].astype(int),
             "آخر نشاط": pd.to_datetime(_visitors_today["ksa_time"]).dt.strftime("%m-%d %H:%M"),
