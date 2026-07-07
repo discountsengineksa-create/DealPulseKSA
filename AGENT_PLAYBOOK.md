@@ -196,6 +196,31 @@ print('rows:', len(df)); print(df.head(3))
 "
 ```
 
+**فخّ #٢ — اختبار الـSQL لا يختبر Python بعده (٢٠٢٦-٠٧-٠٧ hotfix ثانٍ):** استعلام يمرّ ✓ لا يعني الصفحة تُرندَر ✓. الحادثة: حذفت عمود `reg_name` من SELECT، لكن سطر Python بعده `_visitors_today["reg_name"].notna()` بقي كما هو → `KeyError` فور رندر الصفحة. الـSQL نجح، الـcaption انفجر. **قاعدتان لازمتان لكل حذف/إعادة تسمية عمود:**
+
+**أ) `grep` ميكانيكي بعد الحذف** — قبل الدفع، فحص أن العمود المحذوف صفر مراجع في الملف:
+```bash
+grep -n 'reg_name' dashboard.py    # يجب أن يعطي 0 نتائج
+```
+إذا رجّع أي سطر → أصلحه قبل الدفع. **٢ ثانية، يمسك ١٠٠٪ من هذا الصنف.**
+
+**ب) محاكاة Python بعد الـSQL بمعاملات واقعية** — نمرّر الـDataFrame الفعلي على السطور التالية:
+```bash
+python -c "
+from dotenv import load_dotenv; load_dotenv()
+import os, psycopg2, pandas as pd
+from datetime import date, timedelta
+conn = psycopg2.connect(os.getenv('DATABASE_URL'))
+q = '''<الـSQL من dashboard.py>'''
+df = pd.read_sql(q, conn, params={'f': date.today()-timedelta(days=30), 't': date.today()})
+# استنسخ الأسطر التي تلي pd.read_sql (الفلتر، الـcaption، الـapply، الـdataframe view) هنا
+# مثال:
+n_reg = int(df['reg_email'].notna().sum())
+print('n_reg:', n_reg, 'total:', len(df))
+"
+```
+يمسك: عمود محذوف، مفتاح مفقود، NaN غير معالج، dtype خاطئ. **الـstreamlit boot لا يمسك أياً منها لأنه lazy-load.**
+
 ---
 
 ## ٥) القواعد الحمراء للمشروع (كسرها = كارثة)
