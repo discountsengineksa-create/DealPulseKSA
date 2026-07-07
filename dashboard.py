@@ -9295,149 +9295,123 @@ elif page == "👣 زوّار الموقع":
     # المختار أعلاه. المرجع: [[bot_vs_promo_heuristic]] بعد درس ٢٦ يونيو.
     # ملاحظة SQL: Postgres يمنع aggregate حول window (MAX(SUM() OVER())).
     # لذلك نحسب asn_share كطبقة CTE مستقلة، ثم MAX عليها كطبقة تالية.
-    # ── 🔬 تشخيص القفزات (نسخة تجارية — لغة مالك، لا لغة مهندس) ──────────────
-    # الاستعلام يستخرج + الـASN الأكثر هيمنة لكل يوم قفزة (رقم + عدد زياراته)،
-    # ثم Python يحوّل الرقم لهوية بشرية معروفة (Googlebot / STC / Zain / …)
-    # ويبني جملة مفهومة تخبر المالك: ماذا حصل + ماذا يعني له.
-    _spikes = pd.read_sql("""
-        WITH daily AS (
-          SELECT (created_at AT TIME ZONE 'Asia/Riyadh')::date AS d,
-                 COUNT(*) AS visits,
-                 COUNT(DISTINCT visitor_id) AS uniq_v,
-                 COUNT(DISTINCT asn) AS uniq_asn,
-                 SUM(CASE WHEN is_datacenter THEN 1 ELSE 0 END)::float
-                   / NULLIF(COUNT(*), 0) AS dc_ratio
-          FROM web_visits
-          WHERE (created_at AT TIME ZONE 'Asia/Riyadh')::date
+    # ── 👤 مَن زار اليوم؟ — قائمة زوّار مفصّلة ب٣ أنواعك ─────────────────────
+    # نموذج المالك:
+    #   1) مسجّل (web_users.email موجود)  → نعرفه بالاسم/الإيميل
+    #   2) زائر (visitor_id بلا user_id)  → نعطيه معرّف مختصر ونعرف مدينته + مشغّله
+    #   3) من البوت (source='telegram_miniapp') → يوزره من bot_users.username
+    #
+    # لكل زائر: من هو + مدينته + مشغّل الإنترنت + من أين دخل + كم صفحة تصفّح.
+    # قاموس ASN → مشغّل مقروء (سعودي/دولي/VPN).
+    _ASN_NAMES = {
+        # سعودية
+        39891: "STC",     43766: "Zain",     35819: "Mobily",
+        25019: "Mobily",  39386: "STC",
+        # مصرية
+        8452:  "TE Data (مصر)",
+        # بوتات مراكز بيانات (لو ظهرت في الجدول رغم الفلتر)
+        15169: "Google Cloud (bot)", 396982: "Google Cloud (bot)",
+        14618: "AWS (bot)", 16509: "AWS (bot)",
+        24940: "Hetzner (bot)", 16276: "OVH (bot)",
+        # VPN شائع
+        63023: "Aruba إيطاليا (VPN)", 3356: "Level 3/Lumen",
+    }
+
+    _visitors_today = pd.read_sql("""
+        WITH todays_visits AS (
+          SELECT v.visitor_id, v.user_id, v.city, v.asn, v.source,
+                 v.referrer_kind, v.landing_path, v.created_at
+          FROM web_visits v
+          WHERE (v.created_at AT TIME ZONE 'Asia/Riyadh')::date
                 BETWEEN %(f)s AND %(t)s
-          GROUP BY 1
+            AND v.quality_score >= 50
+            AND v.is_datacenter IS NOT TRUE
+            AND (v.user_id IS NULL
+                 OR v.user_id NOT IN (SELECT id FROM web_users WHERE is_admin))
         ),
-        per_asn AS (
-          SELECT (created_at AT TIME ZONE 'Asia/Riyadh')::date AS d,
-                 asn, COUNT(*) AS cnt
-          FROM web_visits
-          WHERE (created_at AT TIME ZONE 'Asia/Riyadh')::date
+        agg AS (
+          SELECT visitor_id, user_id,
+                 MAX(city)          AS city,
+                 MAX(asn)           AS asn,
+                 MAX(source)        AS source,
+                 MAX(referrer_kind) AS ref_kind,
+                 (array_agg(landing_path ORDER BY created_at))[1] AS first_landing,
+                 COUNT(*)           AS sessions,
+                 MAX(created_at)    AS last_seen
+          FROM todays_visits
+          GROUP BY visitor_id, user_id
+        ),
+        page_hits AS (
+          SELECT a.visitor_id, COUNT(*) AS actions_today
+          FROM action_logs a
+          WHERE a.visitor_id IN (SELECT visitor_id FROM agg WHERE visitor_id IS NOT NULL)
+            AND (a.action_time AT TIME ZONE 'Asia/Riyadh')::date
                 BETWEEN %(f)s AND %(t)s
-          GROUP BY 1, 2
-        ),
-        ranked AS (
-          SELECT d, asn, cnt,
-                 cnt::float / SUM(cnt) OVER (PARTITION BY d) AS asn_share,
-                 ROW_NUMBER() OVER (PARTITION BY d ORDER BY cnt DESC) AS rn
-          FROM per_asn
-        ),
-        top_asn AS (
-          SELECT d, asn AS top_asn, cnt AS top_asn_hits, asn_share AS top_share
-          FROM ranked WHERE rn = 1
+          GROUP BY a.visitor_id
         )
-        SELECT d.d AS day,
-               d.visits, d.uniq_v, d.uniq_asn,
-               ROUND(d.dc_ratio::numeric, 2)  AS dc_ratio,
-               ROUND(t.top_share::numeric, 2) AS top_asn_share,
-               t.top_asn, t.top_asn_hits,
-               CASE
-                 WHEN d.dc_ratio >= 0.6 OR t.top_share >= 0.7 THEN 'BOT'
-                 WHEN d.dc_ratio <= 0.15 AND t.top_share <= 0.5
-                      AND d.uniq_asn >= 3 THEN 'HUMAN'
-                 ELSE 'MIXED'
-               END AS verdict
-        FROM daily d JOIN top_asn t USING(d)
-        WHERE d.visits >= 20
-        ORDER BY d.visits DESC
+        SELECT g.visitor_id::text AS vid, g.user_id,
+               wu.display_name AS reg_name, wu.email AS reg_email,
+               wu.telegram_username AS reg_tg,
+               g.city, g.asn, g.source, g.ref_kind, g.first_landing,
+               g.sessions, COALESCE(p.actions_today, 0) AS actions,
+               g.last_seen AT TIME ZONE 'Asia/Riyadh' AS ksa_time
+        FROM agg g
+        LEFT JOIN web_users wu ON wu.id = g.user_id
+        LEFT JOIN page_hits p  ON p.visitor_id = g.visitor_id
+        ORDER BY g.last_seen DESC
     """, conn, params=_p)
 
-    if not _spikes.empty:
-        # قاموس هوية الـASNs — نضيف كلما تعرّفنا على مصدر جديد
-        _ASN_NAMES = {
-            # مراكز بيانات عالمية (بوتات)
-            15169: "Google Cloud", 396982: "Google Cloud",
-            14618: "Amazon AWS", 16509: "Amazon AWS",
-            8075:  "Microsoft Azure", 24940: "Hetzner (ألمانيا)",
-            16276: "OVH (فرنسا)",     63949: "Linode",
-            14061: "DigitalOcean",     20473: "Vultr",
-            132203:"Tencent Cloud",    200651:"Flokinet",
-            51167: "Contabo",          60068: "CDN77",
-            3356:  "Level 3 / Lumen",  # مختلط: مستخدمين + بوتات
-            63023: "Aruba إيطاليا (VPN شائع سعودياً)",
-            # مشغّلات سعودية (بشر حقيقيون)
-            39891: "STC السعودية",     43766: "Zain السعودية",
-            35819: "Mobily السعودية",  25019: "Mobily السعودية",
-            39386: "STC السعودية",
-            # مشغّلات إقليمية
-            8452:  "TE Data (مصر)",
-        }
+    if not _visitors_today.empty:
+        st.markdown("#### 👤 مَن زار اليوم؟")
+        st.caption("قائمة الزوّار الحقيقيين خلال النطاق أعلاه، بعد استثناء البوتات وأنت (الإدمن).")
 
-        def _story(row):
-            """يبني جملتَين لكل قفزة: ما حصل + ماذا يعني للمالك."""
-            v = int(row["visits"])
-            uv = int(row["uniq_v"])
-            un = int(row["uniq_asn"])
-            asn_num = int(row["top_asn"]) if pd.notna(row["top_asn"]) else 0
-            asn_hits = int(row["top_asn_hits"]) if pd.notna(row["top_asn_hits"]) else 0
-            asn_name = _ASN_NAMES.get(asn_num, f"مشغّل غير معروف (ASN {asn_num})")
-            verdict = row["verdict"]
+        def _identity(row):
+            if pd.notna(row["reg_name"]) or pd.notna(row["reg_email"]):
+                name = row["reg_name"] if pd.notna(row["reg_name"]) else row["reg_email"]
+                tg = f" · @{row['reg_tg']}" if pd.notna(row["reg_tg"]) else ""
+                return f"🟢 مسجّل — {name}{tg}"
+            if row["source"] == "telegram_miniapp":
+                return f"🤖 من البوت — زائر {str(row['vid'])[:8]}"
+            return f"🟡 زائر — {str(row['vid'])[:8]}"
 
-            if verdict == "BOT":
-                what = f"{v} زيارة، {asn_hits} منها ({int(row['top_asn_share']*100)}%) من {asn_name}."
-                if asn_num in (15169, 396982):
-                    mean = "الأغلب Googlebot يفهرس صفحاتك — إشارة SEO إيجابية. الفلتر يخفيها من أرقامك."
-                elif asn_num in (14618, 16509):
-                    mean = "سكرابر على AWS. مفلتر تلقائياً — لا تحسبه جمهوراً."
-                else:
-                    mean = "بوت من مركز بيانات. مفلتر تلقائياً — لا يظهر في تحليل الجمهور."
-                return what, mean
+        def _operator(asn):
+            if pd.isna(asn) or asn == 0:
+                return "غير معروف"
+            asn = int(asn)
+            return _ASN_NAMES.get(asn, f"ASN {asn}")
 
-            if verdict == "HUMAN":
-                what = f"{v} زيارة من {uv} زائر فريد عبر {un} مشغّلات مختلفة."
-                mean = ("🎯 يوم ترويج ناجح (شير مع أصحاب / فيروسي). "
-                        "ادرس النمط — من أرسلت له؟ متى؟ كيف صيغة الرسالة؟")
-                return what, mean
+        _REF_AR = {"search": "🔍 بحث", "social": "📱 سوشال",
+                   "direct": "↗️ مباشر", "internal": "🔁 داخلي",
+                   "referral": "🔗 موقع آخر", None: "—"}
 
-            # MIXED
-            what = f"{v} زيارة، {asn_hits} من {asn_name} + {v - asn_hits} من مشغّلات أخرى."
-            mean = ("خليط بشر + بوت. الفلتر يبقي البشر (المشغّلات السعودية/الحقيقية) "
-                    "ويخفي البوتات.")
-            return what, mean
+        _view = pd.DataFrame({
+            "الهوية": _visitors_today.apply(_identity, axis=1),
+            "المدينة": _visitors_today["city"].fillna("غير معروف"),
+            "المشغّل": _visitors_today["asn"].apply(_operator),
+            "دخل من": _visitors_today["ref_kind"].map(lambda x: _REF_AR.get(x, x) if x else "—"),
+            "أول صفحة": _visitors_today["first_landing"].fillna("/"),
+            "صفحات تصفّحها": _visitors_today["actions"].astype(int),
+            "آخر نشاط": pd.to_datetime(_visitors_today["ksa_time"]).dt.strftime("%m-%d %H:%M"),
+        })
 
-        stories = _spikes.apply(_story, axis=1, result_type="expand")
-        _spikes["ماذا حصل"] = stories[0]
-        _spikes["ماذا يعني لك"] = stories[1]
-
-        _V_AR = {"HUMAN": "🟢 جمهور حقيقي",
-                 "BOT":   "🔴 بوت (مفلتَر)",
-                 "MIXED": "🟡 خليط"}
-        _spikes["التصنيف"] = _spikes["verdict"].map(_V_AR)
-
-        st.markdown("#### 🔬 تشخيص القفزات — بلغتك أنت")
-        st.caption("لكل يوم فوق ٢٠ زيارة: ما حصل فعلياً + ماذا يعني لجمهورك (يقرأ الأرقام الخام قبل الفلتر).")
-
-        _display = _spikes[["day", "التصنيف", "ماذا حصل", "ماذا يعني لك"]].rename(
-            columns={"day": "اليوم"}
-        )
         st.dataframe(
-            _display, use_container_width=True, hide_index=True,
+            _view, use_container_width=True, hide_index=True,
             column_config={
-                "اليوم": st.column_config.DateColumn(width="small"),
-                "التصنيف": st.column_config.TextColumn(width="small"),
-                "ماذا حصل": st.column_config.TextColumn(width="medium"),
-                "ماذا يعني لك": st.column_config.TextColumn(width="large"),
+                "الهوية":     st.column_config.TextColumn(width="medium"),
+                "المدينة":    st.column_config.TextColumn(width="small"),
+                "المشغّل":    st.column_config.TextColumn(width="small"),
+                "دخل من":    st.column_config.TextColumn(width="small"),
+                "أول صفحة":   st.column_config.TextColumn(width="medium"),
+                "صفحات تصفّحها": st.column_config.NumberColumn(width="small"),
+                "آخر نشاط":  st.column_config.TextColumn(width="small"),
             },
         )
 
-        _n_h = int((_spikes["verdict"] == "HUMAN").sum())
-        _n_b = int((_spikes["verdict"] == "BOT").sum())
-        _n_m = int((_spikes["verdict"] == "MIXED").sum())
-        st.caption(f"📊 خلاصة النطاق: {_n_h} يوم جمهور حقيقي · {_n_b} يوم بوت (مفلتَر) · {_n_m} يوم خليط.")
-
-        with st.expander("🔧 تفاصيل تقنية (للمطوّرين)"):
-            _tech = _spikes[["day", "visits", "uniq_v", "uniq_asn",
-                             "dc_ratio", "top_asn_share", "top_asn", "verdict"]].rename(
-                columns={"day": "اليوم", "visits": "زيارات خام", "uniq_v": "زوّار فريدون",
-                         "uniq_asn": "مشغّلات", "dc_ratio": "نسبة datacenter",
-                         "top_asn_share": "تركيز أعلى مشغّل", "top_asn": "ASN مهيمن",
-                         "verdict": "verdict"}
-            )
-            st.dataframe(_tech, use_container_width=True, hide_index=True)
+        _n_reg  = int(_visitors_today["reg_name"].notna().sum()
+                      | _visitors_today["reg_email"].notna().sum())
+        _n_tg   = int((_visitors_today["source"] == "telegram_miniapp").sum())
+        _n_anon = len(_visitors_today) - _n_reg - _n_tg
+        st.caption(f"📊 خلاصة النطاق: {_n_reg} مسجّل · {_n_tg} من البوت · {_n_anon} زائر مجهول.")
 
     # ── المصدر + الجهاز ─────────────────────────────────────────────────────
     g1, g2 = st.columns(2)
