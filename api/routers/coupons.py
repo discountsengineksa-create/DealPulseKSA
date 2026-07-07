@@ -249,7 +249,7 @@ def _select_light_clause(lang: str) -> str:
         """
     return """
         id, store_id, name_en, extra_offer, store_tags,
-        discount_value, is_trending,
+        discount_value, is_trending_bool AS is_trending, priority_score_int AS priority_score,
         COALESCE(is_promoted, FALSE) AS is_promoted,
         logo_url, story_ring_color, total_coupon_copies, total_link_clicks
     """
