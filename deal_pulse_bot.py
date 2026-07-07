@@ -1058,8 +1058,8 @@ def _load_and_show_codes(user_id, lang):
               AND NOT COALESCE(is_suspended, FALSE)
               AND (publish_channels IS NULL OR publish_channels ILIKE '%bot%')
             ORDER BY
-                CASE WHEN is_trending = 'ترند 🔥' THEN 1 ELSE 2 END,
-                priority_score DESC
+                is_trending_bool DESC,
+                priority_score_int DESC
             LIMIT 20
         """)
         rows = [dict(r) for r in cur.fetchall()]
@@ -1183,8 +1183,8 @@ def _load_tag_stores(user_id, lang, tag):
               AND NOT COALESCE(is_suspended, FALSE)
               AND (publish_channels IS NULL OR publish_channels ILIKE '%%bot%%')
             ORDER BY
-                CASE WHEN is_trending = 'ترند 🔥' THEN 1 ELSE 2 END,
-                priority_score DESC
+                is_trending_bool DESC,
+                priority_score_int DESC
         """, (tag.lower(),))
         rows = [dict(r) for r in cur.fetchall()]
         release_conn(conn)
@@ -1228,8 +1228,8 @@ def fetch_api_results(query: str, limit: int = 30, lang: str = "ar") -> list | N
                 "discount_value":r.get("discount_value") or "—",
                 "extra_offer":   r.get("extra_offer") or "",
                 "store_bio":     r.get("store_bio") or "",
-                "is_trending":   r.get("is_trending") or "عادي",
-                "priority_score":r.get("priority_score") or "عادي",
+                "is_trending":   bool(r.get("is_trending")),
+                "priority_score":int(r.get("priority_score") or 0),
                 "logo_url":      r.get("logo_url") or "",
             })
         return normalized

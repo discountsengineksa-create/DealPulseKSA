@@ -407,12 +407,12 @@ def log_story_view(payload: StoryViewRequest, request: Request, conn=Depends(get
         was_promoted = bool(row[0])
 
         # was_trending: snapshot للمتجر كـ«ترند» وقت فتح الستوري — يعتمد على
-        # تثبيت الأدمن اليدوي (master.is_trending='ترند 🔥') فقط، ليطابق توقّع
-        # المالك: «ما حطيته ترند يدوياً → ما يُحسب ستوري ترند». الخوارزمية
+        # تثبيت الأدمن اليدوي (is_trending_bool) فقط، ليطابق توقّع المالك:
+        # «ما حطيته ترند يدوياً → ما يُحسب ستوري ترند». الخوارزمية
         # (compute_trending_store_ids) ترفع متاجر عادية لـtop-3/7 في كتالوج
         # صغير فتلوّث bucket «ستوري ترند» بمتاجر غير مقصودة.
         cur.execute(
-            "SELECT BOOL_OR(is_trending = 'ترند 🔥') FROM master WHERE store_id = %s",
+            "SELECT BOOL_OR(is_trending_bool) FROM master WHERE store_id = %s",
             (payload.store_id,),
         )
         _row = cur.fetchone()

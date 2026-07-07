@@ -1028,7 +1028,7 @@ def _get_partner_logos() -> list[dict]:
                    logo_url
             FROM   master
             WHERE  logo_url IS NOT NULL AND logo_url != ''
-            ORDER  BY priority_score DESC NULLS LAST
+            ORDER  BY priority_score_int DESC NULLS LAST
             LIMIT  50
             """,
             conn,
@@ -1423,8 +1423,8 @@ def _sa_load_master() -> pd.DataFrame:
                    store_id,
                    store_id                       AS store_name,
                    COALESCE(logo_url, '')         AS logo_url,
-                   COALESCE(is_trending, 'عادي')  AS is_trending,
-                   COALESCE(priority_score, 'عادي') AS priority_score,
+                   is_trending_bool                AS is_trending,
+                   priority_score_int              AS priority_score,
                    COALESCE(is_promoted, false)   AS is_promoted,
                    last_time
             FROM   master
@@ -2269,12 +2269,12 @@ if page == "إدخال بيانات الماستر":
                             (store_id, name_en, affiliate_link, public_coupon,
                                 extra_offer, extra_offer_en, store_bio, store_bio_en,
                                 description,
-                                priority_score, discount_value, store_tags, store_tags_en,
+                                priority_score_int, discount_value, store_tags, store_tags_en,
                                 my_coupon, first_time, last_time,
-                                total_coupon_copies, total_link_clicks, is_trending,
+                                total_coupon_copies, total_link_clicks, is_trending_bool,
                                 logo_url, is_promoted, source_platform, social_poster_url,
                                 publish_channels, seo_enabled)
-                        VALUES (%s,%s,%s,%s, %s,%s,%s,%s, %s, %s,%s,%s,%s, %s,%s,%s, 0,0,'عادي', %s, %s, %s, %s, %s, %s)
+                        VALUES (%s,%s,%s,%s, %s,%s,%s,%s, %s, %s,%s,%s,%s, %s,%s,%s, 0,0,FALSE, %s, %s, %s, %s, %s, %s)
                         RETURNING id
                     """, (
                         store_id, name_en, aff_link, pub_coupon,
@@ -2370,9 +2370,15 @@ if page == "الاستعلام والتعديل":
                     st.divider()
 
                     # الصف 5: الأهمية + التواريخ + عمولتي
+                    # priority_score = SMALLINT بعد migration_065: 0/3/6/10.
+                    # نعرض التسميات بالعربي ونحفظ الرقم في القاعدة.
+                    _PRIO_INT_TO_STR = {0: "عادي", 3: "مهم", 6: "عاجل", 10: "عاجل جداً"}
+                    _PRIO_STR_TO_INT = {v: k for k, v in _PRIO_INT_TO_STR.items()}
                     r5c1, r5c2, r5c3, r5c4 = st.columns(4)
-                    p_list = ["عادي", "مهم", "عاجل", "عاجل جداً"]
-                    u_prio  = r5c1.selectbox("🚀 الأهمية", p_list, index=p_list.index(res['priority_score']) if res['priority_score'] in p_list else 0)
+                    p_list = list(_PRIO_INT_TO_STR.values())
+                    _cur_prio_str = _PRIO_INT_TO_STR.get(int(res.get('priority_score') or 0), "عادي")
+                    _u_prio_str  = r5c1.selectbox("🚀 الأهمية", p_list, index=p_list.index(_cur_prio_str))
+                    u_prio = _PRIO_STR_TO_INT[_u_prio_str]
                     u_start = r5c2.date_input("📅 تاريخ البداية", res['first_time'])
                     u_end   = r5c3.date_input("📅 تاريخ الانتهاء", res['last_time'])
                     u_mine  = r5c4.text_input("💵 عمولتي الخاصة", res['my_coupon'])
@@ -2507,7 +2513,7 @@ if page == "الاستعلام والتعديل":
                                     extra_offer=%s, extra_offer_en=%s,
                                     store_bio=%s,   store_bio_en=%s,
                                     description=%s,
-                                    priority_score=%s, discount_value=%s, my_coupon=%s,
+                                    priority_score_int=%s, discount_value=%s, my_coupon=%s,
                                     first_time=%s, last_time=%s,
                                     logo_url=%s,
                                     social_poster_url=%s,
@@ -2596,7 +2602,7 @@ if page == "الاستعلام والتعديل":
         if _has_promoted:
             query = """
                 SELECT id, store_id, name_en, affiliate_link, public_coupon, discount_value,
-                        priority_score, first_time, last_time, my_coupon,
+                        priority_score_int AS priority_score, first_time, last_time, my_coupon,
                         store_bio, store_bio_en, extra_offer, extra_offer_en,
                         store_tags, store_tags_en,
                         COALESCE(is_promoted, FALSE) AS is_promoted
@@ -2606,7 +2612,7 @@ if page == "الاستعلام والتعديل":
         else:
             query = """
                 SELECT id, store_id, name_en, affiliate_link, public_coupon, discount_value,
-                        priority_score, first_time, last_time, my_coupon,
+                        priority_score_int AS priority_score, first_time, last_time, my_coupon,
                         store_bio, store_bio_en, extra_offer, extra_offer_en,
                         store_tags, store_tags_en
                 FROM master
@@ -2898,7 +2904,7 @@ if page == "جدول الكوبونات":
         conn = get_conn()
         query = """
             SELECT
-                is_trending,
+                is_trending_bool AS is_trending,
                 store_id,
                 COALESCE(name_en, '')        AS name_en,
                 affiliate_link,
@@ -2915,8 +2921,8 @@ if page == "جدول الكوبونات":
             FROM master
             WHERE last_time IS NULL OR last_time >= CURRENT_DATE
             ORDER BY
-                CASE WHEN is_trending = 'ترند 🔥' THEN 1 ELSE 2 END,
-                priority_score DESC
+                is_trending_bool DESC,
+                priority_score_int DESC
         """
         df_client = pd.read_sql(query, conn)
         conn.close()
@@ -2945,7 +2951,7 @@ if page == "جدول الكوبونات":
             st.divider()
 
             df_client['اسم المتجر'] = df_client.apply(
-                lambda r: f"🔥 {r['store_id']}" if r['is_trending'] == 'ترند 🔥' else r['store_id'],
+                lambda r: f"🔥 {r['store_id']}" if r['is_trending'] else r['store_id'],
                 axis=1,
             )
 
@@ -5374,7 +5380,7 @@ elif page == "🎬 تحليلات الستوري":
 
     st.divider()
 
-    # ─── فلتر المشاهدات: الكل / عادي / ترند (master.is_trending) ─────
+    # ─── فلتر المشاهدات: الكل / عادي / ترند (master.is_trending_bool) ─────
     _SV_TREND_AR = {"all": "الكل", "normal": "🎬 عادي", "trend": "🔥 ترند"}
     _sv_trend_label = st.segmented_control(
         "🔥 المشاهدات", list(_SV_TREND_AR.values()),
@@ -5391,7 +5397,7 @@ elif page == "🎬 تحليلات الستوري":
     # ─── بنّاء WHERE لـ story_views ──────────────────────────────────
     # تصنيف «ترند/عادي» يعتمد الخوارزمية الحيّة (يومي ∪ أسبوعي من
     # _sa_trend_store_ids) لا snapshot was_trending — لأن snapshot يلتقط
-    # التثبيت اليدوي (master.is_trending='ترند 🔥') فقط، ويفوّت متاجر
+    # التثبيت اليدوي (master.is_trending_bool=TRUE) فقط، ويفوّت متاجر
     # الترند الخوارزمي بالكامل.
     _live_trend_set = _sa_trend_store_ids()
     def _sv_build_where(alias="sv"):
@@ -8665,7 +8671,8 @@ elif page == "تحليل المستخدمين":
 - master.store_tags و master.store_tags_en نوعهما TEXT (وليس مصفوفة) رغم أن البيانات بصيغة '{tag1,tag2}'.
   للبحث استخدم: store_tags ILIKE '%tag%'. ممنوع unnest(store_tags) أو ANY(store_tags).
   للتحويل لمصفوفة: string_to_array(trim(both '{}' from COALESCE(store_tags, '')), ',').
-- master.is_trending قيمها نصية: 'عادي' أو 'ترند 🔥'.
+- master.is_trending_bool: BOOLEAN (TRUE = ترند مثبَّت يدوياً). العمود القديم master.is_trending نصّي محفوظ للتوافق حتى migration_066.
+- master.priority_score_int: SMALLINT (0=عادي، 3=مهم، 6=عاجل، 10=عاجل جداً). العمود القديم master.priority_score نصّي محفوظ حتى migration_066.
 - ربط جداول المستخدمين بـ action_logs حسب source:
     source IN ('bot','telegram_miniapp','miniapp') → user_id = bot_users.telegram_id
     source = 'web'                                  → user_id = web_users.id
@@ -8720,7 +8727,7 @@ elif page == "تحليل المستخدمين":
 - ⚠️ البحث عن متجر/كوبون بالاسم: استخدم دائماً ILIKE مع % من الجانبين، لأن المستخدم
   قد يكتب جزء من الاسم فقط أو يخلط بين اسم المتجر ورقم/كود الكوبون.
   مثال: «كوبون نمشي5» يعني المتجر «نمشي» وكوبون احتواؤه «5»، فابحث:
-    SELECT store_id, public_coupon, last_time, total_coupon_copies, total_link_clicks, is_trending
+    SELECT store_id, public_coupon, last_time, total_coupon_copies, total_link_clicks, is_trending_bool AS is_trending
     FROM master
     WHERE (store_id ILIKE '%' || '<اسم>' || '%' OR name_en ILIKE '%' || '<اسم>' || '%'
            OR public_coupon ILIKE '%' || '<كل المدخل>' || '%')

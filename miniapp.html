@@ -1405,7 +1405,7 @@ async function loadData() {
                       : (item.store_id || (LANG_CURRENT === 'en' ? 'Store' : 'متجر')),
                 disc: item.discount_value || (LANG_CURRENT === 'en' ? 'Special offer' : 'خصم خاص'),
                 logo: item.logo_url || 'logo.png',
-                trending: item.is_trending === 'ترند 🔥',
+                trending: !!item.is_trending,
                 promoted: !!item.is_promoted,
                 ringColor: item.story_ring_color || null,   // لون حلقة الستوري العادي
                 // store_tags array (يأتي مُسطّحاً من الـ API) — يدعم الفلترة بالقسم

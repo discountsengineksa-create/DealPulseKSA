@@ -78,7 +78,8 @@ def _ensure_base_tables(conn) -> None:
         store_bio       TEXT,
         store_tags      TEXT,
         my_coupon       TEXT,
-        priority_score  INTEGER DEFAULT 0,
+        priority_score  TEXT,               -- legacy (kept until migration_066)
+        priority_score_int SMALLINT NOT NULL DEFAULT 0,
         discount_value  TEXT,
         first_time      TIMESTAMP DEFAULT NOW(),
         last_time       TIMESTAMP,
@@ -89,7 +90,8 @@ def _ensure_base_tables(conn) -> None:
         link_clicks     INTEGER DEFAULT 0,
         click_count     INTEGER DEFAULT 0,
         total_clicks    INTEGER DEFAULT 0,
-        is_trending     TEXT DEFAULT 'عادي',
+        is_trending     TEXT DEFAULT 'عادي', -- legacy (kept until migration_066)
+        is_trending_bool BOOLEAN NOT NULL DEFAULT FALSE,
         performance_status TEXT,
         visit_categorie TEXT,
         target_category TEXT

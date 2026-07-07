@@ -1,24 +1,27 @@
 ---
-name: bot-frozen-no-changes-without-explicit-approval
-description: The Telegram bot is locked; never modify bot files unless the user explicitly asks in-conversation
-metadata: 
-  node_type: memory
-  type: feedback
-  originSessionId: c68f1e02-f8e3-449a-b56a-5cb4bf29185a
+name: bot-freeze-LIFTED-2026-07-07
+description: The Telegram bot freeze was LIFTED on 2026-07-07 — editing allowed under normal partnership protocol; per-operation permission still applies for DB writes
+type: feedback
+originSessionId: b6ba939a-2469-4f6a-9833-5d2da06c5e04
 ---
+🔓 **LIFTED 2026-07-07** — the owner explicitly released the freeze with a single word: «فك» (unlock), in the audit session that surfaced type debt (is_trending / priority_score) as the only remaining blocker.
 
-🔒 **LOCKED as of 2026-06-10.** The user explicitly froze the Telegram bot: «احفظ وثبت كل شي الان خاص بالبوت ولا يتغير ابدا الا بعد ما تقول لي وحط الشرط هذا».
+**History:** 🔒 LOCKED 2026-06-10 → 🔓 LIFTED 2026-07-07. Locked baseline preserved at git tag `bot-locked-2026-06-10` (commit e37eeb6 on `main`) — restorable snapshot if a rollback is ever needed.
 
-**Frozen scope (do NOT edit these without explicit per-change approval):**
-- `deal_pulse_bot.py`
-- `bot_app.py`
+**What changed:**
+- `deal_pulse_bot.py` and `bot_app.py` may now be edited under normal partnership protocol (announce → verify → prove → learn).
+- No more per-change approval requirement specifically for the bot files. Standard authorization applies (see [[feedback_full_authority]]).
 
-Locked baseline = git tag **`bot-locked-2026-06-10`** (commit e37eeb6 on `main`).
+**What did NOT change (still hard walls):**
+- 🚫 **DB writes still require explicit per-operation permission** ([[feedback_no_db_writes_without_permission]]). Bot code that touches DB schema (migrations, ALTER, INSERT/UPDATE/DELETE) still needs an explicit go-ahead.
+- 🔵 `main` still equals production Railway — bot pushes deploy immediately. Follow [[feedback_always_publish]] but respect production impact.
+- ⚫ Any breaking change (schema-coupled changes) needs a coordinated plan across bot + DB + dashboard, announced before execution.
 
-**The condition (governs every session):**
-- Do NOT modify, refactor, "improve," clean up, or optimize the bot files — for ANY reason — unless the user explicitly asks for that specific change in the current conversation.
-- This overrides default helpfulness: even if I spot a bug, dead code, or an easy win, I **report it and WAIT** for an explicit go-ahead. I do not touch the files first.
-- "Apply the cheap wins / fix everything" style blanket approvals do NOT carry over to future sessions — each bot change needs a fresh explicit request.
-- Mini-web (`miniapp.html`) and the web repo (`dealpulseksa-web`) are NOT covered by this lock unless the user says so — confirm scope if a request is ambiguous.
+**Immediate unblocked work:**
+- Type debt: `master.is_trending` (TEXT holding `'عادي'`/`'ترند 🔥'` emoji-in-data) → migrate to enum/boolean.
+- Type debt: `master.priority_score` (TEXT holding `'عادي'`/`'مهم'`, sorted DESC by lexical accident م>ع) → migrate to numeric/enum.
+- Both were blocked by this freeze — see [[db_foundation_audit]] "Type debt" section.
 
-**How to apply:** before any Edit/Write to a frozen file, confirm the user explicitly requested it. If not, stop and ask. Related work principle: [[feedback-no-dead-code]].
+**Why the freeze existed:** the owner locked the bot after reaching a working baseline (2026-06-10) to prevent regressions from ambient "improvements". The lift signals confidence in the partnership protocol ([[protocol_partnership]]) to prevent the same regression class through discipline instead of a hard file lock.
+
+**How to apply:** edit the bot with the same rigor as any other code — read the memory index first, verify assumptions live, prove with runtime output, update memory after non-obvious decisions. Do NOT treat unfreeze as license to refactor for its own sake ([[feedback_no_dead_code]] still applies).

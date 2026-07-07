@@ -23,7 +23,8 @@ class StoreResult(BaseModel):
     discount_value: str | None = None
     store_tags: list[str] = Field(default_factory=list)
     store_tags_en: list[str] = Field(default_factory=list)
-    is_trending: str | None = None
+    is_trending: bool = False
+    priority_score: int = 0
     is_promoted: bool = False
     logo_url: str | None = None
     cloaked_slug: str | None = None   # Week 4 — يبني المستهلك /go/{cloaked_slug}

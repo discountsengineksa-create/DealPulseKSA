@@ -184,7 +184,7 @@ def _select_lang_clause(lang: str) -> str:
             COALESCE(NULLIF(store_tags_en, ''),  store_tags)    AS store_tags,
             store_tags_en,
             discount_value,
-            total_coupon_copies, total_link_clicks, is_trending,
+            total_coupon_copies, total_link_clicks, is_trending_bool AS is_trending, priority_score_int AS priority_score,
             COALESCE(is_promoted, FALSE) AS is_promoted,
             logo_url, cloaked_slug, story_ring_color,
             COALESCE((SELECT array_agg(ss.media_url ORDER BY ss.sort_order, ss.id)
@@ -211,7 +211,7 @@ def _select_lang_clause(lang: str) -> str:
         description,
         store_tags,  store_tags_en,
         discount_value,
-        total_coupon_copies, total_link_clicks, is_trending,
+        total_coupon_copies, total_link_clicks, is_trending_bool AS is_trending, priority_score_int AS priority_score,
         COALESCE(is_promoted, FALSE) AS is_promoted,
         logo_url, cloaked_slug, story_ring_color,
         COALESCE((SELECT array_agg(ss.media_url ORDER BY ss.sort_order, ss.id)
@@ -243,7 +243,7 @@ def _select_light_clause(lang: str) -> str:
             COALESCE(NULLIF(name_en, ''), store_id)              AS name_en,
             COALESCE(NULLIF(extra_offer_en, ''), extra_offer)    AS extra_offer,
             COALESCE(NULLIF(store_tags_en, ''),  store_tags)     AS store_tags,
-            discount_value, is_trending,
+            discount_value, is_trending_bool AS is_trending, priority_score_int AS priority_score,
             COALESCE(is_promoted, FALSE) AS is_promoted,
             logo_url, story_ring_color, total_coupon_copies, total_link_clicks
         """
@@ -317,8 +317,9 @@ def get_all_coupons(
               AND NOT COALESCE(is_suspended, FALSE)
               AND (publish_channels IS NULL OR publish_channels ILIKE %(chpat)s)
         ORDER BY
-            CASE WHEN COALESCE(is_promoted, FALSE) THEN 0 ELSE 1 END,
-            CASE WHEN is_trending = 'ترند 🔥'      THEN 0 ELSE 1 END,
+            COALESCE(is_promoted, FALSE) DESC,
+            is_trending_bool                DESC,
+            priority_score_int              DESC,
             id ASC
         LIMIT %(limit)s
     """

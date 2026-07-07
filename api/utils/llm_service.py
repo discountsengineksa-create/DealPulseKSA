@@ -82,7 +82,7 @@ def build_input_snapshot() -> dict[str, Any]:
                     m.name_en,
                     COALESCE(m.store_tags, '{}')        AS tags_ar,
                     COALESCE(m.store_tags_en, '{}')     AS tags_en,
-                    m.is_trending,
+                    m.is_trending_bool                   AS is_trending,
                     m.last_time,
                     m.discount_value,
                     m.public_coupon,
@@ -119,7 +119,7 @@ def build_input_snapshot() -> dict[str, Any]:
             cur.execute("""
                 SELECT
                     m.id, m.store_id, m.name_en, m.last_time, m.public_coupon,
-                    m.discount_value, m.is_trending,
+                    m.discount_value, m.is_trending_bool AS is_trending,
                     COALESCE(v.recent_48h, 0) AS recent_48h
                 FROM master m
                 LEFT JOIN mv_store_velocity_48h v ON v.master_id = m.id

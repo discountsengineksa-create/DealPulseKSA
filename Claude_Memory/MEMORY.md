@@ -5,6 +5,8 @@
 - [Bug Fixes Log](bug_fixes.md) — All bugs fixed and why, so we don't reintroduce them
 - [User Preferences](user_preferences.md) — How the user likes to work
 - [🤝 Partnership Protocol](protocol_partnership.md) — ٨ أنماط أُمسك بها بالاسم + دورة انضباط رباعية + طقوس جلسة + الاتفاق الصامت + سياسة المصادر المفتوحة (2026-07-07)
+- [🔓 Full Authority Granted](feedback_full_authority.md) — 2026-07-07 تفويض دائم بالتنفيذ الذاتي على الأفعال المحلية القابلة للعكس؛ لا يبطل حوائط DB/البوت/الحذف الكتلي
+- [Skills Install Manifest](skills_install_manifest.md) — 2026-07-07 ٢٣٨ skill مثبَّت على «user» في ~/.claude/skills عبر ٦ ريبوهات (تفكير ٣٩/رسمي ١٨/UX ١٧/تصميم ٩٦/تسويق ٦٧/فيروس ١)
 - [AI Mastery Goal](user_ai_mastery_goal.md) — wants a universal reusable prompt across all AI platforms/domains; into prompt engineering; give honest expert feedback
 - [Regression Audit First](feedback_regression_audit.md) — when user says "it worked before you changed it", check my own recent diffs first; no speculative code changes
 - [Contact Emails](contact_emails.md) — Personal vs brand ops mailbox (spelled `dealpulesksa@gmail.com`)
@@ -32,7 +34,7 @@
 - [Story System Design](story_system_design.md) — نظام ستوري المتاجر: جدول story_slides، نموذج متداخل (حلقة/متجر، شرائح متتابعة)، فيديو يكمّل مدّته + صوت، Cloudinary f_auto+poster، web createPortal z-[60]
 - [No Dead Code or Premature Optimization](feedback_no_dead_code.md) — المستخدم يرفض الكود الميّت/الوهمي/الاستباقي؛ كل سطر حقيقي وموصول ومبرّر ببوتلنك فعلي
 - [Bot Capacity & Scaling Roadmap](bot_capacity_scaling.md) — سقف تيليجرام ~30/ث للبوت الواحد؛ ضبط 16 عامل/طابور 12k؛ الطموح: الأول بالسعودية+الإمارات؛ مسار Redis/sharding
-- [🔒 BOT FROZEN](bot_frozen_lock.md) — البوت مجمّد (2026-06-10، tag bot-locked-2026-06-10)؛ لا تعديل لـ deal_pulse_bot.py/bot_app.py إلا بإذن صريح لكل تغيير
+- [🔓 Bot Freeze LIFTED](bot_frozen_lock.md) — البوت مفكوك (2026-07-07)؛ التعديل مسموح ضمن بروتوكول الشراكة؛ DB writes وحوائط الإنتاج باقية
 - [DB Foundation Audit](db_foundation_audit.md) — مخطط القاعدة (~76 جدول/42% فارغة)؛ العدّادات الحيّة total_*؛ ميت مؤكّد (users_master + أعمدة راكدة) جاهز للحذف بإذن+نسخة؛ دَيْن النوع (is_trending/priority_score) محجوب بتجميد البوت
 - [Admitad Affiliate Setup](admitad_affiliate_setup.md) — منصة الأفلييت Admitad؛ مساحتان (تيليجرام + ويب موثّقة DealPulseKSA)؛ كل برنامج له بوّابتان: نوع الترافيك (Messengers محظور غالباً→الموقع لا البوت) + حجم الجمهور (SHEIN=10k)؛ ابدأ بالسهل (AliExpress/سفر/Airalo)
 - [Publish Channels Feature](publish_channels_feature.md) — master.publish_channels لاستهداف القنوات لكل متجر (website/bot/social)؛ يحترم شروط الأفلييت؛ API بارامتر channel (افتراضي website)؛ بوت+ميني+SEO يفلترون؛ fallback «حصري بالموقع»
