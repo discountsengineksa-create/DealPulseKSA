@@ -9289,6 +9289,67 @@ elif page == "👣 زوّار الموقع":
         _figd.update_layout(height=300, margin=dict(t=10, b=10, l=10, r=10))
         st.plotly_chart(_figd, use_container_width=True)
 
+    # ── 🔬 تشخيص القفزات (٣ إشارات: تنوّع الزوّار + نسبة datacenter + تركيز ASN) ──
+    # يعمل على البيانات الخام (بلا فلتر البوتات) عمداً — الهدف تصنيف كل قفزة
+    # بشرية (ترويج/فيروسي) أو بوت (crawler/scraper)، لا إخفاؤها. النطاق نفس
+    # المختار أعلاه. المرجع: [[bot_vs_promo_heuristic]] بعد درس ٢٦ يونيو.
+    _spikes = pd.read_sql("""
+        WITH daily AS (
+          SELECT (created_at AT TIME ZONE 'Asia/Riyadh')::date AS d,
+                 COUNT(*) AS visits,
+                 COUNT(DISTINCT visitor_id) AS uniq_v,
+                 COUNT(DISTINCT asn) AS uniq_asn,
+                 SUM(CASE WHEN is_datacenter THEN 1 ELSE 0 END)::float
+                   / NULLIF(COUNT(*), 0) AS dc_ratio
+          FROM web_visits
+          WHERE (created_at AT TIME ZONE 'Asia/Riyadh')::date
+                BETWEEN %(f)s AND %(t)s
+          GROUP BY 1
+        ),
+        asn_share AS (
+          SELECT d, MAX(cnt::float / SUM(cnt) OVER (PARTITION BY d)) AS top_share
+          FROM (SELECT (created_at AT TIME ZONE 'Asia/Riyadh')::date AS d,
+                       asn, COUNT(*) AS cnt
+                FROM web_visits
+                WHERE (created_at AT TIME ZONE 'Asia/Riyadh')::date
+                      BETWEEN %(f)s AND %(t)s
+                GROUP BY 1, 2) x
+          GROUP BY d
+        )
+        SELECT d.d AS day,
+               d.visits, d.uniq_v, d.uniq_asn,
+               ROUND(d.dc_ratio::numeric, 2)  AS dc_ratio,
+               ROUND(a.top_share::numeric, 2) AS top_asn_share,
+               CASE
+                 WHEN d.dc_ratio >= 0.6 OR a.top_share >= 0.7 THEN 'BOT'
+                 WHEN d.dc_ratio <= 0.15 AND a.top_share <= 0.5
+                      AND d.uniq_asn >= 3 THEN 'HUMAN'
+                 ELSE 'MIXED'
+               END AS verdict
+        FROM daily d JOIN asn_share a USING(d)
+        WHERE d.visits >= 20
+        ORDER BY d.visits DESC
+    """, conn, params=_p)
+
+    if not _spikes.empty:
+        st.markdown("#### 🔬 تشخيص القفزات — ٣ إشارات (visitor_id / ASN / datacenter)")
+        st.caption("يشمل كل الأيام ≥ ٢٠ زيارة (خام، قبل فلتر البوتات) — ليكشف ما يُخفى بالفلتر.")
+        _V_AR = {"HUMAN": "🟢 بشرية (ترويج/فيروسي)",
+                 "BOT":   "🔴 بوت (crawler/scraper)",
+                 "MIXED": "🟡 مختلطة"}
+        _spikes["verdict"] = _spikes["verdict"].map(_V_AR)
+        _spikes = _spikes.rename(columns={
+            "day": "اليوم", "visits": "زيارات خام",
+            "uniq_v": "زوّار فريدون", "uniq_asn": "مشغّلات",
+            "dc_ratio": "نسبة datacenter", "top_asn_share": "تركيز أعلى مشغّل",
+            "verdict": "التصنيف",
+        })
+        st.dataframe(_spikes, use_container_width=True, hide_index=True)
+        _n_h = int((_spikes["التصنيف"].str.startswith("🟢")).sum())
+        _n_b = int((_spikes["التصنيف"].str.startswith("🔴")).sum())
+        _n_m = int((_spikes["التصنيف"].str.startswith("🟡")).sum())
+        st.caption(f"📊 خلاصة: {_n_h} يوم بشري · {_n_b} يوم بوت · {_n_m} يوم مختلط.")
+
     # ── المصدر + الجهاز ─────────────────────────────────────────────────────
     g1, g2 = st.columns(2)
     with g1:

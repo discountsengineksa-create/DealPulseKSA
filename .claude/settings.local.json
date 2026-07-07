@@ -129,7 +129,9 @@
       "Bash(rm -f dash_test.log)",
       "Bash(venv/Scripts/streamlit.exe run *)",
       "Bash(where psql *)",
-      "Bash(python -c \"from dotenv import load_dotenv; load_dotenv\\(\\); import os; url = os.getenv\\('MIGRATION_DATABASE_URL'\\) or os.getenv\\('DATABASE_URL'\\); print\\('SOURCE:', 'MIGRATION_DATABASE_URL' if os.getenv\\('MIGRATION_DATABASE_URL'\\) else 'DATABASE_URL'\\); print\\('HOST:', url.split\\('@'\\)[1].split\\('/'\\)[0] if url else 'MISSING'\\)\")"
+      "Bash(python -c \"from dotenv import load_dotenv; load_dotenv\\(\\); import os; url = os.getenv\\('MIGRATION_DATABASE_URL'\\) or os.getenv\\('DATABASE_URL'\\); print\\('SOURCE:', 'MIGRATION_DATABASE_URL' if os.getenv\\('MIGRATION_DATABASE_URL'\\) else 'DATABASE_URL'\\); print\\('HOST:', url.split\\('@'\\)[1].split\\('/'\\)[0] if url else 'MISSING'\\)\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} %{time_total}s\\\\n\" https://api.dealpulseksa.com/health)",
+      "Bash(curl -s https://api.dealpulseksa.com/health)"
     ],
     "additionalDirectories": [
       "C:\\Users\\PC\\Desktop\\dealpulseksa-web\\lib",
