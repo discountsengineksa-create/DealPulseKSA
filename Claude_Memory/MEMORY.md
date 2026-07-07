@@ -6,6 +6,7 @@
 - [User Preferences](user_preferences.md) — How the user likes to work
 - [🤝 Partnership Protocol](protocol_partnership.md) — ٨ أنماط أُمسك بها بالاسم + دورة انضباط رباعية + طقوس جلسة + الاتفاق الصامت + سياسة المصادر المفتوحة (2026-07-07)
 - [🔓 Full Authority Granted](feedback_full_authority.md) — 2026-07-07 تفويض دائم بالتنفيذ الذاتي على الأفعال المحلية القابلة للعكس؛ لا يبطل حوائط DB/البوت/الحذف الكتلي
+- [Bot-vs-Promo 3-Signal Check](bot_vs_promo_heuristic.md) — قبل اتّهام قفزة بالبوت: افحص visitor_id + timing gaps + ASN diversity؛ VPN إيطالي شرعي في KSA لا يُحظر
 - [Skills Install Manifest](skills_install_manifest.md) — 2026-07-07 ٢٣٨ skill مثبَّت على «user» في ~/.claude/skills عبر ٦ ريبوهات (تفكير ٣٩/رسمي ١٨/UX ١٧/تصميم ٩٦/تسويق ٦٧/فيروس ١)
 - [AI Mastery Goal](user_ai_mastery_goal.md) — wants a universal reusable prompt across all AI platforms/domains; into prompt engineering; give honest expert feedback
 - [Regression Audit First](feedback_regression_audit.md) — when user says "it worked before you changed it", check my own recent diffs first; no speculative code changes
