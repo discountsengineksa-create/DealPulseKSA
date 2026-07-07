@@ -180,6 +180,22 @@ sleep 12
 
 **تنبيه:** الإقلاع لا يختبر منطق صفحة بعينها (streamlit ينفّذها عند الزيارة). لتغيير منطقي/استعلام: تحقّق من الاستعلام مستقلاً (شغّله للقراءة على DB) — واحترم فخاخ §٤.٧ (`store_tags` نص، العدّادات الحيّة، `rollback`) و**§٥ لا كتابة DB بلا إذن**.
 
+**فخّ SQL في الكود ≠ SQL في psql (٢٠٢٦-٠٧-٠٧):** استعلام يعمل في psql ثم يُنسخ إلى `pd.read_sql(""" … """)` **يجب أن يُعاد تشغيله مرّةً أخرى بعد النقل**. الفخّ الذي وقعتُ فيه: كتبت الاستعلام على ٤ CTEs في psql (نجح)، ثم جمعت خطوتَين في CTE واحد داخل الكود بلا انتباه (`SELECT MAX(cnt::float / SUM(cnt) OVER (PARTITION BY d)) FROM …` = aggregate حول window = Postgres يرفضه). الإقلاع صار أخضر لأن Streamlit lazy-loads، والصفحة انفجرت على المستخدم. **القاعدة:** بعد نقل أي SQL جديد للكود، شغّله كما هو مضمّن حرفياً (نفس الـstring من `dashboard.py`) عبر `psycopg2 + pd.read_sql` بمعاملات واقعية قبل الدفع.
+
+```bash
+# ٤) اختبار الاستعلام المُضمَّن حرفياً (لكل SQL جديد في dashboard.py)
+python -c "
+from dotenv import load_dotenv; load_dotenv()
+import os, psycopg2, pandas as pd
+from datetime import date, timedelta
+conn = psycopg2.connect(os.getenv('DATABASE_URL'))
+# انسخ نفس الـSQL من الكود، أو استخرجه ديناميكياً
+q = '''<الاستعلام كما هو في dashboard.py>'''
+df = pd.read_sql(q, conn, params={'f': date.today()-timedelta(days=30), 't': date.today()})
+print('rows:', len(df)); print(df.head(3))
+"
+```
+
 ---
 
 ## ٥) القواعد الحمراء للمشروع (كسرها = كارثة)
