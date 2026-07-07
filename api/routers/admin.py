@@ -1602,3 +1602,133 @@ def social_leads_dismiss(
     return {"ok": True, "lead_id": lead_id, "new_status": "lead_dismissed"}
 
 
+# ─── Affiliate Postback: Admitad (real revenue attribution) ──────────────────
+# Server-to-server callback fired by Admitad when an action occurs (sale/lead)
+# or transitions status (pending → approved → declined). Auth = URL token,
+# since Admitad can't set custom headers on their outbound GET.
+#
+# Configure in Admitad publisher panel — Postback URL (triple-bracket macros):
+#   https://api.dealpulseksa.com/api/v1/admin/pb-admitad
+#     ?token=<POSTBACK_ADMITAD_TOKEN>
+#     &action_id=[[[action_id]]]
+#     &order_id=[[[order_id]]]
+#     &offer_id=[[[offer_id]]]
+#     &subid=[[[subid]]]
+#     &status=[[[status]]]
+#     &type=[[[type]]]
+#     &currency=[[[currency]]]
+#     &order_sum=[[[order_sum]]]
+#     &payment_sum=[[[payment_sum]]]
+#     &reward_ready=[[[reward_ready]]]
+#     &click_time=[[[click_time]]]
+#     &conversion_time=[[[conversion_time]]]
+#     &action_ip=[[[action_ip]]]
+#     &user_agent=[[[user_agent]]]
+#
+# UPSERT on (network, action_id) so status transitions overwrite the row.
+# The subid we sent (via /go SubID injection) has the form `{master_id}_{v}` —
+# we parse master_id back out to attribute the conversion to the exact store.
+
+@router.get("/pb-admitad", include_in_schema=False)
+def postback_admitad(request: Request):
+    """Ingest Admitad server-to-server postback → affiliate_conversions."""
+    from datetime import datetime, timezone
+    from json import dumps as _json_dumps
+
+    from api.db import get_db_context
+
+    expected = os.getenv("POSTBACK_ADMITAD_TOKEN")
+    if not expected:
+        raise HTTPException(status_code=503,
+                            detail="POSTBACK_ADMITAD_TOKEN not configured")
+    token = request.query_params.get("token", "")
+    if not _secrets.compare_digest(token, expected):
+        raise HTTPException(status_code=403, detail="forbidden")
+
+    q = dict(request.query_params)
+    action_id = (q.get("action_id") or "").strip()
+    # Unfilled macros come through as literal "[[[action_id]]]" — treat as empty
+    if not action_id or action_id.startswith("[[["):
+        raise HTTPException(status_code=400, detail="action_id required")
+
+    # subid we sent = "{master_id}_{visitor_id_short}". Accept subid or subid4
+    # (Admitad publishers sometimes use subid4 for the click identifier slot).
+    subid = q.get("subid") or q.get("subid4") or ""
+    if subid.startswith("[[["):
+        subid = ""
+    master_id = None
+    if subid:
+        try:
+            master_id = int(subid.split("_", 1)[0])
+        except (ValueError, IndexError):
+            master_id = None
+
+    def _clean(name):
+        v = q.get(name)
+        if not v or v.startswith("[[["):
+            return None
+        return v
+
+    def _num(name):
+        v = _clean(name)
+        if v is None:
+            return None
+        try:
+            return float(str(v).replace(",", "."))
+        except ValueError:
+            return None
+
+    def _ts(name):
+        v = _clean(name)
+        if v is None:
+            return None
+        # Unix seconds
+        try:
+            return datetime.fromtimestamp(int(v), tz=timezone.utc)
+        except (ValueError, TypeError):
+            pass
+        # ISO-8601 (Admitad occasionally sends "2026-07-07T12:34:56Z")
+        try:
+            return datetime.fromisoformat(v.replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            return None
+
+    with get_db_context() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO affiliate_conversions (
+                    network, action_id, master_id, subid,
+                    order_id, offer_id, action_type, status,
+                    currency, order_sum, payment_sum, reward_ready,
+                    click_time, conversion_time,
+                    action_ip, user_agent, raw_query
+                ) VALUES (
+                    'admitad', %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s,
+                    %s, %s, %s::jsonb
+                )
+                ON CONFLICT (network, action_id) DO UPDATE SET
+                    status          = EXCLUDED.status,
+                    order_sum       = COALESCE(EXCLUDED.order_sum,       affiliate_conversions.order_sum),
+                    payment_sum     = COALESCE(EXCLUDED.payment_sum,     affiliate_conversions.payment_sum),
+                    reward_ready    = COALESCE(EXCLUDED.reward_ready,    affiliate_conversions.reward_ready),
+                    conversion_time = COALESCE(EXCLUDED.conversion_time, affiliate_conversions.conversion_time),
+                    raw_query       = EXCLUDED.raw_query,
+                    received_at     = NOW()
+            """, (
+                action_id, master_id, subid or None,
+                _clean("order_id"), _clean("offer_id"),
+                _clean("type") or _clean("action_type"), _clean("status"),
+                _clean("currency"),
+                _num("order_sum"), _num("payment_sum"), _num("reward_ready"),
+                _ts("click_time"), _ts("conversion_time"),
+                _clean("action_ip"), _clean("user_agent"),
+                _json_dumps(q, ensure_ascii=False),
+            ))
+
+    # Admitad only checks HTTP 200; plain body is fine.
+    return {"ok": True, "action_id": action_id, "master_id": master_id}
+
+

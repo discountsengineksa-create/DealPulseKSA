@@ -73,6 +73,48 @@ def _swap_amazon_tag(url: str, source: str) -> str:
     qs["tag"] = new_tag
     return urlunparse(parsed._replace(query=urlencode(qs)))
 
+
+# ─── Admitad SubID injection: correlate click → conversion via subid ─────────
+# When affiliate_link points to an Admitad tracking domain, append
+# subid={master_id}_{visitor_id_short} so the postback returns the same value
+# and we can attribute the sale back to the exact click (see migration_064 +
+# /admin/pb-admitad endpoint). Only added when subid is not already present
+# (some merchants require a fixed subid).
+#
+# Recognized hosts default to Admitad's known tracking domains; override via
+# env `AFFILIATE_ADMITAD_HOSTS` (comma-list) if new domains appear.
+_ADMITAD_HOSTS_DEFAULT = (
+    "admitad.com", "rzekl.com", "wbbsv.com", "gotolink.pro", "mitgo.com",
+)
+
+
+def _admitad_hosts() -> tuple[str, ...]:
+    env = os.getenv("AFFILIATE_ADMITAD_HOSTS", "").strip()
+    if not env:
+        return _ADMITAD_HOSTS_DEFAULT
+    return tuple(h.strip().lower() for h in env.split(",") if h.strip())
+
+
+def _inject_admitad_subid(url: str, master_id: int, visitor_id: str | None) -> str:
+    """Append subid={master_id}_{v} on Admitad tracking links. No-op otherwise."""
+    if not url or not master_id:
+        return url
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return url
+    host = (parsed.netloc or "").lower()
+    if not any(h in host for h in _admitad_hosts()):
+        return url
+    qs = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    # Respect a fixed subid the merchant may already require.
+    if qs.get("subid"):
+        return url
+    # visitor_id is a UUID with dashes; compress to keep URL space small.
+    v_short = (visitor_id or "").replace("-", "")[:12] if visitor_id else "x"
+    qs["subid"] = f"{master_id}_{v_short}"
+    return urlunparse(parsed._replace(query=urlencode(qs)))
+
 # ─── Redis cache for slug→(store_id, affiliate_link) ─────────────────────────
 # يُسرّع التحويلات الشائعة (نفس الـ slug آلاف المرات في الدقيقة).
 # TTL=10min: قصير كفاية لانعكاس تغييرات master، طويل كفاية لتقليل DB hits.
@@ -270,9 +312,10 @@ def cloaked_redirect(
     if not target_url:
         return HTMLResponse(_not_found_page(), status_code=404)
 
-    # 7) tag-swap لأمازون حسب القناة. (لا يلمس روابط غير-أمازون، ولا يلمس
-    #    أمازون لو ENV الخاص بالقناة غير مضبوط.)
+    # 7) tag-swap لأمازون حسب القناة + حقن SubID لروابط Admitad (attribution).
+    #    كل واحدة لا تلمس روابط لا تخصّها.
     final_url = _swap_amazon_tag(target_url, source)
+    final_url = _inject_admitad_subid(final_url, master_id_int, visitor_id)
 
     # 8) تحويل 302 — رابط الأفلييت في الترويسة فقط، بلا كاش ولا referrer
     resp = RedirectResponse(url=final_url, status_code=302)
