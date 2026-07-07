@@ -9295,6 +9295,10 @@ elif page == "👣 زوّار الموقع":
     # المختار أعلاه. المرجع: [[bot_vs_promo_heuristic]] بعد درس ٢٦ يونيو.
     # ملاحظة SQL: Postgres يمنع aggregate حول window (MAX(SUM() OVER())).
     # لذلك نحسب asn_share كطبقة CTE مستقلة، ثم MAX عليها كطبقة تالية.
+    # ── 🔬 تشخيص القفزات (نسخة تجارية — لغة مالك، لا لغة مهندس) ──────────────
+    # الاستعلام يستخرج + الـASN الأكثر هيمنة لكل يوم قفزة (رقم + عدد زياراته)،
+    # ثم Python يحوّل الرقم لهوية بشرية معروفة (Googlebot / STC / Zain / …)
+    # ويبني جملة مفهومة تخبر المالك: ماذا حصل + ماذا يعني له.
     _spikes = pd.read_sql("""
         WITH daily AS (
           SELECT (created_at AT TIME ZONE 'Asia/Riyadh')::date AS d,
@@ -9316,19 +9320,21 @@ elif page == "👣 زوّار الموقع":
                 BETWEEN %(f)s AND %(t)s
           GROUP BY 1, 2
         ),
-        asn_share_rows AS (
-          SELECT d, cnt::float / SUM(cnt) OVER (PARTITION BY d) AS asn_share
+        ranked AS (
+          SELECT d, asn, cnt,
+                 cnt::float / SUM(cnt) OVER (PARTITION BY d) AS asn_share,
+                 ROW_NUMBER() OVER (PARTITION BY d ORDER BY cnt DESC) AS rn
           FROM per_asn
         ),
         top_asn AS (
-          SELECT d, MAX(asn_share) AS top_share
-          FROM asn_share_rows
-          GROUP BY d
+          SELECT d, asn AS top_asn, cnt AS top_asn_hits, asn_share AS top_share
+          FROM ranked WHERE rn = 1
         )
         SELECT d.d AS day,
                d.visits, d.uniq_v, d.uniq_asn,
                ROUND(d.dc_ratio::numeric, 2)  AS dc_ratio,
                ROUND(t.top_share::numeric, 2) AS top_asn_share,
+               t.top_asn, t.top_asn_hits,
                CASE
                  WHEN d.dc_ratio >= 0.6 OR t.top_share >= 0.7 THEN 'BOT'
                  WHEN d.dc_ratio <= 0.15 AND t.top_share <= 0.5
@@ -9341,23 +9347,97 @@ elif page == "👣 زوّار الموقع":
     """, conn, params=_p)
 
     if not _spikes.empty:
-        st.markdown("#### 🔬 تشخيص القفزات — ٣ إشارات (visitor_id / ASN / datacenter)")
-        st.caption("يشمل كل الأيام ≥ ٢٠ زيارة (خام، قبل فلتر البوتات) — ليكشف ما يُخفى بالفلتر.")
-        _V_AR = {"HUMAN": "🟢 بشرية (ترويج/فيروسي)",
-                 "BOT":   "🔴 بوت (crawler/scraper)",
-                 "MIXED": "🟡 مختلطة"}
-        _spikes["verdict"] = _spikes["verdict"].map(_V_AR)
-        _spikes = _spikes.rename(columns={
-            "day": "اليوم", "visits": "زيارات خام",
-            "uniq_v": "زوّار فريدون", "uniq_asn": "مشغّلات",
-            "dc_ratio": "نسبة datacenter", "top_asn_share": "تركيز أعلى مشغّل",
-            "verdict": "التصنيف",
-        })
-        st.dataframe(_spikes, use_container_width=True, hide_index=True)
-        _n_h = int((_spikes["التصنيف"].str.startswith("🟢")).sum())
-        _n_b = int((_spikes["التصنيف"].str.startswith("🔴")).sum())
-        _n_m = int((_spikes["التصنيف"].str.startswith("🟡")).sum())
-        st.caption(f"📊 خلاصة: {_n_h} يوم بشري · {_n_b} يوم بوت · {_n_m} يوم مختلط.")
+        # قاموس هوية الـASNs — نضيف كلما تعرّفنا على مصدر جديد
+        _ASN_NAMES = {
+            # مراكز بيانات عالمية (بوتات)
+            15169: "Google Cloud", 396982: "Google Cloud",
+            14618: "Amazon AWS", 16509: "Amazon AWS",
+            8075:  "Microsoft Azure", 24940: "Hetzner (ألمانيا)",
+            16276: "OVH (فرنسا)",     63949: "Linode",
+            14061: "DigitalOcean",     20473: "Vultr",
+            132203:"Tencent Cloud",    200651:"Flokinet",
+            51167: "Contabo",          60068: "CDN77",
+            3356:  "Level 3 / Lumen",  # مختلط: مستخدمين + بوتات
+            63023: "Aruba إيطاليا (VPN شائع سعودياً)",
+            # مشغّلات سعودية (بشر حقيقيون)
+            39891: "STC السعودية",     43766: "Zain السعودية",
+            35819: "Mobily السعودية",  25019: "Mobily السعودية",
+            39386: "STC السعودية",
+            # مشغّلات إقليمية
+            8452:  "TE Data (مصر)",
+        }
+
+        def _story(row):
+            """يبني جملتَين لكل قفزة: ما حصل + ماذا يعني للمالك."""
+            v = int(row["visits"])
+            uv = int(row["uniq_v"])
+            un = int(row["uniq_asn"])
+            asn_num = int(row["top_asn"]) if pd.notna(row["top_asn"]) else 0
+            asn_hits = int(row["top_asn_hits"]) if pd.notna(row["top_asn_hits"]) else 0
+            asn_name = _ASN_NAMES.get(asn_num, f"مشغّل غير معروف (ASN {asn_num})")
+            verdict = row["verdict"]
+
+            if verdict == "BOT":
+                what = f"{v} زيارة، {asn_hits} منها ({int(row['top_asn_share']*100)}%) من {asn_name}."
+                if asn_num in (15169, 396982):
+                    mean = "الأغلب Googlebot يفهرس صفحاتك — إشارة SEO إيجابية. الفلتر يخفيها من أرقامك."
+                elif asn_num in (14618, 16509):
+                    mean = "سكرابر على AWS. مفلتر تلقائياً — لا تحسبه جمهوراً."
+                else:
+                    mean = "بوت من مركز بيانات. مفلتر تلقائياً — لا يظهر في تحليل الجمهور."
+                return what, mean
+
+            if verdict == "HUMAN":
+                what = f"{v} زيارة من {uv} زائر فريد عبر {un} مشغّلات مختلفة."
+                mean = ("🎯 يوم ترويج ناجح (شير مع أصحاب / فيروسي). "
+                        "ادرس النمط — من أرسلت له؟ متى؟ كيف صيغة الرسالة؟")
+                return what, mean
+
+            # MIXED
+            what = f"{v} زيارة، {asn_hits} من {asn_name} + {v - asn_hits} من مشغّلات أخرى."
+            mean = ("خليط بشر + بوت. الفلتر يبقي البشر (المشغّلات السعودية/الحقيقية) "
+                    "ويخفي البوتات.")
+            return what, mean
+
+        stories = _spikes.apply(_story, axis=1, result_type="expand")
+        _spikes["ماذا حصل"] = stories[0]
+        _spikes["ماذا يعني لك"] = stories[1]
+
+        _V_AR = {"HUMAN": "🟢 جمهور حقيقي",
+                 "BOT":   "🔴 بوت (مفلتَر)",
+                 "MIXED": "🟡 خليط"}
+        _spikes["التصنيف"] = _spikes["verdict"].map(_V_AR)
+
+        st.markdown("#### 🔬 تشخيص القفزات — بلغتك أنت")
+        st.caption("لكل يوم فوق ٢٠ زيارة: ما حصل فعلياً + ماذا يعني لجمهورك (يقرأ الأرقام الخام قبل الفلتر).")
+
+        _display = _spikes[["day", "التصنيف", "ماذا حصل", "ماذا يعني لك"]].rename(
+            columns={"day": "اليوم"}
+        )
+        st.dataframe(
+            _display, use_container_width=True, hide_index=True,
+            column_config={
+                "اليوم": st.column_config.DateColumn(width="small"),
+                "التصنيف": st.column_config.TextColumn(width="small"),
+                "ماذا حصل": st.column_config.TextColumn(width="medium"),
+                "ماذا يعني لك": st.column_config.TextColumn(width="large"),
+            },
+        )
+
+        _n_h = int((_spikes["verdict"] == "HUMAN").sum())
+        _n_b = int((_spikes["verdict"] == "BOT").sum())
+        _n_m = int((_spikes["verdict"] == "MIXED").sum())
+        st.caption(f"📊 خلاصة النطاق: {_n_h} يوم جمهور حقيقي · {_n_b} يوم بوت (مفلتَر) · {_n_m} يوم خليط.")
+
+        with st.expander("🔧 تفاصيل تقنية (للمطوّرين)"):
+            _tech = _spikes[["day", "visits", "uniq_v", "uniq_asn",
+                             "dc_ratio", "top_asn_share", "top_asn", "verdict"]].rename(
+                columns={"day": "اليوم", "visits": "زيارات خام", "uniq_v": "زوّار فريدون",
+                         "uniq_asn": "مشغّلات", "dc_ratio": "نسبة datacenter",
+                         "top_asn_share": "تركيز أعلى مشغّل", "top_asn": "ASN مهيمن",
+                         "verdict": "verdict"}
+            )
+            st.dataframe(_tech, use_container_width=True, hide_index=True)
 
     # ── المصدر + الجهاز ─────────────────────────────────────────────────────
     g1, g2 = st.columns(2)
