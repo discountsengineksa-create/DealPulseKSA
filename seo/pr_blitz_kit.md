@@ -10,13 +10,17 @@
 
 ## 0. قبل أي إطلاق — جهّز عدّتك (5 دقائق)
 
-- [ ] إطلاق IndexNow يدوياً على `/calendar` نبضة أخيرة قبل الترويج:
-  ```powershell
-  $secret = '<X-ADMIN-SECRET من Railway env>'
-  Invoke-RestMethod -Uri 'https://api.dealpulseksa.com/admin/seo-resubmit-url?url=https://www.dealpulseksa.com/calendar' `
-    -Method POST -Headers @{ 'X-Admin-Secret' = $secret }
+- [x] **إطلاق IndexNow يدوياً على `/calendar`** — أُطلق 2026-07-08:
   ```
-  المتوقّع: `indexnow_bing: 200/202`، `indexnow_yandex: 200`، `google: 200 أو forbidden` (لو ownership لسه ما تفعّل).
+  Bing: 200 ✅ | Yandex: 202 ✅ | Naver: 200 ✅ | Seznam: 200 ✅
+  ```
+  للإعادة أو لأي رابط جديد، استخدم السكربت الجاهز:
+  ```powershell
+  cd C:\Users\user\Desktop\Discounts_Engine\seo
+  .\ping_indexnow.ps1                                      # /calendar افتراضياً
+  .\ping_indexnow.ps1 https://www.dealpulseksa.com/stores  # أي URL آخر
+  ```
+  السكربت يقرأ السر من `.env` تلقائياً — بلا نسخ يدوي.
 
 - [ ] افتح Twitter/X، Reddit (حسابك)، Quora AR — سجّل دخول.
 - [ ] Bit.ly أو dub.co لروابط قابلة للتتبّع لكل قناة (اختياري لكن يعطيك أرقام).
