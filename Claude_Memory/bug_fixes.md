@@ -6,6 +6,12 @@ originSessionId: 3eb16deb-09fb-42ac-aa86-1b1afa492099
 ---
 ## Fixed Bugs (June 2026)
 
+### 18. صفحة «تقرير البحث» بالداشبورد تنهار — تعبير ثلاثي كجملة يُفعّل Streamlit magic (dashboard.py)
+- **What (2026-07-08):** صفحة GSC الجديدة «📊 تقرير البحث» تعرض المؤشرات والاتجاه وجدول الفرص السريعة صح، ثم تنهار بـ `SyntaxError: unexpected EOF while parsing` (dashboard.py ~13515). التتبّع يمرّ عبر `streamlit/runtime/scriptrunner/magic_funcs.py` → `st.write` → `st.help` → `_get_variable_name_from_code_str` → `ast.parse(code)`.
+- **Why:** كتبت السقوط الفارغ كتعبير ثلاثي **كجملة مستقلة**: `st.dataframe(...) if not df.empty else st.caption(...)`. أي تعبير عارٍ في سكربت Streamlit يُفعّل «magic display» الذي يحاول `ast.parse` لنصّ السطر ليسمّي المتغيّر — ومع الثلاثي الممتد بـ `\` استخرج السطر الأول فقط (ناقصاً) → EOF. (المشكلة الثلاثي-كجملة، لا المنطق — المنطق كان يعمل.)
+- **Fix (main commit 5e173c7):** حوّلت السقوط الثلاثي إلى `if/else` عادي في المواضع الثلاثة (striking / CTR gaps / authority). جمل if/else لا تُفعّل magic.
+- **Lesson:** في Streamlit **لا تكتب تعبيراً ثلاثياً `A if cond else B` كجملة مستقلة** (خصوصاً مع `\`) — يُفعّل magic display ويحاول ast.parse المصدر فينهار. استخدم `if/else` صريح. للتحقق: `py_compile` يمرّ (البنية صحيحة) لكن العطل **وقت التشغيل** فقط — اختبر الصفحة فعلياً بعد النشر. يرتبط بـ [[seo_indexation_status]].
+
 ### 17. صفحة /blog تتجاوز سقف زحف Googlebot (2MB) + رابطان داخليان 404 (dealpulseksa-web)
 - **What (تدقيق Ahrefs 2026-06-29):** أخطاء حمراء جديدة — «Page size exceeds 2MB» + «HTML file size too large» على `/blog` (كان **2.75MB**)؛ و«404 page»×2 + «Page has links to broken page»×2.
 - **Why:** (1) `app/blog/page.tsx` يجلب `getAllPosts()` ويمرّر **كائنات BlogPost كاملة** (فيها `body` ضخم لكل مقال) إلى `BlogList` وهو **كومبوننت عميل ('use client')** — فكل ما يُمرَّر لكومبوننت عميل يُسلسَل داخل HTML/RSC payload؛ 110 مقالاً × body = 2.75MB، مع أن البطاقات تعرض العنوان/المقتطف/التصنيف فقط. (2) رابطان في «روابط ذات صلة» داخل `lib/blog.ts` يشيران لـ slugs خاطئة: `aliexpress-car-devices-accessories-guide` (الصحيح `-hub`) و`aliexpress-seat-steering-covers-guide` (الصحيح بلا `-guide`).

@@ -45,7 +45,7 @@
 - [Domain Authority Plan](domain_authority_plan.md) — خطة سلطة الدومين (White-Hat): الربط الداخلي منجز (متجر↔/c/ + شبك /c/)؛ المتبقّي عناقيد محتوى/Schema/روابط خلفية
 - [CodeMap Affiliate Channel](codemap_affiliate_channel.md) — قناة أفلييت ثانية (كوبونات فقط بلا روابط تتبّع)؛ براندات كبيرة معروفة نون/نمشي/ستايلي؛ تكمّل سلة وتحلّ بوّابة Admitad
 - [Marketing Skills Toolkit](marketing_skills_toolkit.md) — ركّبنا 17 skill منتقاة من coreyhaines31/marketingskills عام في ~/.claude/skills لدفعة سلطة الدومين؛ المخرجات تُعاد عربي/سعودي + White-Hat
-- [SEO Indexation Status](seo_indexation_status.md) — GSC 2026-06-21: 4/139 مفهرسة فقط؛ حصار موقع جديد + صفر باكلينك؛ الأولوية طلب فهرسة+روابط خلفية لا Schema
+- [SEO Indexation Status](seo_indexation_status.md) — الفهرسة انحلّت (4→150)؛ انفجار ظهور يوليو 2026 (20→336/يوم) نيّته تجارية غير-براند من غرباء لكن مركز 7-70 وCTR~0؛ العنق الآن = المركز+CTR؛ per-query يُسحب عبر Windsor MCP searchconsole؛ عناوين المتاجر صارت «كود خصم {store}» (web 59be4b6)
 - [Affiliate PPC Brand Restrictions](affiliate_ppc_brand_restrictions.md) — نمشي وغيره يمنع المزايدة المدفوعة على اسمه؛ SEO عضوي مسموح؛ seo_enabled=ON بلا أي إعلان مدفوع على اسم براند
 - [Keyword Demand (KSA)](keyword_demand_ksa.md) — الطلب مركّز على البراندات الكبيرة (نون/نمشي/اي هيرب/امازون/شي إن 10K-100K)؛ متاجرك الصغيرة ~10-100؛ اي هيرب أسرع مكسب (أفلييت جاهز)
 - [Instagram Content Engine](instagram_content_engine.md) — محرّك ريلز محتوى فاخر Dark Luxe (content_reels.py + تبويب الاستوديو 3 أوضاع) + تنويع كابشن؛ @dealpulseksa 5 متابعين؛ الستوريات التلقائية وقفت (غير مُشخَّصة)
