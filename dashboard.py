@@ -13512,8 +13512,10 @@ elif page == "📊 تقرير البحث":
             if not _qdf.empty:
                 _strike = _qdf[(_qdf["المركز"] >= 4) & (_qdf["المركز"] <= 15)] \
                     .sort_values("ظهور", ascending=False).head(25)
-                st.dataframe(_strike, width="stretch", hide_index=True) if not _strike.empty \
-                    else st.caption("لا كلمات في نطاق 4–15 حالياً.")
+                if not _strike.empty:
+                    st.dataframe(_strike, width="stretch", hide_index=True)
+                else:
+                    st.caption("لا كلمات في نطاق 4–15 حالياً.")
             else:
                 st.caption("لا بيانات كلمات في هذه الفترة.")
             st.divider()
@@ -13526,16 +13528,20 @@ elif page == "📊 تقرير البحث":
                 if not _qdf.empty:
                     _ctr = _qdf[(_qdf["المركز"] <= 10) & (_qdf["نقرات"] == 0)
                                 & (_qdf["ظهور"] >= 3)].sort_values("ظهور", ascending=False).head(15)
-                    st.dataframe(_ctr[["الكلمة", "ظهور", "المركز"]], width="stretch",
-                                 hide_index=True) if not _ctr.empty else st.caption("لا شيء.")
+                    if not _ctr.empty:
+                        st.dataframe(_ctr[["الكلمة", "ظهور", "المركز"]], width="stretch", hide_index=True)
+                    else:
+                        st.caption("لا شيء.")
             with _cg2:
                 st.markdown("##### 🪜 تحتاج سلطة — طلب حقيقي ومركز عميق")
                 st.caption("طلب موجود لكن مركز 40+ = تحتاج باكلينك لا عنوان.")
                 if not _qdf.empty:
                     _deep = _qdf[(_qdf["المركز"] >= 40) & (_qdf["ظهور"] >= 3)] \
                         .sort_values("ظهور", ascending=False).head(15)
-                    st.dataframe(_deep[["الكلمة", "ظهور", "المركز"]], width="stretch",
-                                 hide_index=True) if not _deep.empty else st.caption("لا شيء.")
+                    if not _deep.empty:
+                        st.dataframe(_deep[["الكلمة", "ظهور", "المركز"]], width="stretch", hide_index=True)
+                    else:
+                        st.caption("لا شيء.")
             st.divider()
 
             # ── الجمهور ──
