@@ -1893,7 +1893,7 @@ _OTHER_PAGES = [
 "📣 بلاغات الأكواد",  # ← Migration 029: بلاغات لا يعمل + إدارة المتاجر المسحوبة
 "🎯 بناء الشرائح", "مركز الإشعارات", "لوحة القيادة", "مركز الدعم",
 "استوديو المحتوى", "🎨 الثيمات",
-"محرّك SEO", "📈 أداء SEO", "🔎 الفهرسة", "📤 الصفحات المنشورة", "🎯 محرك الفرص", "سجل التدقيق",
+"محرّك SEO", "📈 أداء SEO", "📊 تقرير البحث", "🔎 الفهرسة", "📤 الصفحات المنشورة", "🎯 محرك الفرص", "سجل التدقيق",
 "🛰️ متابعة المنصة",
 "🩺 تشخيص النشر",
 ]
@@ -13410,6 +13410,157 @@ elif page == "📈 أداء SEO":
             st.line_chart(_chart.set_index("التاريخ")[["نقرات", "ظهور"]])
             st.markdown("##### 📋 السجل")
             st.dataframe(_snap, width="stretch", hide_index=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 📊 تقرير البحث — تحليل GSC الكامل (فرص سريعة + فجوات CTR + جمهور) — بديل سيمرش
+# ─────────────────────────────────────────────────────────────────────────────
+elif page == "📊 تقرير البحث":
+    page_title("📊", "تقرير البحث الشامل",
+               "تحليل Google Search Console الكامل — فرص سريعة، فجوات نقر، جمهور. بديل سيمرش ببيانات أصدق.")
+    _gsc_json = os.getenv("GSC_SA_JSON")
+    _gsc_site = os.getenv("GSC_SITE", "https://www.dealpulseksa.com/")
+    if not _gsc_json:
+        st.info(
+            "🔍 **GSC غير مربوط بعد.** أضف على خدمة الداشبورد:\n"
+            "- `GSC_SA_JSON` = محتوى ملف service account (JSON كامل)\n"
+            "- `GSC_SITE` = رابط الخاصية (مثل https://www.dealpulseksa.com/)\n\n"
+            "وامنح الـ service account صلاحية في Search Console (المستخدمون والأذونات)."
+        )
+    else:
+        _DEV_AR = {"MOBILE": "📱 جوال", "DESKTOP": "💻 حاسب", "TABLET": "📲 تابلت"}
+        _CTRY_AR = {
+            "sau": "السعودية", "egy": "مصر", "are": "الإمارات", "yem": "اليمن",
+            "mar": "المغرب", "kwt": "الكويت", "qat": "قطر", "bhr": "البحرين",
+            "omn": "عُمان", "jor": "الأردن", "irq": "العراق", "dza": "الجزائر",
+            "usa": "أمريكا", "syr": "سوريا", "lbn": "لبنان", "tun": "تونس",
+        }
+        _rc1, _rc2, _rc3 = st.columns([2, 2, 1])
+        _r_from = _rc1.date_input(
+            "من", value=(datetime.datetime.utcnow() - timedelta(days=90)).date(),
+            key="rep_from", format="YYYY-MM-DD")
+        _r_to = _rc2.date_input(
+            "إلى", value=datetime.datetime.utcnow().date(),
+            key="rep_to", format="YYYY-MM-DD")
+
+        @st.cache_data(ttl=1800, show_spinner=False)
+        def _gsc_report(site, d_from, d_to):
+            """يسحب GSC بالأبعاد المطلوبة للتقرير (مخزّن 30 دقيقة)."""
+            from google.oauth2 import service_account
+            from googleapiclient.discovery import build
+            creds = service_account.Credentials.from_service_account_info(
+                json.loads(os.getenv("GSC_SA_JSON")),
+                scopes=["https://www.googleapis.com/auth/webmasters.readonly"])
+            svc = build("searchconsole", "v1", credentials=creds, cache_discovery=False)
+
+            def _q(dims, limit):
+                return (svc.searchanalytics().query(
+                    siteUrl=site,
+                    body={"startDate": d_from, "endDate": d_to,
+                          "dimensions": dims, "rowLimit": limit}).execute()
+                        .get("rows") or [])
+            return {
+                "totals": _q([], 1),
+                "dates": _q(["date"], 1000),
+                "queries": _q(["query"], 5000),
+                "pages": _q(["page"], 1000),
+                "devices": _q(["device"], 10),
+                "countries": _q(["country"], 40),
+            }
+
+        if _rc3.button("🔄 تحديث", key="rep_refresh"):
+            _gsc_report.clear()
+
+        try:
+            with st.spinner("جارٍ سحب Google Search Console..."):
+                _rep = _gsc_report(_gsc_site, str(_r_from), str(_r_to))
+        except Exception as _rerr:
+            st.error(f"تعذّر الجلب: {str(_rerr)[:400]}")
+            _rep = None
+
+        if _rep is not None:
+            def _rows_df(rows, key_name):
+                return pd.DataFrame([{
+                    key_name: r["keys"][0],
+                    "نقرات": int(r.get("clicks", 0)),
+                    "ظهور": int(r.get("impressions", 0)),
+                    "المركز": round(float(r.get("position", 0)), 1),
+                    "CTR %": round(float(r.get("ctr", 0)) * 100, 1),
+                } for r in rows]) if rows else pd.DataFrame()
+
+            # ── المؤشرات الرئيسية ──
+            _t = (_rep["totals"] or [{}])[0]
+            _k1, _k2, _k3, _k4 = st.columns(4)
+            _k1.metric("👆 نقرات", f"{int(_t.get('clicks', 0)):,}")
+            _k2.metric("👁️ ظهور", f"{int(_t.get('impressions', 0)):,}")
+            _k3.metric("📈 CTR", f"{_t.get('ctr', 0) * 100:.1f}%")
+            _k4.metric("📊 متوسط المركز", f"{_t.get('position', 0):.1f}")
+            st.divider()
+
+            # ── الاتجاه اليومي ──
+            if _rep["dates"]:
+                _dfd = _rows_df(_rep["dates"], "التاريخ").sort_values("التاريخ")
+                st.markdown("##### 📈 الاتجاه اليومي (ظهور + نقرات)")
+                st.line_chart(_dfd.set_index("التاريخ")[["ظهور", "نقرات"]])
+                st.divider()
+
+            _qdf = _rows_df(_rep["queries"], "الكلمة")
+
+            # ── الفرص السريعة (Striking Distance) ──
+            st.markdown("##### 🎯 الفرص السريعة — كلمات على أعتاب صفحة 1 (Striking Distance)")
+            st.caption("مركز 4–15 = دفعة صغيرة تنقلها للـ top-3. مرتّبة بالظهور (الطلب) — هذه أعلى عائد في الموقع.")
+            if not _qdf.empty:
+                _strike = _qdf[(_qdf["المركز"] >= 4) & (_qdf["المركز"] <= 15)] \
+                    .sort_values("ظهور", ascending=False).head(25)
+                st.dataframe(_strike, width="stretch", hide_index=True) if not _strike.empty \
+                    else st.caption("لا كلمات في نطاق 4–15 حالياً.")
+            else:
+                st.caption("لا بيانات كلمات في هذه الفترة.")
+            st.divider()
+
+            # ── فجوات النقر + تحتاج سلطة ──
+            _cg1, _cg2 = st.columns(2)
+            with _cg1:
+                st.markdown("##### 💤 فجوات النقر — صفحة 1 وصفر نقر")
+                st.caption("ترتّب عالياً لكن صفر نقر = مشكلة عنوان/وصف.")
+                if not _qdf.empty:
+                    _ctr = _qdf[(_qdf["المركز"] <= 10) & (_qdf["نقرات"] == 0)
+                                & (_qdf["ظهور"] >= 3)].sort_values("ظهور", ascending=False).head(15)
+                    st.dataframe(_ctr[["الكلمة", "ظهور", "المركز"]], width="stretch",
+                                 hide_index=True) if not _ctr.empty else st.caption("لا شيء.")
+            with _cg2:
+                st.markdown("##### 🪜 تحتاج سلطة — طلب حقيقي ومركز عميق")
+                st.caption("طلب موجود لكن مركز 40+ = تحتاج باكلينك لا عنوان.")
+                if not _qdf.empty:
+                    _deep = _qdf[(_qdf["المركز"] >= 40) & (_qdf["ظهور"] >= 3)] \
+                        .sort_values("ظهور", ascending=False).head(15)
+                    st.dataframe(_deep[["الكلمة", "ظهور", "المركز"]], width="stretch",
+                                 hide_index=True) if not _deep.empty else st.caption("لا شيء.")
+            st.divider()
+
+            # ── الجمهور ──
+            _a1, _a2 = st.columns(2)
+            with _a1:
+                st.markdown("##### 📱 الجهاز")
+                if _rep["devices"]:
+                    _dev = _rows_df(_rep["devices"], "الجهاز")
+                    _dev["الجهاز"] = _dev["الجهاز"].map(lambda x: _DEV_AR.get(x, x))
+                    st.bar_chart(_dev.set_index("الجهاز")["ظهور"], horizontal=True)
+            with _a2:
+                st.markdown("##### 🌍 الدولة (أعلى 8)")
+                if _rep["countries"]:
+                    _cty = _rows_df(_rep["countries"], "الدولة").sort_values(
+                        "ظهور", ascending=False).head(8)
+                    _cty["الدولة"] = _cty["الدولة"].map(lambda x: _CTRY_AR.get(x, x))
+                    st.bar_chart(_cty.set_index("الدولة")["ظهور"], horizontal=True)
+            st.divider()
+
+            # ── أعلى الصفحات ──
+            st.markdown("##### 📄 أعلى الصفحات بالظهور")
+            if _rep["pages"]:
+                _pg = _rows_df(_rep["pages"], "الصفحة").sort_values(
+                    "ظهور", ascending=False).head(20)
+                st.dataframe(_pg, width="stretch", hide_index=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
