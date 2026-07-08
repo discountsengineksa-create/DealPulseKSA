@@ -74,6 +74,7 @@
 - [Blog Home Furniture Cluster](blog_home_furniture_cluster.md) — عنقود أثاث ١٩ مقال (هَب + ٣ لكل ٦ أقسام: كنب/سرير/سفرة/دولاب/خارجي/مكتب) بصوت خبير ٢٠ سنة؛ web 97a1c5a
 - [Blog Toys Cluster Progress](blog_toys_cluster_progress.md) — عنقود ألعاب مستهدَف ٧٢ مقال (٢٤ قسم × ٣)؛ منجَز ١٠/٧٢ (Pillar+STEM+قطيفة+رضّع)؛ باقي ٦٢ مرتّبة بأولويات
 - [Blog The Deal Cluster](blog_thedeal_cluster.md) — عنقود ذا ديل أوتلت 15 مقال (5 أقسام × 3) + ربط من الهَب الرئيسي + best-saudi-stores؛ web 90935f8 (2026-07-08)
+- [Blog VogaCloset Cluster](blog_vogacloset_cluster.md) — عنقود فوغا كلوسيت 15 مقال (5 أقسام × 3: نسائي/رجالي/أطفال/جمال/منزل) + ربط شبكي متبادل مع عنقود ذا ديل؛ web 4b6de74 (2026-07-09)
 - [Domain Canonical Trap](domain_canonical_trap.md) — الصح dealpulseksa.com (حيّ)، التوأم dealpulesksa.com ميّت؛ لا تحكم على هجاء من لقطة مضغوطة — احسمه بـcurl/DNS؛ Trustpilot أول باكلينك مكتمل (2026-07-04)
 - [Local TTS Engine — XTTS v2 (REMOVED)](tts_engine_xtts_v2.md) — بُني ثم حُذف بالكامل 2026-07-06؛ جودة العربي المحلي ضعيفة؛ لا تُعِد بناء محلي-مجاني — الطريق الصحيح API عصبي مدفوع (ElevenLabs/Azure)
 - [Judge by Output, Not Engineering Effort](feedback_output_over_engineering.md) — المستخدم يقيّم بالمخرَج النهائي لا بصعوبة السباكة؛ اكشف سقف جودة الأداة بصراحة قبل البناء عليها
@@ -81,3 +82,7 @@
 - [Mirror Audit — Trace Not Claim](feedback_mirror_audit.md) — دقّق الـ agents (ونفسك) بالـ trace الخام بشكل متماثل؛ الأفضلية للأرقام لا المنصب
 - [Blog Internal-Link De-orphan](blog_internal_link_deorphan.md) — 65 مقال يتيم صُفِّرت (web 98b4329) بإكمال فهارس 4 pillars + hubs؛ السبب top-6 في getRelatedPosts يجوّع ذيل العنقود؛ طريقة تدقيق Node قابلة للتكرار + esbuild للتحقّق
 - [SEO Deep Audit Fixes](seo_deep_audit_fixes.md) — 2026-07-07: بق light-AR 500 (هجرة is_trending BOOLEAN نسيت جملة SELECT رابعة) أفرغ الخريطة/المتاجر/llms صامتاً؛ + حذف ادعاءات متاجر مفبركة (أمازون/Carrefour غير موجودة)؛ درس: اسحب الباك-إند قبل التشخيص
+- [SEO PR Blitz Kit](seo_pr_blitz_kit.md) — 2026-07-08 seo/pr_blitz_kit.md شُحن (Reddit×4 + Quora AR×3 + X ثريد + إيميلات ×5) لترويج /calendar وفكّ الطبقة D المعطّلة
+- [SEO AI Visibility Opt-In](seo_ai_visibility_optin.md) — 2026-07-08 robots.ts opt-in صريح لـ15 كراولر AI + llms.txt أُثري بأرقام+براندات+FAQ لاستخراج AI
+- [SEO Owned-Channels Pivot](seo_owned_channels_pivot.md) — 2026-07-08 المالك رفض Reddit/Quora/مدوّنين؛ التركيز على X+Telegram+IG المملوكة + دليل Google Indexing API
+- [SEO Google Indexing Live](seo_google_indexing_live.md) — 2026-07-08 Google Indexing API فُعِّل بنجاح؛ ٢٠٠ صفحة كلها Google:200 (استنزاف حصة يوم واحد كاملة)
