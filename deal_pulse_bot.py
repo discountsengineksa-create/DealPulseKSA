@@ -1059,8 +1059,8 @@ def _load_and_show_codes(user_id, lang):
               AND (publish_channels IS NULL OR publish_channels ILIKE '%bot%')
             ORDER BY
                 is_trending_bool DESC,
-                priority_score_int DESC
-            LIMIT 20
+                priority_score_int DESC,
+                store_id ASC
         """)
         rows = [dict(r) for r in cur.fetchall()]
         release_conn(conn)

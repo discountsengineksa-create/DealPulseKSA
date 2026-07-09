@@ -131,14 +131,22 @@
       "Bash(where psql *)",
       "Bash(python -c \"from dotenv import load_dotenv; load_dotenv\\(\\); import os; url = os.getenv\\('MIGRATION_DATABASE_URL'\\) or os.getenv\\('DATABASE_URL'\\); print\\('SOURCE:', 'MIGRATION_DATABASE_URL' if os.getenv\\('MIGRATION_DATABASE_URL'\\) else 'DATABASE_URL'\\); print\\('HOST:', url.split\\('@'\\)[1].split\\('/'\\)[0] if url else 'MISSING'\\)\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code} %{time_total}s\\\\n\" https://api.dealpulseksa.com/health)",
-      "Bash(curl -s https://api.dealpulseksa.com/health)"
+      "Bash(curl -s https://api.dealpulseksa.com/health)",
+      "Bash(cd /c/Users/PC/Desktop/dealpulseksa-web && echo \"=== أي ذكر لعلي بابا في blog.ts ===\" && grep -niE \"alibaba|علي ?بابا|علي بابا\" lib/blog.ts | head -20)",
+      "Bash(awk '/slug: .phone-accessories-gimbal/{f=1} f{print NR\": \"$0} f&&/^  \\\\},?$/{c++; if\\(c>=1\\) exit}' lib/blog.ts)",
+      "Read(//c/Users/PC/Desktop/dealpulseksa-web/lib/**)",
+      "Bash(grep -nE \"image:|body: \\\\`|\\\\`,|tags:|relatedStores:|internalLinks:|faq|\\\\},|\\\\];\")",
+      "Bash(grep -nE \"export const \\(blogPosts|posts|BLOG\\)|^\\\\];|^\\\\]$\" lib/blog.ts)",
+      "Bash(npx --no-install esbuild lib/blog.ts --bundle --platform=node --format=esm --outfile=/tmp/blogcheck.mjs)",
+      "Bash(echo \"EXIT:$?\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\PC\\Desktop\\dealpulseksa-web\\lib",
       "C:\\Users\\PC\\Desktop\\dealpulseksa-web\\components",
       "C:\\Users\\PC\\Desktop\\dealpulseksa-web\\app\\store\\[slug]",
       "C:\\Users\\PC\\Desktop\\dealpulseksa-web\\app\\stores",
-      "C:\\Users\\PC\\Desktop\\dealpulseksa-web\\app"
+      "C:\\Users\\PC\\Desktop\\dealpulseksa-web\\app",
+      "c:\\Users\\PC\\Desktop\\dealpulseksa-web\\lib"
     ]
   }
 }
