@@ -76,6 +76,7 @@
 - [Blog The Deal Cluster](blog_thedeal_cluster.md) — عنقود ذا ديل أوتلت 15 مقال (5 أقسام × 3) + ربط من الهَب الرئيسي + best-saudi-stores؛ web 90935f8 (2026-07-08)
 - [Blog VogaCloset Cluster](blog_vogacloset_cluster.md) — عنقود فوغا كلوسيت 15 مقال (5 أقسام × 3: نسائي/رجالي/أطفال/جمال/منزل) + ربط شبكي متبادل مع عنقود ذا ديل؛ web 4b6de74 (2026-07-09)
 - [Blog Mamas & Papas Cluster](blog_mamaspapas_cluster.md) — عنقود ماماز آند باباز 15 مقال (عربات/غرفة/ملابس/تغذية/استحمام) بمعايير سلامة صارمة (لا مقعد سيارة/لا مصدّات) + ربط ثلاثي مع ذا ديل وفوغا؛ web 3bdb844 (2026-07-09)
+- [Blog H&M Cluster](blog_hm_cluster.md) — عنقود اتش اند ام 15 مقال (نسائي/رجالي/أطفال/H&M Home/H&M Move) بصراحة استراتيجية "يستحقّ/لا يستحقّ" + ربط رباعي مع 3 عناقيد سابقة؛ web 46e9e15 (2026-07-09)
 - [Domain Canonical Trap](domain_canonical_trap.md) — الصح dealpulseksa.com (حيّ)، التوأم dealpulesksa.com ميّت؛ لا تحكم على هجاء من لقطة مضغوطة — احسمه بـcurl/DNS؛ Trustpilot أول باكلينك مكتمل (2026-07-04)
 - [Local TTS Engine — XTTS v2 (REMOVED)](tts_engine_xtts_v2.md) — بُني ثم حُذف بالكامل 2026-07-06؛ جودة العربي المحلي ضعيفة؛ لا تُعِد بناء محلي-مجاني — الطريق الصحيح API عصبي مدفوع (ElevenLabs/Azure)
 - [Judge by Output, Not Engineering Effort](feedback_output_over_engineering.md) — المستخدم يقيّم بالمخرَج النهائي لا بصعوبة السباكة؛ اكشف سقف جودة الأداة بصراحة قبل البناء عليها
