@@ -88,3 +88,5 @@
 - [SEO AI Visibility Opt-In](seo_ai_visibility_optin.md) — 2026-07-08 robots.ts opt-in صريح لـ15 كراولر AI + llms.txt أُثري بأرقام+براندات+FAQ لاستخراج AI
 - [SEO Owned-Channels Pivot](seo_owned_channels_pivot.md) — 2026-07-08 المالك رفض Reddit/Quora/مدوّنين؛ التركيز على X+Telegram+IG المملوكة + دليل Google Indexing API
 - [SEO Google Indexing Live](seo_google_indexing_live.md) — 2026-07-08 Google Indexing API فُعِّل بنجاح؛ ٢٠٠ صفحة كلها Google:200 (استنزاف حصة يوم واحد كاملة)
+- [Blog Coffee Moments Cluster](blog_lahazat_cluster.md) — عنقود لحظات القهوة 15 مقال (قهوة/شاي/شراب/باردة/معدّات) + ربط من الهَبين (2026-07-10)
+- [Blog Jana Al-Asal Cluster](blog_jana_honey_cluster.md) — عنقود جنى العسل 15 مقال (أنواع/جودة/YMYL صحّة/مطبخ وجمال/هدايا) + إصلاح مرجع مكسور (2026-07-10)
