@@ -51,6 +51,7 @@
 - [Instagram Content Engine](instagram_content_engine.md) — محرّك ريلز محتوى فاخر Dark Luxe (content_reels.py + تبويب الاستوديو 3 أوضاع) + تنويع كابشن؛ @dealpulseksa 5 متابعين؛ الستوريات التلقائية وقفت (غير مُشخَّصة)
 - [Instagram Growth Engine](ig_growth_engine.md) — caption SEO + carousel/story/reel auto-publish + /ig bio page + keyword bank لكل فئة سعودية
 - [IG Publishing Policy (Stories Manual, Reels Auto-6)](ig_publish_policy.md) — قرار 2026-06-19: الستوري التلقائية ملغاة، الريل يُنتَج كل 6 بثّات تراكمياً
+- [Brand Face for Flow Reels](brand_face_reels.md) — 2026-07-10 وجه علامة نبض الصفقات مقفول: بنت خضراء سعودية (BRAND_FACE/brand_face_crop.png) كـIngredient + character bible؛ الاسم نطقاً «نبض الصفقات» لا «ديل بلس»؛ التوليد في Flow (Google AI Pro) لا Veo API (أغلى 35×)
 - [Competitor Landscape](competitor_landscape.md) — منافسو الكوبونات السعوديون (الموفّر القائد)؛ لا منافسة على الكلمات الكبيرة قريباً؛ الفجوات: التحقّق/تيليجرام/النيش المحلي/AEO
 - [Web Visits Tracking](web_visits_tracking.md) — نبض الزوّار: تتبّع زيارات الموقع على مستوى الجلسة (web_visits/Migration 060) منفصل عن action_logs؛ بوتات مفلترة q≥50؛ النشر يستلزم تطبيق المايقريشن قبل الـ API
 - [Web Login Gate Model](web_login_gate_model.md) — الموقع مفتوح حالياً (web_login_gate_enabled=0)؛ الأكواد/الزيارة للجميع، والستوري (محجوبة بالكامل) والمفضلة للمسجّلين فقط؛ auth-gate يفصل codeUnlocked عن isAuthed؛ حركات المجهول تُحتسب بـ visitor_id
@@ -87,3 +88,5 @@
 - [SEO AI Visibility Opt-In](seo_ai_visibility_optin.md) — 2026-07-08 robots.ts opt-in صريح لـ15 كراولر AI + llms.txt أُثري بأرقام+براندات+FAQ لاستخراج AI
 - [SEO Owned-Channels Pivot](seo_owned_channels_pivot.md) — 2026-07-08 المالك رفض Reddit/Quora/مدوّنين؛ التركيز على X+Telegram+IG المملوكة + دليل Google Indexing API
 - [SEO Google Indexing Live](seo_google_indexing_live.md) — 2026-07-08 Google Indexing API فُعِّل بنجاح؛ ٢٠٠ صفحة كلها Google:200 (استنزاف حصة يوم واحد كاملة)
+- [Web Blog Monolith OOM + Client-Prop Serialization](web_blog_monolith_oom_and_client_prop_serialization.md) — 2026-07-11 إصلاح Ahrefs (web 6a70e1f): Discord discord.gg→discord.com/invite يمسح 1,450 redirect؛ قصّ related لحقول البطاقة يحلّ صفحة >2MB (props الـclient تُسلسَل في HTML)؛ سقف: next dev يـOOM على blog.ts 5.8MB حتى بـ8GB — تحقّق عبر Vercel+Ahrefs لا dev
+- [Health Citation Sourcing](health_citation_sourcing.md) — 2026-07-11 مصادر الاستشهاد الصحي (YMYL): Mayo Clinic + NIH ODS يحجبان الـcrawlers (403) فيظهران «مكسور» بـAhrefs؛ استخدم Harvard Nutrition Source المباشر (nutritionsource.hsph.harvard.edu = 200 للبوت)؛ JISSN 406 للبوت لكنه إيجابي كاذب (يعمل)؛ تحقّق أي «broken link» بـUA متصفح قبل الحكم
