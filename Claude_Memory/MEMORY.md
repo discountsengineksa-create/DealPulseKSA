@@ -90,3 +90,4 @@
 - [SEO Google Indexing Live](seo_google_indexing_live.md) — 2026-07-08 Google Indexing API فُعِّل بنجاح؛ ٢٠٠ صفحة كلها Google:200 (استنزاف حصة يوم واحد كاملة)
 - [Blog Coffee Moments Cluster](blog_lahazat_cluster.md) — عنقود لحظات القهوة 15 مقال (قهوة/شاي/شراب/باردة/معدّات) + ربط من الهَبين (2026-07-10)
 - [Blog Jana Al-Asal Cluster](blog_jana_honey_cluster.md) — عنقود جنى العسل 15 مقال (أنواع/جودة/YMYL صحّة/مطبخ وجمال/هدايا) + إصلاح مرجع مكسور (2026-07-10)
+- [Blog 7 Clusters July 11](blog_7clusters_july11.md) — 105 مقال (عود رويال + قطرة عسل + 5 عبايات: ديزاج/ماي سكاريف/بنت الشيخ/المخملية/عذية) بتموضع متمايز (2026-07-11)
