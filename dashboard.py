@@ -2112,8 +2112,11 @@ if page == "إدخال بيانات الماستر":
         st.divider()
 
         # الصف 5: الأهمية + التواريخ + عمولتي
+        # priority_score_int = SMALLINT بعد migration_065: 0/3/6/10 (لا نص عربي).
+        _PRIO_STR_TO_INT = {"عادي": 0, "مهم": 3, "عاجل": 6, "عاجل جداً": 10}
         col7, col8, col9, col10 = st.columns(4)
-        priority   = col7.selectbox("🚀 الأهمية", ["عادي", "مهم", "عاجل", "عاجل جداً"])
+        _prio_str  = col7.selectbox("🚀 الأهمية", list(_PRIO_STR_TO_INT.keys()))
+        priority   = _PRIO_STR_TO_INT[_prio_str]
         date_start = col8.date_input("📅 تاريخ البداية", datetime.date.today())
         date_end   = col9.date_input("📅 تاريخ الانتهاء", datetime.date.today() + datetime.timedelta(days=30))
         my_coupon  = col10.text_input("💵 عمولتي (كود التتبع)", key="m_my_coupon")
