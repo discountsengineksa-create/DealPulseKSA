@@ -4,6 +4,7 @@ Dispatcher: يجلب المتجر من DB، يبني نص المنشور، وي�
 """
 from __future__ import annotations
 
+import os
 import traceback
 
 from psycopg2.extras import RealDictCursor
@@ -22,6 +23,12 @@ from api.social.template import build_post_text
 # منصة مُدارة غير معلَّمة لمتجر = لا تُنشَر له. المنصات غير المُدارة
 # (x/pinterest/linkedin) تُنشَر حسب التهيئة كالمعتاد (لا تُسقَط).
 _MANAGED_SOCIAL = {"telegram", "discord", "instagram", "threads", "facebook"}
+
+# كاروسيل الفيد التلقائي على إنستقرام — معطّل افتراضياً (قرار 2026-07-15).
+# قِيس من insights: متوسط وصول بوسترات الفيد 1.1 (١٣ منشور بوصول صفر) مقابل
+# الريلز 45، والنشر شبه-الصفري يكبح تقييم توزيع الحساب. النشر الآن Reels-only.
+# للإرجاع: عيّن IG_AUTO_FEED_ENABLED=1 في البيئة (لا يحتاج تعديل كود).
+IG_AUTO_FEED_ENABLED = os.getenv("IG_AUTO_FEED_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _fetch_store(conn, master_id: int) -> dict | None:
@@ -149,76 +156,74 @@ def _run_instagram_extended(
     poster: InstagramPoster,
 ) -> None:
     """
-    إنستقرام: مسار موسَّع يستفيد من فورمات المنصة لزيادة الوصول والـengagement.
+    إنستقرام: المسار الافتراضي الآن Reels-only (قرار 2026-07-15).
 
-    1) Feed Carousel (شريحتان):
-       - Slide 1: البوستر بالثيم (social_poster_url) — الـhero
-       - Slide 2: بطاقة «كيف تستخدم الكود؟» مولَّدة بـPIL، تُرفع لـCloudinary
-                   وتُخزَّن بـpublic_id ثابت (إعادة البث = نفس الرابط)
-       لو فشلت الشريحة الثانية → نسقط على single-image (لا نُسقط المنشور كاملاً)
-    2) Reel جماعي (تلقائي بعد كل بث ناجح): انظر الجزء الأخير من الدالة.
+    1) Feed Carousel — معطّل افتراضياً (IG_AUTO_FEED_ENABLED=1 لإعادته):
+       بوستر (Slide 1) + بطاقة «كيف تستخدم الكود؟» (Slide 2). قِيس من
+       insights أن وصوله الفعلي ~1 على حساب تحت 100 متابع فيكبح التوزيع.
+    2) Reel جماعي (تلقائي بعد كل بث ناجح — المسار الأساسي): كل ٦ بثّات = ريل.
 
     ملاحظة: الستوري التلقائية أُلغيت بقرار المالك (٢٠٢٦-٠٦-١٩) —
     الستوري تُنشَر يدوياً من تطبيق إنستقرام. الكود محذوف لا معطّل.
     """
-    # سجّل صف Feed مسبقاً (للحالات اللي تطلع failed قبل النشر)
-    log_id = _insert_log(
-        conn, master_id=master_id, store_id=store["store_id"],
-        platform=poster.name, post_text=post_text, image_url=image_url,
-    )
-    conn.commit()
-
     if not poster.is_configured():
-        _update_log(conn, log_id, status="skipped", error_message="not configured")
-        conn.commit()
-        return
+        return  # حساب غير مهيّأ — لا فيد ولا ريل
 
-    # ── 1) ابنِ قائمة شرائح الكاروسيل ─────────────────────────────
-    slides: list[str] = []
-    if image_url:
-        slides.append(image_url)
-
-    # شريحة «كيف تستخدم» — مولَّدة فقط لو Cloudinary مهيّأ.
-    # نُرسل اسم المتجر والكود؛ الدالة تُرجع None لو شي فشل بدلاً من رفع استثناء.
-    try:
-        howto_url = upload_howto_slide(
-            store_id=str(store.get("store_id") or ""),
-            store_name=str(store.get("store_id") or ""),
-            coupon=(store.get("public_coupon") or None),
+    # ── 1) كاروسيل الفيد التلقائي — معطّل افتراضياً (IG_AUTO_FEED_ENABLED) ──
+    #   يُتخطّى كلياً في الوضع الافتراضي (Reels-only). لا نُدرج صف Feed في
+    #   social_posts_log ولا نبني شرائح ولا ننشر — كل بثّة تُغذّي قائمة الريل فقط.
+    if IG_AUTO_FEED_ENABLED:
+        # سجّل صف Feed مسبقاً (للحالات اللي تطلع failed قبل النشر)
+        log_id = _insert_log(
+            conn, master_id=master_id, store_id=store["store_id"],
+            platform=poster.name, post_text=post_text, image_url=image_url,
         )
-    except Exception as e:
-        howto_url = None
-        print(f"[social] ig howto slide failed: {e}")
-    if howto_url:
-        slides.append(howto_url)
+        conn.commit()
 
-    # ── 2) انشر Feed (Carousel لو ≥2 شريحة، single لو 1) ──────────
-    try:
-        if len(slides) >= 2:
-            result = poster.post_carousel(post_text, slides)
-        else:
-            result = poster.post(post_text, slides[0] if slides else None)
+        # ابنِ قائمة شرائح الكاروسيل
+        slides: list[str] = []
+        if image_url:
+            slides.append(image_url)
 
-        if result.error:
-            _update_log(conn, log_id, status="failed", error_message=result.error)
+        # شريحة «كيف تستخدم» — مولَّدة فقط لو Cloudinary مهيّأ.
+        try:
+            howto_url = upload_howto_slide(
+                store_id=str(store.get("store_id") or ""),
+                store_name=str(store.get("store_id") or ""),
+                coupon=(store.get("public_coupon") or None),
+            )
+        except Exception as e:
+            howto_url = None
+            print(f"[social] ig howto slide failed: {e}")
+        if howto_url:
+            slides.append(howto_url)
+
+        # انشر Feed (Carousel لو ≥2 شريحة، single لو 1)
+        try:
+            if len(slides) >= 2:
+                result = poster.post_carousel(post_text, slides)
+            else:
+                result = poster.post(post_text, slides[0] if slides else None)
+
+            if result.error:
+                _update_log(conn, log_id, status="failed", error_message=result.error)
+                conn.commit()
+                return  # الفيد فشل — لا نكمل للريل في نفس المسار
+            feed_post_id = result.platform_post_id or ""
+            _update_log(conn, log_id, status="sent", platform_post_id=feed_post_id)
             conn.commit()
-            return  # لا نشر Story لو الـFeed فشل (نتجنّب story-only without context)
+        except NotConfiguredError as e:
+            _update_log(conn, log_id, status="skipped", error_message=str(e))
+            conn.commit()
+            return
+        except Exception as e:
+            _update_log(conn, log_id, status="failed",
+                        error_message=f"{type(e).__name__}: {e}")
+            conn.commit()
+            print(f"[social] instagram feed crashed: {traceback.format_exc()}")
+            return
 
-        feed_post_id = result.platform_post_id or ""
-        _update_log(conn, log_id, status="sent", platform_post_id=feed_post_id)
-        conn.commit()
-    except NotConfiguredError as e:
-        _update_log(conn, log_id, status="skipped", error_message=str(e))
-        conn.commit()
-        return
-    except Exception as e:
-        _update_log(conn, log_id, status="failed",
-                    error_message=f"{type(e).__name__}: {e}")
-        conn.commit()
-        print(f"[social] instagram feed crashed: {traceback.format_exc()}")
-        return
-
-    # ── 3) Batch Reel — كل بث ناجح يضيف هذا المتجر لقائمة انتظار الريل،
+    # ── 2) Batch Reel — كل بث ناجح يضيف هذا المتجر لقائمة انتظار الريل،
     #    ولما توصل ٦+ متاجر منتظرين → ينتج Reel متعدّد (٦ متاجر × ٥ ثوان).
     #
     #    إعادة `last_reeled_at = NULL` للمتجر الحالي تضمن إن «كل ٦ بثّات
