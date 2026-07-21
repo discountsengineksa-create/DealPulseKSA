@@ -10,7 +10,7 @@
 - [Skills Install Manifest](skills_install_manifest.md) — 2026-07-07 ٢٣٨ skill مثبَّت على «user» في ~/.claude/skills عبر ٦ ريبوهات (تفكير ٣٩/رسمي ١٨/UX ١٧/تصميم ٩٦/تسويق ٦٧/فيروس ١)
 - [AI Mastery Goal](user_ai_mastery_goal.md) — wants a universal reusable prompt across all AI platforms/domains; into prompt engineering; give honest expert feedback
 - [Regression Audit First](feedback_regression_audit.md) — when user says "it worked before you changed it", check my own recent diffs first; no speculative code changes
-- [Contact Emails](contact_emails.md) — Personal vs brand ops mailbox (spelled `dealpulesksa@gmail.com`)
+- [Contact Emails](contact_emails.md) — الصندوق الحقيقي `dealpulseksa@gmail.com` (pulse)؛ `dealpulesksa` (pules) خطأ مثبّت بالكود؛ + إيميل DCM المنفصل
 - [Weeks Roadmap](weeks_roadmap.md) — `weeks plan.txt` is the canonical week-by-week schema plan; per-week progress (W1-4 done)
 - [Store Analytics BI Suite](store_analytics_bi.md) — rebuilt «تحليل المتاجر» (4 sub-tabs) + why AI tab uses Groq via REST (no local openai SDK)
 - [Analysis Rebuild Strategy](analysis_rebuild_strategy.md) — tearing down + rebuilding the 6 analysis pages; 3 monetization trajectories + zero-fakery / enterprise due-diligence mandate
@@ -38,6 +38,7 @@
 - [🔓 Bot Freeze LIFTED](bot_frozen_lock.md) — البوت مفكوك (2026-07-07)؛ التعديل مسموح ضمن بروتوكول الشراكة؛ DB writes وحوائط الإنتاج باقية
 - [DB Foundation Audit](db_foundation_audit.md) — مخطط القاعدة (~76 جدول/42% فارغة)؛ العدّادات الحيّة total_*؛ ميت مؤكّد (users_master + أعمدة راكدة) جاهز للحذف بإذن+نسخة؛ دَيْن النوع (is_trending/priority_score) محجوب بتجميد البوت
 - [Admitad Affiliate Setup](admitad_affiliate_setup.md) — منصة الأفلييت Admitad؛ مساحتان (تيليجرام + ويب موثّقة DealPulseKSA)؛ كل برنامج له بوّابتان: نوع الترافيك (Messengers محظور غالباً→الموقع لا البوت) + حجم الجمهور (SHEIN=10k)؛ ابدأ بالسهل (AliExpress/سفر/Airalo)
+- [Admitad DNS Block](admitad_dns_block.md) — شبكة الكمبيوتر (KSA ISP) تحجب admitad.com بتزوير NXDOMAIN على DNS العادي حتى لـ8.8.8.8؛ الحل DNS مشفّر (Chrome Secure DNS/Cloudflare)؛ الجوال يشتغل؛ mitgo.com غير محجوب
 - [Publish Channels Feature](publish_channels_feature.md) — master.publish_channels لاستهداف القنوات لكل متجر (website/bot/social)؛ يحترم شروط الأفلييت؛ API بارامتر channel (افتراضي website)؛ بوت+ميني+SEO يفلترون؛ fallback «حصري بالموقع»
 - [Health Content Cluster](health_content_cluster.md) — 10 مقالات مكمّلات بمدوّنة الويب (lib/blog.ts) لفتح تصنيف iHerb «محتوى» 5%؛ كود مكافآت QQC1568 على الروابط؛ معايير الكتابة + العنقود التالي
 - [Salla Affiliate Channel](salla_affiliate_channel.md) — سلة قناة أفلييت محلية (خصم عميل حقيقي + عمولة، بلا بوّابة ترافيك)؛ تحلّ رفض عمالقة Admitad؛ منتقياً لا جامعاً + عنقود محتوى محلي (عود/تمور/عبايات)؛ ✅ قُبلت 2026-06-18
@@ -98,3 +99,5 @@
 - [Health Citation Sourcing](health_citation_sourcing.md) — 2026-07-11 مصادر الاستشهاد الصحي (YMYL): Mayo Clinic + NIH ODS يحجبان الـcrawlers (403) فيظهران «مكسور» بـAhrefs؛ استخدم Harvard Nutrition Source المباشر (nutritionsource.hsph.harvard.edu = 200 للبوت)؛ JISSN 406 للبوت لكنه إيجابي كاذب (يعمل)؛ تحقّق أي «broken link» بـUA متصفح قبل الحكم
 - [SEO Authority Building](seo_authority_building.md) — crawled-not-indexed (302 صفحة) سقف سلطة لا باغ؛ المسار: باكلينكس White-Hat (قنوات مملوكة، لا Reddit/Quora/مدوّنين)؛ أولوية: طلب رابط شراكة Bedinroom + دليل هيئة السياحة؛ الخطة web a62c6fb (2026-07-14)
 - [SEO High-Demand Front Opened](seo_high_demand_front_opened.md) — 2026-07-12 فخّ منظومي (على مستوى الموقع): AR=draft + EN=noindex → صفر صفحة عربية قابلة للفهرسة؛ نُشرت 23 صفحة (4 كبار + 19 متجر عالق، منها bug: H&M مسمّى ADMIT10)؛ الصفحات العربية 27→50، كلها Google 200؛ نون/نمشي محجوبان بالسلطة لا النشر؛ لا توليد long-tail متعدد (doorway)
+- [Store Page Evergreen (404 Root Cause)](store_page_evergreen.md) — 2026-07-21 السبب الجذري لتوقّف الزحف: `last_time>=CURRENT_DATE` كان يخفي المتجر بالكامل عند انتهاء الكوبون فتصير `/store/{id}` 404 (٥ متاجر كسرت ١٧٥ رابط+breadcrumbs)؛ الحل: المتجر دائم على قناة الموقع، الكوبون يُفرَّغ بـCASE إذا انتهى، الفلترة للبوت فقط
+- [Boostiny Publisher Channel](boostiny_publisher_channel.md) — 2026-07-20 سُجِّلنا كناشر على شبكة Boostiny (منفذ لعملاء كبار يرفضون التقديم المباشر، خصوصاً توصيل الطعام/هنقرستيشن)؛ الطلب مُقدَّم، مراجعة ~5 أيام عمل (≈حتى 2026-07-27)؛ قناة أفلييت رابعة بجانب Admitad/سلة/CodeMap

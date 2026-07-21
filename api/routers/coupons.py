@@ -161,6 +161,23 @@ _POPULARITY_SQL = """
 """
 
 
+# ── صفحة المتجر = أصل SEO دائم (evergreen) ───────────────────────────────────
+# صفحة `/store/{id}` وبطاقتها في الدليل والـsitemap يجب أن تبقى 200 وموجودة حتى بعد
+# انتهاء الكوبون. الفلترة بالانتهاء كانت تُحوّلها 404 فتكسر مئات الروابط الداخلية
+# وbreadcrumbs وتوقف زحف Google (السبب الجذري، 2026-07). الحلّ: على قناة الموقع لا
+# نفلتر بالانتهاء (المتجر يبقى)، والكوبون/الخصم يُفرَّغ في المخرجات عبر CASE إذا
+# انتهى فلا يظهر كود ميّت كأنه فعّال (صدق البيانات). قنوات البوت/الميني تبقى على
+# الكوبونات الفعّالة فقط (سطح صفقات لا دليل SEO دائم).
+_OFFER_ACTIVE_SQL = "(last_time IS NULL OR last_time >= CURRENT_DATE)"
+
+
+def _expiry_where(channel: str) -> str:
+    """شرط الانتهاء في WHERE حسب القناة: الموقع (website) دائم فلا شرط؛ غيره
+    (bot/mini) يقتصر على الكوبونات الفعّالة."""
+    return "" if channel == "website" else \
+        f"AND {_OFFER_ACTIVE_SQL}"
+
+
 def _select_lang_clause(lang: str) -> str:
     """
     يبني SELECT يحقن قيم اللغة المطلوبة في الحقول الأساسية،
@@ -175,15 +192,19 @@ def _select_lang_clause(lang: str) -> str:
             -- store_id هو المفتاح الأساسي (للمفضلة/التتبّع/الربط) ويجب أن يبقى
             -- ثابتاً عبر اللغتين. الواجهة تعرض name_en وتستخدم store_id للعمليات.
             COALESCE(NULLIF(name_en, ''), store_id) AS name_en,
-            affiliate_link, public_coupon,
-            COALESCE(NULLIF(extra_offer_en, ''), extra_offer)   AS extra_offer,
-            extra_offer_en,
+            affiliate_link,
+            -- الكوبون/الخصم/العرض محتوى مؤقّت: يُفرَّغ إذا انتهى فلا يظهر كود ميّت
+            -- كأنه فعّال، مع بقاء المتجر نفسه ظاهراً (evergreen على قناة الموقع).
+            CASE WHEN (last_time IS NULL OR last_time >= CURRENT_DATE) THEN public_coupon ELSE NULL END AS public_coupon,
+            CASE WHEN (last_time IS NULL OR last_time >= CURRENT_DATE)
+                 THEN COALESCE(NULLIF(extra_offer_en, ''), extra_offer) ELSE NULL END AS extra_offer,
+            CASE WHEN (last_time IS NULL OR last_time >= CURRENT_DATE) THEN extra_offer_en ELSE NULL END AS extra_offer_en,
             COALESCE(NULLIF(store_bio_en, ''),   store_bio)     AS store_bio,
             store_bio_en,
             description,
             COALESCE(NULLIF(store_tags_en, ''),  store_tags)    AS store_tags,
             store_tags_en,
-            discount_value,
+            CASE WHEN (last_time IS NULL OR last_time >= CURRENT_DATE) THEN discount_value ELSE NULL END AS discount_value,
             total_coupon_copies, total_link_clicks, is_trending_bool AS is_trending, priority_score_int AS priority_score,
             COALESCE(is_promoted, FALSE) AS is_promoted,
             logo_url, cloaked_slug, story_ring_color,
@@ -205,12 +226,15 @@ def _select_lang_clause(lang: str) -> str:
                      '[]'::json) AS extra_coupons
         """
     return """
-        id, store_id, name_en, affiliate_link, public_coupon,
-        extra_offer, extra_offer_en,
+        id, store_id, name_en, affiliate_link,
+        -- الكوبون/الخصم/العرض يُفرَّغ إذا انتهى (المتجر يبقى evergreen على الموقع).
+        CASE WHEN (last_time IS NULL OR last_time >= CURRENT_DATE) THEN public_coupon ELSE NULL END AS public_coupon,
+        CASE WHEN (last_time IS NULL OR last_time >= CURRENT_DATE) THEN extra_offer    ELSE NULL END AS extra_offer,
+        CASE WHEN (last_time IS NULL OR last_time >= CURRENT_DATE) THEN extra_offer_en ELSE NULL END AS extra_offer_en,
         store_bio,   store_bio_en,
         description,
         store_tags,  store_tags_en,
-        discount_value,
+        CASE WHEN (last_time IS NULL OR last_time >= CURRENT_DATE) THEN discount_value ELSE NULL END AS discount_value,
         total_coupon_copies, total_link_clicks, is_trending_bool AS is_trending, priority_score_int AS priority_score,
         COALESCE(is_promoted, FALSE) AS is_promoted,
         logo_url, cloaked_slug, story_ring_color,
@@ -241,15 +265,20 @@ def _select_light_clause(lang: str) -> str:
         return """
             id, store_id,
             COALESCE(NULLIF(name_en, ''), store_id)              AS name_en,
-            COALESCE(NULLIF(extra_offer_en, ''), extra_offer)    AS extra_offer,
+            CASE WHEN (last_time IS NULL OR last_time >= CURRENT_DATE)
+                 THEN COALESCE(NULLIF(extra_offer_en, ''), extra_offer) ELSE NULL END AS extra_offer,
             COALESCE(NULLIF(store_tags_en, ''),  store_tags)     AS store_tags,
-            discount_value, is_trending_bool AS is_trending, priority_score_int AS priority_score,
+            CASE WHEN (last_time IS NULL OR last_time >= CURRENT_DATE) THEN discount_value ELSE NULL END AS discount_value,
+            is_trending_bool AS is_trending, priority_score_int AS priority_score,
             COALESCE(is_promoted, FALSE) AS is_promoted,
             logo_url, story_ring_color, total_coupon_copies, total_link_clicks
         """
     return """
-        id, store_id, name_en, extra_offer, store_tags,
-        discount_value, is_trending_bool AS is_trending, priority_score_int AS priority_score,
+        id, store_id, name_en,
+        CASE WHEN (last_time IS NULL OR last_time >= CURRENT_DATE) THEN extra_offer    ELSE NULL END AS extra_offer,
+        store_tags,
+        CASE WHEN (last_time IS NULL OR last_time >= CURRENT_DATE) THEN discount_value ELSE NULL END AS discount_value,
+        is_trending_bool AS is_trending, priority_score_int AS priority_score,
         COALESCE(is_promoted, FALSE) AS is_promoted,
         logo_url, story_ring_color, total_coupon_copies, total_link_clicks
     """
@@ -313,8 +342,8 @@ def get_all_coupons(
             {pop_clause},
             0 AS score_pct
         FROM master
-        WHERE (last_time IS NULL OR last_time >= CURRENT_DATE)
-              AND NOT COALESCE(is_suspended, FALSE)
+        WHERE NOT COALESCE(is_suspended, FALSE)
+              {_expiry_where(channel)}
               AND (publish_channels IS NULL OR publish_channels ILIKE %(chpat)s)
         ORDER BY
             COALESCE(is_promoted, FALSE) DESC,
@@ -372,8 +401,8 @@ def search_coupons(
                 ) AS relevance_score
             FROM master
             WHERE
-                (last_time IS NULL OR last_time >= CURRENT_DATE)
-              AND NOT COALESCE(is_suspended, FALSE)
+                NOT COALESCE(is_suspended, FALSE)
+              {_expiry_where(channel)}
               AND (publish_channels IS NULL OR publish_channels ILIKE %(chpat)s)
                 AND (
                     store_id                       ILIKE %(like)s
@@ -437,8 +466,8 @@ def get_coupon_detail(
             0 AS score_pct
         FROM master
         WHERE id = %(id)s
-              AND (last_time IS NULL OR last_time >= CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
+              {_expiry_where(channel)}
               AND (publish_channels IS NULL OR publish_channels ILIKE %(chpat)s)
         LIMIT 1
     """
@@ -473,8 +502,8 @@ def get_coupon_by_slug(
             0 AS score_pct
         FROM master
         WHERE store_id = %(slug)s
-              AND (last_time IS NULL OR last_time >= CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
+              {_expiry_where(channel)}
               AND (publish_channels IS NULL OR publish_channels ILIKE %(chpat)s)
         LIMIT 1
     """
