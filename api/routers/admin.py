@@ -33,6 +33,28 @@ def _verify_admin(x_admin_secret: str) -> None:
         raise HTTPException(status_code=403, detail="forbidden")
 
 
+# ─── Reindex arbitrary URLs ───────────────────────────────────────────────
+# يعيد إرسال روابط عشوائية (صفحات متاجر/رئيسية/أقسام) لمحركات البحث فوراً عبر
+# IndexNow (Bing/Yandex/Naver/Seznam) + Google Indexing API. مفيد لتسريع إعادة
+# زحف صفحة تغيّرت حالتها — مثلاً متجر رجع 200 بعد أن كان 404 (تجديد الكوبون).
+# best-effort: فشل محرك لا يكسر الباقي، وكل محاولة تُسجَّل في seo_index_submissions.
+class ReindexUrlsRequest(BaseModel):
+    urls: list[str]
+
+
+@router.post("/reindex-urls")
+def reindex_urls(
+    body: ReindexUrlsRequest,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """إعادة إرسال روابط لمحركات البحث (IndexNow + Google Indexing API)."""
+    _verify_admin(x_admin_secret)
+    from api.seo.indexer import resubmit_url
+    # سقف 50 لحماية حصة Google (~200/يوم/مفتاح)
+    results = [resubmit_url(u) for u in body.urls[:50]]
+    return {"count": len(results), "results": results}
+
+
 # ─── Email Diagnostics ────────────────────────────────────────────────────
 # يكشف لماذا "نسيت كلمة المرور" لا يصل: غالباً RESEND_API_KEY مفقود في Railway،
 # أو الدومين غير موثّق على Resend. كلا المسارين الفرعيين يطبع رسائل واضحة.
