@@ -23,7 +23,7 @@
 | 9 | XSS | ✅ لا مدخلات مستخدم | — |
 | 10 | الاعتماديات (CVEs) | ✅ حديثة/مرقّعة | — |
 | 11 | كشف `/docs` + `/openapi.json` | 🔧 **أُصلح** | منخفضة |
-| 12 | CSP (وضع التنفيذ) | ⚠️ توصية | متوسطة (إعلامية) |
+| 12 | CSP (وضع التنفيذ) | 🔧 **نُشِر** (قيد اختبار المتصفّح لصفحة الدخول) | متوسطة (إعلامية) |
 | 13 | Trusted Types | ⛔ غير موصى (يكسر JSON-LD) | — |
 
 ---
@@ -80,14 +80,29 @@ Cross-Origin-Opener-Policy: same-origin-allow-popups     ← أُضيف في ه�
 ### 🔧 أُصلح الآن — كشف `/docs` + `/openapi.json` (خطورة منخفضة)
 كان Swagger UI (`/docs`) و`/openapi.json` مكشوفَين (200) — استطلاع مجاني لمخطّط كل الـendpoints. **الحل (منشور):** إغلاقهما بالإنتاج افتراضياً، ويُفتحان محلياً بـ`EXPOSE_DOCS=1`.
 
-### ⚠️ توصية — CSP في وضع التنفيذ (دفاع-عميق ضد XSS)
-مفيد لكنه **محفوف على هذا الستاك** (Firebase OTP + Cloudinary + سكربتات Next الداخلية) — أي مصدر ناقص يكسر الموقع، والانتهاكات تظهر في المتصفّح فقط. **الطريق الآمن:** أجهّز CSP مضبوطاً، ننشره، والمالك يختبر حيّاً (رئيسية + دخول/OTP + ظهور الصور + Console)، ونرجع فوراً لو انكسر شيء. (البديل: تركه — «أفضل الممارسات = 100» ولا ثغرة قائمة.)
+### 🔧 نُشِر — CSP في وضع التنفيذ (دفاع-عميق ضد XSS)
+أُضيف CSP مفروض في `next.config.mjs` يحصر السكربت/الاتصال/الإطار/الصور/الفيديو على مصادر معروفة (API على `api.dealpulseksa.com`، Cloudinary، Firebase OTP/reCAPTCHA، Vercel Analytics)، مع `'unsafe-inline'/'unsafe-eval'` لسكربتات Next الداخلية (بلا nonce حفاظاً على التصيير الثابت/ISR).
+
+**تحقّق آليّ (منجَز):** الرئيسية تُصيَّر 200، و**كل مورد `src=` من الموقع أو Cloudinary فقط — صفر مورد خارجي محجوب**. دومينات المتاجر/السوشال المرصودة كلها روابط `href` (لا يحجبها CSP).
+
+**متبقٍّ — اختبار متصفّح يدوي واحد:** صفحة **تسجيل الدخول/OTP** (Firebase reCAPTCHA) — النطاقات القياسية (`*.firebaseapp.com` / `google.com` / `gstatic.com` / `googleapis.com`) مُدرَجة، لكن تأكيدها يحتاج فتح المتصفّح + Console. لو ظهر `Refused to … CSP` → يُضاف المصدر أو يُرجَع CSP.
 
 ### ⛔ غير موصى — Trusted Types
 يتطلب `require-trusted-types-for 'script'` الذي **يكسر `dangerouslySetInnerHTML`** المستخدَم لحقن JSON-LD (سكيما SEO). المخاطرة > الفائدة.
 
-### 🧱 «الجدار الناري» الحقيقي — Cloudflare Proxy (WAF + DDoS)
-حماية التطبيق قوية، لكن لجدار ناري/حماية-انهيار على مستوى **الحافة**: الدومين على Cloudflare لكن **«DNS only» (سحابة رمادية)**. تفعيل **الوكيل (السحابة البرتقالية)** يضيف: WAF بقواعد جاهزة ضد OWASP Top-10، تخفيف DDoS تلقائي، Rate-limiting/Bot-mitigation على الحافة، وإخفاء أصل Vercel/Railway. **خطوات بحذر:** SSL mode = Full (Strict)، تأكيد توافق نطاقات Vercel، ثم قلب السحابة برتقالية ومراقبة. هذا أقوى إضافة مفردة لـ«الصمود ضد أي هجمة».
+### 🧱 «الجدار الناري» على الحافة — (يحتاج لوحات المالك، لا يُنفَّذ من الكود)
+حماية التطبيق قوية؛ لطبقة حافة (WAF/DDoS) — مقسومة حسب المضيف:
+
+**الويب (Vercel):** استخدم **جدار Vercel المدمج** (Security/Firewall) — بلا تعارض CDN مزدوج: Attack Challenge Mode + قواعد WAF مُدارة + Rate limiting. (Vercel يوفّر DDoS أساسي أصلاً.)
+
+**الـAPI (`api.dealpulseksa.com` → Railway):** هنا Cloudflare يضيف قيمة حقيقية (Railway بلا WAF):
+1. Cloudflare → `SSL/TLS = Full (Strict)` ⚠️ (وإلا redirect loop).
+2. DNS → سجلّ `api` → السحابة **برتقالية (Proxied)**.
+3. Security → WAF → **Managed Rules + OWASP Core Ruleset**.
+4. Security → Bots → **Bot Fight Mode**.
+5. Rate limiting rule (مثلاً >100/دقيقة/IP → تحدّي).
+
+> الـAPI محمي أصلاً بـrate limiting شامل (slowapi+Redis)، فهذي طبقة إضافية لا ضرورة قصوى.
 
 ---
 
