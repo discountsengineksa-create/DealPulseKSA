@@ -3977,7 +3977,7 @@ elif page == "تحليل المتاجر":
         # "all" / "none" → لا تفلتر
 
         # ─── حساب ترند IDs (live algorithm، نوافذ ثابتة) ────────
-        _now_r = (pd.Timestamp.utcnow().tz_localize(None)
+        _now_r = (pd.Timestamp.now('UTC').tz_localize(None)
                   + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
         _today_start = _now_r.normalize()
         _week_start  = _now_r - pd.Timedelta(days=7)
@@ -4944,7 +4944,7 @@ elif page == "تحليل المتاجر":
                 return df
 
             # ── نافذة اليومي: منذ منتصف الليل بتوقيت الرياض إلى الآن ──
-            _now_r       = datetime.datetime.utcnow() + timedelta(hours=3)
+            _now_r       = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) + timedelta(hours=3)
             _daily_start = _now_r.replace(hour=0, minute=0, second=0, microsecond=0)
             _e_daily = [e for e in _events if _daily_start <= e["time"] <= _now_r]
             _f_daily = [f for f in _favs   if _daily_start <= f["created_at"] <= _now_r]
@@ -5213,7 +5213,7 @@ elif page == "🎬 إضافة استوري":
                         else:
                             _e = (pd.to_datetime(_exp_v, utc=True)
                                   + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS)).tz_localize(None)
-                            _nw = (pd.Timestamp.utcnow().tz_localize(None)
+                            _nw = (pd.Timestamp.now('UTC').tz_localize(None)
                                    + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
                             if _e <= _nw:
                                 st.caption(f"⌛ **منتهية** ({_e:%Y-%m-%d %H:%M}) — مخفيّة عن العملاء")
@@ -9290,7 +9290,7 @@ elif page == "👣 زوّار الموقع":
         _figd = px.area(_daily, x="اليوم", y="زيارات", markers=True)
         _figd.update_traces(line_color=BRAND["emerald"])
         _figd.update_layout(height=300, margin=dict(t=10, b=10, l=10, r=10))
-        st.plotly_chart(_figd, use_container_width=True)
+        st.plotly_chart(_figd, width='stretch')
 
     # ── 🔬 تشخيص القفزات (٣ إشارات: تنوّع الزوّار + نسبة datacenter + تركيز ASN) ──
     # يعمل على البيانات الخام (بلا فلتر البوتات) عمداً — الهدف تصنيف كل قفزة
@@ -9464,7 +9464,7 @@ elif page == "👣 زوّار الموقع":
         })
 
         st.dataframe(
-            _view, use_container_width=True, hide_index=True,
+            _view, width='stretch', hide_index=True,
             column_config={
                 "الهوية":     st.column_config.TextColumn(width="medium"),
                 "المدينة":    st.column_config.TextColumn(width="small"),
@@ -9503,7 +9503,7 @@ elif page == "👣 زوّار الموقع":
             _src.columns = ["المصدر", "عدد"]
             _figs = px.pie(_src, names="المصدر", values="عدد", hole=0.45)
             _figs.update_layout(height=300, margin=dict(t=10, b=10, l=10, r=10))
-            st.plotly_chart(_figs, use_container_width=True)
+            st.plotly_chart(_figs, width='stretch')
     with g2:
         st.markdown("#### 📱 الجهاز")
         _dev = pd.read_sql(f"""
@@ -9516,7 +9516,7 @@ elif page == "👣 زوّار الموقع":
             _dev.columns = ["الجهاز", "عدد"]
             _figv = px.pie(_dev, names="الجهاز", values="عدد", hole=0.45)
             _figv.update_layout(height=300, margin=dict(t=10, b=10, l=10, r=10))
-            st.plotly_chart(_figv, use_container_width=True)
+            st.plotly_chart(_figv, width='stretch')
 
     # ── المدن + صفحات الدخول ────────────────────────────────────────────────
     t1, t2 = st.columns(2)
@@ -9529,7 +9529,7 @@ elif page == "👣 زوّار الموقع":
             GROUP BY 1 ORDER BY visits DESC LIMIT 12
         """, conn, params=_p)
         _cit.columns = ["المدينة", "زيارات"]
-        st.dataframe(_cit, use_container_width=True, hide_index=True)
+        st.dataframe(_cit, width='stretch', hide_index=True)
     with t2:
         st.markdown("#### 🚪 صفحات الدخول الأكثر")
         _land = pd.read_sql(f"""
@@ -9539,7 +9539,7 @@ elif page == "👣 زوّار الموقع":
             GROUP BY 1 ORDER BY visits DESC LIMIT 12
         """, conn, params=_p)
         _land.columns = ["الصفحة", "زيارات"]
-        st.dataframe(_land, use_container_width=True, hide_index=True)
+        st.dataframe(_land, width='stretch', hide_index=True)
 
     # ── 🔁 الزوّار والعائدون (هوية ثابتة عبر visitor_id) ────────────────────
     st.divider()
@@ -9611,7 +9611,7 @@ elif page == "👣 زوّار الموقع":
     """, conn, params=_p)
     if not _top.empty:
         _top.columns = ["الزائر", "زيارات", "أول زيارة", "آخر زيارة", "المدينة", "الجهاز"]
-        st.dataframe(_top, use_container_width=True, hide_index=True)
+        st.dataframe(_top, width='stretch', hide_index=True)
 
     # سجل الزيارات الخام — كل زيارة على حدة (للتدقيق)
     with st.expander("🧾 سجل الزيارات الخام (آخر 50)"):
@@ -9629,7 +9629,7 @@ elif page == "👣 زوّار الموقع":
             LIMIT 50
         """, conn, params=_p)
         _log.columns = ["الوقت", "الزائر", "المدينة", "الجهاز", "المصدر", "صفحة الدخول", "الجودة"]
-        st.dataframe(_log, use_container_width=True, hide_index=True)
+        st.dataframe(_log, width='stretch', hide_index=True)
 
     conn.close()
 
@@ -11985,7 +11985,7 @@ elif page == "لوحة القيادة":
                         f"📥 تحميل كامل الفترة ({len(showw)} حدث) — Excel", _xlw.getvalue(),
                         f"LiveFeed_Web_{d_from}_to_{d_to}.xlsx", key="dl_web_live")
 
-            _stamp = (datetime.datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d %H:%M:%S")
+            _stamp = (datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) + timedelta(hours=3)).strftime("%Y-%m-%d %H:%M:%S")
             st.caption(f"⏱️ آخر تحديث: {_stamp} (توقيت السعودية)"
                        + ("  ·  🔴 بث مباشر" if live else "  ·  ⏸️ متوقف"))
         except Exception as e:
@@ -12064,7 +12064,7 @@ elif page == "مركز الدعم":
                 d = pd.read_sql(_OPEN_SQL, c)
             finally:
                 c.close()
-            _stamp = (datetime.datetime.utcnow() + timedelta(hours=3)).strftime("%H:%M:%S")
+            _stamp = (datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) + timedelta(hours=3)).strftime("%H:%M:%S")
             st.subheader(f"📬 طلبات مفتوحة ({len(d)})")
             if d.empty:
                 st.success("🎉 لا توجد طلبات دعم معلقة.")
@@ -12129,7 +12129,7 @@ elif page == "مركز الدعم":
                         delivered, dmsg = (False, "—")
                         if can_tg:
                             delivered, dmsg = _tg_send(_tgid, _rt)
-                        _ts = (datetime.datetime.utcnow() + timedelta(hours=3)).strftime("%m-%d %H:%M")
+                        _ts = (datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) + timedelta(hours=3)).strftime("%m-%d %H:%M")
                         _cur = _rconn.cursor()
                         _cur.execute("""
                             UPDATE support_tickets
@@ -13320,10 +13320,10 @@ elif page == "📈 أداء SEO":
             st.caption(f"الخاصية: {_gsc_site}")
             _gd1, _gd2 = st.columns(2)
             _g_from = _gd1.date_input(
-                "من", value=(datetime.datetime.utcnow() - timedelta(days=28)).date(),
+                "من", value=(datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) - timedelta(days=28)).date(),
                 key="gsc_from", format="YYYY-MM-DD")
             _g_to = _gd2.date_input(
-                "إلى", value=datetime.datetime.utcnow().date(), key="gsc_to", format="YYYY-MM-DD")
+                "إلى", value=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).date(), key="gsc_to", format="YYYY-MM-DD")
             if st.button("📊 اجلب بيانات Search Console", type="primary", key="gsc_run"):
                 with st.spinner("جارٍ الجلب من Google Search Console..."):
                     _gerr = None
@@ -13440,10 +13440,10 @@ elif page == "📊 تقرير البحث":
         }
         _rc1, _rc2, _rc3 = st.columns([2, 2, 1])
         _r_from = _rc1.date_input(
-            "من", value=(datetime.datetime.utcnow() - timedelta(days=90)).date(),
+            "من", value=(datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) - timedelta(days=90)).date(),
             key="rep_from", format="YYYY-MM-DD")
         _r_to = _rc2.date_input(
-            "إلى", value=datetime.datetime.utcnow().date(),
+            "إلى", value=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).date(),
             key="rep_to", format="YYYY-MM-DD")
 
         @st.cache_data(ttl=1800, show_spinner=False)
@@ -13788,7 +13788,7 @@ elif page == "📤 الصفحات المنشورة":
             _creds = service_account.Credentials.from_service_account_info(
                 json.loads(raw), scopes=["https://www.googleapis.com/auth/webmasters.readonly"])
             _svc = build("searchconsole", "v1", credentials=_creds, cache_discovery=False)
-            _end = datetime.datetime.utcnow().date()
+            _end = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).date()
             _start = _end - timedelta(days=28)
             _resp = _svc.searchanalytics().query(
                 siteUrl=gsite,
