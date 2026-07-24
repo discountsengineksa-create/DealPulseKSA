@@ -136,12 +136,17 @@ _raw_origins = os.getenv("ALLOWED_ORIGINS", "null")
 ALLOWED_ORIGINS: list[str] = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 
 # ─── FastAPI app ──────────────────────────────────────────────────────────────
+# تحصين: توثيق الـAPI التفاعلي (Swagger /docs + /openapi.json) يكشف كامل مخطّط
+# الـendpoints والنماذج لأي زائر — استطلاع مجاني للمهاجم. نقفله افتراضياً بالإنتاج،
+# ويُفتح محلياً عند الحاجة بـ EXPOSE_DOCS=1.
+_EXPOSE_DOCS = os.getenv("EXPOSE_DOCS") == "1"
 app = FastAPI(
     title="Deal Pulse KSA — Unified Service",
     description="بوت + API + Mini App في خدمة واحدة",
     version="1.0.0",
-    docs_url="/docs",
+    docs_url="/docs" if _EXPOSE_DOCS else None,
     redoc_url=None,
+    openapi_url="/openapi.json" if _EXPOSE_DOCS else None,
 )
 
 # ─── Rate limiting (slowapi + Redis) ─────────────────────────────────────────
