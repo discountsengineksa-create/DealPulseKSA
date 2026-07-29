@@ -91,6 +91,7 @@
 - [SEO AI Visibility Opt-In](seo_ai_visibility_optin.md) — 2026-07-08 robots.ts opt-in صريح لـ15 كراولر AI + llms.txt أُثري بأرقام+براندات+FAQ لاستخراج AI
 - [SEO Owned-Channels Pivot](seo_owned_channels_pivot.md) — 2026-07-08 المالك رفض Reddit/Quora/مدوّنين؛ التركيز على X+Telegram+IG المملوكة + دليل Google Indexing API
 - [SEO Google Indexing Live](seo_google_indexing_live.md) — 2026-07-08 Google Indexing API فُعِّل بنجاح؛ ٢٠٠ صفحة كلها Google:200 (استنزاف حصة يوم واحد كاملة)
+- [SEO Bulk Reindex Ops](seo_bulk_reindex_ops.md) — endpoint reindex-urls (IndexNow+Google، X-Admin-Secret)؛ درسان: سقف Cloudflare 100s→استخدم ≤25 URL/نداء (50 يرجع 524)، وحصة Google 200/يوم→IndexNow بلا حصة فادفع له الكل ووزّع Google أيام
 - [Blog Coffee Moments Cluster](blog_lahazat_cluster.md) — عنقود لحظات القهوة 15 مقال (قهوة/شاي/شراب/باردة/معدّات) + ربط من الهَبين (2026-07-10)
 - [Blog Jana Al-Asal Cluster](blog_jana_honey_cluster.md) — عنقود جنى العسل 15 مقال (أنواع/جودة/YMYL صحّة/مطبخ وجمال/هدايا) + إصلاح مرجع مكسور (2026-07-10)
 - [Blog 7 Clusters July 11](blog_7clusters_july11.md) — 105 مقال (عود رويال + قطرة عسل + 5 عبايات: ديزاج/ماي سكاريف/بنت الشيخ/المخملية/عذية) بتموضع متمايز (2026-07-11)
@@ -102,3 +103,4 @@
 - [🔒 Security Hardening](security_hardening.md) — 2026-07-24 فحص أمني كامل (الوضع قوي، صفر ثغرة حرجة)؛ تحصينات منشورة لا تُكسر: CSP مفروض بـnext.config (مُختبَر حيّاً)، `/docs`+`/openapi.json` مقفولان بالإنتاج (EXPOSE_DOCS=1 محلياً)، COOP؛ التقرير SECURITY_AUDIT.md؛ جدار الحافة (Vercel/Cloudflare) متبقٍّ للمالك
 - [Store Page Evergreen (404 Root Cause)](store_page_evergreen.md) — 2026-07-21 السبب الجذري لتوقّف الزحف: `last_time>=CURRENT_DATE` كان يخفي المتجر بالكامل عند انتهاء الكوبون فتصير `/store/{id}` 404 (٥ متاجر كسرت ١٧٥ رابط+breadcrumbs)؛ الحل: المتجر دائم على قناة الموقع، الكوبون يُفرَّغ بـCASE إذا انتهى، الفلترة للبوت فقط
 - [Boostiny Publisher Channel](boostiny_publisher_channel.md) — 2026-07-20 سُجِّلنا كناشر على شبكة Boostiny (منفذ لعملاء كبار يرفضون التقديم المباشر، خصوصاً توصيل الطعام/هنقرستيشن)؛ الطلب مُقدَّم، مراجعة ~5 أيام عمل (≈حتى 2026-07-27)؛ قناة أفلييت رابعة بجانب Admitad/سلة/CodeMap
+- [Marketing Baseline & Strategy](marketing_baseline_and_strategy.md) — 2026-07-28 الترافيك الحقيقي ~121 سعودي/شهر (web_visits 89% بوتات، cf_bot_score فارغ)؛ التحويل يعمل ~16% فالبوتلنك اكتساب لا تحويل؛ درس النيّة: البحث التجميعي (مناسبات/فئات) يكسب النقرة لا أسماء البراندات؛ نُشرت /national-day؛ ملف السياق .agents/product-marketing.md
