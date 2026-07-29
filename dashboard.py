@@ -9221,7 +9221,15 @@ elif page == "👣 زوّار الموقع":
             st.rerun()
 
     # فلتر البوتات (تبديل) + استثناء الإدمن (دائم). كلاهما نصوص ثابتة — لا مدخل مستخدم.
-    _q_bot   = "" if wv_bots else "AND quality_score >= 50 AND is_datacenter IS NOT TRUE"
+    # زواحف كبرى تتسرّب من فلتر is_datacenter (cf_bot_score فارغ تماماً، والـIP غير
+    # مُعلَّم datacenter): Meta/Facebook 32934 (معاينة روابط) + Apple 714 (Applebot/
+    # prefetch). تظهر من Ashburn/Leesburg/Seattle وتُضخّم العدّاد بلا أي نقر/نسخ —
+    # مصدر وهم «الترافيك أمريكي». نستثنيها مع البوتات. [[bot_vs_promo_heuristic]]
+    _CRAWLER_ASNS = (32934, 714)
+    _asn_in      = ", ".join(str(a) for a in _CRAWLER_ASNS)   # أعداد ثابتة — لا حقن
+    _q_crawler   = f"AND (asn IS NULL OR asn NOT IN ({_asn_in}))"
+    _q_crawler_v = f"AND (v.asn IS NULL OR v.asn NOT IN ({_asn_in}))"
+    _q_bot   = "" if wv_bots else f"AND quality_score >= 50 AND is_datacenter IS NOT TRUE {_q_crawler}"
     _q_admin = "AND (user_id IS NULL OR user_id NOT IN (SELECT id FROM web_users WHERE is_admin))"
     _q = f"{_q_bot} {_q_admin}"
     _p = {"f": wv_from, "t": wv_to}
@@ -9316,11 +9324,12 @@ elif page == "👣 زوّار الموقع":
         15169: "Google Cloud (bot)", 396982: "Google Cloud (bot)",
         14618: "AWS (bot)", 16509: "AWS (bot)",
         24940: "Hetzner (bot)", 16276: "OVH (bot)",
+        32934: "Meta/Facebook (crawler)", 714: "Apple (Applebot/prefetch)",
         # VPN شائع
         63023: "Aruba إيطاليا (VPN)", 3356: "Level 3/Lumen",
     }
 
-    _visitors_today = pd.read_sql("""
+    _visitors_today = pd.read_sql(f"""
         WITH todays_visits AS (
           SELECT v.visitor_id, v.user_id, v.city, v.asn, v.source,
                  v.referrer_kind, v.referrer_host,
@@ -9330,6 +9339,7 @@ elif page == "👣 زوّار الموقع":
                 BETWEEN %(f)s AND %(t)s
             AND v.quality_score >= 50
             AND v.is_datacenter IS NOT TRUE
+            {_q_crawler_v}
             AND (v.user_id IS NULL
                  OR v.user_id NOT IN (SELECT id FROM web_users WHERE is_admin))
         ),
