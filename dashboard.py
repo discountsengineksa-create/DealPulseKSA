@@ -2373,13 +2373,18 @@ if page == "الاستعلام والتعديل":
                     st.divider()
 
                     # الصف 5: الأهمية + التواريخ + عمولتي
-                    # priority_score = SMALLINT بعد migration_065: 0/3/6/10.
-                    # نعرض التسميات بالعربي ونحفظ الرقم في القاعدة.
+                    # priority_score_int = SMALLINT بعد migration_065: 0/3/6/10.
+                    # ⚠️ res جاي من SELECT * فيحوي العمود القديم النصّي priority_score
+                    # ('عادي'/'مهم') المحفوظ حتى migration_066 — نقرأ الرقمي فقط.
                     _PRIO_INT_TO_STR = {0: "عادي", 3: "مهم", 6: "عاجل", 10: "عاجل جداً"}
                     _PRIO_STR_TO_INT = {v: k for k, v in _PRIO_INT_TO_STR.items()}
                     r5c1, r5c2, r5c3, r5c4 = st.columns(4)
                     p_list = list(_PRIO_INT_TO_STR.values())
-                    _cur_prio_str = _PRIO_INT_TO_STR.get(int(res.get('priority_score') or 0), "عادي")
+                    try:
+                        _cur_prio_int = int(res.get('priority_score_int') or 0)
+                    except (TypeError, ValueError):
+                        _cur_prio_int = 0
+                    _cur_prio_str = _PRIO_INT_TO_STR.get(_cur_prio_int, "عادي")
                     _u_prio_str  = r5c1.selectbox("🚀 الأهمية", p_list, index=p_list.index(_cur_prio_str))
                     u_prio = _PRIO_STR_TO_INT[_u_prio_str]
                     u_start = r5c2.date_input("📅 تاريخ البداية", res['first_time'])
