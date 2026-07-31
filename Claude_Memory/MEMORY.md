@@ -107,5 +107,7 @@
 - [Entrepreneur Bootcamp](entrepreneur_bootcamp.md) — معسكر ٤ دورات (م. يوسف)؛ التسويق المتكامل ✅ في MARKETING_STRATEGY.md؛ ٣ جاية؛ المدرّب استخدم نبض كـcase study
 - [SEO Meta Code Leak (CTR)](seo_meta_code_leak.md) — لا تطبع كود الكوبون في meta description للمتجر (ينسخه من SERP بلا نقر → صفر CTR/عمولة)؛ أُصلح حيّاً web 20fcc5b؛ الوصف يقود بثقة+قيمة+CTA
 - [Seasonal School Traffic Bridge](seasonal_school_traffic_bridge.md) — عنقود المدرسة يجرّ سعوديين موسمياً و/back-to-school كانت معزولة؛ الجسر ١٣ رابط web 01898f6؛ OOM محلي = سقف معروف، تحقّق بالـTS parser
+- [SEO Page Portfolio Verdict](seo_page_portfolio_verdict.md) — ٧١٠/٧٦٤ صفحة صفر نقرة؛ المتاجر نيّة ميتة (بيلاس م5.7/398/0)؛ الأدلّة بلا طلب؛ التجميع وحده يكسب
+- [Calendar Conversion Hub](calendar_conversion_hub.md) — كل موسم صار بوابة (أزرار أقسام + دليل + عبارة فريدة)؛ مطبّ `<!-- -->` في التحقّق
 - [Salla Orders = Code Attribution](salla_orders_attribution_reality.md) — ٦ طلبات بينما المنصة أرسلت زائرَين؛ سلة تنسب بالكود لا النقرة؛ ٢.٨ زائر/متجر/شهر = يانصيب لا سيو؛ ثغرة تتبّع النسخ اليدوي
 - [Owned Audience Reality](owned_audience_reality.md) — ٥ مستخدمي بوت + ١٠ حسابات ويب + صفر بثّ؛ رهان تيليجرام بلا جمهور؛ cf_bot_score فارغ لكن الفلتر يعمل بدونه
