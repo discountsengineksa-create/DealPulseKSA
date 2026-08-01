@@ -1878,7 +1878,7 @@ st.sidebar.radio(
 _MAIN_PAGES = [
 "إدخال بيانات الماستر", "الاستعلام والتعديل", "🎟️ أكواد إضافية", "جدول الكوبونات",
 "📦 أرشيف المنتهية",
-"جدول الأقسام", "البحث عن كود", "طلبات الأكواد", "بيانات المستخدمين",
+"جدول الأقسام", "🗓️ مواسم المتاجر", "البحث عن كود", "طلبات الأكواد", "بيانات المستخدمين",
 "مستخدمو الموقع",
 "🌐 إدارة الموقع",
 ]
@@ -15353,3 +15353,113 @@ if page == "🛰️ متابعة المنصة":
             "فوق الجدولة دون لمس البيئة."
         )
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 🗓️ مواسم المتاجر — تنسيق يدوي لصفحات المناسبات (migration_067)
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "🗓️ مواسم المتاجر":
+    st.header("🗓️ مواسم المتاجر")
+    st.caption(
+        "حدّد يدوياً أي متاجر تظهر في كل صفحة مناسبة. هذا **يُضاف فوق** الاستنتاج "
+        "التلقائي من الأقسام ولا يلغيه — فالمتجر الذي يدخل بقسمه يبقى ظاهراً حتى لو "
+        "لم تختره هنا. يفيد المتاجر التي تخصّ موسماً بلا قسم يعبّر عنه (مثل متجر "
+        "توزيعات مدرسية قسمه «هدايا»)."
+    )
+
+    # المعرّفات مطابقة لـ SALE_SEASONS[].id في dealpulseksa-web/app/calendar/data.ts.
+    # أي تعديل هنا يجب أن يقابله تعديل هناك وإلا صار الاختيار بلا أثر على الموقع.
+    _SEASONS = [
+        ("back-to-school",   "🎒 العودة إلى المدارس",         "منتصف أغسطس – منتصف سبتمبر"),
+        ("national-day",     "🇸🇦 اليوم الوطني السعودي",       "18 – 25 سبتمبر"),
+        ("white-friday",     "🖤 الجمعة البيضاء",              "23 – 30 نوفمبر"),
+        ("eleven-eleven",    "1️⃣1️⃣ 11.11",                    "9 – 12 نوفمبر"),
+        ("twelve-twelve",    "🎁 12.12 ونهاية العام",          "10 – 31 ديسمبر"),
+        ("winter-clearance", "❄️ تصفية الشتاء",                "يناير"),
+        ("founding-day",     "🏛️ يوم التأسيس",                 "15 – 24 فبراير"),
+        ("ramadan",          "🌙 رمضان",                       "تقديري (هجري)"),
+        ("eid-fitr",         "🌟 عيد الفطر",                   "تقديري (هجري)"),
+        ("eid-adha",         "🕋 عيد الأضحى",                  "تقديري (هجري)"),
+        ("summer-sale",      "☀️ تخفيضات الصيف",               "يونيو – منتصف يوليو"),
+        ("riyadh-season",    "🎡 موسم الرياض",                 "أكتوبر – مارس"),
+    ]
+    _season_label = {s: f"{lbl}  ({win})" for s, lbl, win in _SEASONS}
+
+    _osel = st.selectbox(
+        "🗓️ اختر الموسم", options=[s for s, _, _ in _SEASONS],
+        format_func=lambda s: _season_label[s], key="occ_season_select")
+
+    _oc = get_conn(); _oc.rollback()
+    try:
+        _ostores = pd.read_sql(
+            "SELECT id, store_id, COALESCE(NULLIF(name_en,''), store_id) AS name_en, "
+            "COALESCE(store_tags,'') AS store_tags, COALESCE(occasions,'') AS occasions "
+            "FROM master ORDER BY store_id", _oc)
+    except Exception as _e:
+        st.error(f"تعذّر جلب المتاجر: {_e}"); _ostores = pd.DataFrame()
+    finally:
+        _oc.close()
+
+    if _ostores.empty:
+        st.info("لا توجد متاجر بعد.")
+    else:
+        _ostores["occ_list"] = _ostores["occasions"].apply(parse_tags)
+        _current = [int(r["id"]) for _, r in _ostores.iterrows()
+                    if _osel in r["occ_list"]]
+
+        _olabels = {
+            int(r["id"]): f'{r["store_id"]}  ·  {" / ".join(parse_tags(r["store_tags"])[:3]) or "بلا أقسام"}'
+            for _, r in _ostores.iterrows()
+        }
+
+        st.markdown(f"### المتاجر المُختارة لـ {_season_label[_osel]}")
+        _picked = st.multiselect(
+            "اختر المتاجر", options=list(_olabels.keys()),
+            default=_current, format_func=lambda i: _olabels[i],
+            key=f"occ_pick_{_osel}",
+            help="ابحث بالاسم. الأقسام معروضة بجانب كل متجر لتساعدك على القرار.")
+
+        _added   = sorted(set(_picked) - set(_current))
+        _removed = sorted(set(_current) - set(_picked))
+
+        if _added or _removed:
+            _msg = []
+            if _added:   _msg.append(f"➕ إضافة {len(_added)}")
+            if _removed: _msg.append(f"➖ إزالة {len(_removed)}")
+            st.warning(" · ".join(_msg) + " — اضغط حفظ للتطبيق.")
+        else:
+            st.caption(f"لا تغييرات. عدد المتاجر المُنسَّقة لهذا الموسم حالياً: {len(_current)}")
+
+        if st.button("💾 حفظ مواسم هذا الموسم", type="primary",
+                     disabled=not (_added or _removed), key=f"occ_save_{_osel}"):
+            try:
+                _wc = get_conn(); _wc.rollback(); _wcur = _wc.cursor()
+                _n = 0
+                for _sid in _added + _removed:
+                    _row = _ostores[_ostores["id"] == _sid].iloc[0]
+                    _lst = list(_row["occ_list"])
+                    if _sid in _added and _osel not in _lst:
+                        _lst.append(_osel)
+                    elif _sid in _removed and _osel in _lst:
+                        _lst.remove(_osel)
+                    # نفس اصطلاح store_tags: عمود نصّي بصيغة '{a,b}'، وفارغ = NULL.
+                    _lit = ("{" + ",".join(_lst) + "}") if _lst else None
+                    _wcur.execute("UPDATE master SET occasions=%s WHERE id=%s", (_lit, int(_sid)))
+                    _n += 1
+                _wc.commit(); _wc.close()
+                st.success(f"✅ حُدِّث {_n} متجراً. الموقع يلتقط التغيير خلال ساعة (ISR).")
+                st.rerun()
+            except Exception as _e:
+                st.error(f"فشل الحفظ: {_e}")
+
+        st.divider()
+        st.subheader("📋 كل المتاجر المُنسَّقة (كل المواسم)")
+        _tagged = _ostores[_ostores["occ_list"].apply(len) > 0]
+        if _tagged.empty:
+            st.info("لا متجر مُنسَّق يدوياً بعد — الصفحات تعتمد الاستنتاج من الأقسام وحده.")
+        else:
+            _view = pd.DataFrame({
+                "المتجر": _tagged["store_id"],
+                "المواسم": _tagged["occ_list"].apply(
+                    lambda ls: " · ".join(_season_label.get(x, x).split("  (")[0] for x in ls)),
+            })
+            st.dataframe(_view, width="stretch", hide_index=True)
