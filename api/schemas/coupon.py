@@ -23,6 +23,9 @@ class StoreResult(BaseModel):
     discount_value: str | None = None
     store_tags: list[str] = Field(default_factory=list)
     store_tags_en: list[str] = Field(default_factory=list)
+    # مواسم يظهر فيها المتجر صراحةً (migration_067) — معرّفات SALE_SEASONS.
+    # مفردات مستقلة عن store_tags: التصنيف يقول «ماذا يبيع»، وهذا يقول «في أي موسم».
+    occasions: list[str] = Field(default_factory=list)
     is_trending: bool = False
     priority_score: int = 0
     is_promoted: bool = False

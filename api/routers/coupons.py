@@ -204,6 +204,7 @@ def _select_lang_clause(lang: str) -> str:
             description,
             COALESCE(NULLIF(store_tags_en, ''),  store_tags)    AS store_tags,
             store_tags_en,
+            occasions,
             CASE WHEN (last_time IS NULL OR last_time >= CURRENT_DATE) THEN discount_value ELSE NULL END AS discount_value,
             total_coupon_copies, total_link_clicks, is_trending_bool AS is_trending, priority_score_int AS priority_score,
             COALESCE(is_promoted, FALSE) AS is_promoted,
@@ -234,6 +235,7 @@ def _select_lang_clause(lang: str) -> str:
         store_bio,   store_bio_en,
         description,
         store_tags,  store_tags_en,
+        occasions,
         CASE WHEN (last_time IS NULL OR last_time >= CURRENT_DATE) THEN discount_value ELSE NULL END AS discount_value,
         total_coupon_copies, total_link_clicks, is_trending_bool AS is_trending, priority_score_int AS priority_score,
         COALESCE(is_promoted, FALSE) AS is_promoted,
@@ -358,9 +360,10 @@ def get_all_coupons(
 
     results = [
         StoreResult(
-            **{k: v for k, v in row.items() if k not in ("store_tags", "store_tags_en")},
+            **{k: v for k, v in row.items() if k not in ("store_tags", "store_tags_en", "occasions")},
             store_tags=_parse_tags(row.get("store_tags")),
             store_tags_en=_parse_tags(row.get("store_tags_en")),
+            occasions=_parse_tags(row.get("occasions")),
         )
         for row in rows
     ]
@@ -432,9 +435,10 @@ def search_coupons(
 
     results = [
         StoreResult(
-            **{k: v for k, v in row.items() if k not in ("store_tags", "store_tags_en")},
+            **{k: v for k, v in row.items() if k not in ("store_tags", "store_tags_en", "occasions")},
             store_tags=_parse_tags(row.get("store_tags")),
             store_tags_en=_parse_tags(row.get("store_tags_en")),
+            occasions=_parse_tags(row.get("occasions")),
         )
         for row in rows
     ]
@@ -477,9 +481,10 @@ def get_coupon_detail(
     if not row:
         raise HTTPException(status_code=404, detail="store not found")
     return StoreResult(
-        **{k: v for k, v in row.items() if k not in ("store_tags", "store_tags_en")},
+        **{k: v for k, v in row.items() if k not in ("store_tags", "store_tags_en", "occasions")},
         store_tags=_parse_tags(row.get("store_tags")),
         store_tags_en=_parse_tags(row.get("store_tags_en")),
+        occasions=_parse_tags(row.get("occasions")),
     )
 
 
@@ -513,7 +518,8 @@ def get_coupon_by_slug(
     if not row:
         raise HTTPException(status_code=404, detail="store not found")
     return StoreResult(
-        **{k: v for k, v in row.items() if k not in ("store_tags", "store_tags_en")},
+        **{k: v for k, v in row.items() if k not in ("store_tags", "store_tags_en", "occasions")},
         store_tags=_parse_tags(row.get("store_tags")),
         store_tags_en=_parse_tags(row.get("store_tags_en")),
+        occasions=_parse_tags(row.get("occasions")),
     )
