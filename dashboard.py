@@ -9334,6 +9334,50 @@ elif page == "👣 زوّار الموقع":
         63023: "Aruba إيطاليا (VPN)", 3356: "Level 3/Lumen",
     }
 
+    # ── الصفحة: رابط يُفتح + اسم مقروء + نوع ────────────────────────────────
+    # landing_path يُخزَّن مُرمَّزاً (%D8%…) لأن أسماء المتاجر/الأقسام عربية، فالخام
+    # غير قابل للقراءة. نفتح الرابط بالصيغة المُرمَّزة (هي الصالحة للمتصفح)
+    # ونعرض النص مفكوك الترميز. www هو القانوني (يطابق GSC ويتجنّب التحويل).
+    from urllib.parse import unquote as _unquote  # محلي بالصفحة — لا يستخدمه غيرها
+    _SITE = os.getenv("SITE_URL", "https://www.dealpulseksa.com").rstrip("/")
+
+    def _page_url(path):
+        p = (path or "/").strip() or "/"
+        if not p.startswith("/"):
+            p = "/" + p
+        return _SITE + p
+
+    def _page_label(path):
+        try:
+            return _unquote(path or "/")
+        except Exception:
+            return path or "/"
+
+    _PAGE_KINDS = {
+        "blog": "📝 مقال", "store": "🏪 متجر", "category": "📂 قسم",
+        "c": "🎯 صفحة كود", "calendar": "🗓️ التقويم", "deals": "🔥 عروض",
+        "stores": "🏬 دليل المتاجر", "categories": "📂 دليل الأقسام",
+        "trending": "🔥 الرائج", "search": "🔎 بحث",
+        "account": "👤 حساب", "login": "🔐 دخول", "register": "🔐 تسجيل",
+        "favorites": "❤️ المفضلة", "about": "📄 ثابتة", "faq": "📄 ثابتة",
+        "terms": "📄 ثابتة", "privacy": "📄 ثابتة", "contact": "📄 ثابتة",
+        "how-it-works": "📄 ثابتة",
+    }
+
+    def _page_kind(path):
+        """تصنيف الصفحة من أول مقطع في المسار (blog/store/category/…)."""
+        p = (path or "/").strip().strip("/")
+        if not p:
+            return "🏠 الرئيسية"
+        low = p.lower()
+        if low.startswith("blog/category/"):
+            return "📚 قسم مدونة"
+        seg = low.split("/")[0]
+        if seg in _PAGE_KINDS:
+            return _PAGE_KINDS[seg]
+        # مقطع جذري واحد بشرطة = صفحة موسم/هبوط (national-day, back-to-school…)
+        return "🗓️ موسم/هبوط" if ("/" not in low and "-" in seg) else "📄 صفحة"
+
     _visitors_today = pd.read_sql(f"""
         WITH todays_visits AS (
           SELECT v.visitor_id, v.user_id, v.city, v.asn, v.source,
@@ -9468,12 +9512,15 @@ elif page == "👣 زوّار الموقع":
                 return f"🔗 {host}" if host else "🔗 موقع آخر"
             return "—"
 
+        _paths = _visitors_today["first_landing"].fillna("/")
         _view = pd.DataFrame({
             "الهوية": _visitors_today.apply(_identity, axis=1),
             "المدينة": _visitors_today["city"].fillna("غير معروف"),
             "المشغّل": _visitors_today["asn"].apply(_operator),
             "دخل من": _visitors_today.apply(_entry_source, axis=1),
-            "أول صفحة": _visitors_today["first_landing"].fillna("/"),
+            "نوع الصفحة": _paths.apply(_page_kind),
+            "أول صفحة": _paths.apply(_page_label),
+            "فتح": _paths.apply(_page_url),
             "صفحات تصفّحها": _visitors_today["actions"].astype(int),
             "آخر نشاط": pd.to_datetime(_visitors_today["ksa_time"]).dt.strftime("%m-%d %H:%M"),
         })
@@ -9485,11 +9532,20 @@ elif page == "👣 زوّار الموقع":
                 "المدينة":    st.column_config.TextColumn(width="small"),
                 "المشغّل":    st.column_config.TextColumn(width="small"),
                 "دخل من":    st.column_config.TextColumn(width="small"),
-                "أول صفحة":   st.column_config.TextColumn(width="medium"),
+                "نوع الصفحة": st.column_config.TextColumn(width="small"),
+                # النص مفكوك الترميز للقراءة، والفتح من عمود الرابط المجاور
+                # (LinkColumn لا يعرض نصاً مخصّصاً لكل صف — فصلناهما عمداً).
+                "أول صفحة":   st.column_config.TextColumn(width="large"),
+                "فتح":        st.column_config.LinkColumn(
+                    width="small", display_text="🔗 افتح",
+                    help="يفتح نفس الصفحة على الموقع في تبويب جديد"),
                 "صفحات تصفّحها": st.column_config.NumberColumn(width="small"),
                 "آخر نشاط":  st.column_config.TextColumn(width="small"),
             },
         )
+        st.caption("🔗 اضغط «افتح» لترى نفس الصفحة التي دخل منها الزائر. "
+                   "«صفحات تصفّحها» = أحداث مسجّلة (فتح متجر/نقر/نسخ/بحث)، "
+                   "وليس عدد الصفحات — الموقع يسجّل زيارة واحدة لكل جلسة.")
 
         _n_reg  = int(_visitors_today["reg_email"].notna().sum())
         _n_bot  = int(_visitors_today["bot_username"].notna().sum())
@@ -9533,7 +9589,7 @@ elif page == "👣 زوّار الموقع":
             _figv.update_layout(height=300, margin=dict(t=10, b=10, l=10, r=10))
             st.plotly_chart(_figv, width='stretch')
 
-    # ── المدن + صفحات الدخول ────────────────────────────────────────────────
+    # ── المدن + من أحالهم ───────────────────────────────────────────────────
     t1, t2 = st.columns(2)
     with t1:
         st.markdown("#### 📍 أهم المدن")
@@ -9546,15 +9602,236 @@ elif page == "👣 زوّار الموقع":
         _cit.columns = ["المدينة", "زيارات"]
         st.dataframe(_cit, width='stretch', hide_index=True)
     with t2:
-        st.markdown("#### 🚪 صفحات الدخول الأكثر")
-        _land = pd.read_sql(f"""
-            SELECT COALESCE(NULLIF(landing_path, ''), '/') AS path, COUNT(*) AS visits
+        # الدائرة أعلاه تُظهر «النوع» (بحث/سوشال) — هذا يُظهر الموقع نفسه بالاسم
+        st.markdown("#### 🔗 من أحالهم (المصدر بالاسم)")
+        _ref = pd.read_sql(f"""
+            SELECT COALESCE(NULLIF(referrer_host, ''), '—') AS host,
+                   COALESCE(referrer_kind, 'direct')        AS kind,
+                   COUNT(*) AS visits
             FROM web_visits
             WHERE created_at::date BETWEEN %(f)s AND %(t)s {_q}
-            GROUP BY 1 ORDER BY visits DESC LIMIT 12
+            GROUP BY 1, 2 ORDER BY visits DESC LIMIT 12
         """, conn, params=_p)
-        _land.columns = ["الصفحة", "زيارات"]
-        st.dataframe(_land, width='stretch', hide_index=True)
+        if _ref.empty:
+            st.caption("لا بيانات إحالة في هذا النطاق.")
+        else:
+            _ref["kind"] = _ref["kind"].map(lambda x: _SRC_AR.get(x, x))
+            _ref["host"] = _ref.apply(
+                lambda r: "↗️ دخول مباشر (بلا إحالة)" if r["host"] == "—" else r["host"],
+                axis=1)
+            _ref.columns = ["المصدر", "النوع", "زيارات"]
+            st.dataframe(_ref, width='stretch', hide_index=True)
+
+    # ── 🚪 صفحات الدخول: وش الصفحة، من وين جاءوا، وهل تفاعلوا ───────────────
+    st.divider()
+    st.markdown("### 🚪 صفحات الدخول — وش الصفحة ومن وين دخلوا")
+    st.caption(
+        "كل صف = الصفحة التي بدأ منها الزائر جلسته. اضغط «افتح» لترى الصفحة نفسها، "
+        "واقرأ من أين جاء الزوّار إليها وهل تفاعلوا بعدها — هذا يقول لك أي صفحة "
+        "تستحق التطوير وأيها تجذب بلا نتيجة."
+    )
+
+    # التفاعل يُنسب لآخر صفحة دخول سبقت الحدث لنفس الزائر (لا تكرار عبر الصفحات).
+    _lp = pd.read_sql(f"""
+        WITH lp AS (
+          SELECT COALESCE(NULLIF(landing_path, ''), '/') AS path,
+                 COALESCE(visitor_id::text, encode(ip_hash, 'hex')) AS who,
+                 referrer_kind, created_at
+          FROM web_visits
+          WHERE created_at::date BETWEEN %(f)s AND %(t)s {_q}
+        ),
+        agg AS (
+          SELECT path,
+                 COUNT(*)                  AS visits,
+                 COUNT(DISTINCT who)       AS visitors,
+                 COUNT(*) FILTER (WHERE referrer_kind = 'search')   AS s_search,
+                 COUNT(*) FILTER (WHERE referrer_kind = 'social')   AS s_social,
+                 COUNT(*) FILTER (WHERE referrer_kind = 'referral') AS s_ref,
+                 COUNT(*) FILTER (WHERE referrer_kind IS NULL
+                                     OR referrer_kind IN ('direct', 'internal')) AS s_direct,
+                 MAX(created_at) AS last_seen
+          FROM lp GROUP BY path
+        ),
+        acts AS (
+          SELECT a.action_type,
+                 (SELECT COALESCE(NULLIF(v.landing_path, ''), '/')
+                    FROM web_visits v
+                   WHERE v.visitor_id = a.visitor_id
+                     AND v.created_at <= a.action_time
+                   ORDER BY v.created_at DESC LIMIT 1) AS path
+          FROM action_logs a
+          WHERE a.visitor_id IS NOT NULL
+            AND a.action_time::date BETWEEN %(f)s AND %(t)s
+        ),
+        eng AS (
+          SELECT path,
+                 COUNT(*) FILTER (WHERE action_type = 'view_store')  AS views,
+                 COUNT(*) FILTER (WHERE action_type = 'click_link')  AS clicks,
+                 COUNT(*) FILTER (WHERE action_type = 'copy_coupon') AS copies
+          FROM acts WHERE path IS NOT NULL GROUP BY path
+        )
+        SELECT g.path, g.visits, g.visitors,
+               g.s_search, g.s_social, g.s_ref, g.s_direct,
+               COALESCE(e.views, 0)  AS views,
+               COALESCE(e.clicks, 0) AS clicks,
+               COALESCE(e.copies, 0) AS copies,
+               to_char(g.last_seen, 'MM-DD HH24:MI') AS last_seen
+        FROM agg g LEFT JOIN eng e ON e.path = g.path
+        ORDER BY g.visits DESC
+        LIMIT 60
+    """, conn, params=_p)
+
+    if _lp.empty:
+        st.info("لا صفحات دخول في هذا النطاق.")
+    else:
+        _lp_view = pd.DataFrame({
+            "النوع":    _lp["path"].apply(_page_kind),
+            "الصفحة":   _lp["path"].apply(_page_label),
+            "فتح":      _lp["path"].apply(_page_url),
+            "زيارات":   _lp["visits"].astype(int),
+            "زوّار":     _lp["visitors"].astype(int),
+            "🔍 بحث":   _lp["s_search"].astype(int),
+            "📱 سوشال": _lp["s_social"].astype(int),
+            "🔗 إحالة": _lp["s_ref"].astype(int),
+            "↗️ مباشر": _lp["s_direct"].astype(int),
+            "🏪 فتح متجر": _lp["views"].astype(int),
+            "👆 نقر":   _lp["clicks"].astype(int),
+            "📋 نسخ":   _lp["copies"].astype(int),
+            "آخر زيارة": _lp["last_seen"],
+        })
+        st.dataframe(
+            _lp_view, width='stretch', hide_index=True,
+            column_config={
+                "النوع":  st.column_config.TextColumn(width="small"),
+                "الصفحة": st.column_config.TextColumn(width="large"),
+                "فتح":    st.column_config.LinkColumn(
+                    width="small", display_text="🔗 افتح",
+                    help="يفتح الصفحة على الموقع في تبويب جديد"),
+            },
+        )
+        st.caption(
+            "🏪/👆/📋 = ما فعله زوّار هذه الصفحة بعد دخولهم (منسوب لآخر صفحة دخول "
+            "سبقت الحدث). صفحة بزيارات عالية وأصفار في التفاعل = محتوى يجذب "
+            "لكن لا يحوّل → أضف روابط/أكواد أوضح داخلها."
+        )
+
+        # ── فحص صفحة واحدة: من وين جاءوا، وش سوّوا، وأي كلمة جابتهم ─────────
+        st.markdown("#### 🔬 افحص صفحة بعينها")
+        _opts = list(_lp["path"])
+        _pick = st.selectbox(
+            "اختر الصفحة", _opts, key="wv_page_pick",
+            format_func=lambda p: f"{_page_kind(p)} · {_page_label(p)}")
+        _pp = dict(_p, path=_pick)
+
+        _d1, _d2, _d3 = st.columns([2, 1, 1])
+        with _d1:
+            st.link_button("🔗 افتح الصفحة على الموقع", _page_url(_pick),
+                           width='stretch')
+        _row = _lp[_lp["path"] == _pick].iloc[0]
+        _d2.metric("زيارات", int(_row["visits"]))
+        _d3.metric("زوّار فريدون", int(_row["visitors"]))
+
+        _c1, _c2, _c3 = st.columns(3)
+        with _c1:
+            st.markdown("**من وين دخلوا**")
+            _pref = pd.read_sql(f"""
+                SELECT COALESCE(NULLIF(referrer_host, ''), '↗️ مباشر') AS host,
+                       COUNT(*) AS visits
+                FROM web_visits
+                WHERE COALESCE(NULLIF(landing_path, ''), '/') = %(path)s
+                  AND created_at::date BETWEEN %(f)s AND %(t)s {_q}
+                GROUP BY 1 ORDER BY visits DESC LIMIT 8
+            """, conn, params=_pp)
+            _pref.columns = ["المصدر", "زيارات"]
+            st.dataframe(_pref, width='stretch', hide_index=True)
+        with _c2:
+            st.markdown("**من أي مدينة**")
+            _pcit = pd.read_sql(f"""
+                SELECT COALESCE(NULLIF(city, ''), 'غير معروف') AS city,
+                       COUNT(*) AS visits
+                FROM web_visits
+                WHERE COALESCE(NULLIF(landing_path, ''), '/') = %(path)s
+                  AND created_at::date BETWEEN %(f)s AND %(t)s {_q}
+                GROUP BY 1 ORDER BY visits DESC LIMIT 8
+            """, conn, params=_pp)
+            _pcit.columns = ["المدينة", "زيارات"]
+            st.dataframe(_pcit, width='stretch', hide_index=True)
+        with _c3:
+            st.markdown("**وش سوّوا بعدها**")
+            # نفس منطق الإسناد أعلاه: الحدث يتبع آخر صفحة دخول سبقته.
+            _pact = pd.read_sql(f"""
+                WITH acts AS (
+                  SELECT a.action_type, a.store_id, a.details,
+                         (SELECT COALESCE(NULLIF(v.landing_path, ''), '/')
+                            FROM web_visits v
+                           WHERE v.visitor_id = a.visitor_id
+                             AND v.created_at <= a.action_time
+                           ORDER BY v.created_at DESC LIMIT 1) AS path
+                  FROM action_logs a
+                  WHERE a.visitor_id IS NOT NULL
+                    AND a.action_time::date BETWEEN %(f)s AND %(t)s
+                )
+                SELECT action_type,
+                       COALESCE(NULLIF(store_id, ''), NULLIF(details, ''), '—') AS target,
+                       COUNT(*) AS cnt
+                FROM acts WHERE path = %(path)s
+                GROUP BY 1, 2 ORDER BY cnt DESC LIMIT 10
+            """, conn, params=_pp)
+            if _pact.empty:
+                st.caption("لا تفاعل مسجّل — دخلوا وخرجوا.")
+            else:
+                _ACT_AR = {"view_store": "🏪 فتح متجر", "click_link": "👆 نقر رابط",
+                           "copy_coupon": "📋 نسخ كود", "search": "🔎 بحث",
+                           "view_tag": "📂 فتح قسم", "favorite_add": "❤️ مفضلة"}
+                _pact["action_type"] = _pact["action_type"].map(
+                    lambda a: _ACT_AR.get(a, a))
+                _pact.columns = ["الحركة", "المتجر/التفصيل", "عدد"]
+                st.dataframe(_pact, width='stretch', hide_index=True)
+
+        # كلمات Google التي جلبت هذه الصفحة — «ليش دخلوا» بالضبط.
+        # الإحالة من قوقل لا تحمل الكلمة (تُجرَّد)، فمصدرها الوحيد Search Console.
+        with st.expander("🔑 أي كلمة بحث جابتهم لهذه الصفحة؟ (من Google Search Console)"):
+            _gj = os.getenv("GSC_SA_JSON")
+            if not _gj:
+                st.info("GSC غير مربوط على الداشبورد — أضف `GSC_SA_JSON` و`GSC_SITE` "
+                        "لترى الكلمات التي جلبت كل صفحة.")
+            elif st.button("📊 اجلب كلمات هذه الصفحة (آخر 28 يوم)", key="wv_gsc_q"):
+                _gsite = os.getenv("GSC_SITE", "https://www.dealpulseksa.com/")
+                _rows, _gerr = None, None
+                with st.spinner("جارٍ الجلب من Search Console..."):
+                    try:
+                        from google.oauth2 import service_account
+                        from googleapiclient.discovery import build
+                        _cr = service_account.Credentials.from_service_account_info(
+                            json.loads(_gj),
+                            scopes=["https://www.googleapis.com/auth/webmasters.readonly"])
+                        _sv = build("searchconsole", "v1", credentials=_cr,
+                                    cache_discovery=False)
+                        _end = datetime.datetime.now(datetime.timezone.utc).date()
+                        _rows = _sv.searchanalytics().query(
+                            siteUrl=_gsite,
+                            body={"startDate": str(_end - timedelta(days=28)),
+                                  "endDate": str(_end),
+                                  "dimensions": ["query"],
+                                  "dimensionFilterGroups": [{"filters": [{
+                                      "dimension": "page", "operator": "equals",
+                                      "expression": _page_url(_pick)}]}],
+                                  "rowLimit": 25}).execute().get("rows") or []
+                    except Exception as _ge:
+                        _gerr = str(_ge)
+                if _gerr:
+                    st.error(f"تعذّر الجلب: {_gerr[:300]}")
+                elif not _rows:
+                    st.warning("لا كلمات لهذه الصفحة في آخر 28 يوم — إمّا غير مفهرسة "
+                               "بعد، أو ترافيكها ليس من بحث Google.")
+                else:
+                    st.dataframe(pd.DataFrame([{
+                        "الكلمة": r["keys"][0],
+                        "نقرات": int(r.get("clicks", 0)),
+                        "ظهور": int(r.get("impressions", 0)),
+                        "CTR": f"{r.get('ctr', 0) * 100:.1f}%",
+                        "الترتيب": f"{r.get('position', 0):.1f}",
+                    } for r in _rows]), width='stretch', hide_index=True)
 
     # ── 🔁 الزوّار والعائدون (هوية ثابتة عبر visitor_id) ────────────────────
     st.divider()
@@ -9643,8 +9920,16 @@ elif page == "👣 زوّار الموقع":
             ORDER BY created_at DESC
             LIMIT 50
         """, conn, params=_p)
-        _log.columns = ["الوقت", "الزائر", "المدينة", "الجهاز", "المصدر", "صفحة الدخول", "الجودة"]
-        st.dataframe(_log, width='stretch', hide_index=True)
+        _log["url"] = _log["landing"].apply(_page_url)
+        _log["landing"] = _log["landing"].apply(_page_label)
+        _log = _log[["t", "visitor", "city", "device", "src", "landing", "url", "q"]]
+        _log.columns = ["الوقت", "الزائر", "المدينة", "الجهاز", "المصدر",
+                        "صفحة الدخول", "فتح", "الجودة"]
+        st.dataframe(
+            _log, width='stretch', hide_index=True,
+            column_config={"فتح": st.column_config.LinkColumn(
+                width="small", display_text="🔗 افتح")},
+        )
 
     conn.close()
 
