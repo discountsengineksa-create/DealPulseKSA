@@ -116,3 +116,5 @@
 - [DCM Network Channel](dcm_network_channel.md) — ٣ منصّات؛ حصة الأكواد بالأرباح ($0=3)؛ ندرة أكواد أقفلت الحساب؛ المتاح مكرّر بكودماب؛ ليس رافعة نمو
 - [Occasion Page Relevance Filter](occasion_page_relevance_filter.md) — store_tags تصنيف لا موسم؛ BTS ٤٨→١٩؛ + master.occasions (migration_067) وصفحة «مواسم المتاجر» بالداشبورد
 - [Windsor GSC Connector](windsor_gsc_connector.md) — الخطة المجانية ترجع صفوفاً وهمية بأصفار بلا خطأ؛ فكّ إنستغرام لم يكفِ (get_connectors نظيف والقراءة محجوبة) يفتحها
+- [Never Publish Competing Codes](feedback_never_publish_competing_codes.md) — لا تذكر كود المتجر الترحيبي ولو كان أعلى؛ البانر قابل للإغلاق فالعمولة ليست مفقودة حتماً
+- [Jolina Pre-Purchase Angle](jolina_prepurchase_angle.md) — الزاوية «الاسترجاع/الرسوم» لا الكود؛ ومطبّ: مواقع JS لا تُقرأ بـcurl (غلطة وسم أطفال)
