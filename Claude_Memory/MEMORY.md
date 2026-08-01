@@ -117,5 +117,6 @@
 - [Occasion Page Relevance Filter](occasion_page_relevance_filter.md) — store_tags تصنيف لا موسم؛ BTS ٤٨→١٩؛ + master.occasions (migration_067) وصفحة «مواسم المتاجر» بالداشبورد
 - [Windsor GSC Connector](windsor_gsc_connector.md) — الخطة المجانية ترجع صفوفاً وهمية بأصفار بلا خطأ؛ فكّ إنستغرام لم يكفِ (get_connectors نظيف والقراءة محجوبة) يفتحها
 - [Never Publish Competing Codes](feedback_never_publish_competing_codes.md) — لا تذكر كود المتجر الترحيبي ولو كان أعلى؛ البانر قابل للإغلاق فالعمولة ليست مفقودة حتماً
+- [Blog ASQ Cluster](blog_asq_cluster.md) — عبدالصمد القرشي ١٢ مقالاً على خطوط المنتج؛ الاسم بلا مسافة؛ نمط تحقّق esbuild بديل البناء
 - [Blog Inline Code Chips](blog_inline_code_chips.md) — شارة كود/CTA بجانب كل ذكر متجر في ١٣٦٥ مقال؛ الكشف يتبع الإسناد؛ العلاج بالعارض لا بالمحتوى
 - [Jolina Pre-Purchase Angle](jolina_prepurchase_angle.md) — الزاوية «الاسترجاع/الرسوم» لا الكود؛ ومطبّ: مواقع JS لا تُقرأ بـcurl (غلطة وسم أطفال)
