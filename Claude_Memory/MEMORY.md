@@ -105,7 +105,7 @@
 - [Boostiny Publisher Channel](boostiny_publisher_channel.md) — ناشر Boostiny (عملاء كبار/توصيل طعام)؛ الطلب مُقدَّم؛ قناة رابعة
 - [Marketing Baseline & Strategy](marketing_baseline_and_strategy.md) — ~121 سعودي/شهر (89% بوتات)؛ التحويل ~16% يعمل فالعنق الترافيك؛ البحث التجميعي يكسب النقرة؛ .agents/product-marketing.md
 - [Entrepreneur Bootcamp](entrepreneur_bootcamp.md) — معسكر ٤ دورات (م. يوسف)؛ التسويق المتكامل ✅ في MARKETING_STRATEGY.md؛ ٣ جاية؛ المدرّب استخدم نبض كـcase study
-- [SEO Meta Code Leak (CTR)](seo_meta_code_leak.md) — لا تطبع كود الكوبون في meta description للمتجر (ينسخه من SERP بلا نقر → صفر CTR/عمولة)؛ أُصلح حيّاً web 20fcc5b؛ الوصف يقود بثقة+قيمة+CTA
+- [SEO Meta Code: Per-Network](seo_meta_code_leak.md) — ⚠️ صُحِّحت: كشف الكود يتبع نموذج الإسناد؛ يُكشف لـ~٣٧ متجر إسناد-بالكود ويُحجب لـ~١١ إسناد-بالنقرة؛ attribution.ts + llms.txt (web ddee60e)
 - [Seasonal School Traffic Bridge](seasonal_school_traffic_bridge.md) — عنقود المدرسة يجرّ سعوديين موسمياً و/back-to-school كانت معزولة؛ الجسر ١٣ رابط web 01898f6؛ OOM محلي = سقف معروف، تحقّق بالـTS parser
 - [SEO Page Portfolio Verdict](seo_page_portfolio_verdict.md) — ٧١٠/٧٦٤ صفحة صفر نقرة؛ المتاجر نيّة ميتة (بيلاس م5.7/398/0)؛ الأدلّة بلا طلب؛ التجميع وحده يكسب
 - [Calendar Conversion Hub](calendar_conversion_hub.md) — كل موسم صار بوابة (أزرار أقسام + دليل + عبارة فريدة)؛ مطبّ `<!-- -->` في التحقّق
