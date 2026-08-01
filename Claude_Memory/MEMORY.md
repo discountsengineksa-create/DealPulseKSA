@@ -113,5 +113,5 @@
 - [Owned Audience Reality](owned_audience_reality.md) — ٥ مستخدمي بوت + ١٠ حسابات ويب + صفر بثّ؛ رهان تيليجرام بلا جمهور؛ cf_bot_score فارغ لكن الفلتر يعمل بدونه
 - [Prefer Codes over Tracking Links](feedback_prefer_codes_over_tracking_links.md) — المالك يفضّل الأكواد لا روابط التتبّع (إسناد أنظف + الروابط تنحجب/نقرها غير موثوق)
 - [DCM Network Channel](dcm_network_channel.md) — ٣ منصّات؛ حصة الأكواد بالأرباح ($0=3)؛ ندرة أكواد أقفلت الحساب؛ المتاح مكرّر بكودماب؛ ليس رافعة نمو
-- [Occasion Page Relevance Filter](occasion_page_relevance_filter.md) — صفحة المناسبة تفلتر بـstore_tags (طبقتان)؛ BTS كانت تسرد ٤٨ متجراً فيها عسل وفنادق → ٢٩؛ تواريخ الموسم من calendar/data.ts
+- [Occasion Page Relevance Filter](occasion_page_relevance_filter.md) — store_tags تصنيف لا موسم؛ الوسوم العامة أدخلت ١١ متجر عبايات/مجوهرات؛ BTS ٤٨→١٩؛ الإصلاح داتا لا كود (علي إكسبرس)
 - [Windsor GSC Connector](windsor_gsc_connector.md) — GSC موصول لكن الخطة المجانية (حسابان) ترجع صفوفاً وهمية بأصفار بلا خطأ؛ فكّ إنستغرام يفتحها
