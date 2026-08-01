@@ -28,4 +28,11 @@ metadata:
    (api حتى 2026-10-05، www حتى 2026-10-07). **الحل: `ssl.create_default_context(cafile=certifi.where())`** —
    ولا تعطّل التحقّق (`CERT_NONE`) قبل إثبات أن الشهادة سليمة فعلاً.
 
+**⚙️ وصفة التشغيل المثبَّتة (2026-08-01 — دفعة ٤٧ رابطاً):**
+- **المسار الصحيح:** `POST {INTERNAL_API_URL}/api/v1/admin/reindex-urls` بترويسة `X-Admin-Secret` (السر في `.env` محلياً باسم `ADMIN_SHARED_SECRET`). **`/admin/reindex-urls` بلا `/api/v1` يرجع 404** — كل الراوترات مركّبة بالبادئة في `bot_app.py`.
+- **الحمولة:** `{"urls": [...]}`، والسقف بالكود ٥٠ رابطاً للنداء الواحد.
+- **⚠️ لكن Cloudflare يقطع عند ~١٠٠ ثانية:** ٤٧ رابطاً في نداء واحد = **HTTP 524**. النداء يكمل بالخلفية لكن لا ترى النتيجة. **الحل المُختبَر: دفعات ٦ روابط** — ٨ دفعات مرّت كلها ٢٠٠.
+- **النتيجة:** IndexNow (Bing/Yandex/Naver/Seznam) ٢٠٠ لكل رابط، وGoogle Indexing API ٢٠٠ لـ٤٦ من ٤٧ في الجولة الأولى (واحد `Read timed out` عابر نجح بالإعادة). **أعد المتعثّر فقط** بفحص `google.code == 200`.
+- **لا تبحث عنها في `seo_index_submissions`:** الجدول يسجّل بـ`landing_page_id` فقط، وروابط المدوّنة/المتاجر تُرسل بلا صف. التأكيد من ردّ الـAPI نفسه.
+
 **تذكير الصراحة ([[content_guardrails_playbook]]):** IndexNow/Indexing API = طلب زحف، **ليس ضمان فهرسة**. العنق الحقيقي سلطة الدومين/الباكلينك ([[seo_indexation_status]] · [[seo_authority_building]]) لا كمّ الدفع. راجع [[seo_google_indexing_live]].
