@@ -114,5 +114,5 @@
 - [Salla Proven Converters](salla_proven_converters.md) — أول ١٣ طلب (~٥٢٥ ر.س)؛ هدف ٢٠٪ الأعلى وكان مقطوعاً عن ترافيكنا (وُصل web b957858)؛ سلة تنسب بالكود فأغلب الطلبات من خارج الموقع
 - [Prefer Codes over Tracking Links](feedback_prefer_codes_over_tracking_links.md) — المالك يفضّل الأكواد لا روابط التتبّع (إسناد أنظف + الروابط تنحجب/نقرها غير موثوق)
 - [DCM Network Channel](dcm_network_channel.md) — ٣ منصّات؛ حصة الأكواد بالأرباح ($0=3)؛ ندرة أكواد أقفلت الحساب؛ المتاح مكرّر بكودماب؛ ليس رافعة نمو
-- [Occasion Page Relevance Filter](occasion_page_relevance_filter.md) — store_tags تصنيف لا موسم؛ الوسوم العامة أدخلت ١١ متجر عبايات/مجوهرات؛ BTS ٤٨→١٩؛ الإصلاح داتا لا كود (علي إكسبرس)
-- [Windsor GSC Connector](windsor_gsc_connector.md) — GSC موصول لكن الخطة المجانية (حسابان) ترجع صفوفاً وهمية بأصفار بلا خطأ؛ فكّ إنستغرام يفتحها
+- [Occasion Page Relevance Filter](occasion_page_relevance_filter.md) — store_tags تصنيف لا موسم؛ BTS ٤٨→١٩؛ + master.occasions (migration_067) وصفحة «مواسم المتاجر» بالداشبورد
+- [Windsor GSC Connector](windsor_gsc_connector.md) — الخطة المجانية ترجع صفوفاً وهمية بأصفار بلا خطأ؛ فكّ إنستغرام لم يكفِ (get_connectors نظيف والقراءة محجوبة) يفتحها

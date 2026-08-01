@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: c62855b1-ac5e-43c8-b626-e7e183f2c621
-  modified: 2026-08-01T04:40:30.818Z
+  modified: 2026-08-01T07:18:13.503Z
 ---
 
 **Windsor.ai MCP** موصول بحسابين: `searchconsole` (`https://www.dealpulseksa.com/`) و
@@ -15,8 +15,13 @@ metadata:
 `"Uh-oh! You've connected more accounts than your Free plan allows"` مع أصفار — **لا يرجع
 خطأ**. أي تحليل يبني على هذا الردّ بلا قراءته يخرج بأرقام صفرية كاذبة (تحقّقت 1 أغسطس 2026).
 
-**الحل:** فكّ ربط إنستغرام من Windsor لتحرير الخانة لـSearch Console (أهمّ مصدر: استعلامات/
-صفحات/مراكز GSC — نفس البيانات في [[seo_page_portfolio_verdict]] و [[seo_indexation_status]])،
-أو الترقية. حقول GSC المتاحة: `query`, `pagepath`, `clicks`, `impressions`, `position`,
-`country`, `device`, `branded_vs_nonbranded`, `search_appearance` — استدعِ `get_fields` قبل
-`get_data` دائماً.
+**⚠️ فكّ إنستغرام لم يكفِ (جُرِّب 1 أغسطس 2026):** ألغى المالك اختيار حساب إنستغرام، وواجهة
+Windsor صارت `Data sources in use: 1/1`، و`get_connectors` رجّع **searchconsole وحده** —
+ومع ذلك بقي `get_data` يرجّع رسالة تجاوز الخطة. أي بوّابة الخطة على مسار البيانات تتحقّق
+من شيء غير قائمة الحسابات الظاهرة (كاش/تسجيل تاريخي). **لا تفترض أن اختفاء الموصِّل من
+`get_connectors` يعني أن القراءة انفتحت — اختبر بـ`get_data` فعلياً.** المتبقّي: انتظار
+انتشار، أو إعادة تسجيل دخول، أو ترقية.
+
+حقول GSC المتاحة: `query`, `pagepath`, `clicks`, `impressions`, `position`, `country`,
+`device`, `branded_vs_nonbranded`, `search_appearance` — استدعِ `get_fields` قبل `get_data`
+دائماً. البديل القائم لبيانات البحث: صفحتا الداشبورد «📊 تقرير البحث» و«📈 أداء SEO».
