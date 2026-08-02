@@ -360,8 +360,9 @@ def build_batch_caption(stores: list[dict]) -> str:
         if k not in seen:
             seen.add(k)
             uniq.append(h)
-    # Instagram حد 30 — نأخذ أول 30 بعد الـdedup
-    lines.append(" ".join(uniq[:30]))
+    # لا نحشو: الريل يجمع ٦ متاجر، فنكتفي بعشرة هاشتاقات مركّزة (براندنا +
+    # أسماء المتاجر + نيّة) بدل ٣٠. نفس فلسفة caption البوستر المفرد.
+    lines.append(" ".join(uniq[:10]))
     return "\n".join(lines)
 
 

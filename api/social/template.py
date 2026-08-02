@@ -15,6 +15,7 @@
 """
 from __future__ import annotations
 
+import os
 import re
 
 # ════════════════════════════════════════════════════════════════════════
@@ -244,59 +245,65 @@ def _dedupe_keep_order(items: list[str]) -> list[str]:
 # بناء الهاشتاقات
 # ════════════════════════════════════════════════════════════════════════
 
+# عدد هاشتاقات إنستقرام. توصية إنستقرام نفسها ٣-٥، والحشو (٢٥-٣٠) نمط ٢٠١٩
+# لم يعد يوسّع الوصول ويقرأ كسبام. قابل للضبط بلا تعديل كود.
+IG_HASHTAG_COUNT = max(3, min(10, int(os.getenv("IG_HASHTAG_COUNT", "5") or 5)))
+
+# الوسوم التي تجعل الجغرافيا ذات معنى فعلاً (فندق/سفر/توصيل). خارجها الهاشتاق
+# المديني حشو يشوّش تصنيف الحساب («وش موضوع هذا الحساب؟»).
+GEO_RELEVANT_TAGS = {"فنادق", "سفر", "توصيل طلبات", "توصيل طعام", "مطاعم"}
+
+# هاشتاق النيّة التجارية الوحيد الذي يستحق خانة: يطابق ما يكتبه الباحث فعلاً.
+INTENT_HASHTAG = "#كود_خصم"
+
+
 def _build_hashtags(store: dict, *, platform: str = "generic") -> list[str]:
-    """يبني هاشتاقات ديناميكية من بيانات المتجر:
-    البراند + اسم المتجر (متغيرات) + كلمات الفئات من البنك + إقليمية + evergreen.
+    """يبني هاشتاقات مركّزة بالأولوية بدل الحشو.
 
-    إنستقرام: نخرج حتى ~28 هاشتاق (حد المنصة 30 — نترك هامش أمان).
-    باقي المنصات: نخرج ~12 هاشتاق فقط — هاشتاقات Telegram/X/Threads ليست
-    عاملاً تصنيفياً قوياً ولا داعي للحشو."""
+    الترتيب مقصود — إنستقرام يقرأ الأوائل كإشارة موضوع الحساب:
+      1) براندنا  2) اسم المتجر  3) هاشتاقان نيش من بنك الفئة
+      4) نيّة تجارية واحدة  5) جغرافيا **فقط** للمتاجر الجغرافية.
+
+    لماذا لا نحشو: على حساب صغير الهاشتاق المليوني (#السعودية، #عروض) لا يُظهرك
+    أبداً ويجذب بوتات، وأربع صيغ من اسم المتجر (#كوبون_X #كود_X #خصم_X #عروض_X)
+    نمط keyword stuffing بلا حجم بحث حقيقي. الكلمات نفسها تبقى في **نص**
+    الـcaption — والخوارزمية تفهرس النص لا الهاشتاقات فقط.
+    """
     is_ig = platform == "instagram"
-    max_tags = 28 if is_ig else 12
+    limit = IG_HASHTAG_COUNT if is_ig else 3
 
+    tags = _parse_store_tags(store.get("store_tags"))
+
+    # 1) براندنا + اسم المتجر (صيغة واحدة لا خمس)
     bucket: list[str] = [BRAND_HASHTAG]
+    name_tag = _hashtagify((store.get("store_id") or "").strip())
+    if name_tag:
+        bucket.append(name_tag)
 
-    # 1) اسم المتجر — متغيرات متعدّدة على إنستقرام، اسم واحد للباقي.
-    name_ar = (store.get("store_id") or "").strip()
-    name_en = (store.get("name_en") or "").strip()
-    if is_ig:
-        bucket.extend(_brand_variations(name_ar))
-        # اللاتيني (مرة واحدة)
-        tag_en = _hashtagify(name_en)
-        if tag_en and tag_en.lower() not in {t.lower() for t in bucket}:
-            bucket.append(tag_en)
-    else:
-        for v in (_hashtagify(name_ar), _hashtagify(name_en)):
-            if v:
-                bucket.append(v)
-
-    # 2) كلمات الفئات من بنك CATEGORY_KEYWORDS (بحسب store_tags).
-    #    لكل tag في المتجر، نطبّعه ثم نسحب مجموعته من البنك إن وُجدت،
-    #    وإلا نُهشتق الـtag نفسه (المتجر يحصل على هاشتاق ولو tag جديد).
-    for raw_tag in _parse_store_tags(store.get("store_tags")):
-        norm = _normalize_tag(raw_tag)
-        cluster = _CATEGORY_KEYWORDS_NORMALIZED.get(norm)
+    # 2) نيش: هاشتاقان فقط — الأكثر تحديداً من أول فئة معروفة. أكثر من اثنين
+    #    يزاحم هاشتاق النيّة ويحوّل القائمة إلى حشو فئات.
+    niche: list[str] = []
+    for raw_tag in tags:
+        cluster = _CATEGORY_KEYWORDS_NORMALIZED.get(_normalize_tag(raw_tag))
         if cluster:
-            bucket.extend(cluster)
+            niche.extend(cluster)
         else:
             t = _hashtagify(raw_tag)
             if t:
-                bucket.append(t)
+                niche.append(t)
+        if len(_dedupe_keep_order(niche)) >= 2:
+            break
+    bucket.extend(_dedupe_keep_order(niche)[:2])
 
-    # 3) إقليمية — كاملة على إنستقرام، عيّنة قصيرة للباقي.
-    if is_ig:
-        bucket.extend(REGIONAL_HASHTAGS)
-    else:
-        bucket.extend(REGIONAL_HASHTAGS[:2])  # السعودية + الرياض
+    # 3) نيّة تجارية واحدة — مضمونة الخانة (لا تُزاحَم بالفئات)
+    bucket.append(INTENT_HASHTAG)
 
-    # 4) Evergreen — كاملة على إنستقرام، الأهم فقط للباقي.
-    if is_ig:
-        bucket.extend(EVERGREEN_HASHTAGS)
-    else:
-        bucket.extend(EVERGREEN_HASHTAGS[:4])
+    # 4) جغرافيا للمتاجر الجغرافية فقط
+    if any(_normalize_tag(t) in {_normalize_tag(g) for g in GEO_RELEVANT_TAGS}
+           for t in tags):
+        bucket.append(REGIONAL_HASHTAGS[0])   # #السعودية
 
-    deduped = _dedupe_keep_order(bucket)
-    return deduped[:max_tags]
+    return _dedupe_keep_order(bucket)[:limit]
 
 
 # ════════════════════════════════════════════════════════════════════════
