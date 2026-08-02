@@ -320,7 +320,22 @@ def post_instagram_feed_only(master_id: int) -> dict:
         _update_log(conn, log_id, status="sent",
                     platform_post_id=result.platform_post_id or "")
         conn.commit()
-        return {"ok": True, "post_id": result.platform_post_id, "slides": len(slides)}
+
+        # قاعدة المالك: كل بوستر يُحسب ضمن «آخر ٦»، وعند السادس ينزل ريل يجمعهم.
+        # لذلك حتى النشر المباشر يعيد المتجر لقائمة الانتظار ويشغّل الدفعة —
+        # وإلا خرج بوستر لا يُحسب في العدّ فاختلّ إيقاع الريل.
+        produced = 0
+        try:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE master SET last_reeled_at = NULL WHERE id = %s",
+                            (master_id,))
+            conn.commit()
+            produced = run_pending_batches(conn) or 0
+        except Exception as e:
+            conn.rollback()
+            print(f"[social] ig-feed reel queue failed for {master_id}: {e}")
+        return {"ok": True, "post_id": result.platform_post_id,
+                "slides": len(slides), "reels_produced": produced}
     finally:
         try:
             conn.rollback()
