@@ -24,11 +24,14 @@ from api.social.template import build_post_text
 # (x/pinterest/linkedin) تُنشَر حسب التهيئة كالمعتاد (لا تُسقَط).
 _MANAGED_SOCIAL = {"telegram", "discord", "instagram", "threads", "facebook"}
 
-# كاروسيل الفيد التلقائي على إنستقرام — معطّل افتراضياً (قرار 2026-07-15).
-# قِيس من insights: متوسط وصول بوسترات الفيد 1.1 (١٣ منشور بوصول صفر) مقابل
-# الريلز 45، والنشر شبه-الصفري يكبح تقييم توزيع الحساب. النشر الآن Reels-only.
-# للإرجاع: عيّن IG_AUTO_FEED_ENABLED=1 في البيئة (لا يحتاج تعديل كود).
-IG_AUTO_FEED_ENABLED = os.getenv("IG_AUTO_FEED_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
+# كاروسيل الفيد التلقائي على إنستقرام.
+# تاريخ القرار: عُطِّل 2026-07-15 لأن insights قاست وصول بوسترات الفيد 1.1
+# (١٣ منشور بوصول صفر) مقابل 45 للريلز. **أُعيد تفعيله 2026-08-02 بقرار
+# المالك**: البوستر لكل متجر جزء من هوية الحساب ومرجع بصري للكود، وغيابه
+# لمتجرين جديدين (عبدالصمد القرشي وشفق الشرق) هو ما كشف التعطيل.
+# الريل الجماعي يبقى يعمل كما هو — الاثنان لا يتعارضان.
+# للتعطيل مجدداً: IG_AUTO_FEED_ENABLED=0 في البيئة (لا يحتاج تعديل كود).
+IG_AUTO_FEED_ENABLED = os.getenv("IG_AUTO_FEED_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _fetch_store(conn, master_id: int) -> dict | None:
@@ -248,6 +251,82 @@ def _run_instagram_extended(
     except Exception as e:
         # فشل الـbatch لا يجب أن يُلغي نجاح الـFeed — نلوغ ونمشي
         print(f"[social] reels_batch crashed: {type(e).__name__}: {e}")
+
+
+def post_instagram_feed_only(master_id: int) -> dict:
+    """ينشر **بوستر الفيد على إنستقرام فقط** لمتجر واحد — بلا لمس بقية المنصات.
+
+    الحاجة: متجر بُثّ أثناء فترة تعطيل الفيد (2026-07-15 ← 2026-08-02) فخرج بلا
+    بوستر. إعادة البث الكامل تُكرّر المنشور على تيليجرام وديسكورد وفيسبوك بلا
+    داعٍ، فهذا المسار يعالج الفجوة بدقّة. لا يمسّ `last_reeled_at` فلا يُخلّ
+    بقائمة انتظار الريل.
+    """
+    pool = get_pool()
+    conn = pool.getconn()
+    try:
+        store = _fetch_store(conn, master_id)
+        if not store:
+            return {"ok": False, "error": "store not found"}
+
+        raw_channels = store.get("publish_channels")
+        allowed = None if raw_channels is None else {
+            c.strip() for c in str(raw_channels).split(",") if c.strip()
+        }
+        if allowed is not None and "instagram" not in allowed:
+            return {"ok": False, "error": "instagram not enabled for this store"}
+
+        poster = InstagramPoster()
+        if not poster.is_configured():
+            return {"ok": False, "error": "instagram not configured"}
+
+        base_image = store.get("social_poster_url") or store.get("logo_url")
+        if not base_image:
+            return {"ok": False, "error": "no poster or logo image"}
+        post_text = build_post_text(store, platform=poster.name)
+        image_url = platform_image_url(base_image, poster.name)
+
+        log_id = _insert_log(
+            conn, master_id=master_id, store_id=store["store_id"],
+            platform=poster.name, post_text=post_text, image_url=image_url,
+        )
+        conn.commit()
+
+        slides: list[str] = [image_url] if image_url else []
+        try:
+            howto_url = upload_howto_slide(
+                store_id=str(store.get("store_id") or ""),
+                store_name=str(store.get("store_id") or ""),
+                coupon=(store.get("public_coupon") or None),
+            )
+            if howto_url:
+                slides.append(howto_url)
+        except Exception as e:
+            print(f"[social] ig howto slide failed: {e}")
+
+        try:
+            result = (poster.post_carousel(post_text, slides) if len(slides) >= 2
+                      else poster.post(post_text, slides[0] if slides else None))
+        except Exception as e:
+            _update_log(conn, log_id, status="failed",
+                        error_message=f"{type(e).__name__}: {e}")
+            conn.commit()
+            return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
+        if result.error:
+            _update_log(conn, log_id, status="failed", error_message=result.error)
+            conn.commit()
+            return {"ok": False, "error": result.error}
+
+        _update_log(conn, log_id, status="sent",
+                    platform_post_id=result.platform_post_id or "")
+        conn.commit()
+        return {"ok": True, "post_id": result.platform_post_id, "slides": len(slides)}
+    finally:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        pool.putconn(conn)
 
 
 def broadcast_to_all_platforms(master_id: int) -> None:

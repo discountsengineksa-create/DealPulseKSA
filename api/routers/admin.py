@@ -296,6 +296,27 @@ def broadcast(
     return {"status": "queued", "master_id": master_id}
 
 
+@router.post("/social/ig-feed/{master_id}")
+@limiter.limit(LIMIT_ADMIN)
+def ig_feed_only(
+    master_id: int,
+    request: Request,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """ينشر بوستر الفيد على إنستقرام لمتجر واحد فقط — بلا بقية المنصات.
+
+    يسدّ فجوة المتاجر التي بُثّت أثناء تعطيل الفيد (2026-07-15 ← 2026-08-02):
+    إعادة البث الكامل كانت ستكرّر المنشور على تيليجرام/ديسكورد/فيسبوك بلا داعٍ.
+    تنفيذ متزامن ليرجع النتيجة مباشرة، ولا يمسّ قائمة انتظار الريل.
+    """
+    _verify_admin(x_admin_secret)
+    from api.social.dispatcher import post_instagram_feed_only
+    result = post_instagram_feed_only(master_id)
+    from api.utils.ops import audit_log
+    audit_log(action="ig_feed_only", target=str(master_id))
+    return result
+
+
 @router.post("/social/test-story/{master_id}")
 @limiter.limit(LIMIT_ADMIN)
 def test_story(
