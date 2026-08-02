@@ -256,6 +256,18 @@ GEO_RELEVANT_TAGS = {"فنادق", "سفر", "توصيل طلبات", "توصي�
 # هاشتاق النيّة التجارية الوحيد الذي يستحق خانة: يطابق ما يكتبه الباحث فعلاً.
 INTENT_HASHTAG = "#كود_خصم"
 
+# وسوم إدارية لا تصف ما يبيعه المتجر — تُستثنى من اختيار النيش.
+# سببها الواقعي: «إيرالو» (شرائح eSIM) كانت تأخذ #مواقع_عالمية، و«هواوي»
+# كذلك — هاشتاق لا يبحث عنه أحد ولا يصف المنتج.
+META_TAGS_FOR_HASHTAGS = {
+    "مواقع عالمية", "متجر شامل", "جملة", "مورد", "توزيعات", "تطبيقات",
+}
+
+# متجر بعدد وسوم كبير = سوق شامل (نون/نمشي). أي فئة مفردة منه اختيار عشوائي
+# مضلّل (نون كان يأخذ #احذية_السعودية)، فنستبدلها بوسم التسوّق العام.
+MARKETPLACE_TAG_THRESHOLD = 8
+MARKETPLACE_HASHTAGS = ["#تسوق_اونلاين", "#تسوق_السعودية"]
+
 
 def _build_hashtags(store: dict, *, platform: str = "generic") -> list[str]:
     """يبني هاشتاقات مركّزة بالأولوية بدل الحشو.
@@ -283,7 +295,12 @@ def _build_hashtags(store: dict, *, platform: str = "generic") -> list[str]:
     # 2) نيش: هاشتاقان فقط — الأكثر تحديداً من أول فئة معروفة. أكثر من اثنين
     #    يزاحم هاشتاق النيّة ويحوّل القائمة إلى حشو فئات.
     niche: list[str] = []
+    meta_norm = {_normalize_tag(m) for m in META_TAGS_FOR_HASHTAGS}
+    if len(tags) >= MARKETPLACE_TAG_THRESHOLD:
+        niche.extend(MARKETPLACE_HASHTAGS)
     for raw_tag in tags:
+        if _normalize_tag(raw_tag) in meta_norm:
+            continue
         cluster = _CATEGORY_KEYWORDS_NORMALIZED.get(_normalize_tag(raw_tag))
         if cluster:
             niche.extend(cluster)
