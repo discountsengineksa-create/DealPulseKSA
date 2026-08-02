@@ -404,7 +404,12 @@ def _build_text_instagram(store: dict) -> str:
     ]
 
     # ── البلوك التفصيلي (يظهر بعد ضغطة «عرض المزيد») ──
-    lines.append(f"🏪 المتجر: {name}" + (f" / {name_en}" if name_en and name_en.lower() != name.lower() else ""))
+    # منشن البراند حين يكون حسابه معروفاً (master.instagram_handle، اختياري):
+    # يصل البراند إشعار بأننا أعلنّا له — باب لريبوست أو شراكة، لا مجرد نشر.
+    # فارغ = لا منشن (لا نخمّن حساباً: منشن خاطئ يسم شخصاً لا علاقة له).
+    handle = (store.get("instagram_handle") or "").strip().lstrip("@")
+    mention = f" @{handle}" if handle else ""
+    lines.append(f"🏪 المتجر: {name}" + (f" / {name_en}" if name_en and name_en.lower() != name.lower() else "") + mention)
     if discount:
         lines.append(f"💸 نسبة الخصم: {discount}")
     if coupon:

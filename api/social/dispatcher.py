@@ -48,6 +48,7 @@ def _fetch_store(conn, master_id: int) -> dict | None:
                    description, store_bio, store_tags,
                    affiliate_link, logo_url, social_poster_url,
                    publish_channels,
+                   (to_jsonb(master) ->> 'instagram_handle') AS instagram_handle,
                    (to_jsonb(master) ->> 'reels_video_url') AS reels_video_url
             FROM master
             WHERE id = %s

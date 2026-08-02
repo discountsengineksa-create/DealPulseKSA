@@ -2129,6 +2129,17 @@ if page == "إدخال بيانات الماستر":
             key="m_source_platform",
         )
 
+        # الصف 5.6: حساب إنستقرام للبراند — اختياري تماماً (migration_068).
+        # فارغ = ينشر بلا منشن. لا نخمّن الحساب أبداً: منشن خاطئ يسم شخصاً
+        # لا علاقة له بالبراند.
+        ig_handle = st.text_input(
+            "📸 حساب إنستقرام للبراند (اختياري)",
+            placeholder="aigner  —  بلا @، انسخه من بروفايل البراند",
+            help="لو عبّيته، منشور المتجر على إنستقرام يذكر البراند (@حساب) "
+                 "فيصله إشعار بأننا أعلنّا له. اتركه فارغاً ولا شيء يتغيّر.",
+            key="m_instagram_handle",
+        )
+
         # الصف 5.6: قنوات النشر — استهداف انتقائي يحترم شروط الأفلييت.
         # المتجر يظهر فقط في القنوات المُعلَّمة. (البوت = البوت + الميني-ويب).
         st.divider()
@@ -2276,8 +2287,8 @@ if page == "إدخال بيانات الماستر":
                                 my_coupon, first_time, last_time,
                                 total_coupon_copies, total_link_clicks, is_trending_bool,
                                 logo_url, is_promoted, source_platform, social_poster_url,
-                                publish_channels, seo_enabled)
-                        VALUES (%s,%s,%s,%s, %s,%s,%s,%s, %s, %s,%s,%s,%s, %s,%s,%s, 0,0,FALSE, %s, %s, %s, %s, %s, %s)
+                                publish_channels, seo_enabled, instagram_handle)
+                        VALUES (%s,%s,%s,%s, %s,%s,%s,%s, %s, %s,%s,%s,%s, %s,%s,%s, 0,0,FALSE, %s, %s, %s, %s, %s, %s, %s)
                         RETURNING id
                     """, (
                         store_id, name_en, aff_link, pub_coupon,
@@ -2291,6 +2302,7 @@ if page == "إدخال بيانات الماستر":
                         final_poster_url or None,
                         _channels_val,
                         bool(_seo_enabled),
+                        (ig_handle or '').strip().lstrip('@') or None,
                     ))
                     new_master_id = cur.fetchone()[0]
                     # Week 4 — توليد cloaked_slug للمتجر الجديد (نفس تعبير backfill في migration_012)
@@ -2397,6 +2409,14 @@ if page == "الاستعلام والتعديل":
                         value=(res.get('source_platform') or ''),
                         placeholder="مثال: ArabClicks, CJ Affiliate, تواصل مباشر...",
                         help="يساعدك تعرف من أي منصة تابعة جاء كود هذا المتجر — مفيد عند تجديد الكود.",
+                    )
+
+                    # حساب إنستقرام للبراند — اختياري (migration_068)
+                    u_ig_handle = st.text_input(
+                        "📸 حساب إنستقرام للبراند (اختياري)",
+                        value=(res.get('instagram_handle') or ''),
+                        placeholder="aigner  —  بلا @، انسخه من بروفايل البراند",
+                        help="لو عبّيته، منشور المتجر على إنستقرام يذكر البراند (@حساب).",
                     )
 
                     # الصف 5.6: قنوات النشر — استهداف انتقائي يحترم شروط الأفلييت.
@@ -2528,7 +2548,8 @@ if page == "الاستعلام والتعديل":
                                     is_promoted=%s,
                                     source_platform=%s,
                                     publish_channels=%s,
-                                    seo_enabled=%s
+                                    seo_enabled=%s,
+                                    instagram_handle=%s
                                 WHERE id=%s
                             """, (
                                 u_store, u_name_en,
@@ -2544,6 +2565,7 @@ if page == "الاستعلام والتعديل":
                                 _u_src_val,
                                 _u_channels_val,
                                 bool(u_seo_enabled),
+                                (u_ig_handle or '').strip().lstrip('@') or None,
                                 search_id,
                             ))
                             conn.commit()
