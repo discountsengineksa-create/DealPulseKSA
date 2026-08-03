@@ -322,7 +322,11 @@ def get_categories(conn=Depends(get_db)):
 
 @router.get("/", response_model=SearchResponse)
 def get_all_coupons(
-    limit: int = Query(default=50, ge=1, le=5000),     # light يسمح حتى 5000 (كتالوج كامل)
+    limit: int = Query(default=5000, ge=1, le=5000),   # الكتالوج كامل افتراضياً
+    # كان 50: أي متجر خارج الخمسين يسقط من الصفحة الرئيسية — ومعه صف الستوري
+    # الذي كان يُبنى بفلترة هذه القائمة. «منصة زد» تصدّرت الترند اليومي
+    # والأسبوعي وغابت عن الصف لأنها المتجر 52 من 52. الكتالوج صغير، فالسقف
+    # الافتراضي المنخفض كان يكلّف أكثر مما يوفّر.
     lang: Literal["ar", "en"] = Query(default="ar"),
     view: Literal["full", "light"] = Query(default="full"),
     channel: str = Query(default="website"),

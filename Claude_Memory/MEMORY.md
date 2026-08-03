@@ -103,6 +103,7 @@
 - [🔒 Security Hardening](security_hardening.md) — فحص أمني (صفر ثغرة حرجة)؛ CSP بـnext.config مُختبَر؛ /docs مقفول بالإنتاج؛ SECURITY_AUDIT.md؛ جدار الحافة للمالك
 - [Store Page Evergreen (404 Root Cause)](store_page_evergreen.md) — `last_time>=CURRENT_DATE` أخفى المتجر عند انتهاء الكوبون → 404؛ الحل: المتجر دائم، الكوبون يُفرَّغ بـCASE
 - [Boostiny Publisher Channel](boostiny_publisher_channel.md) — ناشر Boostiny (عملاء كبار/توصيل طعام)؛ الطلب مُقدَّم؛ قناة رابعة
+- [Zid Affiliate Channel](zid_affiliate_channel.md) — سفير زد: عمولة 30%/خصم 20%، إسناد بالرابط فقط، خريطة المنتجات + ذكاء زد وMCP
 - [Marketing Baseline & Strategy](marketing_baseline_and_strategy.md) — ~121 سعودي/شهر (89% بوتات)؛ التحويل ~16% يعمل فالعنق الترافيك؛ البحث التجميعي يكسب النقرة؛ .agents/product-marketing.md
 - [Entrepreneur Bootcamp](entrepreneur_bootcamp.md) — معسكر ٤ دورات (م. يوسف)؛ التسويق المتكامل ✅ في MARKETING_STRATEGY.md؛ ٣ جاية؛ المدرّب استخدم نبض كـcase study
 - [SEO Meta Code: Per-Network](seo_meta_code_leak.md) — ⚠️ صُحِّحت: كشف الكود يتبع نموذج الإسناد؛ يُكشف لـ~٣٧ متجر إسناد-بالكود ويُحجب لـ~١١ إسناد-بالنقرة؛ attribution.ts + llms.txt (web ddee60e)
