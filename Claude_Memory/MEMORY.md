@@ -122,3 +122,5 @@
 - [Blog ASQ Cluster](blog_asq_cluster.md) — عبدالصمد القرشي ١٢ مقالاً على خطوط المنتج؛ الاسم بلا مسافة؛ نمط تحقّق esbuild بديل البناء
 - [Blog Inline Code Chips](blog_inline_code_chips.md) — شارة كود/CTA بجانب كل ذكر متجر في ١٣٦٥ مقال؛ الكشف يتبع الإسناد؛ العلاج بالعارض لا بالمحتوى
 - [Jolina Pre-Purchase Angle](jolina_prepurchase_angle.md) — الزاوية «الاسترجاع/الرسوم» لا الكود؛ ومطبّ: مواقع JS لا تُقرأ بـcurl (غلطة وسم أطفال)
+- [SEO Category Query Alignment](seo_category_query_alignment.md) — ٣٨ صفحة قسم كانت «كوبونات/تصنيف» والطلب «تخفيضات على/متاجر/عروض»؛ م3–10 = ١٨٠٤ ظهور/٦ نقرات
+- [Web Repo Verification Recipes](web_repo_verification_recipes.md) — tsconfig ضيّق يتجاوز OOM؛ اختبر clampTitle بالوسوم الحقيقية؛ لا عربية داخل .ps1
