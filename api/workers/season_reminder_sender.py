@@ -35,20 +35,26 @@ API_URL = os.getenv("API_PUBLIC_URL", "https://api.dealpulseksa.com").rstrip("/"
 # كم يوماً قبل البدء تُرسل رسالة التخطيط
 PRE_DAYS = 7
 
-# (شهر, يوم) بداية كل موسم — مطابق لـ `start` في app/calendar/data.ts
+# (شهر, يوم) **بداية نافذة** كل موسم — من حقل `start` في app/calendar/data.ts.
+#
+# ⚠️ ليست يوم الذروة. «11.11» نافذته تبدأ 9 نوفمبر، و«العودة للمدارس» 15 أغسطس
+# لا 1 أغسطس. اشتقاق التواريخ من أسماء العرض بدل حقل `start` يُرسل التذكير في
+# اليوم الخطأ — أخطأتُ في 8 من 12 عند أول كتابة لهذا الجدول.
+#
+# للتحقّق من الانحراف بعد أي تعديل في ريبو الويب:  python check_season_dates.py
 SEASON_START: dict[str, tuple[int, int]] = {
     "winter-clearance": (1, 1),
-    "founding-day": (2, 20),
+    "founding-day": (2, 15),
     "ramadan": (2, 18),
-    "eid-fitr": (3, 20),
-    "eid-adha": (5, 27),
-    "summer-sale": (6, 15),
-    "back-to-school": (8, 1),
+    "eid-fitr": (3, 15),
+    "eid-adha": (5, 20),
+    "summer-sale": (6, 1),
+    "back-to-school": (8, 15),
     "national-day": (9, 18),
     "riyadh-season": (10, 1),
-    "eleven-eleven": (11, 11),
-    "white-friday": (11, 24),
-    "twelve-twelve": (12, 12),
+    "eleven-eleven": (11, 9),
+    "white-friday": (11, 23),
+    "twelve-twelve": (12, 10),
 }
 
 
