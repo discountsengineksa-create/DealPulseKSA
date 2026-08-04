@@ -30,7 +30,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from slowapi.errors import RateLimitExceeded
 
 from api.routers import (admin, auth, broadcast_tracking, contact, coupons, go,
-                          seo, social, track, trend, users)
+                          reminders, seo, social, track, trend, users)
 from api.utils.rate_limit import limiter
 
 # ─── النطاقات المسموح لها بالاتصال بالـ API ────────────────────────────────
@@ -102,6 +102,7 @@ app.include_router(admin.router,   prefix="/api/v1")
 app.include_router(seo.router,     prefix="/api/v1")
 app.include_router(social.router,  prefix="/api/v1")
 app.include_router(trend.router,   prefix="/api/v1")
+app.include_router(reminders.router, prefix="/api/v1")
 # /go/{slug} رابط عام قصير بدون /api/v1 prefix
 app.include_router(go.router)
 # /r/whatsapp — رابط تحويل قصير على دومين نبض الصفقات إلى WhatsApp
