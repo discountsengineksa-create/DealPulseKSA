@@ -1892,6 +1892,7 @@ _ANALYSIS_PAGES = [
 _OTHER_PAGES = [
 "📣 بلاغات الأكواد",  # ← Migration 029: بلاغات لا يعمل + إدارة المتاجر المسحوبة
 "🎯 بناء الشرائح", "مركز الإشعارات", "لوحة القيادة", "مركز الدعم",
+"🔔 تذكيرات المواسم",
 "استوديو المحتوى", "🎨 الثيمات",
 "محرّك SEO", "📈 أداء SEO", "📊 تقرير البحث", "🔎 الفهرسة", "📤 الصفحات المنشورة", "🎯 محرك الفرص", "سجل التدقيق",
 "🛰️ متابعة المنصة",
@@ -15786,3 +15787,81 @@ elif page == "🗓️ مواسم المتاجر":
                     lambda ls: " · ".join(_season_label.get(x, x).split("  (")[0] for x in ls)),
             })
             st.dataframe(_view, width="stretch", hide_index=True)
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  🔔 تذكيرات المواسم — مشتركو /calendar
+# ═══════════════════════════════════════════════════════════════════════════
+#  زائر التقويم يأتي ليعرف تاريخاً ثم يخرج: نيّته تخطيط لا شراء، والموسم بعد
+#  أسابيع فلا شيء يفعله اليوم. هذه الصفحة تُظهر من التقطناه ليوم يصير جاهزاً.
+elif page == "🔔 تذكيرات المواسم":
+    page_title("🔔", "تذكيرات المواسم", "من اشترك ليُذكَّر قبل موسمه — مصنّفين حسب الموسم")
+
+    _rc = get_conn()
+    try:
+        _rc.rollback()  # تنظيف أي معاملة معلّقة من صفحة سابقة
+
+        _tot = pd.read_sql("""
+            SELECT COUNT(*) FILTER (WHERE status='active')                      AS active,
+                   COUNT(*) FILTER (WHERE status='unsubscribed')                AS unsub,
+                   COUNT(DISTINCT lower(email))                                 AS people,
+                   COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE)           AS today
+            FROM season_reminders
+        """, _rc).iloc[0]
+
+        c1, c2, c3, c4 = st.columns(4)
+        with c1: kpi_card("🔔", "اشتراكات نشطة", int(_tot["active"] or 0), "success")
+        with c2: kpi_card("👤", "أشخاص مختلفون", int(_tot["people"] or 0), "info")
+        with c3: kpi_card("🆕", "اشتراكات اليوم", int(_tot["today"] or 0), "info")
+        with c4: kpi_card("🚫", "ألغوا الاشتراك", int(_tot["unsub"] or 0), "warning")
+
+        st.markdown("---")
+
+        # ── التصنيف حسب الموسم ────────────────────────────────────────────
+        st.subheader("📊 المشتركون حسب الموسم")
+        _by = pd.read_sql("""
+            SELECT COALESCE(season_name, season_id)                       AS "الموسم",
+                   season_year                                            AS "السنة",
+                   COUNT(*) FILTER (WHERE status='active')                AS "نشط",
+                   COUNT(*) FILTER (WHERE status='unsubscribed')          AS "ملغى",
+                   COUNT(*) FILTER (WHERE sent_pre_at IS NOT NULL)        AS "أُرسل تنبيه مبكر",
+                   COUNT(*) FILTER (WHERE sent_start_at IS NOT NULL)      AS "أُرسل يوم البدء",
+                   MAX(created_at)                                        AS "آخر اشتراك"
+            FROM season_reminders
+            GROUP BY 1, 2
+            ORDER BY 3 DESC, 2
+        """, _rc)
+        if _by.empty:
+            st.info("ما فيه اشتراكات بعد. الزر يظهر على كل كرت موسم في /calendar.")
+        else:
+            st.dataframe(_by, use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+
+        # ── آخر المشتركين ─────────────────────────────────────────────────
+        st.subheader("🧾 آخر المشتركين")
+        _lim = st.slider("عدد الصفوف", 20, 500, 100, step=20, key="rem_limit")
+        _rows = pd.read_sql(f"""
+            SELECT created_at                                  AS "التاريخ",
+                   email                                       AS "البريد",
+                   COALESCE(season_name, season_id)            AS "الموسم",
+                   season_year                                 AS "السنة",
+                   source                                      AS "المصدر",
+                   status                                      AS "الحالة"
+            FROM season_reminders
+            ORDER BY created_at DESC
+            LIMIT {int(_lim)}
+        """, _rc)
+        if _rows.empty:
+            st.caption("لا صفوف.")
+        else:
+            st.dataframe(_rows, use_container_width=True, hide_index=True)
+            st.download_button(
+                "⬇️ تصدير CSV",
+                _rows.to_csv(index=False).encode("utf-8-sig"),
+                file_name="season_reminders.csv",
+                mime="text/csv",
+            )
+    except Exception as _e:
+        st.error(f"تعذّر تحميل التذكيرات: {_e}")
+    finally:
+        _rc.close()

@@ -108,6 +108,16 @@ def _seo_auto_cycle() -> None:
         _log.warning("seo auto cycle failed (non-fatal): %s", exc)
 
 
+def _season_reminder_cycle() -> None:
+    """تذكيرات مواسم التخفيضات (9 صباحاً Riyadh): رسالة قبل الموسم بأسبوع
+    وأخرى يوم البدء. آمنة للتكرار — الطوابع تمنع الإرسال المزدوج."""
+    from api.workers.season_reminder_sender import run_season_reminders
+    try:
+        run_season_reminders()
+    except Exception as exc:
+        _log.warning("season reminder cycle failed (non-fatal): %s", exc)
+
+
 def _seo_snapshot_cycle() -> None:
     """لقطة أداء SEO اليومية (4 صباحاً Riyadh): PageSpeed + Search Console → تخزين."""
     from api.seo.perf_snapshot import capture_snapshot
@@ -256,6 +266,15 @@ def start_workers() -> None:
         trigger="cron", hour=4, minute=0, timezone="Asia/Riyadh",
         id="seo_snapshot_daily",
         name="Daily SEO performance snapshot (PageSpeed + GSC)",
+        replace_existing=True,
+    )
+
+    # تذكيرات المواسم — 9 صباحاً Riyadh (وقت فتح البريد لا منتصف الليل)
+    _scheduler.add_job(
+        _season_reminder_cycle,
+        trigger="cron", hour=9, minute=0, timezone="Asia/Riyadh",
+        id="season_reminders_daily",
+        name="Season reminder emails (pre-week + start day)",
         replace_existing=True,
     )
 
