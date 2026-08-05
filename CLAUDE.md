@@ -9,6 +9,37 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > is that playbook, not raw intelligence. Also read `Claude_Memory/MEMORY.md` (the
 > memory index) and open any entry relevant to your task before touching code.
 
+---
+
+# 🧱 الحوائط الصلبة — نصّاً، لا بالإحالة
+
+> هذه القواعد كانت تعيش كملفات في `Claude_Memory/`. **الفهرس يُحمَّل، المتون لا** —
+> فكان الحائط يعتمد على أن أفتح ملفاً، وأحياناً لا أفتحه. مكتوبة هنا لأن هذا الملف
+> يُحمَّل بالكامل في كل جلسة. مخالفة أيٍّ منها = ضرر حقيقي، لا مجرّد أسلوب.
+
+| # | الحائط | التفصيل |
+|---|---|---|
+| ١ | **لا كتابة DB بلا إذن صريح للعملية** | `INSERT/UPDATE/DELETE/ALTER/DROP` على الإنتاج يحتاج إذناً لتلك العملية بعينها. **«يلا نبدأ» ليس إذناً.** القراءة مسموحة. → `feedback_no_db_writes_without_permission.md` |
+| ٢ | **`main` = إنتاج Railway** | الدفع إلى `main` ينشر فوراً. اتبع بروتوكول ما قبل الدفع في `AGENT_PLAYBOOK.md` §٤.٩. لا دفع تجريبي. |
+| ٣ | **صفر فبركة** | كل رقم في أي تقرير يُعَدّ حيّاً بأمر. «~» أو «حوالي» = علم أحمر: عُدَّه أو احذفه. الاستشهاد بملف/سطر حرفياً. ادّعاء رقم من الذاكرة بدل عدّه = تلفيق. |
+| ٤ | **White-Hat فقط** | لا doorway، لا صفحات رقيقة مكرّرة، لا مزايدة مدفوعة على اسم براند. → `seo_white_hat_only.md` + `affiliate_ppc_brand_restrictions.md` |
+| ٥ | **لا تنشر كود منافس** | لا يُذكر كود المتجر الترحيبي ولو كان خصمه أعلى. → `feedback_never_publish_competing_codes.md` |
+| ٦ | **البوت مفكوك — لكن ضمن البروتوكول** | التعديل مسموح (٢٠٢٦-٠٧-٠٧)، بإعلان → تحقّق → إثبات → تسجيل. تاغ الرجوع `bot-locked-2026-06-10`. |
+| ٧ | **انشر عند الإنجاز** | جهازان. عند اكتمال أي شغل: `commit` + `push` بلا سؤال. لا `stash`، لا شغل يبقى محلياً. `pull` في بداية الجلسة. |
+| ٨ | **الأكواد قبل روابط التتبّع** | المالك يفضّل الأكواد: إسناد أنظف، والروابط تُحجب ونقرها غير موثوق. |
+
+**أسلوب العمل:** المالك مهندس خبير ٢٠+ سنة. **لا فلسفة، لا قوائم خيارات، لا أساسيات، لا تمهيد.**
+اقرأ → حدّد → نفّذ. عند العجز: سؤال نصّي واحد. المخرَج يُقيَّم بنتيجته لا بصعوبة سباكته،
+واكشف سقف الأداة بصراحة بدل تجميله. → `feedback_no_philosophy.md` · `feedback_senior_engineer.md` · `feedback_output_over_engineering.md`
+
+### 🔑 طقس بداية المهمة (إلزامي)
+
+قبل أي تنفيذ، **أعلن أسماء ملفات الذاكرة التي فتحتها فعلاً** لهذه المهمة.
+لم تُعلن = لم تقرأ، وللمالك أن يوقفك فوراً. الفهرس يعطي العناوين فقط —
+**العنوان ليس الحقيقة، المتن هو الحقيقة.**
+
+---
+
 ## Running the Project
 
 ```bash
@@ -29,11 +60,11 @@ Database credentials come from `.env` (`DATABASE_URL` for Railway prod, or `DB_N
 
 Four runnable entrypoints share one PostgreSQL database:
 
-- **`dashboard.py`** — Streamlit admin interface. A single **14,967-line** file; all **35 pages** are implemented as one long `if/elif` chain keyed on `page = st.sidebar.radio(...)`. No page routing abstraction. **⚠️ `main = production Railway` — see `AGENT_PLAYBOOK.md` §4.9 for the pre-push safety protocol.**
-- **`deal_pulse_bot.py`** — Telegram bot (~2,376 lines) using `pyTelegramBotAPI` (`telebot`). **🔒 FROZEN — no edits without per-change explicit permission** (`bot_frozen_lock.md`).
-- **`bot_app.py`** — Production Railway entrypoint (~412 lines). Combines bot + FastAPI (11 routers) + Mini App into one service.
+- **`dashboard.py`** — Streamlit admin interface. A single **15,867-line** file; all **36 pages** are implemented as one long `if/elif` chain. **Page routing** (`dashboard.py:1878-1900`): three grouped lists — `_MAIN_PAGES` (12), `_ANALYSIS_PAGES` (7), `_OTHER_PAGES` (17) — rendered as sidebar expanders with `st.radio` + `handle_nav`, driving `st.session_state.page`. ⚠️ The `st.sidebar.radio(...)` at `dashboard.py:1871` is the **theme toggle**, not the page selector — don't confuse them. **⚠️ `main = production Railway` — see `AGENT_PLAYBOOK.md` §4.9 for the pre-push safety protocol.**
+- **`deal_pulse_bot.py`** — Telegram bot (~2,376 lines) using `pyTelegramBotAPI` (`telebot`). **🔓 Freeze LIFTED 2026-07-07** — edits allowed under the partnership protocol (declare → verify → prove → record). Rollback tag: `bot-locked-2026-06-10`. See `Claude_Memory/bot_frozen_lock.md`. Lifting the freeze does **not** waive the DB-write wall or the `main=prod` wall.
+- **`bot_app.py`** — Production Railway entrypoint (~418 lines). Combines bot + FastAPI (11 routers) + Mini App into one service.
 - **`api/main.py`** — API-only entrypoint for local dev (`uvicorn api.main:app --port 8000`). Production runs `bot_app.py` instead.
-- **PostgreSQL** (Railway prod, via `DATABASE_URL`) — **~67 tables** after `migration_049` dropped 9 abandoned tables. Local `discounts_engine` on `localhost:5432` is a dummy/test DB only. The `master` table is the source of truth for all store/coupon data.
+- **PostgreSQL** (Railway prod, via `DATABASE_URL`) — migrations run to **`migration_069`** (67 migration files in repo root). Table count: last audited at **~76** (`Claude_Memory/db_foundation_audit.md`); the older "~67 after migration_049" figure is stale. **Count it live before relying on a number.** Local `discounts_engine` on `localhost:5432` is a dummy/test DB only. The `master` table is the source of truth for all store/coupon data.
 
 ## Database Patterns
 
@@ -78,7 +109,7 @@ conn.close()               # returns connection to pool (not real close)
 
 `master.is_trending` holds either `'عادي'` (normal) or `'ترند 🔥'` (trending — emoji-in-data). The dashboard sorts the coupon view so trending stores appear first. Auto-computation uses **`total_link_clicks + total_coupon_copies`** (the LIVE counters).
 
-**⚠️ Type debt (blocked by bot freeze):** `is_trending` should be enum/boolean, and `priority_score` (currently TEXT holding `{'عادي','مهم'}`) should be numeric — but the frozen bot compares them by string, so both changes are held. See `db_foundation_audit.md`.
+**Type debt — EXPAND phase applied, dual-write is live.** `migration_065_type_debt_expand.sql` (2026-07-07, after the freeze lifted) added `is_trending_bool` BOOLEAN and `priority_score_int` SMALLINT alongside the legacy text columns and backfilled both. The typed columns are used in **35 places across 6 files** (dashboard, bot, `api/routers/coupons.py`, `api/routers/track.py`, `api/utils/llm_service.py`, tests). **No contract migration exists yet** — the legacy TEXT columns `is_trending` / `priority_score` are still present and still read by some paths, so **any write must set both the text and typed column**. Do not drop the text columns without a dedicated contract migration. See `db_foundation_audit.md`.
 
 ## Arabic Localization Note
 
