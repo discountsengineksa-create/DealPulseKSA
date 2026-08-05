@@ -13,13 +13,26 @@ metadata:
 
 **🔴 تصحيحُ التصحيح (مُتحقَّق بالكود 2026-08-05): «الكتابة المزدوجة اختفت» كان ادّعاءً خاطئاً.**
 النسخة السابقة من هذا السطر قالت إن `grep "(INSERT|UPDATE|DELETE).*manual_favorites"` = صفر.
-**غلط** — البوت يكتبها في موضعين:
-- `deal_pulse_bot.py:2051` `_add_favorite_db` → `INSERT INTO user_favorites` **ثم** تحديث `bot_users.manual_favorites` (السطر ~2065).
-- `deal_pulse_bot.py:2089` `_remove_favorite_db` → `DELETE FROM user_favorites` **ثم** `UPDATE bot_users SET manual_favorites = array_remove(...)` (السطر 2100).
+**غلط** — البوت يكتبها في **ثلاثة** مواضع (عُدَّت بـgrep متعدّد الأسطر ٢٠٢٦-٠٨-٠٥):
 
-الكتابة المزدوجة **حيّة**: `user_favorites` = SSOT، و`manual_favorites` = cache متزامن.
-درس: الـgrep الذي أنتج الادّعاء الخاطئ إمّا لم يشمل `deal_pulse_bot.py` أو قُرئ نتيجته بتسرّع.
-**النمط الخطر: «تحقّقتُ» بلا لصق مخرَج الأمر = ادّعاء لا تحقّق.** → [[feedback_mirror_audit]]
+| السطر | الدالة | يكتب |
+|---|---|---|
+| ٢٠٦٧ | `_add_favorite_db` (2051) | `INSERT user_favorites` + `UPDATE manual_favorites` |
+| ٢١٠٠ | `_remove_favorite_db` (2089) | `DELETE user_favorites` + `array_remove(manual_favorites)` |
+| ٢٢٩٣ | `_process_heart_reaction` (2276) | `UPDATE manual_favorites` + `INSERT user_favorites` |
+
+الكتابة المزدوجة **حيّة وسليمة في المسارات الثلاثة** — `user_favorites` = SSOT،
+و`manual_favorites` = cache متزامن. مسار ❤️ (تفاعل على رسالة كوبون) يكتب الاثنين كذلك.
+
+**🔬 السبب البنيوي للادّعاء الكاذب — درس قابل للنقل:**
+النمط `(INSERT|UPDATE|DELETE).*manual_favorites` **أحادي السطر**، بينما كتابتا ٢٠٦٧ و٢٢٩٣
+SQL متعدّد الأسطر (`UPDATE bot_users` سطر، و`SET manual_favorites` السطر التالي).
+**grep أحادي السطر لا يستطيع رؤيتها بنيوياً — لا بتسرّع القارئ.**
+القاعدة: **أي بحث عن كتابة SQL في هذا الريبو يجب أن يكون multiline** (`rg -U` أو
+`Grep(multiline:true)`)، لأن أغلب الاستعلامات مكتوبة كسلاسل `"""` متعدّدة الأسطر.
+وحتى بعد التصحيح، أول تقديري كان «موضعان» — والـmultiline أعطى **ثلاثة**.
+كل جولة تحقّق شدّت الرقم: صفر (كاذب) → ١ (أحادي السطر) → ٢ (تقديري) → **٣ (الحقيقة)**.
+**«تحقّقتُ» بلا لصق مخرَج الأمر = ادّعاء.** → [[feedback_mirror_audit]]
 
 **⚠️ ثغرة حقيقية مكتشَفة أثناء التحقّق — الإزالة لا تُسجَّل:**
 `handle_favorite_toggle` (`deal_pulse_bot.py:2220`) يستدعي `log_action(..., 'favorite_add', ...)`
