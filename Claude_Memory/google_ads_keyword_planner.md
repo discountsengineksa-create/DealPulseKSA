@@ -18,6 +18,14 @@ metadata:
 
 **القرار المعلّق (2026-06-09):** إما (أ) حذف تكامل الحجم والاكتفاء بـ Google Trends (SerpApi) للأولوية — مجاني، أو (ب) مصدر حجم بحث طرف-ثالث (Keywords Everywhere / DataForSEO) — أرقام حقيقية بلا موافقة Google، تكلفة بسيطة. لا نترك العمود يعرض «—» للأبد (يخالف [[feedback_no_dead_code]]).
 
+**✅ حُسم بالخيار (أ) — تراجع كامل ٢٠٢٦-٠٦-١١، commit `5ad4f7b` (مُتحقَّق ٢٠٢٦-٠٨-٠٥):**
+«revert(seo): إزالة تكامل Google Keyword Planner — رفضته Google (سياسة RMF)».
+حُذف `api/seo/keyword_planner.py` (١٠٩ أسطر) وأُعيدت `admin.py` و`dashboard.py`
+و`migration_042_seo_keyword_volume.sql` (٢٢٢ سطر حذف مقابل ٧ إضافة).
+**كل ما هو موصوف أدناه تحت «الكود» و«الموديول يبقى يرجّع {}» لم يعد موجوداً — صفر مرجع حيّ**
+(`grep keyword_planner\|avg_monthly_searches` على `api/` و`dashboard.py` = صفر).
+تبقى الحسابات والمتغيّرات موثّقة تاريخياً فقط. **لا تبنِ على هذا التكامل — هو ميّت بقرار Google.**
+
 **المتغيّرات (5):** `GOOGLE_ADS_DEVELOPER_TOKEN / CLIENT_ID / CLIENT_SECRET / REFRESH_TOKEN / CUSTOMER_ID` — في `.env` المحلي + خدمة **DEALPULSEKSA** على Railway (هنا يشتغل الكود؛ الداشبورد لا يحتاجها لأنه يقرأ عبر الـ API). OAuth: تطبيق منشور للإنتاج (refresh token لا ينتهي).
 
 **الكود:** migration_042 (أعمدة `avg_monthly_searches`/`competition`/`kw_volume_checked_at` على `seo_opportunity_keywords`)؛ endpoints `/seo-opportunities` refresh + refresh-all يجلبان الحجم (دفعات 20)؛ الداشبورد يعرض شارة «بحث/شهر». السياق الكامل في [[seo_white_hat_only]].

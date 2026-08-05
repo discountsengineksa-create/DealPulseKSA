@@ -35,7 +35,7 @@
 - [AI Mastery Goal](user_ai_mastery_goal.md) — يريد برومبت عالمي معاد الاستخدام؛ مهتم بهندسة البرومبت؛ رأي خبير صريح
 - العقل المدبر: [البروتوكول](protocol_mastermind.md) (نواة + انخراط ٠–٥ أسئلة + ٤ أوضاع + ٤ نداءات) · [البرومبت](mastermind_prompt.md) (موقع الملف + التفعيل)
 - [Memory Sync via Junction](memory_sync_junction.md) — ذاكرة واحدة بالريبو + junction؛ تتزامن مع git؛ لا تفرّع
-- المهارات: [المثبَّتة](skills_install_manifest.md) (٢٣٨ skill في ~/.claude/skills من ٦ ريبوهات) · [عدّة التسويق](marketing_skills_toolkit.md) (١٧ skill؛ المخرجات عربي سعودي + White-Hat)
+- المهارات: [المثبَّتة](skills_install_manifest.md) (**٢٣٨ على جهاز `Users\user` · ١٧ فقط على `Users\PC` — تحقّق أي جهاز أنت عليه**؛ أُكِّد ٢٠٢٦-٠٨-٠٥) · [عدّة التسويق](marketing_skills_toolkit.md) (١٧ skill تسويق؛ عربي سعودي + White-Hat)
 - [Reconcile Web Repo Separately](reconcile_web_repo_separately.md) — dealpulseksa-web ريبو مستقل؛ افحصه أولاً
 
 ## ٢) البنية والتشغيل والنشر والموقع (١٨)
@@ -83,7 +83,7 @@
 ## ٥) التحليلات والسيو (٢٣)
 
 - تحليل المتاجر: [الجناح](store_analytics_bi.md) (٤ تبويبات + AI عبر Groq) · [استراتيجية إعادة البناء](analysis_rebuild_strategy.md) (٦ صفحات، ٣ مسارات دخل، zero-fakery) · [البنية النهائية](analytics_store_structure.md) (٦ أقسام؛ «أبرز» = top favorites)
-- الكلمات المفتاحية: [Keyword Planner](google_ads_keyword_planner.md) (MCC 857-047-5609؛ v21) · [طلب السوق السعودي](keyword_demand_ksa.md) (البراندات 10K-100K؛ متاجرك ~10-100) · [⚠️ Windsor GSC](windsor_gsc_connector.md) (المجاني يرجع أصفاراً وهمية بلا خطأ)
+- الكلمات المفتاحية: [⛔ Keyword Planner](google_ads_keyword_planner.md) (**رفضته Google نهائياً — التكامل مُتراجَع عنه بـ5ad4f7b، لا كود حيّ**) · [طلب السوق السعودي](keyword_demand_ksa.md) (البراندات 10K-100K؛ متاجرك ~10-100) · [⚠️ Windsor GSC](windsor_gsc_connector.md) (المجاني يرجع أصفاراً وهمية بلا خطأ)
 - [SEO Indexation Status](seo_indexation_status.md) — الفهرسة 4→150؛ انفجار ظهور يوليو؛ العنق = المركز+CTR
 - [SEO Deep Audit Fixes](seo_deep_audit_fixes.md) — بق light-AR 500 (is_trending BOOLEAN) أفرغ الخريطة صامتاً؛ اسحب الباك-إند أولاً
 - [SEO Authority Building](seo_authority_building.md) — crawled-not-indexed سقف سلطة؛ باكلينكس White-Hat
@@ -101,7 +101,7 @@
 ## ٦) المحتوى والمدوّنة (٢٠)
 
 - [Voice Bible](voice_bible.md) — نموذج الصوت التحريري (عيّنة فيتامين د مشرَّحة)؛ قلّد العيّنة
-- [Blog Total = Count It Live](blog_massive_content_session.md) — **عُدّ بـ`grep -cE "^\s*slug:" lib/blog.ts`** لا تجمع تقديرياً
+- [Blog Total = Count It Live](blog_massive_content_session.md) — **١٤٨١ (عُدَّ ٢٠٢٦-٠٨-٠٥؛ كان ٦٥٠ في يوليو)**؛ عُدّ بـ`grep -cE "^\s*slug:" lib/blog.ts` لا تجمع تقديرياً
 - الصحّة: [عنقود المكمّلات](health_content_cluster.md) (١٠ مقالات iHerb؛ كود QQC1568) · [مصادر الاستشهاد](health_citation_sourcing.md) (Mayo/NIH يحجبان الـcrawlers = 403 كاذب؛ استخدم Harvard)
 - [Blog Internal-Link De-orphan](blog_internal_link_deorphan.md) — 65 مقال يتيم صُفِّرت؛ top-6 getRelatedPosts يجوّع الذيل
 - [Blog Inline Code Chips](blog_inline_code_chips.md) — شارة كود/CTA بجانب كل ذكر متجر في ١٣٦٥ مقال؛ العلاج بالعارض
