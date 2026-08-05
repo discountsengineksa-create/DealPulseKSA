@@ -11,11 +11,24 @@ metadata:
 
 **القرار المعماري:** جدول `user_favorites` مُطبّع = مصدر الحقيقة الوحيد (SSOT) للتحليل والتنبيهات.
 
-**⚠️ تصحيح (مُتحقَّق 2026-07-06، امتحان القدرة Q3):** الكتابة المزدوجة لـ `manual_favorites`
-**لم تعد موجودة في الكود** — `grep "(INSERT|UPDATE|DELETE).*manual_favorites"` عبر كل `*.py` = صفر.
-الكتابة الوحيدة الآن إلى `user_favorites` (في `api/routers/users.py`: INSERT أسطر 38/48/78/89،
-DELETE 61/66/103/109). أعمدة `manual_favorites TEXT[]` صارت **legacy للقراءة فقط** (قد تُقرأ في
-واجهات قديمة لكن لا تُحدَّث). الوصف القديم أدناه («تبقى بالكتابة المزدوجة») **بطل** — أثق بالكود لا بالذاكرة الأقدم.
+**🔴 تصحيحُ التصحيح (مُتحقَّق بالكود 2026-08-05): «الكتابة المزدوجة اختفت» كان ادّعاءً خاطئاً.**
+النسخة السابقة من هذا السطر قالت إن `grep "(INSERT|UPDATE|DELETE).*manual_favorites"` = صفر.
+**غلط** — البوت يكتبها في موضعين:
+- `deal_pulse_bot.py:2051` `_add_favorite_db` → `INSERT INTO user_favorites` **ثم** تحديث `bot_users.manual_favorites` (السطر ~2065).
+- `deal_pulse_bot.py:2089` `_remove_favorite_db` → `DELETE FROM user_favorites` **ثم** `UPDATE bot_users SET manual_favorites = array_remove(...)` (السطر 2100).
+
+الكتابة المزدوجة **حيّة**: `user_favorites` = SSOT، و`manual_favorites` = cache متزامن.
+درس: الـgrep الذي أنتج الادّعاء الخاطئ إمّا لم يشمل `deal_pulse_bot.py` أو قُرئ نتيجته بتسرّع.
+**النمط الخطر: «تحقّقتُ» بلا لصق مخرَج الأمر = ادّعاء لا تحقّق.** → [[feedback_mirror_audit]]
+
+**⚠️ ثغرة حقيقية مكتشَفة أثناء التحقّق — الإزالة لا تُسجَّل:**
+`handle_favorite_toggle` (`deal_pulse_bot.py:2220`) يستدعي `log_action(..., 'favorite_add', ...)`
+عند **الإضافة فقط** (سطر 2233). عند الإزالة (سطر 2228) لا يُسجَّل أي حدث، و`_remove_favorite_db`
+لا يسجّل داخلياً. **النتيجة:** `action_logs` يرى الإضافات ولا يرى الإزالات، فأي تحليل «تسرّب
+المفضّلة» أعمى. هذا يفسّر ما بدا شذوذاً في ٢٠٢٦-٠٨-٠٥: حدث `favorite_add` واحد (٢٠٢٦-٠٦-٢٤)
+بينما `user_favorites` **و**`manual_favorites` فارغان — أُضيف ثم أُزيل، والإزالة لم تُسجَّل.
+**لا بق في الكتابة المزدوجة.** الإصلاح (لو أراده المالك): `log_action(store_id, 'favorite_remove', ...)`
+في فرع الإزالة. → [[db_foundation_audit]]
 
 **الجدول:** `platform('bot'|'web'|'miniapp')` + (`web_user_id` أو `telegram_id`، CHECK مالك واحد
 بالضبط) + `store_id` (بلا FK لـ master لأنه غير فريد) + `created_at` + `last_notified_at`.

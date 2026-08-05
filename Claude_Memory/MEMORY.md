@@ -63,13 +63,13 @@
 
 ## ٣) قاعدة البيانات وموثوقية الأرقام (٩)
 
-- [DB Foundation Audit](db_foundation_audit.md) — ~76 جدول/42% فارغة؛ العدّادات total_*؛ ميت جاهز للحذف؛ دَيْن النوع
+- [DB Foundation Audit](db_foundation_audit.md) — **لقطة حيّة ٢٠٢٦-٠٨-٠٥: ٧١ جدول / ٣٨ فارغ (٥٤٪) / master ٥٢**؛ العدّادات total_*؛ دَيْن النوع بلا contract
 - [master.store_id Not Unique](db_master_duplicate_store_id.md) — «نون» مكرّر (8,21) يمنع UNIQUE/FK؛ dedupe pending
 - [Local DB Detached from Prod](db_local_vs_railway.md) — localhost = dummy؛ الإنتاج عبر DATABASE_URL
 - [Data Trust: Geo/Device](data_trust_geo_device.md) — bot_users.city/device مفبركة؛ المدينة الحقيقية من web_users/action_logs فقط
 - [Users Analytics Rules](users_analytics_rules.md) — قواعد العدّ/الهوية/الجغرافيا لتحليل المستخدمين
 - [Web Visits Tracking](web_visits_tracking.md) — web_visits (Migration 060) جلسة-مستوى؛ بوتات مفلترة
-- [Unified Favorites](unified_favorites.md) — user_favorites SSOT (dual-write) عبر بوت+ميني+ويب
+- [Unified Favorites](unified_favorites.md) — user_favorites SSOT + كتابة مزدوجة **حيّة** (ادّعاء «اختفت» كان غلطاً)؛ **الإزالة لا تُسجَّل** في action_logs
 - [Bot-vs-Promo 3-Signal Check](bot_vs_promo_heuristic.md) — قبل اتّهام قفزة بالبوت: visitor_id + timing + ASN
 - [Owned Audience Reality](owned_audience_reality.md) — ٥ مستخدمي بوت + ١٠ حسابات ويب + صفر بثّ؛ رهان تيليجرام بلا جمهور
 

@@ -64,7 +64,7 @@ Four runnable entrypoints share one PostgreSQL database:
 - **`deal_pulse_bot.py`** — Telegram bot (~2,376 lines) using `pyTelegramBotAPI` (`telebot`). **🔓 Freeze LIFTED 2026-07-07** — edits allowed under the partnership protocol (declare → verify → prove → record). Rollback tag: `bot-locked-2026-06-10`. See `Claude_Memory/bot_frozen_lock.md`. Lifting the freeze does **not** waive the DB-write wall or the `main=prod` wall.
 - **`bot_app.py`** — Production Railway entrypoint (~418 lines). Combines bot + FastAPI (11 routers) + Mini App into one service.
 - **`api/main.py`** — API-only entrypoint for local dev (`uvicorn api.main:app --port 8000`). Production runs `bot_app.py` instead.
-- **PostgreSQL** (Railway prod, via `DATABASE_URL`) — migrations run to **`migration_069`** (67 migration files in repo root). Table count: last audited at **~76** (`Claude_Memory/db_foundation_audit.md`); the older "~67 after migration_049" figure is stale. **Count it live before relying on a number.** Local `discounts_engine` on `localhost:5432` is a dummy/test DB only. The `master` table is the source of truth for all store/coupon data.
+- **PostgreSQL** (Railway prod, via `DATABASE_URL`) — migrations run to **`migration_069`** (67 migration files in repo root). **Counted live 2026-08-05: 71 base tables, 38 of them empty (54%), `master` = 52 rows.** Two previously documented figures were both wrong (`~67` in this file, `~76` in memory) — that is exactly the drift this doc now guards against. **Re-count before quoting; the query is in `Claude_Memory/db_foundation_audit.md`.** Local `discounts_engine` on `localhost:5432` is a dummy/test DB only. The `master` table is the source of truth for all store/coupon data.
 
 ## Database Patterns
 
@@ -88,7 +88,7 @@ conn.close()               # returns connection to pool (not real close)
 | Table | Purpose |
 |---|---|
 | `master` | All store data: affiliate links, coupons, tags, dates, live counters, trending flag |
-| `bot_users` | Telegram user profiles — location, favorites |
+| `bot_users` | Telegram user profiles — 26 columns. Favorites live in `manual_favorites` (there is **no** `favorites` column); also `fav_store_inferred` / `fav_tag_inferred` |
 | `web_users` | Website account profiles (Firebase OTP auth) |
 | `action_logs` | Per-event log for every user interaction |
 | `web_visits` | Web session-level tracking (migration_060/061) — separate from action_logs, bot-filtered |
