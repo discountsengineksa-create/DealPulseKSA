@@ -90,7 +90,7 @@
 - [SEO High-Demand Front](seo_high_demand_front_opened.md) — فخّ AR=draft+EN=noindex؛ نُشرت 23 صفحة؛ نون/نمشي محجوبان بالسلطة
 - [SEO Page Portfolio Verdict](seo_page_portfolio_verdict.md) — ٧١٠/٧٦٤ صفحة صفر نقرة؛ المتاجر نيّة ميتة؛ التجميع وحده يكسب
 - [SEO Category Query Alignment](seo_category_query_alignment.md) — وزن المفردات: «كوبون» م49 و«متاجر» م19؛ ٨٧٪ من الظهور غارق؛ CTR المتاجر منخفض **بقرار الإسناد** لا بعطل
-- [SEO Meta Code: Per-Network](seo_meta_code_leak.md) — كشف الكود يتبع نموذج الإسناد (٤١ يُكشف / ١١ يُحجب)؛ attribution.ts
+- [🔴 SEO Meta Code — التفريع نُسِخ](seo_meta_code_leak.md) — الكود يُكشف لكل الكتالوج وما يأتي (قرار المالك ٢٠٢٦-٠٨-٠٥)؛ isCodeAttributed لـllms.txt/المدوّنة فقط
 - الفهرسة: [Google Indexing حيّ](seo_google_indexing_live.md) (٢٠٠/يوم) · [الدفع بالجملة](seo_bulk_reindex_ops.md) (دفعات ٦؛ IndexNow بلا حصة؛ Yandex 202 = نجاح) · [الظهور لمحرّكات AI](seo_ai_visibility_optin.md) (١٥ كراولر + llms.txt)
 - الترويج: [محور القنوات المملوكة](seo_owned_channels_pivot.md) (رفض Reddit/Quora؛ X+Telegram+IG) · [PR Blitz Kit](seo_pr_blitz_kit.md) (لترويج /calendar)
 - الدومين: [خطة السلطة](domain_authority_plan.md) (الربط الداخلي منجز؛ المتبقّي عناقيد/Schema/باكلينك) · [⚠️ فخّ الـcanonical](domain_canonical_trap.md) (الصح dealpulseksa.com؛ dealpulesksa ميّت)
