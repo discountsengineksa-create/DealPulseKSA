@@ -47,6 +47,8 @@ def select_top_demand_stores(cur, n: int) -> list[dict]:
                 + COALESCE(m.total_coupon_copies, 0) * 2) AS demand
         FROM master m
         WHERE m.public_coupon IS NOT NULL AND m.public_coupon <> ''
+          -- كوبون فعّال فقط: لا تُولَّد صفحة هبوط لكود منتهٍ (يوم الانتهاء منتهٍ).
+          AND (m.last_time IS NULL OR m.last_time > CURRENT_DATE)
           AND COALESCE(m.is_suspended, FALSE) = FALSE
           -- يحترم قنوات النشر: لا نولّد صفحة SEO عامة لمتجر مخفيّ عن الموقع
           -- (مثل متجر منعه المعلن من القناة، أو حصري للبوت). NULL = كل القنوات.
@@ -120,6 +122,8 @@ def auto_publish(cur, cap: int) -> list[dict]:
         JOIN master m ON m.id = p.master_id
         WHERE p.status = 'draft'
           AND m.public_coupon IS NOT NULL AND m.public_coupon <> ''
+          -- لا تُنشَر صفحة لكود مات بين التوليد والنشر.
+          AND (m.last_time IS NULL OR m.last_time > CURRENT_DATE)
           AND COALESCE(m.is_suspended, FALSE) = FALSE
           -- قائمة المنع: لا ننشر صفحة لمتجر مُعطّل SEO (خط الدفاع الأخير).
           AND COALESCE(m.seo_enabled, TRUE) = TRUE

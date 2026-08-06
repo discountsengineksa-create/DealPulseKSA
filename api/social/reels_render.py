@@ -380,6 +380,8 @@ def load_stores(limit: int | None = None, only: str | None = None) -> list[dict]
         where coalesce(affiliate_link,'')<>''
           and coalesce(is_suspended,false)=false
           and coalesce(discount_value,'')<>''
+          -- لا ريلز بكود منتهٍ: المنشور يبقى على إنستقرام بعد موت العرض
+          and (last_time is null or last_time > current_date)
           and (%s is null or store_id = %s)
         order by (coalesce(total_coupon_copies,0)+coalesce(total_link_clicks,0)) desc
     """, (only, only))

@@ -192,7 +192,7 @@ def _load_master_meta(conn) -> dict[str, dict]:
                COALESCE(cloaked_slug, '')  AS cloaked_slug
         FROM   master
         WHERE  store_id IS NOT NULL AND TRIM(store_id) <> ''
-          AND  (last_time IS NULL OR last_time >= CURRENT_DATE)
+          AND  (last_time IS NULL OR last_time > CURRENT_DATE)
         ORDER  BY store_id,
                   (CASE WHEN logo_url IS NOT NULL AND logo_url <> '' THEN 0 ELSE 1 END)
     """

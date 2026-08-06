@@ -119,7 +119,7 @@ def _load_active_store_ids(conn) -> set[str]:
             """
             SELECT DISTINCT store_id FROM master
              WHERE store_id IS NOT NULL AND TRIM(store_id) <> ''
-               AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+               AND (last_time IS NULL OR last_time > CURRENT_DATE)
             """
         )
         return {row[0] for row in cur.fetchall()}

@@ -1054,7 +1054,7 @@ def _load_and_show_codes(user_id, lang):
         cur  = conn.cursor(cursor_factory=extras.DictCursor)
         cur.execute("""
             SELECT * FROM master
-            WHERE (last_time IS NULL OR last_time >= CURRENT_DATE)
+            WHERE (last_time IS NULL OR last_time > CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
               AND (publish_channels IS NULL OR publish_channels ILIKE '%bot%')
             ORDER BY
@@ -1093,7 +1093,7 @@ def _load_and_show_featured(user_id, lang):
             SELECT m.*, fc.fav_count
             FROM master m
             JOIN fav_counts fc ON fc.store_id = m.store_id
-            WHERE (m.last_time IS NULL OR m.last_time >= CURRENT_DATE)
+            WHERE (m.last_time IS NULL OR m.last_time > CURRENT_DATE)
               AND NOT COALESCE(m.is_suspended, FALSE)
               AND (m.publish_channels IS NULL OR m.publish_channels ILIKE '%bot%')
             ORDER BY fc.fav_count DESC, m.store_id ASC
@@ -1125,7 +1125,7 @@ def _fetch_cats_from_db(lang: str) -> list:
                          trim(both '{{}}' from COALESCE({tags_expr}, '')), ','
                      )) AS tg
                 WHERE trim(tg) <> ''
-                  AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+                  AND (last_time IS NULL OR last_time > CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
             )
             SELECT t.tag
@@ -1179,7 +1179,7 @@ def _load_tag_stores(user_id, lang, tag):
                 SELECT lower(trim(tg))
                 FROM unnest(string_to_array(trim(both '{{}}' from COALESCE({tags_expr}, '')), ',')) AS tg
             )
-            AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+            AND (last_time IS NULL OR last_time > CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
               AND (publish_channels IS NULL OR publish_channels ILIKE '%%bot%%')
             ORDER BY
@@ -1255,7 +1255,7 @@ def _db_search(search_term: str) -> list:
         like_no_ws = f"%{''.join(search_term.split())}%"
         cur.execute("""
             SELECT * FROM master
-            WHERE (last_time IS NULL OR last_time >= CURRENT_DATE)
+            WHERE (last_time IS NULL OR last_time > CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
               -- قناة البوت فقط (NULL = كل القنوات). يطابق فلتر الـ API channel=bot.
               AND (publish_channels IS NULL OR publish_channels ILIKE '%%bot%%')
@@ -1289,7 +1289,7 @@ def _db_search_website_exclusive(search_term: str) -> dict | None:
         like_no_ws = f"%{''.join(search_term.split())}%"
         cur.execute("""
             SELECT store_id, name_en FROM master
-            WHERE (last_time IS NULL OR last_time >= CURRENT_DATE)
+            WHERE (last_time IS NULL OR last_time > CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
               -- منشور على الموقع، وغير منشور على البوت (حصري للموقع)
               AND publish_channels IS NOT NULL
@@ -1841,7 +1841,7 @@ def handle_link_click(call):
         cur.execute("""
             SELECT affiliate_link, cloaked_slug FROM master
             WHERE store_id = %s
-              AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+              AND (last_time IS NULL OR last_time > CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
             LIMIT 1
         """, (store_id,))
@@ -1904,7 +1904,7 @@ def handle_coupon_copy(call):
             SELECT public_coupon, discount_value, extra_offer, extra_offer_en
             FROM master
             WHERE store_id = %s
-              AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+              AND (last_time IS NULL OR last_time > CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
             LIMIT 1
         """, (store_id,))
@@ -2196,7 +2196,7 @@ def _load_favorites(user_id, lang):
             WHERE m.store_id IN (
                 SELECT store_id FROM user_favorites WHERE telegram_id = %s
             )
-              AND (m.last_time IS NULL OR m.last_time >= CURRENT_DATE)
+              AND (m.last_time IS NULL OR m.last_time > CURRENT_DATE)
               AND NOT COALESCE(m.is_suspended, FALSE)
               AND (m.publish_channels IS NULL OR m.publish_channels ILIKE '%%bot%%')
             ORDER BY (

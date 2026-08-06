@@ -1323,7 +1323,7 @@ def _sa_trend_store_ids() -> set:
         cur.execute("""
             SELECT DISTINCT store_id FROM master
              WHERE store_id IS NOT NULL AND TRIM(store_id) <> ''
-               AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+               AND (last_time IS NULL OR last_time > CURRENT_DATE)
         """)
         active = {r[0] for r in cur.fetchall()}
 
@@ -2694,14 +2694,16 @@ if page == "الاستعلام والتعديل":
 
 
 # ══════════════════════════════════════════════════════════════════════
-# 📦 أرشيف المنتهية — المتاجر اللي last_time < CURRENT_DATE
-#    الموقع والبوت يخفونها تلقائياً (فلتر last_time >= CURRENT_DATE)،
+# 📦 أرشيف المنتهية — المتاجر اللي last_time <= CURRENT_DATE
+#    الكود يختفي تلقائياً من الموقع والبوت والميني (فلتر last_time > CURRENT_DATE)،
 #    وهنا نقدر نراجعها، نمدّد تاريخها، أو نحذفها نهائياً.
 # ══════════════════════════════════════════════════════════════════════
 if page == "📦 أرشيف المنتهية":
     st.header("📦 أرشيف الأكواد المنتهية")
     st.caption(
-        "هذه المتاجر **مخفية تلقائياً** من الموقع والبوت لأن تاريخ انتهائها مرّ. "
+        "**كودها مخفيّ تلقائياً** من الموقع والبوت والميني لأن تاريخ انتهائها مرّ "
+        "(يوم الانتهاء نفسه يُحتسب منتهياً). المتجر يختفي كلياً من البوت والميني، "
+        "وصفحته على الموقع تبقى بلا كود حفاظاً على روابط المقالات الداخلية. "
         "تقدر تمدّد التاريخ لإعادة تفعيلها، أو تحذفها نهائياً."
     )
 
@@ -2715,7 +2717,7 @@ if page == "📦 أرشيف المنتهية":
                    total_coupon_copies, total_link_clicks,
                    (CURRENT_DATE - last_time) AS days_expired
             FROM master
-            WHERE last_time IS NOT NULL AND last_time < CURRENT_DATE
+            WHERE last_time IS NOT NULL AND last_time <= CURRENT_DATE
             ORDER BY last_time DESC, id DESC
         """
         df_arch = pd.read_sql(archive_q, conn)
@@ -2950,7 +2952,7 @@ if page == "جدول الكوبونات":
                 total_coupon_copies,
                 total_link_clicks
             FROM master
-            WHERE last_time IS NULL OR last_time >= CURRENT_DATE
+            WHERE last_time IS NULL OR last_time > CURRENT_DATE
             ORDER BY
                 is_trending_bool DESC,
                 priority_score_int DESC
@@ -6451,7 +6453,7 @@ elif page == "📣 بلاغات الأكواد":
             active = pd.read_sql("""
                 SELECT store_id FROM master
                 WHERE NOT COALESCE(is_suspended, FALSE)
-                  AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+                  AND (last_time IS NULL OR last_time > CURRENT_DATE)
                 ORDER BY store_id
             """, conn)
             if active.empty:
@@ -7321,8 +7323,8 @@ elif page == "تحليل المستخدمين":
         # ── متاجر مختارة (قائمتها تتفلتر حسب حالة المتاجر المختارة) ───────
         _store_cond = {
             "active":   "AND last_time > CURRENT_DATE + 3",
-            "expired":  "AND last_time < CURRENT_DATE",
-            "expiring": "AND last_time BETWEEN CURRENT_DATE AND CURRENT_DATE + 3",
+            "expired":  "AND last_time <= CURRENT_DATE",
+            "expiring": "AND last_time BETWEEN CURRENT_DATE + 1 AND CURRENT_DATE + 3",
         }.get(gen_store_status, "")
         _store_opts = ["لا شيء", "الكل"] + _gen_distinct(f"""
             SELECT DISTINCT store_id FROM master
@@ -7485,8 +7487,8 @@ elif page == "تحليل المستخدمين":
                        else "('web')")
                 cond = {
                     "active":   "m.last_time > CURRENT_DATE + 3",
-                    "expiring": "m.last_time BETWEEN CURRENT_DATE AND CURRENT_DATE + 3",
-                    "expired":  "m.last_time < CURRENT_DATE",
+                    "expiring": "m.last_time BETWEEN CURRENT_DATE + 1 AND CURRENT_DATE + 3",
+                    "expired":  "m.last_time <= CURRENT_DATE",
                 }[store_status]
                 return (" AND EXISTS (SELECT 1 FROM action_logs al2 "
                         "JOIN master m ON m.store_id = al2.store_id "
@@ -8084,8 +8086,8 @@ elif page == "تحليل المستخدمين":
         if gen_store_status in ("active", "expired", "expiring"):
             _ms_cond = {
                 "active":   "m.last_time > CURRENT_DATE + 3",
-                "expired":  "m.last_time < CURRENT_DATE",
-                "expiring": "m.last_time BETWEEN CURRENT_DATE AND CURRENT_DATE + 3",
+                "expired":  "m.last_time <= CURRENT_DATE",
+                "expiring": "m.last_time BETWEEN CURRENT_DATE + 1 AND CURRENT_DATE + 3",
             }[gen_store_status]
             _tl_storestat_where = (f" AND EXISTS (SELECT 1 FROM master m "
                                    f"WHERE m.store_id = al.store_id AND {_ms_cond})")
@@ -8768,8 +8770,8 @@ elif page == "تحليل المستخدمين":
 - ⚠️ «متى ينتهي الكوبون» = master.last_time (تاريخ آخر صلاحية للكوبون الحالي).
 - ⚠️ لتصنيف الكوبون (فعّال/منتهي/قريب الانتهاء):
     'فعّال'         إذا last_time > CURRENT_DATE + 3
-    'قريب الانتهاء' إذا last_time BETWEEN CURRENT_DATE AND CURRENT_DATE + 3
-    'منتهي'         إذا last_time < CURRENT_DATE
+    'قريب الانتهاء' إذا last_time BETWEEN CURRENT_DATE + 1 AND CURRENT_DATE + 3
+    'منتهي'         إذا last_time <= CURRENT_DATE
 """
 
         # عرض سجل المحادثة

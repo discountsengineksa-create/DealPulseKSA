@@ -24,6 +24,29 @@ from api.seo.schema_markup import build_jsonld
 
 router = APIRouter(prefix="/seo", tags=["seo"])
 
+# ── الكود المنتهي لا يُعرض — ولا حتى داخل متن صفحة /c/ ──────────────────────
+# صفحات الهبوط تُولَّد مرّة ويُطبع الكود **نصّاً ثابتاً** في `body_markdown`
+# و`description_meta`، فحين ينتهي العرض تبقى تنشر كوداً ميّتاً بينما بقيّة
+# المنصّة أخفته (الموقع/البوت/الميني). الحجب عند التقديم لا في القاعدة:
+# لا نفقد المحتوى، ويرجع الكود وحده لحظة تمديد `last_time`.
+_OFFER_ACTIVE_SQL = "(m.last_time IS NULL OR m.last_time > CURRENT_DATE)"
+
+
+def _strip_dead_code(body: str | None, code: str | None) -> str | None:
+    """يُسقط كل سطر يذكر الكود المنتهي من متن الصفحة (بقيّة الدليل تبقى)."""
+    if not body or not code:
+        return body
+    return "\n".join(ln for ln in body.splitlines() if code not in ln)
+
+
+def _clean_meta(desc: str | None, code: str | None, keyword: str, lang: str = "ar") -> str | None:
+    """الوصف سطر واحد — لو حمل الكود المنتهي نستبدله بوصف عام بلا ادّعاء."""
+    if not desc or not code or code not in desc:
+        return desc
+    if lang == "en":
+        return f"{keyword} — latest offers and deals with Deal Pulse KSA."
+    return f"{keyword} — أحدث العروض والتخفيضات مع نبض الصفقات."
+
 
 class SeoPageSummary(BaseModel):
     slug: str
@@ -60,28 +83,39 @@ def list_pages(
     conn=Depends(get_db),
 ):
     """قائمة الصفحات المنشورة (للـ sitemap + الفهرسة الذاتية)."""
-    where = ["status = 'published'"]
+    where = ["p.status = 'published'"]
     params: list[Any] = []
     if lang in ("ar", "en"):
-        where.append("lang = %s")
+        where.append("p.lang = %s")
         params.append(lang)
     params.append(limit)
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             f"""
-            SELECT slug, target_keyword, master_id, lang,
-                   title_meta, description_meta,
-                   to_char(published_at, 'YYYY-MM-DD"T"HH24:MI:SSZ') AS published_at
-            FROM seo_landing_pages
+            SELECT p.slug, p.target_keyword, p.master_id, p.lang,
+                   p.title_meta, p.description_meta,
+                   to_char(p.published_at, 'YYYY-MM-DD"T"HH24:MI:SSZ') AS published_at,
+                   CASE WHEN {_OFFER_ACTIVE_SQL} THEN NULL ELSE m.public_coupon END AS dead_code
+            FROM seo_landing_pages p
+            LEFT JOIN master m ON m.id = p.master_id
             WHERE {' AND '.join(where)}
-            ORDER BY published_at DESC NULLS LAST, id DESC
+            ORDER BY p.published_at DESC NULLS LAST, p.id DESC
             LIMIT %s
             """,
             params,
         )
         rows = cur.fetchall()
-    return SeoPageList(total=len(rows), pages=[SeoPageSummary(**dict(r)) for r in rows])
+
+    pages = []
+    for r in rows:
+        d = dict(r)
+        dead = d.pop("dead_code", None)
+        d["description_meta"] = _clean_meta(
+            d["description_meta"], dead, d["target_keyword"], d.get("lang") or "ar"
+        )
+        pages.append(SeoPageSummary(**d))
+    return SeoPageList(total=len(pages), pages=pages)
 
 
 @router.get("/pages/{slug}", response_model=SeoPageFull)
@@ -99,12 +133,14 @@ def get_page(slug: str, conn=Depends(get_db)):
                    to_char(p.published_at, 'YYYY-MM-DD"T"HH24:MI:SSZ') AS published_at,
                    m.store_id,
                    COALESCE(NULLIF(m.name_en, ''), m.store_id) AS store_name,
-                   m.logo_url, m.discount_value, m.public_coupon, m.cloaked_slug,
-                   m.store_tags
+                   m.logo_url, m.cloaked_slug, m.store_tags,
+                   CASE WHEN {active} THEN m.discount_value END AS discount_value,
+                   CASE WHEN {active} THEN m.public_coupon  END AS public_coupon,
+                   CASE WHEN {active} THEN NULL ELSE m.public_coupon END AS dead_code
             FROM seo_landing_pages p
             LEFT JOIN master m ON m.id = p.master_id
             WHERE p.slug = %s AND p.status = 'published'
-            """,
+            """.format(active=_OFFER_ACTIVE_SQL),
             (slug,),
         )
         row = cur.fetchone()
@@ -112,6 +148,15 @@ def get_page(slug: str, conn=Depends(get_db)):
         raise HTTPException(status_code=404, detail="page not found")
 
     page_dict = dict(row)
+    # العرض منتهٍ ⇒ يُمحى الكود من المتن والوصف قبل بناء JSON-LD، وإلا سرّبه
+    # الـstructured data إلى Google وإلى محرّكات الـAI بعد موته.
+    dead_code = page_dict.pop("dead_code", None)
+    if dead_code:
+        page_dict["body_markdown"] = _strip_dead_code(page_dict["body_markdown"], dead_code)
+        page_dict["description_meta"] = _clean_meta(
+            page_dict.get("description_meta"), dead_code, page_dict["target_keyword"],
+            page_dict.get("lang") or "ar",
+        )
     # نبني JSON-LD ونضمّنه في الرد (Next.js يلصقه في <head>)
     jsonld = build_jsonld(page_dict)
 
