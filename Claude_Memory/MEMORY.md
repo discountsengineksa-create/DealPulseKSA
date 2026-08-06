@@ -1,6 +1,6 @@
 # Project Memory Index
 
-> ١٢٩ ملفاً. **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
+> ١٣٠ ملفاً. **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
 > **الطبقة ٠ تُقرأ متونها قبل أي مهمة.** من الباقي: افتح ما يخصّ مهمتك وأعلن ما فتحته.
 > الحوائط الصلبة منسوخة نصّاً في `CLAUDE.md`. سطرٌ بعدّة روابط = ملفات مستقلة جُمعت للاختصار.
 
@@ -90,7 +90,8 @@
 - [SEO High-Demand Front](seo_high_demand_front_opened.md) — فخّ AR=draft+EN=noindex؛ نُشرت 23 صفحة؛ نون/نمشي محجوبان بالسلطة
 - [SEO Page Portfolio Verdict](seo_page_portfolio_verdict.md) — ٧١٠/٧٦٤ صفحة صفر نقرة؛ المتاجر نيّة ميتة؛ التجميع وحده يكسب
 - [SEO Category Query Alignment](seo_category_query_alignment.md) — وزن المفردات: «كوبون» م49 و«متاجر» م19؛ ٨٧٪ من الظهور غارق؛ CTR المتاجر منخفض **بقرار الإسناد** لا بعطل
-- [🔴 SEO Meta Code — التفريع نُسِخ](seo_meta_code_leak.md) — الكود يُكشف لكل الكتالوج وما يأتي (قرار المالك ٢٠٢٦-٠٨-٠٥)؛ isCodeAttributed لـllms.txt/المدوّنة فقط
+- [🔴 SEO Meta Code — التفريع نُسِخ](seo_meta_code_leak.md) — الكود يُكشف لكل الكتالوج في سنِبت المتجر **و llms.txt**؛ isCodeAttributed لشارات المدوّنة فقط
+- [⚖️ ثقة أدوات الفحص](seo_audit_tools_trust.md) — «هبوط الترافيك» تقدير لا قياس (افحص المركز)؛ سيمرش مجمّد على آخر rerun + عيّنة ٦٪؛ أصفار AI فلترها أمريكي
 - الفهرسة: [Google Indexing حيّ](seo_google_indexing_live.md) (٢٠٠/يوم) · [الدفع بالجملة](seo_bulk_reindex_ops.md) (دفعات ٦؛ IndexNow بلا حصة؛ Yandex 202 = نجاح) · [الظهور لمحرّكات AI](seo_ai_visibility_optin.md) (١٥ كراولر + llms.txt)
 - الترويج: [محور القنوات المملوكة](seo_owned_channels_pivot.md) (رفض Reddit/Quora؛ X+Telegram+IG) · [PR Blitz Kit](seo_pr_blitz_kit.md) (لترويج /calendar)
 - الدومين: [خطة السلطة](domain_authority_plan.md) (الربط الداخلي منجز؛ المتبقّي عناقيد/Schema/باكلينك) · [⚠️ فخّ الـcanonical](domain_canonical_trap.md) (الصح dealpulseksa.com؛ dealpulesksa ميّت)
@@ -114,7 +115,7 @@
 - سلة: [القناة](salla_affiliate_channel.md) (خصم+عمولة بلا بوّابة ✅) · [الإسناد بالكود لا النقرة](salla_orders_attribution_reality.md) · [أول ١٣ طلب ~٥٢٥ ر.س](salla_proven_converters.md)
 - Admitad: [الإعداد](admitad_affiliate_setup.md) (مساحتان + بوّابتان) · [حجب ISP للنطاق](admitad_dns_block.md) (NXDOMAIN مزوّر → DNS مشفّر)
 - [CodeMap Affiliate Channel](codemap_affiliate_channel.md) — كوبونات فقط بلا تتبّع؛ براندات كبيرة؛ تكمّل سلة
-- [Boostiny Publisher Channel](boostiny_publisher_channel.md) — ناشر Boostiny (عملاء كبار/توصيل طعام)؛ الطلب مُقدَّم
+- [Boostiny Publisher Channel](boostiny_publisher_channel.md) — قُبل ٢٠٢٦-٠٨-٠٦ (#52131)؛ الملف قُدِّم ومقفول → مراجعة ثانية ثم اتفاقية
 - [DCM Network Channel](dcm_network_channel.md) — ٣ منصّات؛ ندرة أكواد أقفلت الحساب؛ ليس رافعة نمو
 - [Zid Affiliate Channel](zid_affiliate_channel.md) — سفير زد: عمولة 30%/خصم 20%، إسناد بالرابط فقط
 - [Jahez Direct BD](jahez_direct_bd.md) — تواصل مباشر بلا شبكة؛ البريد من زيارة المقر؛ مسوّدة في outreach/
