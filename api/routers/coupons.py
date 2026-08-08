@@ -171,16 +171,20 @@ _POPULARITY_SQL = """
 _OFFER_ACTIVE_SQL = "(last_time IS NULL OR last_time > CURRENT_DATE)"
 
 
-def _expiry_where(channel: str, *, detail: bool = False) -> str:
+def _expiry_where(channel: str, *, detail: bool = False, evergreen: bool = False) -> str:
     """شرط الانتهاء في WHERE.
 
     • **الكتالوج والبحث والأبرز — كل القنوات:** المتجر المنتهي يختفي فوراً من
-      واجهات العرض (القائمة، البحث، عدّاد المتاجر، الخريطة) إلى حين تجديد التاريخ.
+      واجهات العرض (القائمة، البحث، عدّاد المتاجر) إلى حين تجديد التاريخ.
     • **صفحة المتجر المفردة على الموقع فقط (`detail=True`):** تبقى 200 بلا كود.
       المقالات تحمل ٧٥ رابطاً داخلياً إليها، وتحويلها 404 كسر شبكة الروابط وأوقف
       زحف Google في 2026-07-21. البوت والميني يفلترانها كالمعتاد.
+    • **الخريطة على الموقع فقط (`evergreen=True`):** تُدرج المنتهي كذلك.
+      إخراج صفحة ترجّع 200 من الـsitemap يجعلها أصلاً حيّاً بلا إشارة اكتشاف —
+      وميزانية الزحف هنا شحيحة (٢٤٤ صفحة «مكتشفة لم تُفهرس»)، فالإخراج يذبلها
+      بصمت بينما نيّة الإصلاح كانت الحفاظ عليها. لا يمسّ الكتالوج ولا البحث.
     """
-    if detail and channel == "website":
+    if channel == "website" and (detail or evergreen):
         return ""
     return f"AND {_OFFER_ACTIVE_SQL}"
 
@@ -337,12 +341,20 @@ def get_all_coupons(
     lang: Literal["ar", "en"] = Query(default="ar"),
     view: Literal["full", "light"] = Query(default="full"),
     channel: str = Query(default="website"),
+    include_expired: bool = Query(
+        default=False,
+        description="خريطة الموقع فقط: يضمّ المتاجر المنتهية (channel=website حصراً)",
+    ),
     conn=Depends(get_db),
 ):
     """إرجاع المتاجر مرتبةً: المروّجة ثم الترند ثم بالمعرّف. ?lang=en يبدّل الحقول.
     ?view=light → قائمة خفيفة سريعة (بلا ستوري/أكواد إضافية/وصف/popularity) للكتالوج
     الكامل (آلاف المتاجر)؛ التفاصيل تُجلب لكل متجر عبر /coupons/detail/{id}.
-    ?channel=bot → قائمة الميني-ويب/البوت (افتراضي website)."""
+    ?channel=bot → قائمة الميني-ويب/البوت (افتراضي website).
+
+    ⚠️ `include_expired=true` **للـsitemap وحده** — صفحة المتجر المنتهي ترجّع 200
+    فيجب أن تبقى في الخريطة، لكنها تظلّ خارج الكتالوج والبحث وعدّاد المتاجر.
+    لا تستعمله في واجهة عرض: سيُظهر متجراً بلا كود كأنه معروض."""
     if view == "light":
         select_clause = _select_light_clause(lang)
         pop_clause = "0 AS popularity_score"
@@ -356,7 +368,7 @@ def get_all_coupons(
             0 AS score_pct
         FROM master
         WHERE NOT COALESCE(is_suspended, FALSE)
-              {_expiry_where(channel)}
+              {_expiry_where(channel, evergreen=include_expired)}
               AND (publish_channels IS NULL OR publish_channels ILIKE %(chpat)s)
         ORDER BY
             COALESCE(is_promoted, FALSE) DESC,
