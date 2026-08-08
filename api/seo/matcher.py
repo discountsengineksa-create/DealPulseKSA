@@ -24,6 +24,34 @@ DEFAULT_LIMIT = 25
 SIM_THRESHOLD = 0.30   # نفس روح بحث الكوبونات (similarity > 0.05) لكن أصرم للجودة
 
 
+MIN_KEYWORD_LEN = 3
+
+
+def _normalize_ar(s: str) -> str:
+    """توحيد صور الحرف العربي: ة/ه، أإآ/ا، ى/ي، حذف التطويل والتشكيل.
+    ضروري هنا لأن «منصه» و«منصة» صورتان لكلمة واحدة، وبدون التوحيد يمرّ أحدهما."""
+    s = (s or "").strip().lower()
+    s = re.sub(r"[ـً-ْ]", "", s)          # تطويل + تشكيل
+    s = s.replace("ة", "ه").replace("ى", "ي")
+    s = re.sub(r"[أإآ]", "ا", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _is_name_fragment(keyword: str, store_name: str) -> bool:
+    """هل الكلمة **جزء مبتور** من اسم المتجر لا الاسم نفسه؟
+
+    `trend_signals` يلتقط بحث المستخدم **أثناء الكتابة**، فتُسجَّل مقاطع جزئية
+    ويصنع المطابق صفحة هبوط لكل واحدة. الأثر الموثّق (٢٠٢٦-٠٨-٠٨): «منصة زد»
+    وحدها صارت أربع صفحات منشورة من `منص` و`منصه` و`منصة` و`زد` — تتنافس بينها
+    وتتنافس مع صفحة المتجر. ومثلها `تو`←تويو و`وولف`←وولفيكس و`بيد`←بيد إن روم
+    و`قطرة عس`←قطرة عسل. الاسم الكامل يمرّ (`ريمان`، `نون`) لأنه ليس مبتوراً.
+    """
+    k, s = _normalize_ar(keyword), _normalize_ar(store_name)
+    if not k or not s:
+        return False
+    return k != s and k in s
+
+
 def _load_blocklist(cur) -> list[tuple[str, str]]:
     """يرجّع [(pattern, pattern_type), ...]. pattern_type: exact|substring|regex."""
     cur.execute("SELECT pattern, COALESCE(pattern_type, 'substring') FROM seo_keyword_blocklist")
@@ -81,11 +109,14 @@ def match_and_enqueue(*, limit: int = DEFAULT_LIMIT, sim_threshold: float = SIM_
                 kw = (c["query_text"] or "").strip()
                 if not kw or _is_blocked(kw, blocklist):
                     continue
+                if len(_normalize_ar(kw)) < MIN_KEYWORD_LEN:
+                    _log.info("  ⏭️  keyword too short, skipped: %r", kw)
+                    continue
 
                 # أقرب متجر بالـ trigram
                 cur.execute(
                     """
-                    SELECT id,
+                    SELECT id, store_id,
                            GREATEST(
                                similarity(lower(store_id),                    lower(%(q)s)),
                                similarity(lower(COALESCE(name_en, '')),       lower(%(q)s)),
@@ -101,6 +132,13 @@ def match_and_enqueue(*, limit: int = DEFAULT_LIMIT, sim_threshold: float = SIM_
                 m = cur.fetchone()
                 if not m or float(m["sim"] or 0) < sim_threshold:
                     continue  # لا متجر مطابق — تخطّى (فجوة محتوى، نتركها)
+
+                # مقطع مبتور من اسم المتجر ⇒ لا صفحة له: صفحة المتجر تغطّيه،
+                # وإنشاؤها يوَلّد منافساً داخلياً لا طلباً جديداً.
+                if _is_name_fragment(kw, m["store_id"] or ""):
+                    _log.info("  ⏭️  fragment of store name, skipped: %r ⊂ %r",
+                              kw, m["store_id"])
+                    continue
 
                 cur.execute(
                     """
