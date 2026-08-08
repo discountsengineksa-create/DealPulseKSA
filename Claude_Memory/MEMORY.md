@@ -91,10 +91,10 @@
 - [SEO Page Portfolio Verdict](seo_page_portfolio_verdict.md) — ٧١٠/٧٦٤ صفحة صفر نقرة؛ المتاجر نيّة ميتة؛ التجميع وحده يكسب
 - [SEO Category Query Alignment](seo_category_query_alignment.md) — وزن المفردات: «كوبون» م49 و«متاجر» م19؛ ٨٧٪ من الظهور غارق؛ CTR المتاجر منخفض **بقرار الإسناد** لا بعطل
 - [🔴 SEO Meta Code — التفريع نُسِخ](seo_meta_code_leak.md) — الكود يُكشف لكل الكتالوج في سنِبت المتجر **و llms.txt**؛ isCodeAttributed لشارات المدوّنة فقط
-- [⚖️ ثقة أدوات الفحص](seo_audit_tools_trust.md) — «هبوط الترافيك» تقدير لا قياس (افحص المركز)؛ سيمرش مجمّد على آخر rerun + عيّنة ٦٪؛ أصفار AI فلترها أمريكي
+- [⚖️ ثقة أدوات الفحص](seo_audit_tools_trust.md) — **آخر يومين في GSC ناقصان (سقوط كل الخطوط معاً = تأخّر لا هبوط)**؛ «هبوط الترافيك» في Ahrefs تقدير لا قياس؛ سيمرش مجمّد + عيّنة ٦٪
 - الفهرسة: [Google Indexing حيّ](seo_google_indexing_live.md) (٢٠٠/يوم) · [الدفع بالجملة](seo_bulk_reindex_ops.md) (دفعات ٦؛ IndexNow بلا حصة؛ Yandex 202 = نجاح) · [الظهور لمحرّكات AI](seo_ai_visibility_optin.md) (١٥ كراولر + llms.txt)
 - الترويج: [محور القنوات المملوكة](seo_owned_channels_pivot.md) (رفض Reddit/Quora؛ X+Telegram+IG) · [PR Blitz Kit](seo_pr_blitz_kit.md) (لترويج /calendar)
-- الدومين: [خطة السلطة](domain_authority_plan.md) (الربط الداخلي منجز؛ المتبقّي عناقيد/Schema/باكلينك) · [⚠️ فخّ الـcanonical](domain_canonical_trap.md) (الصح dealpulseksa.com؛ dealpulesksa ميّت)
+- الدومين: [خطة السلطة](domain_authority_plan.md) (**الهَب السِتوايد أُعيد توجيهه للمناسبات ٢٠٢٦-٠٨-٠٨**؛ المتبقّي باكلينك) · [⚠️ فخّ الـcanonical](domain_canonical_trap.md) (الصح dealpulseksa.com؛ dealpulesksa ميّت)
 - [Content/Programmatic Strategy](content_programmatic_strategy.md) — «عربي فقط لا /en»؛ category-content + هَب أقسام؛ لا صفحات رقيقة
 - [Seasonal School Traffic Bridge](seasonal_school_traffic_bridge.md) — عنقود المدرسة يجرّ سعوديين موسمياً؛ الجسر ١٣ رابط
 - [Competitor Landscape](competitor_landscape.md) — الموفّر القائد؛ الفجوات: تحقّق/تيليجرام/نيش محلي/AEO
@@ -102,7 +102,7 @@
 ## ٦) المحتوى والمدوّنة (٢٠)
 
 - [Voice Bible](voice_bible.md) — نموذج الصوت التحريري (عيّنة فيتامين د مشرَّحة)؛ قلّد العيّنة
-- [Blog Total = Count It Live](blog_massive_content_session.md) — **١٤٨١ (عُدَّ ٢٠٢٦-٠٨-٠٥؛ كان ٦٥٠ في يوليو)**؛ عُدّ بـ`grep -cE "^\s*slug:" lib/blog.ts` لا تجمع تقديرياً
+- [Blog Total = Count It Live](blog_massive_content_session.md) — **١٥٦٤ (عُدَّ ٢٠٢٦-٠٨-٠٨؛ كان ١٤٨١ قبل ٣ أيام)**؛ عُدّ بـ`grep -cE "^\s*slug:" lib/blog.ts` لا تجمع تقديرياً
 - الصحّة: [عنقود المكمّلات](health_content_cluster.md) (١٠ مقالات iHerb؛ كود QQC1568) · [مصادر الاستشهاد](health_citation_sourcing.md) (Mayo/NIH يحجبان الـcrawlers = 403 كاذب؛ استخدم Harvard)
 - [Blog Internal-Link De-orphan](blog_internal_link_deorphan.md) — 65 مقال يتيم صُفِّرت؛ top-6 getRelatedPosts يجوّع الذيل
 - [Blog Inline Code Chips](blog_inline_code_chips.md) — شارة كود/CTA بجانب كل ذكر متجر في ١٣٦٥ مقال؛ العلاج بالعارض
