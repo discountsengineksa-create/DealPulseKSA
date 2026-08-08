@@ -1888,6 +1888,7 @@ _ANALYSIS_PAGES = [
 "تحليل المتاجر", "تحليل الأقسام",
 "تحليل طلبات الأكواد", "تحليل المستخدمين",
 "👣 زوّار الموقع",
+"💰 إسناد الإيراد",
 ]
 _OTHER_PAGES = [
 "📣 بلاغات الأكواد",  # ← Migration 029: بلاغات لا يعمل + إدارة المتاجر المسحوبة
@@ -15865,5 +15866,239 @@ elif page == "🔔 تذكيرات المواسم":
             )
     except Exception as _e:
         st.error(f"تعذّر تحميل التذكيرات: {_e}")
+    finally:
+        _rc.close()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 💰 إسناد الإيراد — الجسر بين الظهور العضوي والفلوس الفعلية
+# ═══════════════════════════════════════════════════════════════════════════
+# السؤال الذي لم يكن للمنصّة جواب عليه: «هل السيو يجيب فلوس؟». تعذّر الجواب
+# ليس نقص أدوات — بل نموذج الإسناد: سلة وكودماب ينسبان **بالكود** لا بالنقرة،
+# فطلبٌ يقع بلا أن يمرّ الشاري بالموقع أصلاً (ثبت: هدف ولحظات القهوة وخيارات
+# أعطوا طلبات حقيقية و action_logs يسجّل لهم صفر نقر وصفر نسخ). ⇒ لا يمكن ربط
+# طلبٍ بجلسة، ومحاولة ذلك تُنتج صفراً كاذباً.
+#
+# ما يصحّ هو الربط **على مستوى المتجر**: كم ريالاً أعاد كل متجر مقابل ظهوره
+# العضوي. تجمع الصفحة المصادر الثلاثة على master_id وتشتقّ المؤشّر:
+#   • الظهور/النقر العضوي  ← GSC لكل صفحة /store/{name}
+#   • التفاعل داخل الموقع  ← action_logs
+#   • الإيراد               ← affiliate_conversions
+elif page == "💰 إسناد الإيراد":
+    page_title("💰", "إسناد الإيراد",
+               "ريال حقيقي مقابل ظهور عضوي — لكل متجر. الإسناد بالكود لا بالنقرة، "
+               "فالربط على مستوى المتجر لا الطلب.")
+
+    _rc = get_conn()
+    _rc.rollback()
+    try:
+        # ── ١) حالة خطوط التغذية ─────────────────────────────────────────
+        st.subheader("① حالة مصادر الإيراد")
+        _pb_armed = bool(os.getenv("POSTBACK_ADMITAD_TOKEN"))
+        _conv = pd.read_sql(
+            "SELECT network, COUNT(*) AS rows, COALESCE(SUM(order_sum),0) AS sales, "
+            "COALESCE(SUM(reward_ready),0) AS commission "
+            "FROM affiliate_conversions GROUP BY network ORDER BY 2 DESC", _rc)
+
+        _c1, _c2, _c3 = st.columns(3)
+        _c1.metric("تحويلات مسجّلة", int(_conv["rows"].sum()) if not _conv.empty else 0)
+        _c2.metric("مبيعات (ر.س)",
+                   f"{float(_conv['sales'].sum()):,.2f}" if not _conv.empty else "0.00")
+        _c3.metric("عمولة (ر.س)",
+                   f"{float(_conv['commission'].sum()):,.2f}" if not _conv.empty else "0.00")
+
+        if _pb_armed:
+            st.success("✅ Admitad postback مُفعّل — التحويلات تدخل تلقائياً.")
+        else:
+            st.warning(
+                "⚠️ **Admitad postback مبنيّ لكنه معطّل.** الإنتاج يرد "
+                "503 POSTBACK_ADMITAD_TOKEN not configured. خطوتان يدويتان "
+                "(~٥ دقائق) موثّقتان في seo/admitad_postback_setup.md: ضع "
+                "POSTBACK_ADMITAD_TOKEN في متغيّرات Railway، ثم الصق رابط "
+                "الـPostback في لوحة Admitad. بعدها يدخل كل بيع تلقائياً."
+            )
+        if not _conv.empty:
+            st.dataframe(_conv.rename(columns={
+                "network": "الشبكة", "rows": "تحويلات",
+                "sales": "مبيعات", "commission": "عمولة"}),
+                width="stretch", hide_index=True)
+
+        # ── ٢) استيراد يدوي (سلة/كودماب: لا API للمسوّق) ──────────────────
+        st.divider()
+        st.subheader("② استيراد تحويلات يدوياً")
+        st.caption(
+            "سلة وكودماب لا يوفّران API للمسوّق (محسوم بالتحقّق) — لكن لوحة سلة "
+            "تدعم تصدير الطلبات. صدّر CSV وارفعه هنا، وطابِق الأعمدة."
+        )
+        _up = st.file_uploader("ملف CSV من لوحة الشريك", type=["csv"], key="conv_csv")
+        if _up is not None:
+            try:
+                _raw = pd.read_csv(_up)
+                st.dataframe(_raw.head(5), width="stretch")
+                _cols = list(_raw.columns)
+                _m1, _m2, _m3 = st.columns(3)
+                _f_store = _m1.selectbox("عمود المتجر", _cols, key="cv_store")
+                _f_order = _m2.selectbox("عمود رقم الطلب", _cols, key="cv_order")
+                _f_sales = _m3.selectbox("عمود المبيعات", _cols, key="cv_sales")
+                _m4, _m5, _m6 = st.columns(3)
+                _f_comm = _m4.selectbox("عمود العمولة", _cols, key="cv_comm")
+                _f_date = _m5.selectbox("عمود التاريخ", _cols, key="cv_date")
+                _f_net = _m6.text_input("اسم الشبكة", value="salla", key="cv_net")
+
+                if st.button("📥 استورد إلى affiliate_conversions", type="primary"):
+                    _stores = pd.read_sql("SELECT id, store_id FROM master", _rc)
+                    _byname = {str(r.store_id).strip(): int(r.id)
+                               for r in _stores.itertuples()}
+
+                    def _num(_row, _col):
+                        _v = _row.get(_col)
+                        if _v is None or pd.isna(_v):
+                            return None
+                        try:
+                            return float(str(_v).replace(",", "").strip())
+                        except ValueError:
+                            return None
+
+                    _ok = _skip = 0
+                    with _rc.cursor() as _cu:
+                        for _rec in _raw.to_dict("records"):
+                            _oid = str(_rec.get(_f_order) or "").strip()
+                            if not _oid or _oid.lower() == "nan":
+                                _skip += 1
+                                continue
+                            _mid = _byname.get(str(_rec.get(_f_store) or "").strip())
+                            _when = pd.to_datetime(_rec.get(_f_date), errors="coerce")
+                            _cu.execute(
+                                """
+                                INSERT INTO affiliate_conversions
+                                    (network, action_id, master_id, order_id,
+                                     order_sum, reward_ready, conversion_time,
+                                     status, currency, received_at)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s,
+                                        'imported', 'SAR', NOW())
+                                ON CONFLICT (network, action_id) DO UPDATE SET
+                                    order_sum    = EXCLUDED.order_sum,
+                                    reward_ready = EXCLUDED.reward_ready,
+                                    master_id    = COALESCE(EXCLUDED.master_id,
+                                                        affiliate_conversions.master_id)
+                                """,
+                                (_f_net.strip() or "manual", _oid, _mid, _oid,
+                                 _num(_rec, _f_sales), _num(_rec, _f_comm),
+                                 None if pd.isna(_when) else _when.to_pydatetime()),
+                            )
+                            _ok += 1
+                    _rc.commit()
+                    st.success(f"✅ استُورد {_ok} صفاً · تُخطّي {_skip} (بلا رقم طلب).")
+                    st.cache_data.clear()
+            except Exception as _e:
+                _rc.rollback()
+                st.error(f"تعذّرت قراءة/استيراد الملف: {_e}")
+
+        # ── ٣) الجسر: إيراد مقابل ظهور عضوي لكل متجر ──────────────────────
+        st.divider()
+        st.subheader("③ الجسر — ريال مقابل ظهور عضوي")
+
+        _days = st.slider("نافذة التحليل (أيام)", 7, 90, 28, key="attr_days")
+        _eng = pd.read_sql(f"""
+            SELECT m.id AS master_id, m.store_id AS store,
+                   COUNT(*) FILTER (WHERE a.action_type='view_store')  AS views,
+                   COUNT(*) FILTER (WHERE a.action_type='click_link')  AS clicks,
+                   COUNT(*) FILTER (WHERE a.action_type='copy_coupon') AS copies
+            FROM master m
+            LEFT JOIN action_logs a
+                   ON a.store_id = m.store_id
+                  AND a.action_time > NOW() - INTERVAL '{int(_days)} days'
+            GROUP BY m.id, m.store_id
+        """, _rc)
+        _rev = pd.read_sql(f"""
+            SELECT master_id,
+                   COUNT(*)                      AS orders,
+                   COALESCE(SUM(order_sum), 0)   AS sales,
+                   COALESCE(SUM(reward_ready),0) AS commission
+            FROM affiliate_conversions
+            WHERE master_id IS NOT NULL
+              AND COALESCE(conversion_time, received_at)
+                  > NOW() - INTERVAL '{int(_days)} days'
+            GROUP BY master_id
+        """, _rc)
+
+        _bridge = _eng.merge(_rev, on="master_id", how="left").fillna(
+            {"orders": 0, "sales": 0.0, "commission": 0.0})
+
+        # الظهور العضوي من GSC لكل صفحة /store/{name} — اختياري: الصفحة تعمل بدونه.
+        _gj = os.getenv("GSC_SA_JSON")
+        _gsite = os.getenv("GSC_SITE", "https://www.dealpulseksa.com/")
+        if _gj:
+            try:
+                from urllib.parse import unquote
+
+                from google.oauth2.service_account import Credentials as _Cr
+                from googleapiclient.discovery import build as _build
+
+                @st.cache_data(ttl=1800, show_spinner=False)
+                def _gsc_store_pages(site, days):
+                    _cr = _Cr.from_service_account_info(
+                        json.loads(os.getenv("GSC_SA_JSON")),
+                        scopes=["https://www.googleapis.com/auth/webmasters.readonly"])
+                    _sv = _build("searchconsole", "v1", credentials=_cr,
+                                 cache_discovery=False)
+                    # آخر يومين في GSC ناقصان دائماً — نُنهي النافذة قبلهما.
+                    _end = date.today() - timedelta(days=2)
+                    _res = _sv.searchanalytics().query(
+                        siteUrl=site,
+                        body={"startDate": str(_end - timedelta(days=days)),
+                              "endDate": str(_end),
+                              "dimensions": ["page"], "rowLimit": 1000}).execute()
+                    _out = []
+                    for _row in _res.get("rows", []):
+                        _u = _row["keys"][0]
+                        if "/store/" not in _u:
+                            continue
+                        _out.append({"store": unquote(_u.split("/store/")[1]).strip(),
+                                     "impressions": _row.get("impressions", 0),
+                                     "gsc_clicks": _row.get("clicks", 0)})
+                    return pd.DataFrame(_out)
+
+                _g = _gsc_store_pages(_gsite, int(_days))
+                if not _g.empty:
+                    _bridge = _bridge.merge(_g, on="store", how="left")
+            except Exception as _e:
+                st.caption(f"⚠️ تعذّر سحب GSC: {_e}")
+        else:
+            st.caption("ℹ️ GSC_SA_JSON غير مضبوط — الظهور العضوي غير معروض.")
+
+        if "impressions" not in _bridge.columns:
+            _bridge["impressions"] = 0
+            _bridge["gsc_clicks"] = 0
+        _bridge = _bridge.fillna({"impressions": 0, "gsc_clicks": 0})
+
+        # المؤشّر المشتقّ: ريال لكل ألف ظهور عضوي — يقارن متاجر مختلفة الحجم بعدل.
+        _bridge["ريال/ألف ظهور"] = _bridge.apply(
+            lambda r: round(float(r["commission"]) * 1000 / r["impressions"], 2)
+            if r["impressions"] else 0.0, axis=1)
+
+        _bridge = _bridge.sort_values(["commission", "impressions"], ascending=False)
+        st.dataframe(
+            _bridge.rename(columns={
+                "store": "المتجر", "views": "مشاهدات", "clicks": "نقرات",
+                "copies": "نسخ الكود", "orders": "طلبات", "sales": "مبيعات",
+                "commission": "عمولة", "impressions": "ظهور عضوي",
+                "gsc_clicks": "نقرات عضوية"}).drop(columns=["master_id"]),
+            width="stretch", hide_index=True)
+
+        _earning = int((_bridge["commission"] > 0).sum())
+        _exposed = int((_bridge["impressions"] > 0).sum())
+        st.caption(
+            f"**{_earning}** متجراً أعاد عمولة · **{_exposed}** متجراً له ظهور عضوي. "
+            "⚠️ العمود المشتقّ **ارتباط لا إسناد**: الشبكات تنسب بالكود، فالطلب قد "
+            "يقع بلا مرور الشاري بالموقع. اقرأه كترتيب أولويات لا كدليل سببية."
+        )
+        st.download_button(
+            "⬇️ تصدير الجسر CSV",
+            _bridge.to_csv(index=False).encode("utf-8-sig"),
+            file_name="revenue_attribution.csv", mime="text/csv")
+    except Exception as _e:
+        _rc.rollback()
+        st.error(f"تعذّر بناء الجسر: {_e}")
     finally:
         _rc.close()
