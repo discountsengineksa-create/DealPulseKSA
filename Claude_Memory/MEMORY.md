@@ -90,6 +90,7 @@
 - [SEO High-Demand Front](seo_high_demand_front_opened.md) — فخّ AR=draft+EN=noindex؛ نُشرت 23 صفحة؛ نون/نمشي محجوبان بالسلطة
 - [SEO Page Portfolio Verdict](seo_page_portfolio_verdict.md) — ٧١٠/٧٦٤ صفحة صفر نقرة؛ المتاجر نيّة ميتة؛ التجميع وحده يكسب
 - [SEO Category Query Alignment](seo_category_query_alignment.md) — وزن المفردات: «كوبون» م49 و«متاجر» م19؛ ٨٧٪ من الظهور غارق؛ CTR المتاجر منخفض **بقرار الإسناد** لا بعطل
+- [🔁 تكاذُب /c/ ↔ /store](seo_c_store_cannibalization.md) — صفحتان بعنوان واحد تُسقطان الترتيب؛ canonical مشتقّ لـ١٩ + اسم المتجر العربي مضمون بكل عنوان
 - [🔴 SEO Meta Code — التفريع نُسِخ](seo_meta_code_leak.md) — الكود يُكشف لكل الكتالوج في سنِبت المتجر **و llms.txt**؛ isCodeAttributed لشارات المدوّنة فقط
 - [⚖️ ثقة أدوات الفحص](seo_audit_tools_trust.md) — **آخر يومين في GSC ناقصان (سقوط كل الخطوط معاً = تأخّر لا هبوط)**؛ «هبوط الترافيك» في Ahrefs تقدير لا قياس؛ سيمرش مجمّد + عيّنة ٦٪
 - الفهرسة: [Google Indexing حيّ](seo_google_indexing_live.md) (٢٠٠/يوم) · [الدفع بالجملة](seo_bulk_reindex_ops.md) (دفعات ٦؛ IndexNow بلا حصة؛ Yandex 202 = نجاح) · [الظهور لمحرّكات AI](seo_ai_visibility_optin.md) (١٥ كراولر + llms.txt)
