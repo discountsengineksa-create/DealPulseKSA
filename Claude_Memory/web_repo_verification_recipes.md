@@ -43,6 +43,28 @@ metadata:
 بـ`npx tsc <file> --outDir <tmp> --module commonjs` ثم `require` وتشغيل دوالها الحقيقية
 على البيانات الحقيقية (وصفة ٢ أدناه). ما بعدهما يُتحقَّق **حيّاً بـcurl بعد النشر**.
 
+## ١ج) قياس Core Web Vitals بلا مفتاح — Lighthouse محلياً
+
+`PageSpeed Insights API` يرجّع **429 بلا مفتاح**، و`CrUX API` يرجّع **403**. البديل الذي
+يعمل فوراً (Chrome موجود على الجهاز):
+
+```bash
+export CHROME_PATH="C:/Program Files (x86)/Google/Chrome/Application/chrome.exe"
+npx -y lighthouse "<url>" --only-categories=performance --form-factor=mobile \
+  --throttling-method=simulate --output=json --output-path=<out.json> \
+  --chrome-flags="--headless=new --no-sandbox --disable-gpu" --quiet
+```
+
+**قياس ٢٠٢٦-٠٨-٠٨ (جوال، محاكاة):** الرئيسية **perf 68 · LCP 3.39s · CLS 0.000 ·
+TBT 703ms** · صفحة متجر (بيلاس) **perf 85 · LCP 2.63s · CLS 0.014 · TBT 335ms**.
+⇒ **CLS ممتاز، LCP في النطاق البرتقالي (2.5–4s)، والعنق التفاعلية (TBT) على الرئيسية.**
+
+**⚠️ الفرق الذي يُغفَل:** Lighthouse **بيانات مختبر (lab)**؛ جوجل يرتّب بـ**بيانات الميدان
+(CrUX)** من مستخدمين حقيقيين، وهي **لا تتكوّن أصلاً دون حجم زيارات كافٍ**. بترافيكنا
+(~١٢١ سعودي/شهر) الأرجح ألّا يكون لنا سجل CrUX — فتحسين CWV عندنا **استثمار تجربة مستخدم
+لا رافعة ترتيب**. تحقّق من وجود سجل CrUX قبل صرف وقت عليه (يحتاج مفتاح API أو تقرير
+«مؤشرات أداء الويب الأساسية» في GSC — وهو يقول «لا توجد بيانات كافية» حين لا يوجد سجل).
+
 ## ٢) اختبر العناوين بالدوال الحقيقية لا بإعادة كتابتها
 
 قبل تغيير عنوان مُولَّد لصفحات كثيرة: ترجم `lib/seo/metadata.ts` بـ
