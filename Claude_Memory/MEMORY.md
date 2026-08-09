@@ -1,6 +1,6 @@
 # Project Memory Index
 
-> ١٣٠ ملفاً. **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
+> ١٣٢ ملفاً (عُدّت ٢٠٢٦-٠٨-٠٩ — الرقم يطابق القرص وسطور الأقسام). **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
 > **الطبقة ٠ تُقرأ متونها قبل أي مهمة.** من الباقي: افتح ما يخصّ مهمتك وأعلن ما فتحته.
 > الحوائط الصلبة منسوخة نصّاً في `CLAUDE.md`. سطرٌ بعدّة روابط = ملفات مستقلة جُمعت للاختصار.
 
@@ -80,7 +80,7 @@
 - [Web Login Gate Model](web_login_gate_model.md) — الموقع مفتوح؛ الستوري/المفضلة للمسجّلين؛ حركات المجهول بـvisitor_id
 - [Store Page Evergreen (404 Root Cause)](store_page_evergreen.md) — `last_time>=CURRENT_DATE` أخفى المتجر → 404؛ المتجر دائم والكوبون يُفرَّغ
 
-## ٥) التحليلات والسيو (٢٣)
+## ٥) التحليلات والسيو (٢٦)
 
 - تحليل المتاجر: [الجناح](store_analytics_bi.md) (٤ تبويبات + AI عبر Groq) · [استراتيجية إعادة البناء](analysis_rebuild_strategy.md) (٦ صفحات، ٣ مسارات دخل، zero-fakery) · [البنية النهائية](analytics_store_structure.md) (٦ أقسام؛ «أبرز» = top favorites)
 - الكلمات المفتاحية: [⛔ Keyword Planner](google_ads_keyword_planner.md) (**رفضته Google نهائياً — التكامل مُتراجَع عنه بـ5ad4f7b، لا كود حيّ**) · [طلب السوق السعودي](keyword_demand_ksa.md) (البراندات 10K-100K؛ متاجرك ~10-100) · [⚠️ Windsor GSC](windsor_gsc_connector.md) (المجاني يرجع أصفاراً وهمية بلا خطأ)
@@ -95,6 +95,7 @@
 - [⚖️ ثقة أدوات الفحص](seo_audit_tools_trust.md) — **آخر يومين في GSC ناقصان (سقوط كل الخطوط معاً = تأخّر لا هبوط)**؛ «هبوط الترافيك» في Ahrefs تقدير لا قياس؛ سيمرش مجمّد + عيّنة ٦٪
 - الفهرسة: [Google Indexing حيّ](seo_google_indexing_live.md) (٢٠٠/يوم) · [الدفع بالجملة](seo_bulk_reindex_ops.md) (دفعات ٦؛ IndexNow بلا حصة؛ Yandex 202 = نجاح) · [الظهور لمحرّكات AI](seo_ai_visibility_optin.md) (١٥ كراولر + llms.txt)
 - الترويج: [محور القنوات المملوكة](seo_owned_channels_pivot.md) (رفض Reddit/Quora؛ X+Telegram+IG) · [PR Blitz Kit](seo_pr_blitz_kit.md) (لترويج /calendar)
+- [🔗 SaaSHub Directory Listing](saashub_directory_listing.md) — رابط الدليل nofollow حتى تُوثَّق الملكية (٢٢ صفحة مقيسة)؛ التوثيق مجاني بلا رابط متبادل
 - الدومين: [خطة السلطة](domain_authority_plan.md) (**الهَب السِتوايد أُعيد توجيهه للمناسبات ٢٠٢٦-٠٨-٠٨**؛ المتبقّي باكلينك) · [⚠️ فخّ الـcanonical](domain_canonical_trap.md) (الصح dealpulseksa.com؛ dealpulesksa ميّت)
 - [Content/Programmatic Strategy](content_programmatic_strategy.md) — «عربي فقط لا /en»؛ category-content + هَب أقسام؛ لا صفحات رقيقة
 - [Seasonal School Traffic Bridge](seasonal_school_traffic_bridge.md) — عنقود المدرسة يجرّ سعوديين موسمياً؛ الجسر ١٣ رابط
