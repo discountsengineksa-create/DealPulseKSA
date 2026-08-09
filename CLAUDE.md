@@ -56,11 +56,29 @@ run_ghost.bat
 
 Database credentials come from `.env` (`DATABASE_URL` for Railway prod, or `DB_NAME/DB_USER/DB_PASSWORD/DB_HOST/DB_PORT` for local Postgres). No component hardcodes credentials — everything reads from environment variables.
 
+`run_all.py` starts the bot and the dashboard together as two subprocesses (Ctrl+C terminates both) — a convenience wrapper around the two commands above, not a separate entrypoint.
+
+## Testing
+
+```bash
+# All tests
+pytest tests/ -v
+
+# One file / one test
+pytest tests/test_auth.py -v
+pytest tests/test_auth.py::test_register_success -v
+
+# Skip tests that need a real DB connection
+pytest tests/ -v -m "not slow"
+```
+
+Tests need `TEST_DATABASE_URL` (a separate Railway Postgres instance with migrations applied — **never point this at prod**), plus `JWT_SECRET` and `ADMIN_SHARED_SECRET`; `conftest.py` fixture `db_available` auto-skips DB-dependent tests when `TEST_DATABASE_URL` isn't set. Full setup steps (provisioning the test DB, applying migrations, `tests/.env.test` template) are in `tests/README.md`. 25 tests cover auth, JWT, `track`/`go` routers, LLM cache, and the Financial Guardian — no lint/type-check tooling is configured in this repo.
+
 ## Architecture
 
 Four runnable entrypoints share one PostgreSQL database:
 
-- **`dashboard.py`** — Streamlit admin interface. A single **15,867-line** file; all **36 pages** are implemented as one long `if/elif` chain. **Page routing** (`dashboard.py:1878-1900`): three grouped lists — `_MAIN_PAGES` (12), `_ANALYSIS_PAGES` (7), `_OTHER_PAGES` (17) — rendered as sidebar expanders with `st.radio` + `handle_nav`, driving `st.session_state.page`. ⚠️ The `st.sidebar.radio(...)` at `dashboard.py:1871` is the **theme toggle**, not the page selector — don't confuse them. **⚠️ `main = production Railway` — see `AGENT_PLAYBOOK.md` §4.9 for the pre-push safety protocol.**
+- **`dashboard.py`** — Streamlit admin interface. A single **16,104-line** file; all **37 pages** are implemented as one long `if/elif` chain. **Page routing** (`dashboard.py:1878-1900`): three grouped lists — `_MAIN_PAGES` (12), `_ANALYSIS_PAGES` (8), `_OTHER_PAGES` (17) — rendered as sidebar expanders with `st.radio` + `handle_nav`, driving `st.session_state.page`. ⚠️ The `st.sidebar.radio(...)` at `dashboard.py:1871` is the **theme toggle**, not the page selector — don't confuse them. **⚠️ `main = production Railway` — see `AGENT_PLAYBOOK.md` §4.9 for the pre-push safety protocol.**
 - **`deal_pulse_bot.py`** — Telegram bot (~2,376 lines) using `pyTelegramBotAPI` (`telebot`). **🔓 Freeze LIFTED 2026-07-07** — edits allowed under the partnership protocol (declare → verify → prove → record). Rollback tag: `bot-locked-2026-06-10`. See `Claude_Memory/bot_frozen_lock.md`. Lifting the freeze does **not** waive the DB-write wall or the `main=prod` wall.
 - **`bot_app.py`** — Production Railway entrypoint (~418 lines). Combines bot + FastAPI (**12 routers** — counted 2026-08-05 via `include_router`; the "11" previously documented here was wrong) + Mini App into one service. Routers: admin, auth, broadcast_tracking, contact, coupons, go, reminders, seo, social, track, trend, users.
 - **`api/main.py`** — API-only entrypoint for local dev (`uvicorn api.main:app --port 8000`). Production runs `bot_app.py` instead.
