@@ -80,6 +80,18 @@ curl -sL -A "Mozilla/5.0" "https://www.saashub.com/<slug>" \
 `dealpulesksa@gmail.com` — وهي البطاقة التي تُلصق حرفياً في كل دليل. الصحيح
 `dealpulseksa@gmail.com` ([[contact_emails]] · [[domain_canonical_trap]]).
 
-**المعلّق:** إكمال Competitors/Description/Features/Pricing/Platforms/Screenshots ثم `Verify`.
+## حالة الإغلاق ٢٠٢٦-٠٨-٠٩ (كل ما بيدنا مُنجَز)
+
+مُنجَز: Tagline · ٤ تصنيفات · منافسون · Features ٥ · Description · Screenshots ٤ + شعار ·
+`Pricing = Free` (كان `Freemium` **مستنتَجاً** من Free+Paid=Yes — لا يوجد حقل باسم Freemium؛
+`codito-io` يطبع Freemium و`gamercoins` يطبع Free بنفس الموقع) · `Platform(s) = Web + Telegram`
+(حُذفت Instagram) · Blog URL · **Startup Details** (Saudi Arabia / Riyadh / 1-9 / Salah Asiri).
+المتبقّي عندنا: **Q&A فقط**.
+
+**بعد كل ذلك ظلّت الصفحة `Not approved`، وصفر روابط لنطاقنا، ودليل السعودية ثابت على ٤٢ بلا
+ذكرنا** ⇒ **الاعتماد يحكم كل شيء** (رابط الموقع + الإدراج في الدليل)، وهو قرارهم لا زرّ عندنا.
+الاستعجال المشروع الوحيد: زر Feedback / صفحة Contacts برسالة مراجعة.
+
+**المعلّق:** Q&A، ثم انتظار الاعتماد.
 لا حاجة لـmeta tag ولا لصندوق بريد على النطاق — التوثيق مُنجَز.
 (لو احتجناه مستقبلاً: النطاق على Cloudflare بلا سجلات MX ⇒ Email Routing المجانية تحلّها.)
