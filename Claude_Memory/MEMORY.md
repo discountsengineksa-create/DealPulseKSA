@@ -75,7 +75,7 @@
 - [Support System](support_system.md) — دعم عبر Telegram Bot API (بلا قروبات/webhook)؛ support_tickets؛ migration 039
 - [Publish Channels Feature](publish_channels_feature.md) — master.publish_channels لكل متجر؛ API channel؛ fallback «حصري بالموقع»
 - [Season Reminders Feature](season_reminders_feature.md) — التقاط زائر /calendar بإيميل بلا تسجيل؛ مزلق `start` ≠ يوم الذروة
-- [Calendar Conversion Hub](calendar_conversion_hub.md) — كل موسم صار بوابة (أزرار أقسام + دليل + عبارة فريدة)
+- [Calendar Conversion Hub](calendar_conversion_hub.md) — كل موسم صار بوابة (أزرار أقسام + دليل + عبارة فريدة)؛ **ووُصلت بمبدّل اللغة ٢٠٢٦-٠٨-٠٩ — «لا /en» يحكم الـURLs لا لغة الواجهة**
 - [Occasion Page Relevance Filter](occasion_page_relevance_filter.md) — store_tags تصنيف لا موسم؛ + master.occasions (migration_067)
 - [Web Login Gate Model](web_login_gate_model.md) — الموقع مفتوح؛ الستوري/المفضلة للمسجّلين؛ حركات المجهول بـvisitor_id
 - [Store Page Evergreen (404 Root Cause)](store_page_evergreen.md) — `last_time>=CURRENT_DATE` أخفى المتجر → 404؛ المتجر دائم والكوبون يُفرَّغ
