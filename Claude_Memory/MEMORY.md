@@ -1,6 +1,6 @@
 # Project Memory Index
 
-> ١٣٢ ملفاً (عُدّت ٢٠٢٦-٠٨-٠٩ — الرقم يطابق القرص وسطور الأقسام). **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
+> ١٣٣ ملفاً (عُدّت ٢٠٢٦-٠٨-٠٩ — الرقم يطابق القرص وسطور الأقسام). **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
 > **الطبقة ٠ تُقرأ متونها قبل أي مهمة.** من الباقي: افتح ما يخصّ مهمتك وأعلن ما فتحته.
 > الحوائط الصلبة منسوخة نصّاً في `CLAUDE.md`. سطرٌ بعدّة روابط = ملفات مستقلة جُمعت للاختصار.
 
@@ -18,7 +18,7 @@
 - [Mirror Audit — Trace Not Claim](feedback_mirror_audit.md) — دقّق الـagents ونفسك بالـtrace الخام؛ الأفضلية للأرقام
 - [Git Sync Workflow](git_sync_workflow.md) — جهازان: pull قبل، push بعد كل تغيير؛ main = Railway prod
 
-## ١) أسلوب العمل والتفضيلات (١٩)
+## ١) أسلوب العمل والتفضيلات (٢٠)
 
 - [User Preferences](user_preferences.md) — how the user likes to work
 - [Analysis Style](feedback_analysis_style.md) — جداول مقارِنة تقود قراراً؛ أفعال وأكواد لا كلام ملمّع؛ أقفل الصفحة قبل التالية
@@ -35,6 +35,7 @@
 - [AI Mastery Goal](user_ai_mastery_goal.md) — يريد برومبت عالمي معاد الاستخدام؛ مهتم بهندسة البرومبت؛ رأي خبير صريح
 - العقل المدبر: [البروتوكول](protocol_mastermind.md) (نواة + انخراط ٠–٥ أسئلة + ٤ أوضاع + ٤ نداءات) · [البرومبت](mastermind_prompt.md) (موقع الملف + التفعيل)
 - [Memory Sync via Junction](memory_sync_junction.md) — ذاكرة واحدة بالريبو + junction؛ تتزامن مع git؛ لا تفرّع
+- [☁️ Claude Code Cloud Sessions](claude_code_cloud_sessions.md) — claude.ai/code + الجوال مربوطان بالريبو (٢٠٢٦-٠٨-٠٩)؛ يرثان الذاكرة، **لكن بلا `.env` فلا وصول لقاعدة البيانات**
 - المهارات: [المثبَّتة](skills_install_manifest.md) (**٢٣٨ على جهاز `Users\user` · ١٧ فقط على `Users\PC` — تحقّق أي جهاز أنت عليه**؛ أُكِّد ٢٠٢٦-٠٨-٠٥) · [عدّة التسويق](marketing_skills_toolkit.md) (١٧ skill تسويق؛ عربي سعودي + White-Hat)
 - [Reconcile Web Repo Separately](reconcile_web_repo_separately.md) — dealpulseksa-web ريبو مستقل؛ افحصه أولاً
 
