@@ -7,6 +7,13 @@ metadata:
 
 **المصدر:** [`AgriciDaniel/claude-seo`](https://github.com/AgriciDaniel/claude-seo) · MIT · **v2.2.4**.
 **عُدّ حيّاً ٢٠٢٦-٠٨-٠٩:** `ls agents/ | wc -l` = **١٨** agent · `ls skills/ | wc -l` = **٢٥** skill · ٥٣ سكربت بايثون.
+أُكِّد مستقلاً ٢٠٢٦-٠٨-١٠ عبر GitHub API (`/contents/agents` = ١٨ · `/contents/skills` = ٢٥).
+
+⚠️ **الاسم لا يكفي — لا تبحث عن agent باسم skill.** بفرق المجموعات (٢٠٢٦-٠٨-١٠):
+**١٦ اسماً موجود كوكيل ومهارة معاً** · **٢ وكيل فقط**: `seo-performance` · `seo-visual` ·
+**٩ مهارة فقط**: `seo-audit` · `seo-competitor-pages` · `seo-content-brief` · `seo-hreflang` ·
+`seo-images` · `seo-page` · `seo-plan` · `seo-programmatic` · `seo`.
+(١٦+٢=١٨ وكيلاً · ١٦+٩=٢٥ مهارة.)
 
 ## التثبيت — على الريبو لا على الجهاز (هذا هو الدرس)
 
@@ -63,7 +70,7 @@ metadata:
 | ٥ | **seo-google** | GSC + CrUX + GA4 ببيانات حقيقية؛ حساب خدمة `gsc-indexer` موجود أصلاً (`GSC_SA_JSON`) فالتوصيل قصير |
 | ٦ | **seo-drift** | لقطة أساس + كشف الانحدار — الوقاية من صنف بق «light-AR 500 أفرغ الخريطة صامتاً» ([[seo_deep_audit_fixes]]) |
 | ٧ | seo-technical · seo-schema · seo-sitemap | نظافة دورية؛ ولـ`/c/` تحديداً انتبه لفخّ ISR ([[seo_c_store_cannibalization]]) |
-| — | **صفر فائدة** | `seo-local` و`seo-maps` (لا فرع فعلي) · `seo-hreflang` (القرار «عربي فقط لا /en») · `seo-ecommerce` (لسنا تاجراً) · `seo-dataforseo` (مدفوع) |
+| — | **صفر فائدة** | `seo-local` و`seo-maps` (لا فرع فعلي) · `seo-ecommerce` (لسنا تاجراً) · `seo-dataforseo` (مدفوع) · ومن المهارات `seo-hreflang` (القرار «عربي فقط لا /en») |
 
 ## الأمان والتكلفة — فُحصت قبل التبنّي
 
