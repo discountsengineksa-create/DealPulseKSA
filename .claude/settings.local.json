@@ -197,7 +197,9 @@
       "WebFetch(domain:www2.hm.com)",
       "WebFetch(domain:gndrz.com)",
       "WebFetch(domain:prf.hn)",
-      "WebFetch(domain:ae.hm.com)"
+      "WebFetch(domain:ae.hm.com)",
+      "Bash(cp ~/.claude/settings.json /tmp/claude-0/-home-user-DealPulseKSA/5ee242ec-ccea-5e57-bd08-fd00bf00d2ce/scratchpad/user-settings.bak)",
+      "Bash(claude plugin *)"
     ],
     "additionalDirectories": [
       "C:\\Users\\PC\\Desktop\\dealpulseksa-web\\lib",
