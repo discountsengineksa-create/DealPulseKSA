@@ -67,10 +67,9 @@ pytest tests/ -v
 # One file / one test
 pytest tests/test_auth.py -v
 pytest tests/test_auth.py::test_register_success -v
-
-# Skip tests that need a real DB connection
-pytest tests/ -v -m "not slow"
 ```
+
+⚠️ `pytest.ini` declares markers `slow` / `requires_db` / `requires_llm`, but **no test carries any marker** (zero `@pytest.mark.` in `tests/`), so `-m "not slow"` filters nothing and runs the whole suite. DB-dependent tests skip themselves through the `db_available` fixture instead — there is no marker-based way to select them.
 
 Tests need `TEST_DATABASE_URL` (a separate Railway Postgres instance with migrations applied — **never point this at prod**), plus `JWT_SECRET` and `ADMIN_SHARED_SECRET`; `conftest.py` fixture `db_available` auto-skips DB-dependent tests when `TEST_DATABASE_URL` isn't set. Full setup steps (provisioning the test DB, applying migrations, `tests/.env.test` template) are in `tests/README.md`. 25 tests cover auth, JWT, `track`/`go` routers, LLM cache, and the Financial Guardian — no lint/type-check tooling is configured in this repo.
 
