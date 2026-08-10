@@ -1,120 +1,123 @@
-# SXO / Search-Experience Audit — www.dealpulseksa.com
+# SXO / Search-Experience Audit — www.dealpulseksa.com (CORRECTED)
 
-**Method:** Read the Arabic SERPs backwards for the three queries the site's store-page template is actually built to compete for: `كوبون خصم نون`, `كود خصم نمشي`, `كوبونات خصم السعودية` — plus a targeted query on the flagged zero-click page, `كوبون خصم Bellas بيلا السعودية`. For the two winning competitor URLs I inspected structure directly via fetch (word count, code count, schema-adjacent UI signals) rather than guessing from titles alone. No `render_page.py` re-fetch of dealpulseksa's own pages was run this session — the target-page facts below are the already-measured figures handed to this audit (`content.md`'s live-measured store-page sample) plus the GSC-reported Bellas numbers; re-deriving them would have burned the tool-call budget without adding new evidence.
+## Correction notice — replaces the previous version of this file
 
-**This is the primary finding of the whole audit — lead with it.**
+The prior run of this audit searched **"بيلا"** (a truncated, wrong keyword) instead of the store's actual name **"بيلاس"**, found four unrelated Saudi brands colliding on that wrong token, and concluded "entity ambiguity" with a title-rewrite fix. That was built on a typo, not on the real query. Real Google Search Console data (28 days, pulled live 2026-08-10, property `https://www.dealpulseksa.com/`) has since shown the actual pattern, and this version is built on GSC's real query list plus fresh SERP inspection of those exact queries. **Do not reuse the "four Saudi brands" / "entity ambiguity" framing — it is retracted.**
 
----
-
-## The headline answer
-
-**The store-page format is the RIGHT page type, executed thinly. It is not a page-type mismatch.**
-
-Evidence: all three head-term SERPs are monopolized by the exact same page type dealpulseksa already publishes — a single-store coupon/promo-code page. Zero listicles, zero "best coupon sites 2026" roundups, zero retailer-native pages beat them into the top slots I inspected. If this were a page-type mismatch, the fix would be "build a different template." It isn't — the fix is "make the existing template deep enough to compete," which is a narrower, cheaper, and more mechanical fix than a template redesign.
-
-The **Bellas** page is a separate, second failure mode layered on top of the same template: **entity ambiguity**, not thin content. That one needs a different fix (disambiguation in title/meta), not more words.
+**Method note (limitation, stated up front):** the search tool used for SERP inspection is US-based and not Saudi-localized. Results below are directionally useful (what page types and entities occupy a query's result set globally/from a non-KSA vantage point) but the exact rank order, local-pack presence, and any Saudi-specific SERP features (e.g. `اشتري الآن` shopping carousels, Saudi map-pack results) cannot be confirmed from here. This caps confidence on all three findings below to "structural pattern," not "exact SERP screenshot."
 
 ---
 
-## 1. SERP inspection — what wins for the site's actual keyword targets
+## GSC facts this audit is built on (measured, not modeled)
 
-### `كوبون خصم نون` (coupon discount Noon)
-Top results, all coupon-aggregator store pages: `otlobcoupon.com/store/nooncouponsegypt-310.html`, `couponwafir.com/store/كود-خصم-نون-noon/`, `couponwafy.com/store/noon-44.html`, `e5smley.com/store/noon`, plus a Facebook page for the same niche. **Page type consensus: single-store coupon page, 100% of inspected results.**
+**Totals (28d):** 7,609 impressions · 34 clicks · CTR 0.45% · 944 of 961 query-page rows have zero clicks.
 
-### `كود خصم نمشي` (Namshi discount code)
-Top results: `couponzil.com/store/namshi-discount-code/`, `namshidiscountcode.com` (a dedicated single-purpose domain), `couponava.com/store/كوبون-نمشي/`, `codekhasm.com/store/namshi-نمشي/`, `e5smley.com/store/namshi`. **Same page type again, 100% of inspected results.** Note `namshidiscountcode.com` — a whole domain built around one brand's coupon intent, which is the depth-of-commitment ceiling this niche rewards.
-
-### `كوبونات خصم السعودية` (Saudi discount coupons — the broad/hub query)
-Top results shift to homepage/hub-level competitors, not individual store pages: `coupon.sa` (dedicated Saudi coupon site), `coponsa.com`, `coupoonat.com`, `almotasuq.com`, plus two coupon apps (`Saudi Coupons` on App Store and Google Play) and `sdcappsa.com`. **Consensus: coupon-portal homepage/hub, not a single-store page** — confirming the store-page template is correctly scoped to brand-level queries (`نون`, `نمشي`) and should not be the page competing for this broader head term; that's a homepage/hub job, which is a separate finding from the store-page depth gap below.
-
-### Structural depth of the two winning store pages I opened directly
-| Signal | `e5smley.com/store/noon` | `couponwafy.com/store/noon-44.html` | dealpulseksa `/store/سويتر` (measured in `content.md`) |
+**By position band:**
+| Band | Impr. | Clicks | CTR |
 |---|---|---|---|
-| Word count | ~15,000+ words | ~3,500-4,000 words | **63 words** |
-| Codes shown | 60+ codes | 149 total, 8 featured | **1 code** |
-| Copy-code UI | "إنسخ الكود الآن" buttons | "نسخ الكود" buttons | prose only, no button |
-| Expiry dates | Yes, per-code ("فعال حتى 30/12/2026") | Not per-code | None |
-| Live usage/social-proof | "تم الإستخدام: 11,338 مرة" | "استخدام اليوم: 95", "آخر استخدام: منذ 2 د" | None |
-| Verified/trust badge | Implied by usage stats | Explicit "موثّق" badge + 4.1★/10 reviews | None |
-| FAQ / guide content | Extensive ("طريقة استخدام كود خصم نون", shipping, payment, authenticity) | Extensive FAQ + store history + related stores | Two Q&As, 63 words total |
-| Schema (per `content.md`, dealpulseksa side; competitor schema not independently confirmed this session) | not verified | not verified | **Organization + BreadcrumbList only — no Offer, no FAQPage** despite the page literally being an FAQ with a code |
+| 1-3 | 171 | 19 | 11.1% |
+| 4-10 | 1,765 | 7 | 0.40% ← biggest single loss |
+| 11-20 | 866 | 2 | 0.23% |
+| 21-50 | 2,684 | 3 | 0.11% |
+| 51+ | 2,123 | 3 | 0.14% |
 
-The gap is not "wrong shape," it's **magnitude**: dealpulseksa's store page is 63 words carrying one code with zero trust signals, competing against pages carrying 60-149 codes, live usage timestamps, verified badges, and star ratings — a 55x-to-240x content-depth gap in the same template slot.
-
----
-
-## 2. Second, distinct failure mode: the Bellas entity-ambiguity case
-
-Searching `كوبون خصم Bellas بيلا السعودية` does not return one dominant "Bella" brand — it returns **at least four unrelated Saudi/regional businesses that all use "بيلا"**: a hair-products store (`belllaa.com`), an evening-dress brand (`Oro Bella`, `code5sm.com/store/oro-bella/`, `wferly.com/store/oro-bella/`), a sandals/shoe brand (`Bella Sandy`, `allcouponat.com`, `wferly.com`), and a homeware store (`Bella Stores`, `bella-sa.com`). None of these is obviously "the" Bella; the name is a generic transliteration collision, not a distinctive brand token.
-
-This directly explains the measured GSC pattern: **398 impressions, average position 5.7, zero clicks.** The page is getting matched and shown for a query token that is genuinely ambiguous in the SERP — a user searching "بيلا" cannot tell from a position-5-6 snippet whether dealpulseksa's result is *their* Bella (hair? dresses? shoes? home goods?) without a title/meta that names the product category explicitly. Faced with that uncertainty next to 4+ competing "Bella" results that do disambiguate in their titles (`أورو بيلا`, `بيلا ساندي`), the rational click goes to whichever snippet names the actual category. High impressions + zero clicks at a mediocre-but-visible position is the signature of a **SERP snippet that fails to disambiguate a generic-name entity**, not of a content-depth problem — this store page could hit 500 words and it would not fix a title that doesn't say what kind of "Bella" this is.
-
-**Fix implication for Bellas specifically:** rewrite title tag and meta description to include the product category (e.g. "كود خصم بيلا [category] السعودية" naming what the store actually sells), not "add more words to the page body." This is a title/meta fix, cheap, and testable within one indexing cycle — flag as the fastest win in this whole audit.
+**By page segment:**
+| Segment | Impr. | Clicks | CTR |
+|---|---|---|---|
+| `/store` | 5,643 (74% of site total) | 7 | 0.12% |
+| `/blog` | 680 | 2 | 0.29% |
+| `/category` | 554 | 2 | 0.36% |
+| `/calendar` | 360 | 4 | **1.11% (9x /store)** |
+| `/c` | 248 | 0 | 0% |
+| homepage | 28 | 17 | 60.7% (brand searches, "نبض الصفقات") |
 
 ---
 
-## 3. Third, distinct failure mode: blog articles at position 1-4 with 1-2 impressions
+## Headline finding
 
-This is **not** a SERP-execution problem and should not be diagnosed with the same fix as the store pages above. Per `content.md`'s independent sample, the one blog article inspected had no visible AI-slop markers (specific voice, explicit affiliate disclosure, correctly nested `BlogPosting`+`ItemList` schema). Ranking position 1-4 with only 1-2 impressions is the signature of **near-zero real search volume for the exact query targeted**, not of weak content — Google does not typically hand out top-4 rankings on high-quality SERPs to thin content; it hands out top-4 rankings on *empty* SERPs (no real competition because nobody searches the term). This is a keyword-selection/demand problem for the blog cohort, separate from both the store-page depth gap and the Bellas ambiguity case. Do not spend store-page-style "add more words" effort here — the content is already adequate; the targeting isn't.
-
----
-
-## 4. Why `/calendar` is the one pattern that earns clicks
-
-`/calendar` is not competing in the same arena as the store-page queries above. There is no equivalent of `e5smley.com`'s 15,000-word single-purpose competitor for a Saudi seasonal-sales calendar query — the competitive field for "مواعيد التخفيضات في السعودية"-type queries is thinner and less commoditized than "كود خصم [national retailer]." Per `content.md`, the calendar page carries the richest schema of any sampled page type (5 JSON-LD blocks) and an honest, specific disclosure (Hijri-calendar date-uncertainty caveat) — exactly the kind of first-hand, non-generic signal the store-page template is missing. `/calendar` succeeds because it picked a page type where DealPulse's actual differentiation (honest curation, no fake precision) is a competitive edge, whereas the store-page template picked a page type where the site is competing on raw depth against domains that have published 15,000 words per brand and lost.
+**`/store` is not one failure mode, it's two, and they need opposite fixes.** A large share of its 5,643 impressions come from **bare store-name queries where the intent is navigational-to-the-merchant** (بيلاس, المخملية, لحظات القهوة, عذيه) — Google is matching the page correctly, but a third-party coupon aggregator is structurally not what these searchers want, so no on-page optimization converts that click. Separately, a smaller set of **genuinely commercial queries** (كود خصم مرايا, كود خصم موقع هواوي) sit at winnable positions (4.9 and 10) against real coupon-aggregator competition — that subset is the actual optimization opportunity, and even there the sample sizes are mostly too thin to diagnose with confidence except in the one case (هواوي) with enough impressions to say something concrete. `/calendar`'s 9x CTR confirms the pattern: it wins because it competes on informational queries against guides and government sources, not against merchant identity or a saturated coupon-code field.
 
 ---
 
-## 5. SXO Gap Score — store-page template (0-100, separate from SEO Health Score)
+## 1. Bare store-name queries: navigational-to-merchant, not a content problem
+
+Searched the three bare-name queries directly (non-KSA vantage point, stated above).
+
+**بيلاس** (207 impr., pos 5.5, 0 clicks) — top results are: the merchant's own site (`chrisbella-sa.com`, "كريسبيلا صارت بيلاس" — literally the brand announcing its own rename), the brand's Instagram (`@bellas.s3`), and unrelated Pilates services. **No coupon-aggregator result appeared in the visible set at all.** The SERP is dominated by first-party brand identity, not commerce comparison.
+
+**المخملية** (55 impr. pos 10 + 51 impr. pos 8.3 — two spellings, same brand) — top results: the merchant's own site (`almokhmalih.sa`, an abaya/jalabiya designer brand), plus unrelated uses of the word (a plant genus, a Wattpad novel, a perfume line). Again, **first-party brand site dominates**, no coupon competitor visible.
+
+**لحظات القهوة** (43 impr. pos 9.1, 0 clicks) — top results: the merchant's own site and app (`coffeemoments.net` / `ecoffeemoments.net`), and five different owned social accounts (Instagram, TikTok, X, YouTube, Facebook). This one is especially telling: Coffee Moments is a **B2B beverage-ingredients supplier** (coffee/tea/syrup agent for Molinari, Dilmah, Torani), not a consumer retailer with a "discount code" shopping habit at all. A user typing this bare name is looking for the company, not a coupon.
+
+**Verdict:** across all three, the SERP a bare store name produces is owned-brand-property-dominated (official site + social), not commerce/comparison-dominated. That is the signature of navigational intent. A coupon aggregator is not a snippet-wording problem away from winning that click — it is competing for a slot the query isn't asking for. Recommend **abandoning on-page optimization pursuit of pure bare-name queries** (no title rewrite, no added content will convert this — the previous audit's title-rewrite recommendation for this class of query should not be actioned). The only legitimate lever left is: does the query carry an explicit commercial modifier ("كود خصم", "كوبون")? If yes, it moves into the class below and is worth a look. If the bare name alone is what's driving the impression, it is out of scope for SXO optimization.
+
+---
+
+## 2. Commercial-intent queries at page-one positions: one too-small-to-conclude, one genuinely losing
+
+**كود خصم مرايا** (30 impr., pos 4.9, 0 clicks) — Search results for "مرايا" collapse toward **"ميرايا" (Miraaya)**, an Iraqi cosmetics/beauty retailer, not a Saudi brand — a sign the query token itself may be ambiguous or normalized oddly by the search stack, but from a non-localized vantage point this cannot be confirmed as what a Saudi searcher actually sees. What can be said with confidence is the sample size: **30 impressions over 28 days is roughly 1/day.** At an industry-typical CTR for position ~5 (roughly 4-7%), expected clicks over that window land around 1-2 — getting zero is well within normal Poisson variance for a base rate this low. **Verdict: too small a sample to diagnose a snippet or ranking problem here.** Do not treat this as a proven loss; flag it for re-check once impressions accumulate (e.g. after 90+ days or once volume triples).
+
+**كود خصم موقع هواوي** (86 impr., pos 10, 0 clicks) — this is the higher-confidence case, both because the sample is ~3x larger and because the SERP is fully visible and saturated: the top results are Huawei's own official coupon-support page **plus seven distinct third-party coupon-aggregator domains** all targeting this exact query (`couponzil.com`, `allcouponat.com`, `goldencouponzz.com`, `couponava.com`, `couponwafy.com`, `codekhasm.com`, `couponswadi.com`). Position 10 is the last slot on page one — the tail end of the 4-10 band, which is already the site's single biggest impression-to-click loss (1,765 impr. → 7 clicks, 0.40% CTR sitewide). **This is losing to something specific: a crowded field of established, single-purpose coupon domains outranking dealpulseksa for the exact same intent.** The query type is correctly matched (commercial, coupon-seeking, right page type) — the problem is competitive position, not intent mismatch. At position 10, even average-for-position CTR (~2-3%) would predict roughly 2 clicks from 86 impressions; getting zero is a real (if still modest-n) signal that this specific listing is being skipped in favor of the competitors above it, not proof of total unwinnability.
+
+**Distinction to hold onto:** مرايا = insufficient data, don't act yet. هواوي = real competitive displacement in a page type the site is correctly positioned for — this is the actual "optimize the store template" opportunity, not the bare-name queries in §1.
+
+---
+
+## 3. What makes `/calendar` winnable — and how to extend it deliberately
+
+`/calendar`'s winning queries (`متى تبدأ التخفيضات في السعودية` 24 impr. pos 9.0 → 1 click; `مواعيد التخفيضات في السعودية` 11 impr. pos 8.1 → 1 click; `مواعيد التخفيضات العالمية` 1 impr. pos 6.0 → 1 click) share a structural trait the `/store` queries don't: **the SERP for "when do sales start" has no single dominant merchant or brand to compete against.** Inspecting `متى تبدأ التخفيضات في السعودية` directly: the result set is a mix of a **government source** (`mc.gov.sa`, Ministry of Commerce official sale-season announcement), **news outlets** (`maaal.com`, `ajel.sa`), and **independent guide/calendar content** (`qyubic.com` "دليل أفضل مواسم العروض", `allcouponat.com` "جدول التخفيضات السنوي", `me-jeddah.com`). `dealpulseksa.com/calendar` itself appeared directly in this result set, ranked alongside these mixed-authority sources — competing as a peer, not as an outsider trying to unseat a merchant's own homepage.
+
+Three concrete traits define this winnable query class, extractable and repeatable:
+1. **No entity monopoly** — unlike a store name (§1) or a hyper-specific coupon code (§2), "when do sales happen" has no single canonical answer-owner. A calendar/guide page is a legitimate contender by default.
+2. **Broad, evergreen, TOFU phrasing** — "متى", "مواعيد", "جدول" (when/schedule/calendar) signal informational intent that content hubs (not stores, not aggregators) are expected to answer. This matches the page type Google already shows for the query.
+3. **Mixed-authority competitive set, not a saturated single-purpose niche** — government + news + guides is a shallower, less commoditized field than the seven-deep coupon-aggregator wall found for هواوي in §2. Less competition per slot.
+
+**How to extend deliberately:** identify other genuinely broad, entity-free, schedule/guide-shaped queries (season names, "أفضل وقت للشراء", occasion-specific "متى يبدأ" variants — the existing `seasonal_events` table and occasion pages already in the codebase are the natural source list) and build/expand calendar-adjacent hub content for them, rather than trying to force the `/store` template to win queries (§1) where a merchant's own identity structurally outranks any third-party aggregator.
+
+---
+
+## SXO Gap Score — revised, split by query class (not one blended score)
+
+| Query class | Page type used | Winnable in principle? | Evidence |
+|---|---|---|---|
+| Bare store-name (بيلاس, المخملية, لحظات القهوة, عذيه) | `/store` | **No — navigational intent, abandon pursuit** | §1: SERPs owned by merchant's own site + social, zero coupon competitors visible |
+| Commercial + code query, thin sample (مرايا) | `/store` | Undetermined | §2: n=30, statistically inconclusive |
+| Commercial + code query, real sample (هواوي) | `/store` | **Yes, but currently losing on position** | §2: pos 10 vs. 7 direct competitor coupon domains |
+| Broad informational/schedule queries | `/calendar` | **Yes, and already winning** | §3: 9x CTR vs. `/store`, peer-ranked with gov/news/guide sources |
+
+Dimension scoring for the one class actually worth optimizing (`/store` commercial-intent subset, هواوي-type queries):
 
 | Dimension | Score | Evidence |
 |---|---|---|
-| Page Type (0-15) | **14/15** | Confirmed aligned to SERP consensus for brand-level queries (§1) — this is not where the gap is |
-| Content Depth (0-15) | **1/15** | 63 words vs. 3,500-15,000+ words on inspected competitors; 1 code vs. 8-149 codes shown |
-| UX Signals (0-15) | **2/15** | No copy-button UI evidenced in the rendered prose (per `content.md`), no expiry countdown, no usage/freshness ticker that every inspected competitor carries |
-| Schema (0-15) | **3/15** | Organization + BreadcrumbList only (measured); missing Offer and FAQPage despite the page literally being an FAQ containing a code — already flagged in `content.md` as the single highest-confidence fix available |
-| Media (0-15) | **2/15** | No store logo/imagery confirmed in the extracted text (competitors show store logo + category imagery) |
-| Authority (0-15) | **3/15** | No verified badge, no star rating, no review count — every inspected competitor carries at least one of these |
-| Freshness (0-10) | **1/10** | No "last used X minutes ago" or per-code expiry date; competitors show live, ticking freshness signals that both build user trust and give Google a reason to re-crawl |
-| **Total** | **26/100** | Low-confidence directionally (n=1 target page, per `content.md`'s own caveat), but the gap pattern is consistent across all 3 head-term SERPs inspected — not a fluke of one query |
+| Page Type (0-15) | 13/15 | Correctly matched for the commercial subset; the score is not 15 because a meaningful share of `/store`'s 5,643 impressions are the unwinnable navigational subset in §1, meaning the template is being served against queries it cannot win at all, diluting the segment's real CTR |
+| Content Depth / UX / Schema / Media / Authority / Freshness | Not re-scored this session | Already measured against live competitor structure in this audit's prior content-depth pass (see `content.md` for the 63-word / 1-code / no-Offer-schema findings); those measurements are unaffected by this correction and still stand — this file's correction is scoped to query-intent classification, not to the depth/schema/UX gap |
 
 ---
 
-## 6. User stories (cite the specific SERP signal that generated each)
+## Recommendations, ranked
 
-1. **"Is this code still active?"** — generated by every competitor's expiry date / "آخر استخدام: منذ 2 د" signal (couponwafy.com). Consideration stage. dealpulseksa's page has zero freshness signal to answer this — a user cannot tell if `TZ3F` still works without clicking through and testing it.
-2. **"Is this a real/trustworthy coupon site?"** — generated by couponwafy.com's "موثّق" badge + 4.1★/10 reviews. Awareness/trust stage. dealpulseksa carries no third-party trust marker on the page itself.
-3. **"Does this store have more than one code, in case the first one fails?"** — generated by e5smley.com/couponwafy.com showing 8-149 codes vs. dealpulseksa's 1. Decision stage — a user bouncing off a failed single code has nowhere else to go on the page.
-4. **"Which 'Bella' is this?"** — generated specifically by the fragmented multi-brand SERP in §2. Awareness stage, unique to ambiguous-name stores; the fix is title/meta disambiguation, not page depth.
-5. **"How do I actually redeem this?"** — the one story dealpulseksa's page already answers (the 3-step redemption FAQ, per `content.md`) — keep this, it's a genuine strength shared with the competitor FAQ sections.
-
----
-
-## 7. Recommendations, ranked by evidence strength and the "right type, thin execution" verdict
-
-1. **(Highest confidence — do first) Add `Offer` + `FAQPage` schema to `/store/[slug]`.** Already flagged in `content.md` as a pure schema-authoring task (the code and merchant are already in the prose). Directly closes part of the Schema dimension gap above.
-2. **(High confidence, mechanical, scalable) Expand the store-page template to show multiple live codes per store where the catalog supports it, with a visible "last verified" or "last used" timestamp per code.** This is the single largest measured gap (63 words / 1 code vs. 3,500-15,000 words / 8-149 codes) and it is a template change, not a per-page hand-write — one fix propagates across every `/store/[slug]` URL in the sitemap.
-3. **(Cheap, fast, isolated) Fix the Bellas title/meta to name the product category explicitly** (and audit the sitemap for any other store names that collide with unrelated Saudi/regional brands — "بيلا" is unlikely to be the only generic-name collision in the catalog). This is a snippet-disambiguation fix, testable in one indexing cycle, independent of the depth work in #2.
-4. **(Separate workstream, do not merge with #1-3) Audit blog-cohort keyword targeting, not blog content quality**, per `content.md`'s hypothesis test — the 1-2 impression pattern at position 1-4 points at zero-demand keyword selection, and no amount of store-page-style depth work fixes that.
-5. **(Longer-horizon, White-Hat) Where a "verified" or usage-count claim cannot be made truthfully (no real user-verification pipeline exists), do not fabricate one** — per this repo's white-hat wall, fake usage counters or fake review scores are not an option even though every winning competitor displays them. The legitimate substitute is a genuinely dated "last checked" timestamp tied to real catalog-update runs, which DealPulse can support without fabrication.
+1. **(Do first, zero cost) Stop treating bare store-name impressions as an SXO opportunity.** Do not rewrite titles/meta for بيلاس, المخملية, لحظات القهوة, عذيه chasing CTR — the intent is navigational-to-merchant and structurally unwinnable by a coupon aggregator. Redirect that effort.
+2. **(Real opportunity, needs scale not just this page) For the هواوي-class queries — commercial intent, position 4-10, real competitor field visible — the fix is competitive depth/authority on the `/store` template**, consistent with this audit's separate content-depth findings (see `content.md`): more codes shown, visible freshness/last-checked signals, `Offer`+`FAQPage` schema. This is the queries this template should actually be optimized for.
+3. **(Wait, don't act) مرايا-class queries with n<50 impressions** — re-check after volume accumulates (90-day window) before concluding anything about snippet performance.
+4. **(Extend deliberately) Build more `/calendar`-adjacent broad/schedule content** using the three traits in §3 (no entity monopoly, TOFU phrasing, mixed-authority competitive field) as the selection filter for which new queries are worth targeting — this is the site's only currently-proven winnable pattern.
+5. **White-Hat constraint, unchanged:** do not add fabricated usage counters or review scores to close the Authority/Freshness gap on `/store` pages — no verification pipeline exists to back them. The legitimate substitute is a real "last checked" timestamp tied to actual catalog-update runs.
 
 ---
 
 ## Cross-skill handoffs
 
-- Schema gap (Offer/FAQPage missing on store pages) → `/seo schema` for generation, coordinated with `content.md`'s identical finding (do not duplicate work, one ticket).
-- Thin store-page content at scale (hundreds of `/store/[slug]` URLs per sitemap) → `/seo page` for a page-level audit of the template once depth work in recommendation #2 is scoped.
-- Blog keyword-targeting mismatch → `/seo content` for a deeper keyword-demand pass on the 710/764 zero-click cohort; this SXO audit only confirms the *symptom pattern* (good position, near-zero impressions), it does not re-derive keyword demand data.
+- Schema gap (`Offer`/`FAQPage` missing on `/store` pages) → `/seo schema`, coordinated with `content.md`'s identical finding.
+- Query-intent segmentation at scale (which of the hundreds of `/store/[slug]` URLs carry navigational-only impressions vs. real commercial-intent impressions) → `/seo content` or a dedicated GSC query-classification pass; this audit only demonstrates the pattern on 5 sampled queries, it does not classify the full 961-row query set.
+- `/calendar` pattern extension → `/seo page` once a candidate list of broad/schedule queries is drafted from `seasonal_events`/occasion pages.
 
 ---
 
 ## Limitations
 
-- Target-page facts (63-word store page, Organization+BreadcrumbList-only schema, Bellas GSC numbers) were **not re-fetched this session** — they are the already-measured figures supplied to this audit and cross-referenced against `content.md`'s independent live measurement of the same store-page sample. If those upstream numbers are stale, this audit's comparison table inherits that staleness.
-- Only 2 competitor URLs were opened in full for structural detail (`e5smley.com/store/noon`, `couponwafy.com/store/noon-44.html`); the remaining competitor domains named in §1 are cited from SERP title/snippet only, not independently opened — page-type classification for those is snippet-level confidence, not fetch-level confidence.
-- Competitor schema markup (Offer/FAQPage/AggregateRating on their side) was **not independently confirmed via raw HTML/JSON-LD inspection** — the depth comparison in §1 rests on visible on-page UI signals (usage counters, badges, code counts), not on a structured-data diff. The dealpulseksa side of that comparison (Organization+BreadcrumbList only) is high-confidence per `content.md`'s live measurement; the competitor side's *schema* (as opposed to visible content) is inferred, not measured.
-- No AI Overview / featured-snippet presence was recorded for the three head-term SERPs (WebSearch results returned as ranked links + an AI summary, not a raw SERP screenshot) — SERP-feature analysis (§2 of the standard SXO method) is therefore incomplete for this audit.
-- Sample size on the Bellas entity-collision hypothesis is one query variant; a fuller check would search the exact store name as it appears in dealpulseksa's own title tag (not fetched this session) to confirm the collision is real for the precise query users type, not just for the generic "بيلا" term used here.
+- **Search tool is US-based, not Saudi-localized.** All SERP inspections in this file (§1-§3) reflect what a non-KSA vantage point returns, not necessarily what a Saudi searcher sees. Rank order, local-pack presence, and Saudi-specific SERP features could not be confirmed. Findings are stated as structural patterns (what entity/page-type dominates a query), which is more robust to this limitation than exact-position claims would be.
+- Only 5 of the ~7 flagged queries were directly inspected this session (بيلاس, المخملية, لحظات القهوة, كود خصم مرايا, كود خصم موقع هواوي, متى تبدأ التخفيضات في السعودية) — جولينا and عذيه were named in the brief but not independently searched; the navigational-intent pattern in §1 is inferred to extend to them by analogy (bare Saudi/regional brand name, no commercial modifier), not confirmed by direct inspection.
+- Sample sizes throughout are small in absolute terms (single-digit clicks sitewide); statistical claims in §2 use standard CTR-by-position benchmarks as a sanity check, not a formal significance test against dealpulseksa's own historical baseline (insufficient volume exists for that).
+- This file corrects query-intent/SERP classification only. The separate content-depth, schema, and UX gap findings from the prior audit pass (word count, code count, missing `Offer`/`FAQPage` schema — documented in `content.md`) were not re-verified this session and are carried forward as still-standing.
 
 ---
 
@@ -124,29 +127,17 @@ This is **not** a SERP-execution problem and should not be diagnosed with the sa
 {
   "category": "search_experience",
   "url_scope": "https://www.dealpulseksa.com",
-  "primary_finding": "store_page_right_type_thin_execution",
-  "mismatch_severity": "ALIGNED (page type) / CRITICAL (content depth + trust signals)",
-  "sxo_gap_score": 26,
-  "sxo_gap_score_confidence": "low — n=1 target page, pattern consistent across 3 SERPs inspected",
-  "serp_evidence": [
-    {"query": "كوبون خصم نون", "dominant_type": "single_store_coupon_page", "consensus_pct": 100, "competitors": ["otlobcoupon.com", "couponwafir.com", "couponwafy.com", "e5smley.com"]},
-    {"query": "كود خصم نمشي", "dominant_type": "single_store_coupon_page", "consensus_pct": 100, "competitors": ["couponzil.com", "namshidiscountcode.com", "couponava.com", "codekhasm.com", "e5smley.com"]},
-    {"query": "كوبونات خصم السعودية", "dominant_type": "coupon_portal_hub", "consensus_pct": 100, "competitors": ["coupon.sa", "coponsa.com", "coupoonat.com", "almotasuq.com", "sdcappsa.com"]},
-    {"query": "كوبون خصم Bellas بيلا السعودية", "dominant_type": "fragmented_multi_entity", "finding": "entity_ambiguity_not_content_gap", "competitors": ["belllaa.com", "code5sm.com/store/oro-bella", "allcouponat.com", "bella-sa.com"]}
+  "correction_of_prior_finding": true,
+  "prior_finding_retracted": "entity_ambiguity_among_four_saudi_brands_bella_typo",
+  "primary_finding": "store_impressions_split_navigational_unwinnable_vs_commercial_winnable",
+  "gsc_window_days": 28,
+  "gsc_totals": {"impressions": 7609, "clicks": 34, "ctr_pct": 0.45, "zero_click_query_page_rows": 944, "total_query_page_rows": 961},
+  "query_classes": [
+    {"class": "bare_store_name_navigational", "examples": ["بيلاس", "المخملية", "لحظات القهوة", "عذيه"], "winnable": false, "action": "abandon_optimization_pursuit"},
+    {"class": "commercial_code_query_thin_sample", "examples": ["كود خصم مرايا"], "impressions": 30, "position": 4.9, "winnable": "undetermined_insufficient_data"},
+    {"class": "commercial_code_query_real_sample", "examples": ["كود خصم موقع هواوي"], "impressions": 86, "position": 10, "winnable": true, "action": "close_competitive_depth_gap", "competitor_count_visible": 7},
+    {"class": "broad_informational_schedule", "examples": ["متى تبدأ التخفيضات في السعودية", "مواعيد التخفيضات في السعودية"], "page": "/calendar", "winnable": true, "ctr_pct": 1.11, "vs_store_ctr_pct": 0.12}
   ],
-  "depth_comparison": {
-    "target_word_count": 63,
-    "target_codes_shown": 1,
-    "competitor_word_count_range": [3500, 15000],
-    "competitor_codes_shown_range": [8, 149],
-    "target_schema": ["Organization", "BreadcrumbList"],
-    "target_missing_schema": ["Offer", "FAQPage"]
-  },
-  "distinct_failure_modes": [
-    {"page": "store_template", "cause": "content_depth_and_trust_signal_gap", "fix_type": "template_expansion"},
-    {"page": "Bellas_store", "cause": "entity_name_ambiguity_in_serp", "fix_type": "title_meta_disambiguation"},
-    {"page": "blog_cohort_710_of_764", "cause": "zero_demand_keyword_targeting", "fix_type": "keyword_demand_audit_not_content_rewrite"},
-    {"page": "calendar", "cause": "n/a_this_pattern_works", "fix_type": "extend_pattern_to_other_hub_queries"}
-  ]
+  "limitation_search_tool_not_ksa_localized": true
 }
 ```
