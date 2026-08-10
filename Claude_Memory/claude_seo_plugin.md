@@ -41,9 +41,32 @@ metadata:
 `claude plugin marketplace list` يحلّ `agricidaniel-claude-seo`، و`claude plugin list` يعرض
 `claude-seo v2.2.4 · Scope: project · enabled` — من إعدادات الريبو وحدها.
 
-**ما زال لكل جهاز مرّة واحدة:** لو أبلغ Claude Code أن الإضافة «غير مثبّتة»، شغّل
-`claude plugin install claude-seo@agricidaniel-claude-seo`. وللمحرّك البايثوني وPlaywright:
-`/seo setup` ثم `/seo doctor` (لم يُشغَّلا في الجلسة السحابية — بلا قيمة هناك).
+⚠️ **الإعلان يسافر، المحتوى لا.** تُحقِّق على `Users\PC` بعد دمج الفرع (٢٠٢٦-٠٨-١٠):
+`claude plugin list` ردّ `No plugins installed` و`No marketplaces configured` **رغم وجود
+`.claude/settings.json` في الريبو**. فالإعداد يقول *ماذا* يُحمَّل، لكن الماركت-بليس يُستنسخ
+مرّة على كل جهاز. **كل جهاز جديد يحتاج أمرين:**
+
+```
+claude plugin marketplace add AgriciDaniel/claude-seo
+claude plugin install claude-seo@agricidaniel-claude-seo
+```
+
+ثم **أعد تشغيل الجلسة** — التثبيت وسط الجلسة لا يُحمِّل الوكلاء فيها.
+وللمحرّك البايثوني وChromium: `/seo setup` ثم `/seo doctor`.
+(Python على هذا الجهاز **٣.١٣.٢** والمطلوب ٣.١٠+ · `uv` غير مثبَّت.)
+
+## التقرير الموحّد — أمر واحد لا ١٨
+
+**`/seo audit https://dealpulseksa.com`** هو المدخل. المنسّق يوزّع على **حتى ١٥ وكيلاً
+بالتوازي** ويجمعها في **خطة عمل مرتَّبة بالأولوية** بدرجة ٠–١٠٠، لا ١٨ تقريراً منفصلاً.
+الأوامر المفردة (`/seo sxo` … إلخ) للتعمّق بعد التقرير لا قبله. المرجع `docs/COMMANDS.md`
+(٣٢ أمراً).
+
+⚠️ **Chromium ليس ترفاً هنا:** الموقع Next.js، و`--render auto` يكتشف قشرة SPA ويحوّل
+لـPlaywright. بدونه تُقاس صفحاتك على HTML خام فتخرج نتائج كاذبة.
+
+💸 **التكلفة:** ١٥ وكيلاً متوازياً على خطة **Pro** يبتلعان نافذة الـ٥ ساعات بسرعة، والحصة
+مشتركة مع الترمنال والجوال ([[claude_code_cloud_sessions]]). ابدأ بنطاق ضيّق لا بالموقع كله.
 
 ## 🚧 السقف — السحابة لا تستطيع تدقيق الموقع إطلاقاً
 
