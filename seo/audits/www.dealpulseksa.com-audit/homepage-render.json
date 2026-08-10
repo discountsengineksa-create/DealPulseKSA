@@ -1,0 +1,66 @@
+﻿{
+  "url": "https://www.dealpulseksa.com/",
+  "status_code": 200,
+  "content": "<!DOCTYPE html><html lang=\"ar\" dir=\"rtl\" class=\"__variable_570931\"><head><meta charSet=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=5\"/><link rel=\"preload\" href=\"/_next/static/media/01f0c602c274ea55-s.p.woff2\" as=\"font\" crossorigin=\"\" type=\"font/woff2\"/><link rel=\"preload\" href=\"/_next/static/media/350b852752f8489d-s.p.woff2\" as=\"font\" crossorigin=\"\" type=\"font/woff2\"/><link rel=\"preload\" as=\"image\" imageSrcSet=\"/_next/image?url=%2Flogo.png&amp;w=16&...",
+  "raw_content": "<!DOCTYPE html><html lang=\"ar\" dir=\"rtl\" class=\"__variable_570931\"><head><meta charSet=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=5\"/><link rel=\"preload...",
+  "is_spa": false,
+  "extracted_text": "\u0645\u064f\u062d\u062f\u0651\u062b \u0627\u0644\u0622\u0646 \u0645\u0628\u0627\u0634\u0631\u0629\u064b\n\u0627\u0643\u062a\u0634\u0641 \u0623\u062d\u062f\u062b \u0643\u0648\u0628\u0648\u0646\u0627\u062a \u0627\u0644\u062e\u0635\u0645 \u0648\u0639\u0631\u0648\u0636 \u0627\u0644\u0645\u062a\u0627\u062c\u0631 \u0641\u064a \u0627\u0644\u0645\u0645\u0644\u0643\u0629 \u0627\u0644\u0639\u0631\u0628\u064a\u0629 \u0627\u0644\u0633\u0639\u0648\u062f\u064a\u0629\n\u0644\u0627 \u062a\u062f\u0641\u0639 \u0627\u0644\u0633\u0639\u0631 \u0643\u0627\u0645\u0644 \u0645\u0627 \u062f\u0627\u0645 \u0641\u064a\u0647 \u062e\u0635\u0645 \u0628\u0627\u0646\u062a\u0638\u0627\u0631\u0643\n\u062a\u0635\u0641\u0651\u062d \u062d\u0633\u0628 \u0627\u0644\u062a\u0635\u0646\u064a\u0641\n\u0627\u0639\u062b\u0631 \u0639\u0644\u0649 \u0645\u0627 \u064a\u0646\u0627\u0633\u0628\u0643 \u0628\u0633\u0631\u0639\u0629\n\u0627\u0644\u0628\u0648\u062a \u0645\u062a\u0627\u062d \u0623\u064a\u0636\u0627\u064b \u0639\u0644\u0649 \u062a\u0644\u062c\u0631\u0627\u0645\n\u0627\u062d\u0635\u0644 \u0639\u0644\u0649 \u0625\u0634\u0639\u0627\u0631\u0627\u062a \u0641\u0648\u0631\u064a\u0629 \u0644\u0623\u0642\u0648\u0649 \u0627\u0644\u0639\u0631\u0648\u0636\u060c \u0645\u0641\u0636\u0644\u062a\u0643 \u0641\u064a \u062c\u064a\u0628\u0643\u060c \u0648\u0645\u064a\u0646\u064a \u0622\u0628 \u0627\u062d\u062a\u0631\u0627\u0641\u064a \u0628\u0643\u0644 \u0627\u0644\u0645\u064a\u0632\u0627\u062a\n\u0627\u0641\u062a\u062d \u0627\u0644\u0628\u0648\u062a",
+  "publication_date": "2026-08-10",
+  "accessibility_tree": null,
+  "headers": {
+    "Age": "43",
+    "Cache-Control": "public, max-age=0, must-revalidate",
+    "Content-Encoding": "br",
+    "Content-Security-Policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; manifest-src 'self'; worker-src 'self' blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.vercel-scripts.com https://apis.google.com https://www.google.com https://www.gstatic.com https://*.gstatic.com https://*.firebaseapp.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://api.dealpulseksa.com https://res.cloudinary.com https://images.unsplash.com https://cdn-icons-png.flaticon.com https://*.googleusercontent.com https://*.gstatic.com https://firebasestorage.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; media-src 'self' blob: data: https://res.cloudinary.com; connect-src 'self' https://api.dealpulseksa.com https://dealpulseksa-production.up.railway.app https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://vitals.vercel-insights.com https://*.vercel-scripts.com https://www.google.com; frame-src 'self' https://www.google.com https://*.firebaseapp.com; upgrade-insecure-requests",
+    "Content-Type": "text/html; charset=utf-8",
+    "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+    "Date": "Mon, 10 Aug 2026 14:16:27 GMT",
+    "Etag": "W/\"b2ih8nnfnz6kl5\"",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Server": "Vercel",
+    "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
+    "Vary": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "SAMEORIGIN",
+    "X-Matched-Path": "/",
+    "X-Nextjs-Prerender": "1",
+    "X-Nextjs-Stale-Time": "300",
+    "X-Powered-By": "Next.js",
+    "X-Vercel-Cache": "HIT",
+    "X-Vercel-Id": "bom1::iad1::f7rvx-1786371430488-434cc1fa9707",
+    "Transfer-Encoding": "chunked"
+  },
+  "redirect_chain": [],
+  "console_errors": [],
+  "render_diagnostics": [],
+  "render_engine": null,
+  "render_ms": null,
+  "mode_used": "raw",
+  "error": null,
+  "structured_data": {
+    "block_count": 1,
+    "processed_count": 1,
+    "total_bytes": 2001,
+    "truncated": false,
+    "blocks": [
+      {
+        "index": 1,
+        "size_bytes": 2001,
+        "valid": true,
+        "types": [
+          "ContactPoint",
+          "Country",
+          "EntryPoint",
+          "ImageObject",
+          "OnlineBusiness",
+          "Organization",
+          "PostalAddress",
+          "SearchAction",
+          "WebSite"
+        ],
+        "types_truncated": false
+      }
+    ]
+  }
+}
