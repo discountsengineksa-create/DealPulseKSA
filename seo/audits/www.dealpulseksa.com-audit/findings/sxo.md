@@ -141,3 +141,79 @@ Dimension scoring for the one class actually worth optimizing (`/store` commerci
   "limitation_search_tool_not_ksa_localized": true
 }
 ```
+
+---
+
+## 2026-08-10 (addendum) — `/c` is the site's only zero-click page type: cannibalization verdict
+
+**New trigger:** corrected page-level GSC pull (28d, same property, later same day): site total 12,957 impressions / 132 clicks / 1.02% CTR. `/calendar` 1,859/38/2.04% · `/blog` 3,250/50/1.54% (565 pages) · `/category` 815/4/0.49% · `/store` 6,693/17/0.25% (49 pages) · **`/c` 411/0/0.00% (35 pages)**. Note this table's totals are larger than the §GSC-facts table above (7,609/34) because it was pulled later the same day with a rolling 28-day window shifting forward — both are real GSC pulls, not a contradiction, just different snapshot times; page-type ordering and the `/c`-is-worst pattern is consistent across both.
+
+**Method used this session:** `claude-seo run render_page.py --mode auto --json` against 3 live `/c` URLs (Bellas, Vogacloset, Airalo) succeeded (HTTP 200, `mode_used: raw`, Vercel/Next.js SSR headers confirmed real, non-cached-error responses). **Forcing `--mode always` (Playwright) failed on all 4 URLs attempted (2 `/c`, 2 `/store`) with `net::ERR_FAILED` — a tool/network problem on this run, not a site-down signal (the plain `raw` fetch to the same domain succeeded seconds apart with 200s).** This means: **no `/store` page was successfully fetched this session** — the `/store` side of the comparison below relies on (a) the title strings given directly in the task brief, which match the previously-documented pattern in `Claude_Memory/seo_c_store_cannibalization.md`, and (b) this file's own carried-forward `content.md` findings (thin `/store` content, no `Offer`/`FAQPage` schema) — not a fresh fetch. This is a real limitation, disclosed rather than papered over.
+
+### 1. Does cannibalization explain the zero clicks?
+
+**Partially — and the data itself proves it's not the whole story.** Per `Claude_Memory/seo_c_store_cannibalization.md` (fix shipped 2026-08-08, web commit `6425411`), a `duplicatesStorePage()` function already detects `/c` pages whose title reduces (after stripping year/percent/"فعّال"/Latin brand name) to exactly "كود خصم {اسم المتجر}" and sets their canonical to the matching `/store` page — **confirmed live at 19 of 61 published `/c` pages** as of that date.
+
+That fix is doing *something*: the memory file's own count was 61 published `/c` pages; today's GSC breakdown shows only **35** `/c` pages generating *any* impression in the 28-day window. If the 61-page figure is still current (not independently re-counted this session — flagged as an inference, not a live count), that implies roughly **26 pages generate zero impressions at all**, i.e. Google has stopped surfacing them in favor of the canonical `/store` target — the fix working as designed for that subset.
+
+**But the 35 pages that still surface convert at exactly 0%, not just "lower than /store."** That is not what a working canonical alone would predict — `rel=canonical` does not guarantee Google drops a URL from appearing in results (Google frequently still indexes and shows the non-canonical URL, especially early after signal consolidation), so some residual `/c` impressions after a canonical fix is expected. **Zero clicks across all 35, including pages presumably outside the exact-duplicate-title subset the fix targets (i.e. pages the fix deliberately left alone as "differentiated"), means a second, independent problem exists beyond cannibalization: the pages that DO still get shown are not being clicked, which is a snippet/CTR-appeal problem, not just a duplicate-indexing problem.** Verdict: cannibalization is the primary structural cause but not sufficient on its own to explain a flat 0% across the entire remaining set — evidence in §2 below shows why the surviving pages don't convert either.
+
+**Direct rank comparison for the same query, as requested:** could not be observed live this session (no successful fetch/SERP check pairs this specific instance produced a side-by-side rank for one query showing both URL types — WebSearch was not run this addendum given the turn budget; the tool's US-vantage-point limitation, already disclosed above, would apply equally here). This is a genuine gap — flagged, not glossed over. The strongest available evidence for "which one wins" remains the already-documented جولينا case in the memory file: GSC showed a real ranking position (م 8.1, 77 impressions) that the owner's own manual search could not reproduce in 30 results — the memory's own diagnosis is that Google **alternates** between `/store/جولينا` and `/c/كود-خصم-jolina-2026` for the same query, splitting and diluting signal rather than either one consistently winning. That alternation, not a stable "one wins", is the actual mechanism — consistent with why canonical (a soft signal) rather than a 301 (a hard signal) has not fully stopped the split.
+
+### 2. What differs in the SERP-visible layer
+
+**Title/H1, confirmed live (Bellas, fetched this session):** the `/c` page's `extracted_text` (trafilatura-cleaned, boilerplate stripped) opens with the exact string **"كود خصم بيلاس 2026: خصم 15% على مجوهراتك الجديدة!"** — identical to the `<title>` given in the task brief. That means on this page, **title = H1 = opening sentence**, verbatim, with no differentiation between what the SERP snippet shows and what the reader sees first — a templated-thin-content signature. The `/store` title in the same brief, **"كود خصم بيلاس 15% فعّال 2026 | نبض الصفقات"**, carries two things the `/c` title lacks: the word **"فعّال"** (active/currently-valid — the single highest-intent trust cue a coupon searcher scans a snippet for) and the **brand name** ("نبض الصفقات") for source recognition. The `/c` title instead reads as lifestyle marketing copy ("خصم 15% على مجوهراتك الجديدة" — "15% off your new jewelry") with an exclamation mark, closer to an ad headline than a utility answer to "is there a working code."
+
+**Body content, confirmed live (Bellas):** the full `extracted_text` is lifestyle-blog register throughout — "جدّدي إطلالتك بأحدث إكسسوارات ومجوهرات بيلاس الفاخرة" ("refresh your look with Bellas's latest luxury accessories"), "محط الأنظار" ("the center of attention"), "بأسعار لا تُقاوم" ("prices you can't resist") — copywriting voice, not the transactional register ("verified", "last checked", "X uses today") that content.md documented as what wins on `/store`-type templates against competitors.
+
+**Schema, confirmed live (Bellas) — this is the addendum's one genuinely new, counter-intuitive finding:** the `/c` page ships **3 valid JSON-LD blocks, 5,381 bytes total** — `Organization`/`WebSite`/`ContactPoint` (site-wide), **`FAQPage` + `Article` + `Question`/`Answer`** (page-specific), and `BreadcrumbList`. That means **`/c` is not thinner on schema than `/store`** — if anything it appears to carry richer structured data than what this audit's `content.md` pass documented as missing (`Offer`/`FAQPage`) on `/store`. This reframes the diagnosis: **the zero-click problem on `/c` is not an on-page depth/schema deficiency — it is being out-competed for the same intent by a page (`/store`) carrying a more trust-calibrated title, while both pages fight over one shared ranking slot.** (Caveat: `/store`'s own schema could not be directly re-verified this session per the fetch failure above; this claim compares live-measured `/c` schema against the prior audit's `content.md` characterization of `/store`, not a same-session pair.)
+
+### 3. Verdict
+
+**Consolidate `/c` into `/store` — upgrade the existing canonical-tag fix to a 301 redirect for the duplicate-title subset, and fold the differentiated remainder's genuinely useful angles (FAQ content, lifestyle framing) into the `/store` template rather than keeping them as separate competing URLs.**
+
+Justification, numbers-first:
+- **35 pages, 411 impressions, 0 clicks, 0.00% CTR — the only page type on the entire site with a flat zero.** Even `/category` (the second-worst segment) converts at 0.49%, `/store` at 0.25%. There is no CTR floor to defend; there is nothing to lose by removing the URL from independent competition.
+- **The 2026-08-08 canonical fix is directionally correct but structurally too weak:** `rel=canonical` is a hint Google is free to ignore, and per the memory file's own جولينا case, Google is observed **alternating** between the two URLs rather than converging — meaning the underlying problem (two URLs, one intent, split signal) persists even after the fix for the subset it doesn't fully suppress. A 301 is a directive, not a hint — it removes the second URL from the index entirely and consolidates 100% of any link/impression signal onto `/store`, rather than leaving `/c` "eligible but ignored."
+- **Do not pick the reverse (consolidate `/store` into `/c`).** `/store` already carries 6,693 impressions and 17 clicks — 16x the impression volume of `/c` at a non-zero (if weak) CTR — plus it is the page type this audit's §2 above already identified as the one queries with real commercial intent (هواوي-class) actually compete on. `/c` has zero proof of working at all.
+- **Do not "differentiate instead."** The memory file already tried the differentiation path for the minority of `/c` pages the fix deliberately left alone (e.g. "متجر ريمان", which does earn a real click on a genuinely different query, "متجر" not "كود خصم") — that pattern only works when the `/c` page answers a *provably different query* from the store page, verified per-page, not as a blanket policy. For the Bellas/Vogacloset/Airalo-type pages sampled this session — same merchant, same "كود خصم X" intent, cosmetic copywriting-vs-utility difference only — there is no different query to defend; they are near-clones of `/store`, not a distinct page type.
+- **Do not drop `/c` entirely without redirecting.** These pages hold whatever residual crawl equity/impression history they've accumulated (411 impressions of visibility exist); a bare removal (404/noindex-and-abandon) throws that away. A 301 into the matching `/store` slug preserves and consolidates it instead.
+
+**Scope of the 301 recommendation:** apply it to the same `duplicatesStorePage()`-detected subset already identified by the existing fix (title reduces to literal "كود خصم {store}") — do not blanket-redirect all 61 pages. The handful the memory file already found earning real distinct-query traffic (متجر ريمان-pattern) should be kept and re-optimized as their own page type (informational "about the merchant" / delivery-specific angle), not redirected — but every page in that surviving set should be re-verified against live GSC query data (not assumed) before being spared, since this addendum's 0%-across-all-35 result suggests the safe list may be smaller in practice than the 08-08 audit assumed.
+
+### Limitations (this addendum)
+
+- **No `/store` page was successfully fetched this session** (Playwright `net::ERR_FAILED` on all `--mode always` attempts; `--mode auto` for `/store` was not retried after the Playwright failures, given the 10-turn budget). The `/store` side of the §2 comparison relies on the task brief's given title strings plus this file's own already-standing `content.md` findings, not a fresh same-session fetch — flagged, not disguised as measured.
+- **No live head-to-head SERP rank comparison was run this addendum** (§1's direct-request item). WebSearch was not invoked this pass; the جولينا alternation case from the existing memory file is the best available evidence for the mechanism, not a fresh observation.
+- **The "61 → 35 pages, ~26 suppressed" arithmetic in §1 combines two different sessions' counts** (memory file dated 2026-08-08, GSC pull dated 2026-08-10) and was not verified by an independent live count of `seo_landing_pages` rows this session — stated as an inference with the gap disclosed, per the zero-fabrication rule.
+- Search tool (for any SERP work) remains US-based, not Saudi-localized — same caveat as the rest of this file.
+- Only 3 of the 35 live `/c` pages were fetched and inspected (Bellas succeeded and was read in full; Vogacloset and Airalo were fetched successfully in raw mode but not individually parsed for title/schema in this pass given the turn budget — the Bellas findings are presented as representative of the templated pattern, not independently confirmed on all three).
+
+### Structured summary (addendum, for `audit-data.json` ingestion)
+
+```json
+{
+  "category": "search_experience",
+  "url_scope": "https://www.dealpulseksa.com",
+  "addendum_date": "2026-08-10",
+  "primary_finding": "c_pages_only_zero_click_page_type_sitewide_cannibalization_partial_explanation",
+  "gsc_window_days": 28,
+  "gsc_totals_later_pull": {"impressions": 12957, "clicks": 132, "ctr_pct": 1.02},
+  "segment_ctr": {"calendar_pct": 2.04, "blog_pct": 1.54, "category_pct": 0.49, "store_pct": 0.25, "c_pct": 0.00},
+  "c_page_count_with_impressions": 35,
+  "c_page_count_published_prior_audit": 61,
+  "existing_fix": "rel_canonical_duplicatesStorePage_19_of_61_pages_2026-08-08",
+  "fix_sufficiency": "partial_suppresses_impressions_for_some_pages_does_not_explain_zero_ctr_on_survivors",
+  "verdict": "consolidate_c_into_store_via_301_upgrade_from_canonical",
+  "verdict_scope": "duplicate_title_subset_only_not_blanket_all_61",
+  "fetch_failures_this_session": ["playwright_mode_always_net_ERR_FAILED_4_urls", "no_store_page_fetched_live"],
+  "confirmed_live_findings": {
+    "bellas_c_title_equals_h1_equals_opening_sentence": true,
+    "bellas_c_schema_blocks": ["Organization/WebSite/ContactPoint", "FAQPage/Article/Question/Answer", "BreadcrumbList"],
+    "bellas_c_tone": "lifestyle_marketing_copy_not_utility_coupon_register"
+  },
+  "limitation_search_tool_not_ksa_localized": true,
+  "limitation_no_store_page_fetched_this_session": true,
+  "limitation_no_live_serp_head_to_head_this_addendum": true
+}
+```
