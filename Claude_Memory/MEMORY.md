@@ -57,6 +57,7 @@
 - الموقع: [المشروع](website_project.md) (Next.js + Firebase + checklist) · [التصميم](website_design_preferences.md) (Apple-style، watermark، OTP) · [محرّك السيو](website_seo_engine.md) (lib/seo، BILINGUAL_ENABLED، revalidate/indexnow)
 - [Web Repo Verification Recipes](web_repo_verification_recipes.md) — tsconfig ضيّق يتجاوز OOM؛ اختبر clampTitle بالوسوم الحقيقية؛ لا عربية داخل .ps1
 - [Web Blog OOM + Client-Prop](web_blog_monolith_oom_and_client_prop_serialization.md) — قصّ related لصفحة >2MB؛ next dev يـOOM على blog.ts
+- [🎟️ Coupon Visual Identity](web_coupon_visual_identity.md) — التذكرة نُشرت ٢٠٢٦-٠٨-١١؛ **`view=light` يرجّع الكود/الرابط `null`** و**`StoreCard` ليست بطاقة الرئيسية**؛ الترند وُصل بالكتالوج
 
 ## ٣) قاعدة البيانات وموثوقية الأرقام (٩)
 
