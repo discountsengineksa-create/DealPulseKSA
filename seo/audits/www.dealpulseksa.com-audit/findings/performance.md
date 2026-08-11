@@ -1,126 +1,121 @@
-C# Performance / Core Web Vitals — www.dealpulseksa.com
+# Performance / Core Web Vitals — www.dealpulseksa.com
+## Before/After: `/store/*` and `/category/*` prerendering fix (shipped 2026-08-10)
 
-**Data source: LAB ONLY (PageSpeed Insights v5 / Lighthouse, mobile).** No field data exists —
-CrUX API and CrUX History both returned `403 Client Error: Forbidden` on
-`https://chromeuxreport.googleapis.com/v1/records:queryRecord` for every URL tested. This means
-the Chrome UX Report API is not enabled on the Google Cloud project that owns the key at
-`C:\Users\PC\.config\claude-seo\google-api.json` (PageSpeed Insights API works fine on the same
-key — different API, different enablement flag). **Fix:** in that Cloud project, enable
-"Chrome UX Report API" in APIs & Services → Library, then re-run
-`claude-seo run crux_history.py <url> --json`. Until then, no 75th-percentile real-user figure
-can be reported for LCP/INP/CLS on this domain — every number below is a single synthetic
-Lighthouse run, not a distribution.
+**Data source: LAB ONLY (PageSpeed Insights v5 / Lighthouse, mobile strategy, single run per URL,
+2026-08-11).** CrUX field data does **not exist** for this domain — the CrUX API returns
+`404 chrome ux report data not found`, meaning the site is below Google's minimum-traffic sampling
+threshold. This is not a tooling fault; it is not retried. Every number below is a single synthetic
+Lighthouse run, not a 28-day real-user distribution, and Google's 75th-percentile pass/fail
+evaluation **cannot be performed** on this domain until CrUX starts returning data. INP specifically
+has **no measurement at all** in this report — Lighthouse lab runs do not simulate real user
+interactions, so no lab INP number exists either; Total Blocking Time (TBT) is used below only as a
+rough interactivity-risk proxy, not as INP.
 
-Homepage (out of scope for this pass, already measured previously): performance score 0.95.
+**What changed (confirmed live, both sides measured):** `/store/*` and `/category/*` moved from
+`x-vercel-cache: MISS` + `Cache-Control: private, no-cache, no-store, max-age=0, must-revalidate`
+to `x-vercel-cache: PRERENDER` + `Cache-Control: public, max-age=0, must-revalidate`, by adding
+`generateStaticParams` to both dynamic segments and removing a `searchParams` read from the store
+page's server component. These two templates carry 7,508 of the site's 12,957 monthly impressions
+(58%).
 
-## Pages measured (3/3 requested, mobile strategy)
+## Pages measured (4/4 requested, mobile strategy)
 
-| Page | Perf score | LCP (lab) | TBT (lab, INP proxy) | CLS (lab) | FCP (lab) |
-|---|---|---|---|---|---|
-| `/store/سويتر` (no-store template) | 93 | **3.2 s** — needs improvement (score 0.74) | 60 ms | 0 — good | 0.9 s |
-| `/calendar` | 98 | **2.5 s** — good, at the edge (score 0.90) | 44 ms | 0 — good | 0.9 s |
-| `/blog/perfume-brands-celebrity-saudi-arabia` | 79 | **4.5 s** — POOR (score 0.37) | 248 ms | 0 — good | 1.0 s |
+| Page | Perf score | LCP (lab) | TTFB (lab, `server-response-time`) | TBT (lab, weak INP-risk proxy) | CLS (lab) | FCP (lab) |
+|---|---|---|---|---|---|---|
+| `/store/بيلاس` (fixed template — priority) | 86 | **4.13 s** — POOR (score 0.46) | 4 ms | 43 ms | 0 — good | 0.9 s |
+| `/category/تطبيقات` (fixed template) | 97 | **2.63 s** — needs improvement (score 0.87) | 4 ms | 0 ms | 0 — good | 0.9 s |
+| `/calendar` (content focus, unaffected by fix) | 98 | **2.40 s** — good (score 0.91) | 14 ms | 20.5 ms | 0 — good | 1.0 s |
+| `/` homepage (unaffected by fix, comparison point) | 94 | **3.00 s** — needs improvement (score 0.78) | 9 ms | 0 ms | 0 — good | 1.4 s |
 
-CWV pass/fail (lab-only, thresholds from the 2026 table — LCP good ≤2.5s / needs-improvement
-2.5–4.0s / poor >4.0s):
+Homepage baseline on record: PSI mobile performance score **0.95** (measured 2026-08-10, before
+the fix). Today's homepage re-run scores **0.94** — a 1-point difference is single-run Lighthouse
+variance, not a signal; the homepage template was not touched by this fix and should be flat.
 
-- `/store/سويتر`: LCP **needs improvement**, CLS good, INP cannot be measured in lab (TBT 60 ms is a low-risk proxy).
-- `/calendar`: LCP **good** but only by 24 ms of margin (2476 ms vs. 2500 ms threshold) — not resilient to any regression. CLS good.
-- `/blog/perfume-brands-celebrity-saudi-arabia`: LCP **poor** (4.5 s, nearly double the "good" ceiling). CLS good. TBT 248 ms is the highest of the three pages and sits in Lighthouse's own "needs improvement" TBT band — the strongest lab signal that INP will be elevated on this template.
+## The before/after comparison (the actual question this report answers)
 
-No page shows any CLS risk (all measured 0.000 exactly) — layout-shift is not a problem on this
-site's current templates.
+The previous lab audit of this site (same repo, same `performance.md`, dated before the fix)
+measured the `/store/*` template — a **different individual store page**, `/store/سويتر`, not
+`/store/بيلاس` — under the old `private, no-cache, no-store` header:
 
-## Bottlenecks identified
+| Metric | `/store/سويتر` — BEFORE (no-store, old audit) | `/store/بيلاس` — AFTER (PRERENDER, this run) |
+|---|---|---|
+| Perf score | 93 | 86 |
+| LCP | 3.2 s (score 0.74) | 4.13 s (score 0.46) |
+| TTFB (`server-response-time`) | 11 ms | 4 ms |
+| TBT | 60 ms | 43 ms |
 
-### 1. Blog template — LCP 4.5s is the single worst number measured (highest priority)
-- Gap between FCP (1.0s) and LCP (4.5s) is **3.5 seconds** — more than double the FCP→LCP gap on
-  the other two pages (store: 2.2s, calendar: 1.6s). That gap size, not raw byte weight, is the
-  signal something is actively delaying LCP element paint on this template specifically.
-- `total-byte-weight` audit lists `https://www.dealpulseksa.com/logo.png` at **102,882 bytes**
-  (100 KB) as a directly-requested asset on this page — separate from the correctly-optimized
-  `_next/image?url=%2Flogo.png&w=128&q=75` (1,912 bytes, AVIF) that the header nav already uses.
-  Something on the blog template (likely `<head>` OG/schema image tag or a raw `<img>` not routed
-  through `next/image`) is pulling the unoptimized original PNG.
-- **Console error present**: `Error: Minified React error #418` (hydration text mismatch —
-  server-rendered HTML doesn't match client render) firing from
-  `_next/static/chunks/4bd1b696-c023c6e3521b1417.js`. A hydration mismatch forces React to
-  discard the server-rendered subtree and re-render client-side, which is a plausible root cause
-  for a 3.5s FCP→LCP gap: the visually-complete paint has to wait for client JS to re-render
-  content rather than the already-painted SSR HTML being used as-is.
-- `lcp-discovery-insight`-class issue also present on the store page (see below) — worth checking
-  whether the blog's LCP element (hero image or first content block) is equally not discoverable
-  from the initial HTML.
-- TBT 248 ms — 4x the other two pages — with 4 long tasks vs. 2-3 elsewhere; `bootup-time` shows
-  517ms total JS execution attributed to the document itself plus 468ms to chunk `255-*.js`.
+**Caveat that matters more than the numbers:** these are two *different store pages*, not the same
+URL re-measured. `/category/*` has no prior lab run at all (the earlier audit tested `/store`,
+`/calendar`, `/blog` — not `/category`), so there is no before/after pair for the category template
+either. This report is the first lab measurement ever taken of `/category/*`, and the store-template
+comparison is confounded by page-specific content (different Cloudinary story-media asset, different
+byte weight) rather than being a clean A/B of the same page.
 
-### 2. Store template — LCP 3.2s + defeated CDN cache (second priority, highest reach)
-- `lcp-discovery-insight` audit **failed** (score 0): "Optimize LCP by making the LCP image
-  discoverable from the HTML immediately, and avoiding lazy-loading." The only late-loading image
-  on this page is the Cloudinary story-theme asset
-  (`res.cloudinary.com/.../story_media/theme_*.png`, 33 KB) requested well after the CSS/font
-  wave — consistent with it being the LCP candidate and not being eagerly discoverable/preloaded.
-- Server response time itself is not the problem in this lab run (11 ms) — but this page is
-  served with `Cache-Control: private, no-cache, no-store, max-age=0, must-revalidate` on a
-  **public** page. That header combination defeats Vercel's CDN/Edge cache entirely: every single
-  visitor triggers a full SSR execution on the origin, for what is documented as the
-  highest-commercial-intent template on the site (one instance per store, i.e. this cost is paid
-  on every store page, not just this one). The 11 ms TTFB seen here is from Lighthouse's own test
-  vantage point close to the origin/edge; real Saudi-based users hitting a cold, non-cached SSR
-  path will not see 11 ms, and there is currently no CrUX field data available to quantify the
-  real-world tax (see CrUX block above). This is a cost/latency risk that scales with traffic and
-  cannot be fixed by any front-end optimization — it has to be fixed at the response-header /
-  data-revalidation layer (switch to `public, s-maxage=…, stale-while-revalidate=…` and invalidate
-  via `revalidatePath`/`revalidateTag` on coupon updates, per the ISR pattern already used
-  elsewhere per `website_seo_engine.md`, rather than opting the whole route out of caching).
+**TTFB**: dropped from 11 ms to 4 ms on the store template. Both numbers are within single-digit
+milliseconds — this is the range where Lighthouse/PSI run-to-run noise (different test timestamp,
+possibly different Google test-runner region) is as large as the delta itself. PSI's test vantage
+point is already close to Vercel's edge network regardless of cache status, so a lab TTFB of
+11 ms even on the *uncached* `no-store` path was never going to expose the real cost of that
+header — the cost of `no-store` shows up as **origin compute load and dollar cost at scale**, which
+a single lab probe close to the edge cannot see. **Lab TTFB data does not support a measurable
+before/after speed claim** — it was already fast before, and it is (immeasurably) faster now.
 
-### 3. Shared across all three pages (lower priority, small but consistent)
-- **Render-blocking CSS**: same single stylesheet (`_next/static/css/b1b905cecca16531.css`,
-  14.6 KB) blocks first paint on all three pages, costing 140-164 ms of estimated LCP savings on
-  each page per the `render-blocking-insight` audit. Candidate for critical-CSS inlining or
-  splitting since 70,889 bytes uncompressed serving 14.6 KB compressed suggests most of it is
-  unused per-page (`unused-css-rules` diagnostic also fires on all three, though Lighthouse scores
-  it 1/1 because the absolute bytes are small — do not ignore just because the audit "passes").
-- **Legacy JavaScript**: identical 12,141 wasted bytes on all three pages from
-  `_next/static/chunks/255-98a0bdaa30757bda.js` — polyfills/transforms for pre-Baseline browsers
-  that are very likely unnecessary. Check the project's browserslist/next.config target.
-- **Two preloaded woff2 fonts** (35.6 KB + 32.7 KB = ~68 KB) load consistently in the 290-360ms
-  window on every page and do not appear to be blocking FCP (FCP is 0.9-1.0s on all three, in the
-  "good" band) — font loading is not currently a CWV problem, no action needed here.
-- **CSP allows `unsafe-inline` + host-allowlist `script-src`** — flagged by Lighthouse's
-  `csp-xss`/`trusted-types-xss` audits on all three pages. Not a CWV metric, but noted since it
-  surfaced on every run; a security-hardening item, not a performance one.
+**LCP**: got *worse* in this measurement (3.2 s → 4.13 s, crossing from "needs improvement" into
+"poor"). This is real data and is reported honestly rather than discarded — but it is not
+attributable to the caching change. The store template's LCP element is a Cloudinary
+`story_media/theme_*.png` asset that differs per store; `/store/بيلاس`'s version is heavier and,
+per the `lcp-discovery-insight` audit (failed, score 0, on both the old and the new run), is still
+not eagerly discoverable from the initial HTML — the same root cause flagged in the prior audit
+(see Bottlenecks below) is still unfixed and is the far larger lever on this template than the
+cache-header change.
 
-## Recommendations, prioritized by expected CWV impact
+## Verdict
 
-1. **Fix the blog template's LCP (4.5s → target <2.5s).** Two concrete, verifiable steps:
-   a) find and eliminate the direct 100 KB `/logo.png` request on the blog template — route it
-   through `next/image` like the header does (should drop to ~2 KB AVIF), and b) resolve the
-   React hydration error #418 (compare server vs. client render output for whatever component is
-   mismatching — the fact that this error is unique to the blog template out of the three pages
-   tested is the strongest lead). Expected impact: largest single CWV win available — this page
-   is currently in the "poor" bucket, the other two are not.
+**The caching change is a CDN/origin-compute/cost win, not a measured user-visible speed win.**
+Every visitor to `/store/*` and `/category/*` now gets served from Vercel's edge (`PRERENDER`)
+instead of triggering a fresh SSR execution on every request — that is real, confirmed by the
+header change alone, and it matters at 7,508 impressions/month of scale for origin compute cost and
+resilience under load. But nothing in this lab data shows an LCP or TTFB improvement large enough to
+separate from noise: TTFB was already sub-15ms in Lighthouse's near-edge test vantage before the
+fix, and LCP on the one template with a same-template before/after comparison moved in the wrong
+direction (confounded by page content, not the cache header). **Do not report this as an LCP win.**
+Report it as: fixed a scaling/cost problem, with real-world speed impact for users on slower
+connections/higher network RTT than PSI's test location — currently **unverifiable** because CrUX
+has no field data for this domain. Re-run this exact comparison once CrUX starts returning records;
+that is the only data source that can settle the user-facing-speed question definitively.
 
-2. **Stop defeating CDN cache on the store template.** Replace
-   `private, no-cache, no-store, max-age=0, must-revalidate` with a `public` cache policy plus
-   explicit revalidation on write (ISR/`revalidatePath`), scoped to this route only. This does not
-   move the lab LCP number much (11 ms TTFB already), but it is the correct fix for real-world TTFB
-   at scale on the single highest-commercial-intent template, and it cannot be assessed further
-   until the CrUX API is enabled (see fix above) — re-run CrUX after enabling the API to confirm
-   real-user TTFB before/after.
+## Bottlenecks identified (unrelated to the caching fix — carried over / still open)
 
-3. **Make the LCP image eagerly discoverable on the store template.** Add `fetchpriority="high"`
-   and ensure the Cloudinary story-theme image (or whatever resolves as LCP) is present in initial
-   server-rendered HTML with no lazy-loading, per the failed `lcp-discovery-insight` audit.
-   Expected impact: closes the gap on a page currently sitting just above the "good" LCP threshold.
+1. **`lcp-discovery-insight` fails on both fixed templates** (`/store/بيلاس` and `/category/تطبيقات`,
+   score 0 on both) — the LCP candidate image is not eagerly discoverable / not preloaded from
+   initial HTML. This is the same defect flagged in the pre-fix audit and is unaffected by the
+   cache-header change. **This is the actual lever to move LCP on these templates**, not caching.
+   Add `fetchpriority="high"` and ensure the LCP image (Cloudinary story-theme asset on `/store`,
+   equivalent hero/card image on `/category`) ships in the server-rendered HTML with no lazy-load.
 
-4. **Inline/split the shared 14.6 KB render-blocking stylesheet.** ~150 ms of estimated savings
-   per page across every template on the site (store, calendar, blog all show the identical
-   pattern) — cheap, template-wide win once done in one place.
+2. **Render-blocking CSS** — identical single stylesheet
+   (`_next/static/css/b1b905cecca16531.css`, 14.6 KB) on all four pages measured, costing
+   130–187 ms of estimated LCP savings per the `render-blocking-insight` audit on every page. Same
+   finding as the prior audit — still unaddressed, template-wide, cheap fix once done in one place.
 
-5. **Drop unnecessary legacy-JS transpilation** (~12 KB wasted on every page) by confirming the
-   build target excludes polyfills for pre-Baseline browsers. Minor but free once confirmed.
+3. **Legacy JavaScript** — identical 12,141 wasted bytes from
+   `_next/static/chunks/255-98a0bdaa30757bda.js` on all four pages. Same finding as prior audit.
 
-6. **Re-run this audit with CrUX field data once the Chrome UX Report API is enabled** — every
-   number in this file is a single lab run; a 75th-percentile field measurement is required before
-   any pass/fail CWV verdict can be considered final per Google's evaluation method.
+4. **Homepage and `/calendar` LCP sit in "needs improvement"/at-the-edge-of-good** (3.0 s and
+   2.4 s respectively) — neither was touched by this fix and neither regressed; not a priority for
+   this before/after pass but worth folding into the `lcp-discovery-insight` fix above since the
+   root cause (LCP image discoverability) is shared across templates.
+
+## Recommendations, prioritized
+
+1. **Do not claim a CWV win from this deploy in any stakeholder-facing report.** Report it correctly
+   as an infrastructure/cost fix (origin compute reduction at 7,508 impressions/month scale) with an
+   *unverified* user-facing speed effect, pending CrUX field data.
+2. **Fix `lcp-discovery-insight` on `/store/*` and `/category/*`** — highest-impact, verifiable-today
+   lever on the templates that matter most (58% of impressions). Expected impact: should recover
+   the store template from "poor" (4.1 s) toward "needs improvement" or better, independent of caching.
+3. **Re-run this exact 4-URL PSI comparison after CrUX field data becomes available** for this
+   domain (currently 404 — below sampling threshold) — that is the only source that can confirm
+   whether real Saudi users on slower networks see a TTFB/LCP improvement the lab test cannot detect.
+4. Inline/split the shared 14.6 KB render-blocking stylesheet and drop the 12 KB of legacy JS
+   transpilation — both template-wide, low-effort, apply once.

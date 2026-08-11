@@ -56,7 +56,8 @@ possible — every framework-recommended "allow" bot is allowed, and both
 framework-recommended "optional block" bots (CCBot, cohere-ai) are allowed
 too. Not a defect, but worth the owner knowing it's a deliberate choice, not
 an oversight: training-data crawlers get the same unrestricted access as
-answer-engine crawlers.
+answer-engine crawlers. `/calendar` carries no page-specific disallow — it is
+covered by the same blanket `Allow: /`.
 
 ## 2. llms.txt — present, 200 OK, structurally risky at scale
 
@@ -303,3 +304,176 @@ above, not measured citation rates. Do not quote these as percentages.
 - `Claude_Memory/zid_affiliate_channel.md` — source for the confirmed Zid click-attribution fact
 - `Claude_Memory/owned_audience_reality.md`, `Claude_Memory/seo_owned_channels_pivot.md`, `Claude_Memory/domain_authority_plan.md`, `Claude_Memory/seo_audit_tools_trust.md` — source for §4's brand-signal context (memory, not fresh measurement)
 - `Claude_Memory/feedback_prefer_codes_over_tracking_links.md` — existing site principle that recommendation #1 operationalizes for the AI-facing export specifically
+
+---
+
+## [2026-08-11] Follow-up: Page-Level Citability Deep-Dive — /calendar
+
+**Scope note:** this section audits `https://www.dealpulseksa.com/calendar`
+specifically, not the whole domain. It builds on figures already measured
+and handed to this pass rather than re-deriving them: 2,030 words, H1
+"مواعيد التخفيضات في السعودية 2026", 18 H2s / 12 seasons, 10 FAQ H3s, 5
+JSON-LD blocks (Organization graph, WebPage, BreadcrumbList, ItemList with
+12 items, FAQPage with 10 Q&A), the confirmed zero-mention gap on
+وزارة التجارة / mc.gov.sa / ترخيص / رخصة / نظام التخفيضات, and the page's
+GSC performance (CTR 2.04% vs 0.25% site-wide on /store, 529 impressions
+last 7 days — best-performing page on the site).
+
+**Method / honesty flag:** content was retrieved this pass via `WebFetch`
+(a small-model summarization pass over the fetched HTML), not via
+`render_page.py`'s `extracted_text` (trafilatura) field as the skill
+prescribes — that script was not found in this repo or on this machine this
+session (`find` for `render_page.py` returned nothing under the project or
+common install paths). The word counts below are therefore **directionally
+accurate, not word-perfect** — they are counted with Python `str.split()` on
+the exact strings WebFetch returned, but that text passed through one extra
+summarization layer before reaching this analysis. It also returned 6 of
+the 10 FAQ H3s (likely truncated by its own output budget, not a page
+defect). Treat the passage-level claims below as a strong first pass;
+re-verify with a raw HTML/trafilatura fetch before treating any single word
+count as final.
+
+### 1. Passage-level citability — named passages, quotable vs. not
+
+**Quotable as standalone answers (self-contained, no missing subject, specific):**
+
+| Passage (verbatim) | Words | Why it's citable |
+|---|---|---|
+| FAQ — "متى تبدأ التخفيضات في السعودية؟" → "لا يوجد موعد واحد؛ السنة فيها عدة مواسم تشمل تصفيات يناير والعيدان ورمضان والعودة للمدارس والعيدين والجمعة البيضاء في نوفمبر." | 20 | **This H3 is a near-verbatim match to the exact target query in this brief.** Question-and-answer are both self-contained; no pronoun or preceding-paragraph dependency. This is the single most important passage on the page for the stated goal. |
+| FAQ — "هل تواريخ رمضان والعيدين ثابتة كل سنة؟" → "لا؛ رمضان والعيدان تتبع التقويم الهجري فتتقدّم نحو 11 يوماً كل سنة محددة برؤية الهلال." | 15 | Short, but carries a precise quantified claim ("نحو 11 يوماً كل سنة") — GEO literature on citation behavior consistently finds models will lift a short passage verbatim specifically *because* it contains a precise number, even under the 134–167-word target. |
+| Hijri-date disclaimer: "⚠️ مواسم رمضان والعيدين تتبع التقويم الهجري وتُحدَّد برؤية الهلال، لذا تواريخها هنا تقديرية لسنة 2026." | 15 | Fully self-contained caveat, doesn't require page context, and is the kind of honest hedge that (per this task's constraints) should be preserved, not removed — it is itself a citable trust signal, not a weakness. |
+| FAQ — "متى الجمعة البيضاء (وايت فرايداي) في السعودية؟" → "آخر جمعة من نوفمبر، ويليها «سايبر مندَي» يوم الإثنين، أضخم موسم تسوق أونلاين." | 13 | Self-contained, names both events, no antecedent needed. |
+
+**Not reliably quotable as-is (context-dependent or too imprecise):**
+
+| Passage pattern | Example | Problem |
+|---|---|---|
+| Season-body fragments under each H2 | '"23 سبتمبر" يشمل كل الفئات خاصة الإلكترونيات والأزياء والمطاعم والسيارات.' (10 words) | **The subject is missing from the sentence itself.** The season name ("اليوم الوطني السعودي") lives only in the H2 heading above it, not restated in the body. If a chunker/extractor lifts this line without its heading (a real risk — many RAG pipelines split on paragraph, not heading+paragraph pairs), the quote becomes "September 23 covers all categories" with no referent. This same pattern repeats across all ~12 season blocks — it is a structural pattern, not a one-off. |
+| Broad/imprecise ranges | "موسم الرياض" → "أكتوبر حتى مارس" (a 6-month span) | Too wide to serve a "when does X start" query with confidence; reads as a category description, not a date answer. Lower priority to fix than the missing-subject issue above, since Riyadh Season is not the target query, but worth noting as a pattern. |
+| Hedged/approximate season dates | "رمضان" → "يبدأ ~18 فبراير (تقديري)"، "عيد الفطر" → "~20 مارس (تقديري)" | Correctly hedged (this is the right call per the Hijri caveat, not a defect) — but the "~" and "تقديري" markers mean these specific lines are weaker verbatim-quote candidates than the fixed-date entries (National Day, White Friday), since a model is less likely to state an approximate figure with the same confidence as a fixed one. This is an acceptable tradeoff for honesty, flagged here only so it's not mistaken for a fixable defect. |
+
+**Bottom line:** the page already contains one near-perfect passage for the
+exact target query (the "متى تبدأ التخفيضات" FAQ pair), but at 20 words it
+is far short of the 134–167-word optimal range documented elsewhere on this
+domain's AI block (§3 above), and the 12 season-summary blocks — the page's
+main body content — carry a repeated structural flaw (missing subject) that
+caps their standalone quotability regardless of length.
+
+### 2. Does the missing mc.gov.sa anchor hurt citability specifically?
+
+**Two different mechanisms, and they should not be conflated.** Google's
+ranking algorithm and an AI assistant's citation decision are not the same
+process:
+
+- **Google ranking** rewards the *page* for topical authority signals
+  (backlinks, corroborating internal/external links, E-E-A-T). A missing
+  outbound citation to a primary source is one signal among hundreds, and
+  its ranking impact is diffuse and hard to isolate from everything else a
+  higher-ranking competitor is also doing better.
+- **AI citation** (ChatGPT/Perplexity/AI Overviews deciding what to quote
+  or link) leans more heavily, per available reporting on RAG-style
+  synthesis, on whether a passage's factual claim can be corroborated
+  against a source the model already trusts. A page that names and links a
+  primary regulator directly gives the model an explicit corroboration
+  anchor for date-sensitive claims — exactly the kind of claim this page is
+  built around.
+
+**Honest verdict: likely helps, magnitude unclear.** There is no controlled
+public study (that this pass can point to) quantifying "adding one
+government citation changes AI-citation odds by X%." What can be said with
+more confidence is the *shape* of the gap: the page's 12 shopping seasons
+(back-to-school mid-Aug–mid-Sept, National Day Sept 23, Riyadh Season
+Oct–March) already fall inside — or straddle — the window the task brief
+attributes to competitor pages as the Ministry of Commerce's officially
+declared 2026 discount season (1 Aug–31 Oct). That figure comes from the
+task brief, not from a live mc.gov.sa fetch performed this pass — **it was
+not independently re-verified this session**, and government-declared
+windows can change year to year, so it must be confirmed against the live
+mc.gov.sa page before publishing, not copied from this brief.
+
+There is also a real conceptual distinction the page currently erases: the
+12 "shopping seasons" listed here are informal, marketing-driven retail
+events, while "نظام التخفيضات" (the Discount Regulations) is a *separate*,
+legally binding framework under which the Ministry of Commerce declares
+specific registered discount windows merchants must comply with. A user (or
+an assistant) asking "متى تبدأ التخفيضات في السعودية" may mean either sense
+of "تخفيضات" — informal shopping season, or the regulated discount period —
+and the page currently only answers the first. Naming and citing the
+regulatory sense, clearly distinguished from the shopping-calendar sense,
+closes a real content gap and gives assistants a second, authoritative
+citation point — but whether that specific addition *causes* more citations
+is not something this pass can prove, only argue is directionally sound.
+
+### 3. FAQPage schema after Google's May 2026 rich-result retirement — still useful for AI extraction?
+
+Separating what's confirmed from what's inference/vendor claim, as instructed:
+
+- **Confirmed (structural fact, not a claim about outcomes):** JSON-LD
+  `FAQPage` markup gives any machine parser — including an LLM ingestion
+  pipeline that chooses to read structured data — an unambiguous,
+  pre-segmented list of question/answer pairs. That is strictly less
+  ambiguous than inferring Q&A boundaries from HTML heading+paragraph pairs,
+  where (per §1 above) a chunker can lose the subject/heading association.
+  This is true regardless of whether Google displays a rich result for it.
+- **Vendor claim / unproven (do not present as fact):** the common GEO-tooling
+  claim that "FAQPage schema improves AI citation rate" has no public,
+  controlled benchmark behind it that this pass can point to. It is a
+  plausible mechanism, not a measured one — no DataForSEO or other citation
+  tool was invoked this session to test it directly on this page.
+- **Inference this pass is willing to stand behind:** since Google's rich
+  result for FAQPage is retired, the *only* remaining consumer of this
+  markup is likely other machine readers — including AI crawlers/browsing
+  tools that parse structured data preferentially when present. That does
+  not prove it moves citation odds, but it means the schema now has a single
+  clear purpose (AI/machine extraction) rather than a dual one (SERP
+  decoration + extraction), and it costs nothing to keep since it is already
+  built and validated. Whether Bing (which powers Copilot) still renders FAQ
+  rich results was not checked this pass — flagged as unverified, not
+  assumed either way.
+
+**Recommendation on this point specifically:** keep the schema as-is
+(zero cost, plausible upside, no confirmed downside); do not invest further
+engineering effort expanding it purely on the unproven "schema → citation"
+claim — spend that effort on the content-level fixes in §4 instead, which
+rest on more defensible mechanisms (self-containment, primary-source
+corroboration).
+
+### 4. Three ranked, concrete changes for "متى تبدأ التخفيضات في السعودية"
+
+1. **Expand the exact-match FAQ answer itself — highest priority, lowest
+   effort.** The H3 "متى تبدأ التخفيضات في السعودية؟" is already a
+   near-verbatim match to the target query (§1). Its current answer is 20
+   words; grow it toward the 134–167-word target by folding in the specific
+   date ranges already documented elsewhere on the page (back-to-school
+   mid-Aug–mid-Sept, National Day Sept 23, White Friday last Friday of
+   November + Cyber Monday, 12.12, January end-of-season, June–mid-July
+   summer) into one self-contained paragraph that does not require the
+   reader to consult the H2 list above it. This is a copy edit against
+   content that already exists on the page — no new research required.
+   *Effort: Low.*
+2. **Add a clearly-labeled, distinct mention of the official Ministry of
+   Commerce discount season** ("موسم تخفيضات [year] الرسمي" per نظام
+   التخفيضات), explicitly separated from the 12 informal shopping seasons,
+   with a citation link to mc.gov.sa. The exact current window must be
+   pulled live from mc.gov.sa before publishing — it was not independently
+   re-verified this session and should not be copied from this brief's
+   figure without checking it is still current. This closes the one
+   confirmed content gap competitors already have, and gives assistants a
+   primary-source anchor for a date-sensitive claim. *Effort: Low–Medium
+   (one verification step + one new paragraph + one citation link, no
+   engineering).*
+3. **Fix the missing-subject pattern across the 12 season blocks** by
+   rewriting each from a date+category fragment into one full sentence that
+   restates the season name inline — e.g. replace '"23 سبتمبر" يشمل كل
+   الفئات خاصة الإلكترونيات...' with 'يوم الوطني السعودي (23 سبتمبر) يشمل
+   تخفيضات في كل الفئات خاصة الإلكترونيات والأزياء والمطاعم والسيارات.' This
+   raises the baseline citability of the page's main body (not just the FAQ)
+   for every season-specific query, not only the one named in this brief,
+   and removes the dependency on a chunker preserving heading+body pairing.
+   *Effort: Medium — 12 short rewrites, pure content work, no engineering.*
+
+None of these three recommend adding freshness/verification claims the site
+cannot back — #2 is a real, checkable citation to an external authority
+(not a fabricated signal), and the Hijri estimate caveat is left untouched
+by design, per this task's own instruction that it is a deliberate trust
+signal worth preserving.
