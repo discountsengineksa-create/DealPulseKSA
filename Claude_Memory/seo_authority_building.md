@@ -13,7 +13,34 @@ metadata:
 
 **التقدّم:**
 - ✅ **Find Saudi** (findsaudi.com) — أُدرج نبض الصفقات (2026-07-14) تحت **«اتصالات و إنترنت › تسوّق، تجارة الكترونية»** (لا «دعاية وإعلان» — تلك للوكالات). حالة: «تم بنجاح»، بانتظار مراجعة ~24 ساعة. قيمة متواضعة (إشارة كِيان لا رافعة ترتيب). التالي المعلّق: Bedinroom partner email + Google Business Profile.
-- ⚠️ **تعارض بريد لم يُحسَم:** موقع الويب `lib/seo/constants.ts` ينشر `dealpulseksa@gmail.com` (pulse)، بينما [[contact_emails]] يسجّل `dealpulesksa@gmail.com` (pules). واحد خطأ ويُنشَر لقوقل — اسأل المالك أيّهما الصندوق الفعلي قبل تثبيته.
+- ✅ **تعارض البريد حُسِم (٢٠٢٦-٠٨-١١):** الصحيح **`dealpulseksa@gmail.com`** (pulse). دليلان:
+  ملف Trustpilot الذي **ملأه المالك بنفسه** يعرضه، وتعليمات المالك العامة تنصّ عليه صراحةً
+  وتصف `dealpules...` بأنه «خطأ إملائي مثبّت في الكود». ⚠️ **لا تصحّح المثبّت تلقائياً** —
+  قد يكون مربوطاً بخدمات؛ التصحيح قرار مالك لا تنظيف روتيني.
 - الحسابات الرسمية (من constants.ts، sameAs): IG/X/FB = `dealpulseksa`، بوت تيليجرام `t.me/DealPulseksa_bot`، Threads `@dealpulseksa`.
 
-**القرار (المالك اختار):** **بناء السلطة**. الخطة الكاملة في ريبو الويب `seo/authority_building_plan.md` (web commit `a62c6fb`). White-Hat فقط، وقناعة القنوات المملوكة من [[seo_owned_channels_pivot]] (لا Reddit/Quora/مدوّنين). طبقات: (1) استشهادات أساسية GBP/Trustpilot/LinkedIn/Crunchbase/أدلّة سعودية (Saudi Bizness/Find Saudi/KSA Directory) (2) روابط سياقية وثيقة الصلة — **الأولوية: إيميل طلب رابط شراكة من Bedinroom** (أفلييت جديد + بنينا لهم هَب [[blog_bedinroom_cluster]]) + دليل شركاء هيئة السياحة partner.visitsaudi.com + ملفات ناشر Admitad/Salla (3) أصل قابل للربط /calendar (4) PR اختياري. بطاقة NAP موحّدة + إيميل Bedinroom جاهزان في الملف. Trustpilot أول باكلينك مكتمل ([[domain_canonical_trap]]).
+**القرار (المالك اختار):** **بناء السلطة**. الخطة الكاملة في ريبو الويب `seo/authority_building_plan.md` (web commit `a62c6fb`). White-Hat فقط، وقناعة القنوات المملوكة من [[seo_owned_channels_pivot]] (لا Reddit/Quora/مدوّنين). طبقات: (1) استشهادات أساسية GBP/Trustpilot/LinkedIn/Crunchbase/أدلّة سعودية (Saudi Bizness/Find Saudi/KSA Directory) (2) روابط سياقية وثيقة الصلة — **الأولوية: إيميل طلب رابط شراكة من Bedinroom** (أفلييت جديد + بنينا لهم هَب [[blog_bedinroom_cluster]]) + دليل شركاء هيئة السياحة partner.visitsaudi.com + ملفات ناشر Admitad/Salla (3) أصل قابل للربط /calendar (4) PR اختياري. بطاقة NAP موحّدة + إيميل Bedinroom جاهزان في الملف.
+
+## 🔴 حالة الروابط الحقيقية — مقيسة ٢٠٢٦-٠٨-١١، لا مُقدَّرة
+
+**بينغ (تقرير الارتباطات الخلفية) يعطي نطاقاً محيلاً واحداً:**
+
+```
+المجالات المرجعية : 1   ←  findsaudi.com  (٤ صفحات)
+نصوص الإرساء      : 1   ←  "https://www.dealpulseksa.com"  رابط عارٍ بلا كلمة مفتاحية
+```
+
+⚠️ **«Trustpilot أول باكلينك مكتمل» يحتاج تدقيقاً:** الصفحة **موجودة ومطالَب بها فعلاً**
+(`Claimed profile • July 2026`، تصنيف Coupon Service / Online Marketplace، صفر مراجعة) —
+**لكنها لا تظهر في نطاقات بينغ المحيلة.** إمّا الرابط `nofollow` أو لم يُلتقَط بعد (الصفحة
+عمرها شهر). **في الحالتين لا تُحسب اليوم.** ⇒ **الرصيد ٣ نطاقات dofollow** (عدد Ahrefs
+المتبوع)، لا ٤. → [[seo_audit_tools_trust]]
+
+**والدرس الأعمّ من جلسة ٢٠٢٦-٠٨-١١:** ثلاثة أهداف رشّحها تدقيق آلي سقطت عند أول احتكاك حيّ —
+`partner.visitsaudi.com` (يشترط صفة شريك سياحي لا نملكها) · `MAGNiTT` (**أغلق التسجيل الحرّ**،
+`Login` فقط بلا `Sign up`، ومستندات مساعدتهم قديمة) · `Product Hunt` (جمهور تقني إنجليزي،
+وإطلاق بلا جمهور مملوك يُقرأ مهجوراً). **قوائم الأدلّة تتقادم أسرع مما تُراجَع — افتح الصفحة
+قبل أن ترشّحها.**
+
+**الطريق الوحيد الباقي بيقين:** SaaSHub عالق عند `Not approved` (زر Feedback يطلب المراجعة)،
+وطلب روابط من شركاء أفلييت قائمين. → [[saashub_directory_listing]] · [[domain_authority_plan]]
