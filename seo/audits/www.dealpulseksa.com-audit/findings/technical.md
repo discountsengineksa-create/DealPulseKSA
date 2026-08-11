@@ -127,7 +127,7 @@ Not tested in this session (no IndexNow key file or submission endpoint fetched)
 2. `Cache-Control: private, no-cache, no-store, ...` on `/category/*` in addition to the already-known `/store/*` — 112/1748 sitemap URLs (6.4%), covering the two highest-link-equity templates. Fix: switch to `public, max-age=0, s-maxage=<N>, stale-while-revalidate` matching the `/c/*`/`/blog/*` pattern already correct in the same codebase.
 
 **Medium**
-3. Raw-space (`%20`) percent-encoded slugs on 31/53 `/store/*` (58%) and 14/59 `/category/*` (24%) URLs — inconsistent with the properly hyphenated `/c/*` pattern on the same site. No ranking impact from the Arabic encoding itself; the space character is the actual defect. Fix: hyphenate + 301 old→new, bounded to 45 URLs.
+3. Raw-space (`%20`) percent-encoded slugs on 31/53 `/store/*` (58%) and 14/59 `/category/*` (24%) URLs — inconsistent with the properly hyphenated `/c/*` pattern on the same site. No ranking impact from the Arabic encoding itself; the space character is the actual defect. Fix: hyphenate + 301 old→new, bounded to 45 URLs. **See §10 below — do not act on this before reading the risk assessment; the honest priority given current traffic and timing is "defer," not "fix now."**
 
 **Low**
 4. Canonical tags on `/store/*`/`/category/*` repeat the raw-space encoding (correct relative to the served URL, but inherits the URL-structure defect above — resolves itself once #3 is fixed).
@@ -138,7 +138,52 @@ Not tested in this session (no IndexNow key file or submission endpoint fetched)
 
 ---
 
+## 10. Addendum — URL Migration Risk Assessment: %20 in `/store/*` and `/category/*` slugs
+
+**Recommendation up front: leave it alone for now.** This is a cosmetic/hygiene defect with no documented SEO harm, the affected templates just had a cache-control change ship today, and the true implementation cost is materially larger than "hyphenate 45 slugs" once internal links are accounted for. If it gets done at all, do it as a scoped hygiene project no sooner than 4 weeks from today, using an explicit 45-row redirect map, never a regex rule, and keep the 301s permanently.
+
+### 10.1 Is there measurable SEO harm, or is this cosmetic?
+
+**Cosmetic.** There is no documented Google mechanism that penalizes or demotes a percent-encoded space in a URL path:
+
+- Google's own crawling/indexing docs on URL structure recommend hyphens over underscores for word separation and descriptive paths, but do not list literal-space/`%20` as a crawl error, duplicate-content trigger, or ranking demotion — it is a readability/best-practice recommendation, not a documented penalty.
+- John Mueller (Google Search) has stated on multiple public occasions that URL structure/format is a very lightweight signal, that Google resolves percent-encoded characters (including `%20`) exactly as their decoded form with no indexing penalty, and that URLs should be changed for user/maintainability reasons, not because Google can't handle them.
+- This audit's own §2 and §4 data already proves it live on this exact site: `/store/*` and `/category/*` — both majority-`%20` — self-canonicalize correctly, carry `index, follow`, have no `X-Robots-Tag` block, and are the URLs currently generating the 6,693 impressions / 17 clicks (`/store`) and 815 / 4 (`/category`) cited in the task. Google is not struggling to crawl, canonicalize, or rank these URLs today.
+- The one *real* (non-SEO) risk from a literal space is downstream portability — unencoded spaces can break in contexts that treat whitespace as a token boundary (some chat-app auto-linkers, plain-text email auto-linking, older log parsers). But the served/canonical URL here is already correctly percent-encoded (`%20`, not a literal space in the HTTP request line) — confirmed live in §2/§4 — so even that risk is already mitigated at the point Google, browsers, and any spec-compliant client touch it. The residual exposure is narrow: a human manually retyping/pasting the *decoded* Arabic text with a space into a tool that fails to auto-encode it.
+
+Verdict: no measurable ranking, crawl, or indexing harm exists or is likely. This is an internal consistency/engineering-hygiene issue (a `slugify()` utility already exists in `lib/utils.ts` — hyphenates, keeps Arabic Unicode range `؀-ۿ`, strips other characters — and is simply not wired into the two href-builders that still call raw `encodeURIComponent(store.store_id)` / `encodeURIComponent(tag)`, e.g. `app/store/[slug]/page.tsx`'s card links and `components/CategoryPills.tsx:47`), not an SEO recovery item.
+
+### 10.2 If it is done anyway — safe sequence, and the real cost
+
+The code-level fix (wiring the existing `slugify()` into two href-builders) is trivial. The migration around it is not, because of scope this audit surfaced live:
+
+- **39 files** in `dealpulseksa-web` reference `store_id`/slug-building/`encodeURIComponent` for store or category links (`grep` count, this session) — every one that builds an `href` to `/store/*` or `/category/*` from raw `store_id`/tag text needs to resolve to the new slug, not just the two templates that render the pages themselves.
+- **Blog content is a separate, larger unknown.** Per `Claude_Memory/blog_inline_code_chips.md`, the chip-attachment logic in `app/blog/[slug]/page.tsx` extracts store IDs by scanning literal `/store/…` links already present in article body text (`storeIdsIn(body)`), across 1,365 of 1,381 blog pages. That confirms `/store/*` hrefs exist as written text inside article content (`lib/blog.ts`), not only as dynamically generated component links — meaning some unknown subset of the 45 affected slugs may be hardcoded into article bodies and would need a scripted find-and-replace across blog content, not just an app-code change. **This was not counted in this session** — before committing to a timeline or cost estimate, run a grep of `lib/blog.ts` for each of the 31 store and 14 category slugs to get a real count; do not assume it's free just because the component-level links would auto-update.
+
+If proceeding, the sequence:
+
+1. Generate an explicit **old-slug → new-slug map** for all 45 URLs (not a generic regex transform) — `slugify()`'s character-stripping isn't guaranteed reversible, so pin every pair explicitly.
+2. Wire `slugify(store_id)` / `slugify(tag)` into the href-builders (starting with `app/store/[slug]/page.tsx` and `components/CategoryPills.tsx:47`, then the remaining files from the 39-file list that build store/category links) so the new hyphenated slug becomes what's rendered everywhere going forward.
+3. Add exact-match 301s (Next.js `redirects()` in `next.config.mjs`, or `middleware.ts`) for all 45 old paths → new paths. Exact-match, not a space→hyphen regex, because `slugify()` also strips characters a naive regex wouldn't.
+4. Update `app/sitemap.ts` to emit only the new slugs — never list old and new together.
+5. Confirm canonical tags follow automatically (they already self-canonicalize to whatever's served per §2, so no separate canonical-migration step if #2 is done correctly).
+6. Grep `lib/blog.ts` for hardcoded old-slug links across the 1,365 chip-bearing articles and fix any hits found (scope unknown until counted — see above).
+7. Submit the 45 new URLs via the existing IndexNow bulk-push (per `Claude_Memory/seo_bulk_reindex_ops.md`) and spot-check old→new via GSC URL Inspection.
+8. **Keep the 301s permanently.** No sunset date. These are indexed pages on a low-authority site still accumulating signal (`Claude_Memory/domain_authority_plan.md`, `seo_indexation_status.md`); Google may re-crawl and re-check the old URL for as long as any external link/citation to it exists, and removing the redirect early risks losing exactly the equity the migration was meant to protect.
+9. Monitor GSC Page Indexing/Coverage for the 45 old URLs weekly for 8-12 weeks to confirm "Page with redirect" status and that the new URLs move to "Indexed."
+
+### 10.3 When
+
+**Not now. Defer at least 4 weeks.** The store/category cache-control fix (§2 — `no-store`/`private` → cacheable) shipped to these exact two templates immediately before this audit. Stacking a URL/redirect migration on the same templates before that fix has a clean read (minimum 2-4 weeks, ideally spanning 3-4 weekly cycles to smooth day-of-week noise, of stable GSC impressions/clicks/CWV and confirmation the cache change didn't itself regress anything) makes it impossible to attribute any subsequent movement to either change. Given §10.1 already establishes the `%20` issue as cosmetic with no ranking harm, there is no urgency pulling the other direction — current click volume on the affected templates is already low (17 clicks/28 days total on `/store`, split unknown across the 31 affected vs. 22 unaffected URLs; this audit has no per-URL breakdown), so nothing is being lost by waiting. Sequence: let the cache fix's measurement window close first, separately scope the `lib/blog.ts` hardcoded-link cost (10.2 step 6) with real numbers, and only then schedule the slug migration as its own isolated, measurable change.
+
+---
+
 ## Files/paths referenced
 - `c:\Users\PC\Desktop\dealpulseksa-web\next.config.mjs` (headers() block — no middleware/bot-detection code found)
 - `c:\Users\PC\Desktop\dealpulseksa-web\package.json` (no bot-management dependency)
+- `c:\Users\PC\Desktop\dealpulseksa-web\lib\utils.ts:13-20` (`slugify()` — exists, hyphenates + supports Arabic Unicode range `؀-ۿ`, unused by store/category href-builders)
+- `c:\Users\PC\Desktop\dealpulseksa-web\components\StoreCard.tsx:94` (`href={\`/store/${encodeURIComponent(store.store_id)}\`}` — raw encode, not slugify)
+- `c:\Users\PC\Desktop\dealpulseksa-web\components\CategoryPills.tsx:47` (`href={\`/category/${encodeURIComponent(tag)}\`}` — raw encode, not slugify)
+- `c:\Users\PC\Desktop\dealpulseksa-web\app\store\[slug]\page.tsx`, `app\category\[slug]\page.tsx`, `app\c\[slug]\page.tsx` (template routes; `/c/*` is the already-correct pattern)
+- `Claude_Memory\blog_inline_code_chips.md` (confirms `/store/…` links live as text inside 1,365 blog article bodies, scanned not generated — the unscoped cost driver in §10.2)
 - Live URLs cited inline above (robots.txt, sitemap.xml, one `/store/*`, one `/c/*`, one `/category/*`, one `/blog/*`, apex domain on `/`, `/robots.txt`, `/sitemap.xml`)
