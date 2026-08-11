@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-**حيّ ٢٠٢٦-٠٨-١١ على جهاز `Users\PC`: ٢٦١ skill** (`(Get-ChildItem ~\.claude\skills -Directory).Count` = ٢٦١، و`SKILL.md` = ٢٦١ — واحد لواحد، لا تعشيش). قبلها كان ١٧ فقط.
+**حيّ ٢٠٢٦-٠٨-١١ على جهاز `Users\PC`: ٢٩٦ skill + ٢٥ أمر** (بعد موجتين — انظر «موجة GitHub» أسفل). الموجة الأولى بلغت ٢٦١ skill (`(Get-ChildItem ~\.claude\skills -Directory).Count` = ٢٦١، و`SKILL.md` = ٢٦١ — واحد لواحد، لا تعشيش). قبلها كان ١٧ فقط.
 
 **`C:\Users\user` ليس على هذا الجهاز** (`Get-ChildItem C:\Users` = Administrator, All Users, Default, Default User, PC, Public). لا نسخ مباشر بين الجهازين — **التركيب يُعاد استنساخاً من المصادر**.
 
@@ -39,6 +39,24 @@ metadata:
 `content-strategy-ds` · `content-strategy-oc` · `ux-writing-ds` · `copy-editing-oc` · `copywriting-oc` · `product-marketing-oc` · `programmatic-seo-oc` · `seo-audit-oc` (٨ إعادات تسمية، والاسم في الـfrontmatter يُزامَن مع المجلد).
 
 **مستبعَدان:** `claude-api` (يحجب المهارة المدمجة في الـharness) و`template` (قالب لا مهارة).
+
+## موجة GitHub (٢٠٢٦-٠٨-١١) — ٣ مصادر إضافية، ٢٦١ → ٢٩٦
+
+مسح GitHub Search API (لا `gh` على الجهاز) بحثاً عن أقوى مهارات واجهات:
+
+| المصدر | ★ | المركَّب | لماذا |
+|---|---|---|---|
+| `nextlevelbuilder/ui-ux-pro-max-skill` | ١١٥٬٦٣٧ | **٧** | قاعدة محلية قابلة للبحث: ٨٤ ستايل / ١٩٢ بالِت / ٧٤ اقتران خطوط / ٩٨ قاعدة UX عبر ٢٢ ستاك + shadcn/Radix |
+| `addyosmani/agent-skills` | ٨٦٬١٢٨ | **٢٤** | انضباط هندسي إنتاجي (`frontend-ui-engineering`, `performance-optimization`, `browser-testing-with-devtools`) — لا يغطّيه أيّ من الـ٢٦١ |
+| `educlopez/ui-craft` | ٢٦١ | **٤ + ٢٥ أمراً** | نظام هندسة تصميم ضد «سلوب الـAI» |
+
+**درس `ui-craft`:** الريبو يشحن ٢٩ verb-skill لـcodex/cursor/gemini، لكن **لـClaude يشحن ٤ مهارات + ٢٥ أمراً** في `commands/`. لا تركّب الـ٢٩ كمهارات — التركيب الصحيح: `cli/assets/claude/skills` → `~/.claude/skills\`، و`commands/` → `~/.claude/commands\` (`/polish`, `/critique`, `/finalize`, `/harden`…). **أول أوامر على هذا الجهاز — المجلد لم يكن موجوداً.**
+
+**فخّ ثانٍ في التصحيح — مسار المستخدم ≠ حمولة الريبو:** رُحّل `docs/brand-guidelines.md` في ٣ مهارات (`brand`, `banner-design`, `design-system`) إلى مسار kit مطلق ميّت، بينما هو **ملف يُنشئه المستخدم في مشروعه**. القاعدة: صحّح فقط ما يوجد فعلاً في الريبو المصدر، وتحقّق بـ`Test-Path` بعد كل ترحيل.
+
+**الحقائب الحيّة:** `~\.claude\skill-kits\ux-ui-agent-kit` (١٣٨ نظام) و`addyosmani-kit` (٧ checklists). **٩٦ إحالة مطلقة تتحقّق بالوجود، صفر مفقودة.**
+
+**RTL: غير موجود على GitHub.** بحث `rtl arabic design system agent skill in:name,description` = **total=0**. لا مهارة عربية/RTL جاهزة في العالم — الفجوة تُسدّ بصناعة محلية.
 
 ## ملاحظات إلزامية
 
