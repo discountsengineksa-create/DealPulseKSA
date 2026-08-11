@@ -1,6 +1,6 @@
 # Project Memory Index
 
-> ١٣٤ ملفاً (عُدّت ٢٠٢٦-٠٨-١٠ — الرقم يطابق القرص وسطور الأقسام). **العدّ للمتون، بلا `MEMORY.md` نفسه** (`ls *.md` يعطي ١٣٥ — لا تنسخه هنا). **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
+> ١٣٥ ملفاً (عُدّت ٢٠٢٦-٠٨-١١ — الرقم يطابق القرص وسطور الأقسام). **العدّ للمتون، بلا `MEMORY.md` نفسه** (`ls *.md` يعطي ١٣٥ — لا تنسخه هنا). **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
 > **الطبقة ٠ تُقرأ متونها قبل أي مهمة.** من الباقي: افتح ما يخصّ مهمتك وأعلن ما فتحته.
 > الحوائط الصلبة منسوخة نصّاً في `CLAUDE.md`. سطرٌ بعدّة روابط = ملفات مستقلة جُمعت للاختصار.
 
@@ -81,7 +81,7 @@
 - [Web Login Gate Model](web_login_gate_model.md) — الموقع مفتوح؛ الستوري/المفضلة للمسجّلين؛ حركات المجهول بـvisitor_id
 - [Store Page Evergreen (404 Root Cause)](store_page_evergreen.md) — `last_time>=CURRENT_DATE` أخفى المتجر → 404؛ المتجر دائم والكوبون يُفرَّغ
 
-## ٥) التحليلات والسيو (٢٧)
+## ٥) التحليلات والسيو (٢٨)
 
 - تحليل المتاجر: [الجناح](store_analytics_bi.md) (٤ تبويبات + AI عبر Groq) · [استراتيجية إعادة البناء](analysis_rebuild_strategy.md) (٦ صفحات، ٣ مسارات دخل، zero-fakery) · [البنية النهائية](analytics_store_structure.md) (٦ أقسام؛ «أبرز» = top favorites)
 - الكلمات المفتاحية: [⛔ Keyword Planner](google_ads_keyword_planner.md) (**رفضته Google نهائياً — التكامل مُتراجَع عنه بـ5ad4f7b، لا كود حيّ**) · [طلب السوق السعودي](keyword_demand_ksa.md) (البراندات 10K-100K؛ متاجرك ~10-100) · [⚠️ Windsor GSC](windsor_gsc_connector.md) (المجاني يرجع أصفاراً وهمية بلا خطأ)
@@ -89,7 +89,8 @@
 - [SEO Deep Audit Fixes](seo_deep_audit_fixes.md) — بق light-AR 500 (is_trending BOOLEAN) أفرغ الخريطة صامتاً؛ اسحب الباك-إند أولاً
 - [SEO Authority Building](seo_authority_building.md) — crawled-not-indexed سقف سلطة؛ باكلينكس White-Hat
 - [SEO High-Demand Front](seo_high_demand_front_opened.md) — فخّ AR=draft+EN=noindex؛ نُشرت 23 صفحة؛ نون/نمشي محجوبان بالسلطة
-- [SEO Page Portfolio Verdict](seo_page_portfolio_verdict.md) — ٧١٠/٧٦٤ صفحة صفر نقرة؛ المتاجر نيّة ميتة؛ التجميع وحده يكسب
+- [🤖 AI Citation Channel](ai_citation_channel.md) — **٤١٣ استشهاد Copilot/٣٠ يوماً مقابل ١٣٢ نقرة جوجل**؛ يقاس بـBing AI Performance؛ **يسقط حكم «صفر نقرة = ميت»**؛ قاعدتان لا واحدة
+- [SEO Page Portfolio Verdict](seo_page_portfolio_verdict.md) — ٧١٠/٧٦٤ صفحة صفر نقرة؛ المتاجر نيّة ميتة؛ التجميع وحده يكسب — ⚠️ **عُدِّل بـ[[ai_citation_channel]]: صفر نقرة ≠ صفر قيمة**
 - [SEO Category Query Alignment](seo_category_query_alignment.md) — وزن المفردات: «كوبون» م49 و«متاجر» م19؛ ٨٧٪ من الظهور غارق؛ CTR المتاجر منخفض **بقرار الإسناد** لا بعطل
 - [🔁 تكاذُب /c/ ↔ /store](seo_c_store_cannibalization.md) — صفحتان بعنوان واحد تُسقطان الترتيب؛ canonical مشتقّ لـ١٩ + اسم المتجر العربي مضمون بكل عنوان
 - [🔴 SEO Meta Code — التفريع نُسِخ](seo_meta_code_leak.md) — الكود يُكشف لكل الكتالوج في سنِبت المتجر **و llms.txt**؛ isCodeAttributed لشارات المدوّنة فقط
