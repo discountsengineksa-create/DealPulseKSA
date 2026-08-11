@@ -119,7 +119,7 @@
 - سلة: [القناة](salla_affiliate_channel.md) (خصم+عمولة بلا بوّابة ✅) · [الإسناد بالكود لا النقرة](salla_orders_attribution_reality.md) · [أول ١٣ طلب ~٥٢٥ ر.س](salla_proven_converters.md)
 - Admitad: [الإعداد](admitad_affiliate_setup.md) (مساحتان + بوّابتان) · [حجب ISP للنطاق](admitad_dns_block.md) (NXDOMAIN مزوّر → DNS مشفّر)
 - [CodeMap Affiliate Channel](codemap_affiliate_channel.md) — كوبونات فقط بلا تتبّع؛ براندات كبيرة؛ تكمّل سلة
-- [Boostiny Publisher Channel](boostiny_publisher_channel.md) — قُبل ٢٠٢٦-٠٨-٠٦ (#52131)؛ **اتفاقية Zoho Sign وصلت ٠٨-١٠ وتنتهي ٠٨-٢٥ — لا توقّع قبل مطابقة الاسم الرباعي بخطاب الآيبان**
+- [Boostiny Publisher Channel](boostiny_publisher_channel.md) — قُبل ٢٠٢٦-٠٨-٠٦ (#52131)؛ اتفاقية IO قُرئت ٠٨-١١: **لا حصرية · إنهاء بـ١٠ أيام عمل · لكن NET ٦٠–٧٥ يوماً والفوترة الشهرية علينا** · والسرّية تمنع كتابة الأسعار في الريبو العام
 - [DCM Network Channel](dcm_network_channel.md) — ٣ منصّات؛ ندرة أكواد أقفلت الحساب؛ ليس رافعة نمو
 - [Zid Affiliate Channel](zid_affiliate_channel.md) — سفير زد: عمولة 30%/خصم 20%، إسناد بالرابط فقط
 - [Jahez Direct BD](jahez_direct_bd.md) — تواصل مباشر بلا شبكة؛ البريد من زيارة المقر؛ مسوّدة في outreach/
