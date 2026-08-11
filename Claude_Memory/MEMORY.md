@@ -37,7 +37,7 @@
 - العقل المدبر: [البروتوكول](protocol_mastermind.md) (نواة + انخراط ٠–٥ أسئلة + ٤ أوضاع + ٤ نداءات) · [البرومبت](mastermind_prompt.md) (موقع الملف + التفعيل)
 - [Memory Sync via Junction](memory_sync_junction.md) — ذاكرة واحدة بالريبو + junction؛ تتزامن مع git؛ لا تفرّع
 - [☁️ Claude Code Cloud Sessions](claude_code_cloud_sessions.md) — claude.ai/code + الجوال مربوطان بالريبو (٢٠٢٦-٠٨-٠٩)؛ يرثان الذاكرة، **لكن بلا `.env` فلا وصول لقاعدة البيانات**
-- المهارات: [المثبَّتة](skills_install_manifest.md) (**٢٣٨ على جهاز `Users\user` · ١٧ فقط على `Users\PC` — تحقّق أي جهاز أنت عليه**؛ أُكِّد ٢٠٢٦-٠٨-٠٥) · [عدّة التسويق](marketing_skills_toolkit.md) (١٧ skill تسويق؛ عربي سعودي + White-Hat)
+- المهارات: [المثبَّتة](skills_install_manifest.md) (**٢٦١ على `Users\PC` بعد تركيب ٢٠٢٦-٠٨-١١؛ حمولة ux-ui خارج `skills\` وإلا ١٧ مهارة مكسورة صامتة**) · [عدّة التسويق](marketing_skills_toolkit.md) (١٧ skill تسويق؛ عربي سعودي + White-Hat)
 - [Reconcile Web Repo Separately](reconcile_web_repo_separately.md) — dealpulseksa-web ريبو مستقل؛ افحصه أولاً
 
 ## ٢) البنية والتشغيل والنشر والموقع (١٨)
