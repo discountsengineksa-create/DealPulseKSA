@@ -1,15 +1,16 @@
 # Project Memory Index
 
-> ١٣٥ ملفاً (عُدّت ٢٠٢٦-٠٨-١١ — الرقم يطابق القرص وسطور الأقسام). **العدّ للمتون، بلا `MEMORY.md` نفسه** (`ls *.md` يعطي ١٣٥ — لا تنسخه هنا). **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
+> ١٣٦ ملفاً (عُدّت ٢٠٢٦-٠٨-١١ — الرقم يطابق القرص وسطور الأقسام). **العدّ للمتون، بلا `MEMORY.md` نفسه** (`ls *.md` يعطي ١٣٧ — لا تنسخه هنا). **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
 > **الطبقة ٠ تُقرأ متونها قبل أي مهمة.** من الباقي: افتح ما يخصّ مهمتك وأعلن ما فتحته.
 > الحوائط الصلبة منسوخة نصّاً في `CLAUDE.md`. سطرٌ بعدّة روابط = ملفات مستقلة جُمعت للاختصار.
 
-## 🔴 الطبقة ٠ — اقرأ متونها قبل أي مهمة (١١)
+## 🔴 الطبقة ٠ — اقرأ متونها قبل أي مهمة (١٢)
 
 - [🤝 Partnership Protocol](protocol_partnership.md) — ٨ أنماط بالاسم + دورة انضباط + طقوس جلسة + سياسة المصادر
 - [No Philosophy — Just Execute](feedback_no_philosophy.md) — لا خيارات/تمهيد؛ ابدأ بالأوضح؛ سؤال نصّي واحد عند العجز
 - [Treat User as Senior Engineer](feedback_senior_engineer.md) — خبير ٢٠+؛ لا فلسفة/خيارات/أساسيات؛ اقرأ حدّد نفّذ
 - [🧱 No DB Writes Without Permission](feedback_no_db_writes_without_permission.md) — INSERT/UPDATE/DELETE يحتاج إذناً صريحاً؛ «يلا نبدا» ليس إذناً
+- [🧱 لا حذف من الكتالوج ولا من المدوّنة](feedback_never_delete_catalog_or_content.md) — متجر/مقال لا يُحذف إلا بطلب شخصي؛ التوصية مسموحة والتنفيذ ممنوع
 - [🧱 Always Push, Never Leave Work Local](feedback_always_push.md) — أجهزة متعددة؛ push كل شيء، لا stash، pull بالبداية
 - [🧱 SEO White-Hat Only](seo_white_hat_only.md) — White-Hat فقط؛ محرّك ببوابات؛ SEO_AUTO_PUBLISH على DEALPULSEKSA
 - [🛡️ Content Guardrails Playbook](content_guardrails_playbook.md) — سلامة/YMYL + صفر فبركة + تنسيق + ربط داخلي + صراحة استراتيجية
