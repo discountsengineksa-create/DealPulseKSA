@@ -1443,7 +1443,10 @@ _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def _load_arabic_font(size: int) -> ImageFont.FreeTypeFont:
     candidates = [
-        # خط Cairo المرفق في المستودع — الأولوية
+        # ⚠️ Noto أولاً: نسخة Cairo-Bold.ttf في هذا المستودع **لاتينية فقط** — تنقصها
+        # ٩ من ١١ محرفاً عربياً في «أهلاً بك …»، فكانت صورة الترحيب تُبنى بلا نصّ
+        # إطلاقاً (صفر بكسل داكن في الشريط، قِيس ٢٠٢٦-٠٨-١٢). Noto يغطّيها كلها.
+        os.path.join(_BASE_DIR, "NotoSansArabic-Bold.ttf"),
         os.path.join(_BASE_DIR, "Cairo-Bold.ttf"),
         os.path.join(_BASE_DIR, "Cairo-Bold.ttf.ttf"),  # توافق مع الاسم القديم لو لم يُعَد التسمية
         os.path.join(_BASE_DIR, "Cairo-Regular.ttf"),
@@ -1461,17 +1464,19 @@ def _load_arabic_font(size: int) -> ImageFont.FreeTypeFont:
 
 
 def generate_welcome_image(user_name: str) -> BytesIO:
-    """يبني صورة ترحيب: لوقو نبض الصفقات الجديد + اسم المستخدم تحته.
-    اللوقو 1424×752 (logo.png) — نضيف 220px أسفل للترحيب بخلفية كريم متناسقة
-    مع هوية اللوقو، فلا قطع ولا تشوّه."""
+    """يبني صورة ترحيب: لوقو نبض الصفقات + اسم المستخدم تحته.
+    المقاس يُقرأ من الملف نفسه (لا يُفترض) — لوقو التذكرة 1344×866 بخلفية بيضاء
+    منذ ٢٠٢٦-٠٨-١٢، وقبله كان 1456×720 بخلفية كريم. نضيف شريطاً أسفله بنفس لون
+    خلفية اللوقو فلا يظهر خطّ فاصل."""
     img_path = os.path.join(_BASE_DIR, "logo.png")
     logo = Image.open(img_path).convert("RGBA")
     W, H_logo = logo.size
     BAND_H = 240
     H = H_logo + BAND_H
 
-    # خلفية كريم تطابق خلفية اللوقو الأصلية (FAF9F6 تقريباً).
-    canvas = Image.new("RGB", (W, H), (250, 249, 246))
+    # لون الشريط يُلتقط من ركن اللوقو نفسه، فيتغيّر معه بدل أن يُثبَّت يدوياً.
+    band_rgb = logo.convert("RGB").getpixel((2, 2))
+    canvas = Image.new("RGB", (W, H), band_rgb)
     canvas.paste(logo, (0, 0), logo)
 
     draw = ImageDraw.Draw(canvas)
