@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>نبض الصفقات — الملف التعريفي</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+
+  :root{
+    --ink:#0F172A;      --ink-2:#1E293B;   --muted:#64748B;   --line:#E2E8F0;
+    --green:#10B981;    --green-d:#059669; --green-l:#ECFDF5;
+    --cream:#FDF8F0;    --bg:#FFFFFF;      --gold:#C9A227;
+  }
+
+  html{ font-family:"Dubai","Segoe UI",Tahoma,sans-serif; }
+  body{ background:#F1F5F9; color:var(--ink); font-size:11pt; line-height:1.75; }
+
+  .page{
+    width:210mm; height:297mm; background:var(--bg); position:relative;
+    padding:18mm 16mm 16mm; overflow:hidden; page-break-after:always;
+    display:flex; flex-direction:column;
+  }
+  .page:last-child{ page-break-after:auto; }
+
+  /* ── رأس وتذييل ─────────────────────────────── */
+  .runhead{ display:flex; justify-content:space-between; align-items:center;
+    padding-bottom:4mm; border-bottom:1px solid var(--line); margin-bottom:8mm; }
+  .runhead .brand{ font-weight:700; font-size:10pt; color:var(--ink); letter-spacing:.2px; }
+  .runhead .brand span{ color:var(--green-d); }
+  .runhead .sec{ font-size:9pt; color:var(--muted); }
+
+  .foot{ margin-top:auto; padding-top:5mm; border-top:1px solid var(--line);
+    display:flex; justify-content:space-between; font-size:8.5pt; color:var(--muted); }
+
+  h1{ font-size:26pt; font-weight:700; line-height:1.3; letter-spacing:-.5px; }
+  h2{ font-size:17pt; font-weight:700; margin-bottom:2mm; letter-spacing:-.3px; }
+  h3{ font-size:11.5pt; font-weight:700; color:var(--ink); }
+  p { color:var(--ink-2); }
+  .lead{ font-size:12pt; color:var(--ink-2); line-height:1.9; }
+  .kicker{ font-size:9pt; font-weight:700; color:var(--green-d);
+    letter-spacing:1.5px; margin-bottom:2mm; }
+  .rule{ width:22mm; height:3px; background:var(--green); border-radius:2px; margin:3mm 0 6mm; }
+
+  /* ── الغلاف ─────────────────────────────────── */
+  .cover{ background:linear-gradient(160deg,#FDFCFA 0%,#F0FAF6 55%,#E8F5F0 100%);
+    justify-content:center; padding:22mm 18mm; }
+  .logo-card{ width:104mm; padding:5mm; background:#fff; border-radius:5mm;
+    box-shadow:0 8px 28px -10px rgba(15,23,42,.18), 0 2px 6px -2px rgba(15,23,42,.08);
+    margin-bottom:14mm; }
+  .logo-card img{ width:100%; display:block; border-radius:2.5mm; }
+  .cover h1{ font-size:34pt; }
+  .cover .sub{ font-size:14pt; color:var(--ink-2); margin-top:5mm; line-height:1.8; max-width:150mm; }
+  .cover .meta{ margin-top:16mm; display:flex; gap:12mm; font-size:10.5pt; color:var(--ink-2); }
+  .cover .meta b{ display:block; font-size:8.5pt; color:var(--muted);
+    font-weight:600; letter-spacing:.5px; margin-bottom:1mm; }
+  .cover .ribbon{ position:absolute; inset-inline-start:0; top:0; width:6mm; height:100%;
+    background:linear-gradient(180deg,var(--green) 0%,var(--gold) 100%); }
+
+  /* ── شبكات ─────────────────────────────────── */
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:6mm; }
+  .grid3{ display:grid; grid-template-columns:repeat(3,1fr); gap:5mm; }
+
+  .card{ border:1px solid var(--line); border-radius:4mm; padding:6mm; background:#fff; }
+  .card.soft{ background:var(--cream); border-color:#F0E6D2; }
+  .card.mint{ background:var(--green-l); border-color:#C7EFDF; }
+  .card h3{ margin-bottom:2mm; }
+  .card p{ font-size:10pt; line-height:1.7; color:var(--ink-2); }
+
+  .num{ font-size:24pt; font-weight:700; color:var(--green-d); line-height:1.15; }
+  .num small{ font-size:11pt; color:var(--ink-2); font-weight:600; }
+  .num-label{ font-size:10pt; font-weight:600; color:var(--ink); margin-top:1mm; }
+  .src{ font-size:7.5pt; color:var(--muted); margin-top:2mm; line-height:1.55; }
+  /* الفاصل «·» يلتصق بصرياً بالأرقام العربية-الهندية فيُقرأ «١٢٠ أغسطس» —
+     لذلك المصدر والتاريخ سطر مستقل، والنصوص اللاتينية داخل bdi لعزل الاتجاه. */
+  .src .stamp{ display:block; margin-top:.8mm; color:#94A3B8; }
+  bdi{ unicode-bidi:isolate; }
+
+  table{ width:100%; border-collapse:collapse; font-size:9.5pt; }
+  th{ text-align:right; background:#F8FAFC; color:var(--ink); font-weight:700;
+      padding:3mm 3mm; border-bottom:1.5px solid var(--line); font-size:9.5pt; }
+  td{ padding:2.8mm 3mm; border-bottom:1px solid #F1F5F9; color:var(--ink-2); }
+  td.n{ font-weight:700; color:var(--ink); }
+  tr:last-child td{ border-bottom:none; }
+  tfoot td{ background:var(--green-l); font-weight:700; color:var(--ink); border-top:1.5px solid #C7EFDF; }
+
+  ul.ticks{ list-style:none; }
+  ul.ticks li{ position:relative; padding-inline-start:7mm; margin-bottom:2.5mm;
+    font-size:10pt; color:var(--ink-2); line-height:1.65; }
+  ul.ticks li::before{ content:"✓"; position:absolute; inset-inline-start:0; top:0;
+    color:var(--green-d); font-weight:700; }
+
+  .steps{ counter-reset:s; display:grid; gap:4mm; }
+  .step{ counter-increment:s; position:relative; padding-inline-start:13mm; }
+  .step::before{ content:counter(s); position:absolute; inset-inline-start:0; top:0;
+    width:9mm; height:9mm; border-radius:50%; background:var(--green); color:#fff;
+    font-weight:700; font-size:11pt; display:flex; align-items:center; justify-content:center; }
+  .step h3{ margin-bottom:.5mm; }
+  .step p{ font-size:10pt; }
+
+  .pill{ display:inline-block; padding:1.2mm 3.5mm; border-radius:20px; font-size:9pt;
+    font-weight:600; background:var(--green-l); color:var(--green-d); border:1px solid #C7EFDF; }
+
+  .quote{ border-inline-start:3px solid var(--green); padding:3mm 5mm; background:#F8FAFC;
+    border-radius:0 3mm 3mm 0; font-size:10.5pt; color:var(--ink-2); line-height:1.8; }
+
+  .cta{ background:linear-gradient(135deg,#0F172A 0%,#1E3A5F 100%); color:#fff;
+    border-radius:5mm; padding:9mm; }
+  .cta h2{ color:#fff; }
+  .cta p{ color:#CBD5E1; font-size:10.5pt; }
+  .cta .row{ display:flex; gap:10mm; margin-top:6mm; }
+  .cta .row div b{ display:block; font-size:8.5pt; color:#94A3B8; font-weight:600;
+    letter-spacing:.5px; margin-bottom:1mm; }
+  .cta .row div span{ font-size:11.5pt; color:#fff; font-weight:600; }
+
+  .note{ font-size:8.5pt; color:var(--muted); line-height:1.6; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════ ص ١ — الغلاف ══════════════ -->
+<section class="page cover">
+  <div class="ribbon"></div>
+  <div class="logo-card"><img src="__LOGO__" alt="نبض الصفقات"></div>
+  <div class="kicker">الملف التعريفي</div>
+  <h1>منصّة الكوبونات والعروض<br>الموثّقة في السعودية</h1>
+  <p class="sub">نوصل المتسوّق السعودي بأكواد خصم مُتحقَّق منها يدوياً، عبر موقع ومحتوى عربي أصلي وبوت تيليجرام — ونصنع للمتجر الشريك حضوراً دائماً في البحث ومساعدات الذكاء الاصطناعي.</p>
+  <div class="meta">
+    <div><b>الموقع</b>dealpulseksa.com</div>
+    <div><b>البريد</b>dealpulseksa@gmail.com</div>
+    <div><b>إصدار</b>أغسطس ٢٠٢٦</div>
+  </div>
+</section>
+
+<!-- ══════════════ ص ٢ — من نحن ══════════════ -->
+<section class="page">
+  <div class="runhead"><div class="brand">نبض الصفقات · <span>Deal Pulse KSA</span></div><div class="sec">من نحن</div></div>
+
+  <div class="kicker">التعريف</div>
+  <h2>وجهة سعودية واحدة للخصم الموثوق</h2>
+  <div class="rule"></div>
+  <p class="lead">«نبض الصفقات» منصّة سعودية تجمع أكواد الخصم وعروض المتاجر في مكان واحد، مع <b>تحقّق يدوي لكل كود قبل نشره</b>. لا نعتمد على استيراد آلي لقوائم أكواد منتهية — وهذه هي الفجوة التي بُنيت عليها المنصّة أساساً: المتسوّق يصل إلى صفحة الدفع فيجد الكود يعمل.</p>
+
+  <div style="height:8mm"></div>
+  <div class="kicker">ثلاثة منافذ</div>
+  <div class="grid3">
+    <div class="card">
+      <h3>الموقع</h3>
+      <p>صفحة دائمة لكل متجر، مدوّنة عربية أصلية، وصفحات مناسبات موسمية — مبني على Next.js بأداء وفهرسة عالية.</p>
+    </div>
+    <div class="card">
+      <h3>بوت تيليجرام</h3>
+      <p>قناة وصول مباشرة: بحث عن متجر، نسخ الكود فوراً، مفضّلة وتنبيهات — بلا تحميل تطبيق.</p>
+    </div>
+    <div class="card">
+      <h3>تطبيق مصغّر</h3>
+      <p>Mini App داخل تيليجرام بواجهة كاملة للتصفّح والمفضّلة، مربوط بنفس قاعدة البيانات.</p>
+    </div>
+  </div>
+
+  <div style="height:8mm"></div>
+  <div class="kicker">ما الذي يميّزنا فعلياً</div>
+  <div class="grid2">
+    <div>
+      <ul class="ticks">
+        <li><b>تحقّق يدوي:</b> كل كود يُختبر قبل النشر، وتُوثَّق صلاحيته.</li>
+        <li><b>محتوى عربي أصلي:</b> أدلّة شرائية مكتوبة للسوق السعودي لا مترجمة.</li>
+        <li><b>تغطية المناسبات:</b> اليوم الوطني، الجمعة البيضاء، رمضان، العودة للمدارس.</li>
+      </ul>
+    </div>
+    <div>
+      <ul class="ticks">
+        <li><b>حضور في مساعدات الذكاء الاصطناعي:</b> صفحاتنا تُقتبس داخل إجابات المساعدين.</li>
+        <li><b>تتبّع دقيق:</b> كل نقرة ونسخة كود مُسجّلة، فالتقرير للشريك مبني على قياس.</li>
+        <li><b>سياسة نظيفة:</b> لا مزايدة مدفوعة على اسم البراند، ولا صفحات مكرّرة.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div style="height:7mm"></div>
+  <div class="quote">نبيع للمتجر الشريك شيئاً واحداً: <b>نيّة شراء جاهزة</b>. الزائر الذي يبحث عن «كود خصم» يكون قد اختار المنتج فعلاً ولم يتبقَّ إلا إتمام الطلب — وهذا أقصر طريق بين المحتوى والمبيعة.</div>
+
+  <div class="foot"><span>نبض الصفقات — الملف التعريفي</span><span>٢</span></div>
+</section>
+
+<!-- ══════════════ ص ٣ — الأرقام ══════════════ -->
+<section class="page">
+  <div class="runhead"><div class="brand">نبض الصفقات · <span>Deal Pulse KSA</span></div><div class="sec">المنصّة بالأرقام</div></div>
+
+  <div class="kicker">مقاسة لا مقدَّرة</div>
+  <h2>المنصّة بالأرقام</h2>
+  <div class="rule"></div>
+  <p class="note" style="margin-bottom:6mm">كل رقم أدناه مسحوب من مصدره الحيّ بتاريخه المذكور تحته — قاعدة بيانات المنصّة، و<bdi>Google Search Console</bdi>، و<bdi>Bing Webmaster Tools</bdi>. لا تقديرات ولا أرقام تسويقية.</p>
+
+  <div class="grid3" style="margin-bottom:6mm">
+    <div class="card">
+      <div class="num">٥٣</div>
+      <div class="num-label">متجراً في الكتالوج</div>
+      <div class="src">جميعها نشطة وبكود خصم ورابط فعّال
+        <span class="stamp">قاعدة بيانات المنصّة — ١٢ أغسطس ٢٠٢٦</span></div>
+    </div>
+    <div class="card">
+      <div class="num">١٬٥٦٤</div>
+      <div class="num-label">مقالاً عربياً أصلياً</div>
+      <div class="src">أدلّة شرائية ومقارنات ومحتوى موسمي
+        <span class="stamp">عدّ مباشر — ١٢ أغسطس ٢٠٢٦</span></div>
+    </div>
+    <div class="card">
+      <div class="num">٣٨</div>
+      <div class="num-label">فئة تسوّق مغطّاة</div>
+      <div class="src">أزياء، إلكترونيات، عطور، أطفال، منزل، رياضة…
+        <span class="stamp">قاعدة بيانات المنصّة — ١٢ أغسطس ٢٠٢٦</span></div>
+    </div>
+  </div>
+
+  <div class="grid3" style="margin-bottom:6mm">
+    <div class="card mint">
+      <div class="num">٤١٣</div>
+      <div class="num-label">استشهاداً في مساعدات الذكاء الاصطناعي</div>
+      <div class="src">خلال ٣٠ يوماً
+        <span class="stamp"><bdi>Bing Webmaster Tools</bdi> — ١١ أغسطس ٢٠٢٦</span></div>
+    </div>
+    <div class="card">
+      <div class="num">١٠٬٥٢٣</div>
+      <div class="num-label">ظهوراً في نتائج جوجل</div>
+      <div class="src">خلال ٢٨ يوماً
+        <span class="stamp"><bdi>Google Search Console</bdi> — ٢٨ يوليو ٢٠٢٦</span></div>
+    </div>
+    <div class="card">
+      <div class="num">١٣٦</div>
+      <div class="num-label">صفحة هبوط مُحسّنة للبحث</div>
+      <div class="src">صفحات متاجر وفئات ومناسبات
+        <span class="stamp">قاعدة بيانات المنصّة — ١٢ أغسطس ٢٠٢٦</span></div>
+    </div>
+  </div>
+
+  <div class="card soft">
+    <h3 style="margin-bottom:3mm">لماذا نبرز رقم الاستشهاد بالذكاء الاصطناعي؟</h3>
+    <p>لأن سلوك البحث تغيّر: المتسوّق صار يسأل المساعد الذكي «وش أفضل متجر…» ويأخذ الإجابة دون فتح نتيجة بحث. صفحاتنا تُقتبس داخل هذه الإجابات <b>٤١٣ مرة في ٣٠ يوماً</b> — وهذا ظهور لا يُشترى ولا تلتقطه تقارير الترافيك التقليدية. المتجر المذكور داخل صفحاتنا يرث هذا الظهور.</p>
+  </div>
+
+  <div style="height:6mm"></div>
+  <div class="card">
+    <h3 style="margin-bottom:3mm">جودة الزيارة أهمّ من حجمها</h3>
+    <p>من كل ١٠٠ زائر سعودي حقيقي يصل المنصّة، <b>١٦ منهم ينفّذون فعل شراء مباشراً</b> (نسخ كود أو نقر رابط المتجر) — قياس داخلي على بيانات ٣٠ يوماً، ٢٨ يوليو ٢٠٢٦. المنصّة في مرحلة نمو مبكّرة (أُطلقت يونيو ٢٠٢٦)، والرهان معقود على جودة النيّة وعمق المحتوى لا على أرقام زيارات منتفخة.</p>
+  </div>
+
+  <div class="foot"><span>نبض الصفقات — الملف التعريفي</span><span>٣</span></div>
+</section>
+
+<!-- ══════════════ ص ٤ — للشريك ══════════════ -->
+<section class="page">
+  <div class="runhead"><div class="brand">نبض الصفقات · <span>Deal Pulse KSA</span></div><div class="sec">ماذا يحصل عليه الشريك</div></div>
+
+  <div class="kicker">حزمة الشراكة</div>
+  <h2>ما الذي يحصل عليه المتجر الشريك</h2>
+  <div class="rule"></div>
+
+  <div class="grid2" style="gap:5mm">
+    <div class="card">
+      <h3>صفحة متجر دائمة</h3>
+      <p>صفحة مخصّصة باسم المتجر تحمل الأكواد والعروض ونبذة تعريفية وشعار المتجر، مُهيّأة للبحث ببيانات منظّمة (Schema)، وتبقى قائمة حتى عند انتهاء الكود.</p>
+    </div>
+    <div class="card">
+      <h3>عنقود محتوى مخصّص</h3>
+      <p>مقالات عربية أصلية حول فئة المتجر ومنتجاته وأسئلة المتسوّقين، مترابطة داخلياً وموجّهة لصفحة المتجر — من ١٢ إلى ١٩ مقالاً في العناقيد المكتملة.</p>
+    </div>
+    <div class="card">
+      <h3>إدراج في المناسبات الموسمية</h3>
+      <p>ظهور تلقائي في صفحات اليوم الوطني والجمعة البيضاء ورمضان والعودة للمدارس، مع تقويم مناسبات يجمع عروض الموسم في مكان واحد.</p>
+    </div>
+    <div class="card">
+      <h3>قنوات التوزيع المباشر</h3>
+      <p>نشر العرض عبر بوت تيليجرام والتطبيق المصغّر وحسابات التواصل، مع إمكانية إبراز المتجر في واجهة «الأكثر رواجاً».</p>
+    </div>
+    <div class="card">
+      <h3>ستوري المتجر</h3>
+      <p>مساحة عرض بصرية (فيديو أو صورة) أعلى الواجهة بنمط الستوري، لإبراز إطلاق أو عرض محدود بمدّة صلاحية محدّدة.</p>
+    </div>
+    <div class="card">
+      <h3>تقرير أداء بالقياس</h3>
+      <p>عدد مشاهدات صفحة المتجر ونسخ الكود والنقرات — أرقام مسجّلة في نظامنا، تُشارَك مع الشريك عند الطلب بلا تجميل.</p>
+    </div>
+  </div>
+
+  <div style="height:7mm"></div>
+  <div class="kicker">نماذج التعاون</div>
+  <div class="grid3">
+    <div class="card mint">
+      <h3>عمولة على المبيعات</h3>
+      <p>عبر شبكات الأفلييت المعتمدة أو اتفاق مباشر — لا تكلفة مقدّمة على المتجر، والدفع مقابل نتيجة.</p>
+    </div>
+    <div class="card">
+      <h3>كود حصري</h3>
+      <p>كود خاص بجمهور «نبض الصفقات» يمنحك إسناداً نظيفاً وقياساً دقيقاً لأثر القناة.</p>
+    </div>
+    <div class="card">
+      <h3>إبراز مدفوع</h3>
+      <p>حملة موسمية أو إبراز في الواجهة والمناسبات، بسعر متّفق عليه حسب المدة والمساحة.</p>
+    </div>
+  </div>
+
+  <div style="height:6mm"></div>
+  <div class="card">
+    <h3 style="margin-bottom:2mm">ملاحظة على الإسناد</h3>
+    <p>نفضّل <b>الكود الحصري على رابط التتبّع</b>: الروابط تُحجب أحياناً من المتصفّحات وشبكات المشغّلين فيضيع الإسناد، بينما الكود يصل مع الطلب كاملاً إلى لوحة المتجر. هذا يحمي حقّ الطرفين ويجعل الأرقام قابلة للمطابقة من الجهتين.</p>
+  </div>
+
+  <div class="foot"><span>نبض الصفقات — الملف التعريفي</span><span>٤</span></div>
+</section>
+
+<!-- ══════════════ ص ٥ — الدليل والقنوات ══════════════ -->
+<section class="page">
+  <div class="runhead"><div class="brand">نبض الصفقات · <span>Deal Pulse KSA</span></div><div class="sec">الأثر والقنوات</div></div>
+
+  <div class="kicker">دليل تحويل فعلي</div>
+  <h2>مبيعات مُسنَدة لأكوادنا</h2>
+  <div class="rule"></div>
+  <p class="note" style="margin-bottom:5mm">أول حصاد مسجّل عبر منصّة «سلة» للأفلييت — طلبات حقيقية مُسنَدة إلى أكواد «نبض الصفقات»، مسحوبة من لوحة الشريك في ١ أغسطس ٢٠٢٦.</p>
+
+  <table>
+    <thead><tr><th>المتجر</th><th>الطلبات</th><th>المبيعات (ر.س)</th><th>نسبة العمولة</th><th>العمولة (ر.س)</th></tr></thead>
+    <tbody>
+      <tr><td>متجر إكسسوارات جوالي</td><td class="n">٥</td><td class="n">1,399.49</td><td>15%</td><td class="n">209.92</td></tr>
+      <tr><td>معهد هدف العالمية للتدريب</td><td class="n">٤</td><td class="n">1,247.40</td><td>20%</td><td class="n">249.48</td></tr>
+      <tr><td>لحظات القهوة</td><td class="n">٢</td><td class="n">365.04</td><td>10%</td><td class="n">36.50</td></tr>
+      <tr><td>ماس</td><td class="n">١</td><td class="n">116.78</td><td>15%</td><td class="n">17.52</td></tr>
+      <tr><td>خيارات</td><td class="n">١</td><td class="n">116.10</td><td>10%</td><td class="n">11.61</td></tr>
+    </tbody>
+    <tfoot><tr><td>الإجمالي</td><td>١٣</td><td>3,244.81</td><td>—</td><td>525.03</td></tr></tfoot>
+  </table>
+
+  <div style="height:8mm"></div>
+  <div class="kicker">البنية التشغيلية</div>
+  <h2>قنوات ربط المتاجر</h2>
+  <div class="rule"></div>
+
+  <div class="grid2">
+    <div>
+      <table>
+        <thead><tr><th>القناة</th><th>عدد المتاجر</th></tr></thead>
+        <tbody>
+          <tr><td>سلة (Salla Partners)</td><td class="n">٢٦</td></tr>
+          <tr><td>أدميتاد (Admitad)</td><td class="n">١١</td></tr>
+          <tr><td>كود ماب (CodeMap)</td><td class="n">٦</td></tr>
+          <tr><td>اتفاقات مباشرة</td><td class="n">٩</td></tr>
+          <tr><td>زد (Zid)</td><td class="n">١</td></tr>
+        </tbody>
+        <tfoot><tr><td>الإجمالي</td><td>٥٣</td></tr></tfoot>
+      </table>
+      <p class="src" style="margin-top:2mm">قاعدة بيانات المنصّة — ١٢ أغسطس ٢٠٢٦</p>
+    </div>
+    <div class="card soft">
+      <h3 style="margin-bottom:3mm">جاهزون للربط بأي نموذج</h3>
+      <p>نعمل حالياً عبر أربع شبكات أفلييت معتمدة إضافة إلى الاتفاقات المباشرة، وننضمّ إلى شبكة «بوستيني» (Boostiny) كناشر معتمد. الربط لا يتطلّب من المتجر تطويراً برمجياً: كود خصم أو رابط تتبّع — ونحن نتكفّل بالمحتوى والنشر والقياس.</p>
+      <div style="margin-top:4mm">
+        <span class="pill">سلة</span> <span class="pill">أدميتاد</span> <span class="pill">كود ماب</span> <span class="pill">زد</span> <span class="pill">بوستيني</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot"><span>نبض الصفقات — الملف التعريفي</span><span>٥</span></div>
+</section>
+
+<!-- ══════════════ ص ٦ — كيف نبدأ ══════════════ -->
+<section class="page">
+  <div class="runhead"><div class="brand">نبض الصفقات · <span>Deal Pulse KSA</span></div><div class="sec">كيف نبدأ</div></div>
+
+  <div class="kicker">خطوات التفعيل</div>
+  <h2>من الاتفاق إلى أول عملية بيع</h2>
+  <div class="rule"></div>
+
+  <div class="steps" style="margin-bottom:9mm">
+    <div class="step">
+      <h3>الاتفاق على النموذج</h3>
+      <p>عمولة على المبيعات، أو كود حصري، أو إبراز مدفوع — نحدّد النموذج ونسبة العمولة أو قيمة الحملة في رسالة واحدة.</p>
+    </div>
+    <div class="step">
+      <h3>استلام الكود والمواد</h3>
+      <p>كود الخصم ونسبته وشروطه ومدّته، مع شعار المتجر ونبذة قصيرة. لا نحتاج أي تكامل تقني من طرفكم.</p>
+    </div>
+    <div class="step">
+      <h3>النشر خلال ٤٨ ساعة</h3>
+      <p>صفحة المتجر + إدراج في الفئات والمناسبات + نشر على قنوات التوزيع، ثم بناء عنقود المحتوى تدريجياً.</p>
+    </div>
+    <div class="step">
+      <h3>التقرير والتجديد</h3>
+      <p>تقرير أداء بالأرقام المسجّلة عند الطلب، ومراجعة العرض موسمياً لرفع الأثر.</p>
+    </div>
+  </div>
+
+  <div class="cta">
+    <h2>لنبدأ الشراكة</h2>
+    <p style="margin-top:2mm">أرسل لنا اسم المتجر ونموذج التعاون المفضّل، ونرجع لك بخطة نشر مقترحة.</p>
+    <div class="row">
+      <div><b>البريد الإلكتروني</b><span>dealpulseksa@gmail.com</span></div>
+      <div><b>الموقع</b><span>dealpulseksa.com</span></div>
+    </div>
+  </div>
+
+  <div style="height:7mm"></div>
+  <p class="note">جميع الأرقام الواردة في هذا الملف مسحوبة من مصادرها الحيّة بتواريخها المذكورة: قاعدة بيانات المنصّة (١٢ أغسطس ٢٠٢٦)، و<bdi>Google Search Console</bdi>، و<bdi>Bing Webmaster Tools</bdi> (١١ أغسطس ٢٠٢٦)، ولوحة شركاء سلة (١ أغسطس ٢٠٢٦). المنصّة أُطلقت في يونيو ٢٠٢٦ وهي في طور النمو، ونلتزم بعرض أرقامها كما هي.</p>
+
+  <div class="foot"><span>نبض الصفقات — الملف التعريفي</span><span>٦</span></div>
+</section>
+
+</body>
+</html>
