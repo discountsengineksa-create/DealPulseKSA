@@ -77,6 +77,10 @@ body{
 .hdr-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:15px}
 .logo{display:flex;align-items:center;gap:12px}
 .logo-img{ width:45px; height:45px; object-fit: contain; }
+/* الثيم الافتراضي داكن (dpk_theme) → نُظهر النسخة البيضاء، ونقلبها مع body.light */
+.logo-on-light{ display:none; }
+body.light .logo-on-light{ display:block; }
+body.light .logo-on-dark{ display:none; }
 .logo-txt h1{font-size:16px;font-weight:900;color:var(--t1);line-height:1.2}
 .logo-txt p{font-size:10px;font-weight:700;color:var(--em);letter-spacing:1px}
 
@@ -163,7 +167,10 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
 <header class="hdr">
   <div class="hdr-row">
     <div class="logo">
-      <img src="logo.png?v=2026061301" class="logo-img" alt="Logo">
+      <!-- مارك DP ضيّق (بلا حشوة داخلية) بنسختين: أبيض للثيم الداكن وكحلي للفاتح.
+           القفل الكامل بالاسم لا يُقرأ عند 45px، والاسم مكتوب نصّاً بجانبه أصلاً. -->
+      <img src="mark_white.png?v=2026081201" class="logo-img logo-on-dark" alt="نبض الصفقات">
+      <img src="mark.png?v=2026081201" class="logo-img logo-on-light" alt="نبض الصفقات">
       <div class="logo-txt">
         <h1 id="brandName">نبض الصفقات</h1>
         <p>DEAL PULSE KSA · <span id="lastSync" style="opacity:0.6;font-size:9px;letter-spacing:0">--</span></p>

@@ -385,6 +385,10 @@ def serve_miniapp():
 _STATIC_FILES = {
     "logo.png":  "image/png",
     "logo2.png": "image/png",
+    # مارك DP وحده (شفّاف، ضيّق) — الميني-ويب يستخدمه في الهيدر بنسختَي الثيم،
+    # لأن القفل الكامل بالاسم يذوب عند 45px والاسم مكتوب نصّاً بجانبه.
+    "mark.png":       "image/png",
+    "mark_white.png": "image/png",
     "Cairo-Bold.ttf": "font/ttf",
 }
 
