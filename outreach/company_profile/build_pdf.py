@@ -16,7 +16,9 @@ HERE = pathlib.Path(__file__).resolve().parent
 SRC = HERE / "profile.html"
 BUILD = HERE / "_build.html"
 OUT = HERE / "DealPulse_Profile_AR.pdf"
-LOGO = pathlib.Path(r"C:\Users\PC\Desktop\dealpulseksa-web\public\logo.png")
+# نسخة طباعة داخل الريبو (3360×2166 ⇒ ~908dpi عند عرض 94mm في الغلاف).
+# كانت تشير إلى ريبو الويب — مسار خارجي يكسر البناء على أي جهاز ثانٍ.
+LOGO = HERE / "logo_print.png"
 
 BROWSERS = [
     r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
