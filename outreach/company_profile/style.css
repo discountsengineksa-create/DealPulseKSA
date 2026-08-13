@@ -129,6 +129,56 @@ html[lang="en"] .quote{ border-radius:0 3mm 3mm 0; line-height:1.7; }
 .layer .body span{ font-size:9pt; color:var(--ink-700); line-height:1.6;
   display:block; }
 
+/* ═══ رسم ١ · مسار المشتري ═══════════════════════════════════════════
+   صفّان متطابقان في أول ثلاث محطّات ويفترقان في الرابعة — الافتراق هو
+   الحجّة كلّها، فيجب أن يُرى قبل أن يُقرأ. */
+.journey{ display:grid; gap:5mm; }
+.jrow{ border:1px solid var(--line); border-radius:3.5mm; padding:5mm; }
+.jrow.bad{ background:var(--surface); }
+.jrow.good{ background:var(--g-50); border-color:#C7EFDF; }
+.jhead{ display:flex; align-items:baseline; gap:3mm; margin-bottom:3.5mm; }
+.jtag{ font-size:8pt; font-weight:700; padding:1mm 2.5mm; border-radius:2mm;
+  flex:0 0 auto; }
+.jrow.bad .jtag{ background:#FEE4E2; color:#B42318; }
+.jrow.good .jtag{ background:var(--g-100); color:var(--g-700); }
+.jtitle{ font-size:9.5pt; font-weight:600; color:var(--ink-900); }
+
+.track{ display:flex; align-items:stretch; gap:1.5mm; }
+.node{ flex:1; text-align:center; padding:3mm 1.5mm; border-radius:2.5mm;
+  background:var(--paper); border:1px solid var(--line); font-size:8.5pt;
+  line-height:1.45; color:var(--ink-700);
+  display:flex; align-items:center; justify-content:center; }
+.node.stop{ background:#FEF3F2; border-color:#FDA29B; color:#B42318; font-weight:600; }
+.node.win{ background:var(--g-600); border-color:var(--g-600); color:#fff; font-weight:600; }
+.node.us{ background:var(--ink-900); border-color:var(--ink-900); color:#fff; font-weight:600; }
+
+/* السهم يتبع اتجاه القراءة **تلقائياً**: مثلّث حدوده الجانبية `inline-start`
+   يعطي رأساً لليسار في RTL ولليمين في LTR بلا أي قلب يدوي. */
+.arw{ flex:0 0 auto; align-self:center; width:0; height:0;
+  border-block:1.8mm solid transparent; border-inline-start:2.4mm solid var(--g-500); }
+.jrow.bad .arw{ border-inline-start-color:var(--ink-500); }
+
+/* ═══ رسم ٢ · الشبكة في الخلفية ═══════════════════════════════════════
+   تدفّق **رأسي** بقصد: الرأسي محايد الاتجاه، فيقرأ نفسه في النسختين. */
+.net-row{ display:grid; gap:3mm; grid-template-columns:repeat(3,1fr); }
+.net-row.one{ grid-template-columns:1fr; }
+.net-box{ border:1px solid var(--line); border-radius:2.5mm; padding:3.5mm 3mm;
+  text-align:center; background:var(--paper); }
+.net-box b{ display:block; font-size:9pt; font-weight:600; color:var(--ink-900); }
+.net-box span{ display:block; font-size:8pt; color:var(--ink-500); margin-top:.8mm;
+  line-height:1.5; }
+.net-box.src{ background:var(--surface); }
+.net-box.hub{ background:var(--g-50); border-color:#C7EFDF; }
+.net-box.brand{ background:var(--g-600); border-color:var(--g-600); }
+.net-box.brand b{ color:#fff; } .net-box.brand span{ color:#D1FAE5; }
+.net-box.store{ background:var(--ink-900); border-color:var(--ink-900); }
+.net-box.store b{ color:#fff; } .net-box.store span{ color:#C3CBDA; }
+.net-down{ display:flex; justify-content:center; padding:2.2mm 0; }
+.net-down i{ width:0; height:0; border-inline:1.8mm solid transparent;
+  border-block-start:2.4mm solid var(--g-500); }
+.net-tie{ font-size:8pt; color:var(--g-700); font-weight:600; text-align:center;
+  padding:2mm 0 0; }
+
 .cta{ background:var(--ink-900); color:#fff; border-radius:4mm; padding:8mm; }
 .cta h2{ color:#fff; }
 .cta p{ color:#C3CBDA; font-size:10pt; }
