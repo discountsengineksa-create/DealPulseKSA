@@ -154,8 +154,10 @@ python outreach/company_profile/check_overflow.py    # ⚠️ إلزامي بع�
 ## 🔤 فحص ثانٍ قبل الشحن: هل سقط خطّ إلى النظام؟
 
 الخطوط مضمّنة في الـPDF كي يطبع بنفس الشكل على أي جهاز. لكن **أي حرف خارج
-IBM Plex وDejaVu يسحب خطّ النظام بصمت** — ويختلف بين ويندوز ولينكس، فيتغيّر شكله
-حسب جهاز البناء. (حدث فعلاً: الحرف `↔` أدخل `LiberationSans-Bold`.)
+IBM Plex يسحب خطّ النظام بصمت** — ويختلف بين ويندوز ولينكس، فيتغيّر شكله حسب
+جهاز البناء. حدث مرّتين: الحرف `↔` أدخل `LiberationSans-Bold`، وعلامتا `✓`/`✕`
+أدخلتا `DejaVuSans` على لينكس و`SegoeUISymbol` على ويندوز — **ولذلك صارتا
+مرسومتين SVG في `style.css` لا محرفاً.** المعيار الآن: `IBMPlex*` وحدها.
 
 ```bash
 python - <<'EOF'
@@ -167,10 +169,14 @@ for f in ['DealPulse_Profile_AR.pdf','DealPulse_Profile_EN.pdf','DealPulse_Profi
         if e!=-1:
             try: b.append(zlib.decompressobj().decompress(raw[s:e]))
             except Exception: pass
-    fonts = set(x.decode() for x in re.findall(rb'/FontName\s*/[A-Z]+\+([^\s/\]>]+)', b''.join(b)))
-    stray = [x for x in fonts if 'IBMPlex' not in x and 'DejaVu' not in x]
+    fonts = sorted(set(x.decode() for x in re.findall(rb'/FontName\s*/[A-Z]+\+([^\s/\]>]+)', b''.join(b))))
+    stray = [x for x in fonts if not x.replace('-','').startswith('IBMPlex')]
     print(f, '->', stray or 'clean')
 EOF
 ```
 
-أي اسم غير `IBMPlex*` أو `DejaVuSans` = حرف يجب استبداله بنصّ عادي.
+أي اسم آخر = حرف يجب استبداله بنصّ عادي أو برسم SVG.
+
+⚠️ **الشرط يزيل الشرطات قبل المقارنة عمداً:** كروميوم يكتب اللاتيني المتغيّر
+`IBM-Plex-Sans` (بشرطات) والعربي `IBMPlexSansArabic` (بلا) — والفحص الحرفي على
+`'IBMPlex' in x` كان يعلّم اللاتيني المضمّن كدخيل في كل تشغيل.

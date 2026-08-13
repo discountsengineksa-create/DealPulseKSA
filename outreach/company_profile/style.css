@@ -99,14 +99,21 @@ bdi{ unicode-bidi:isolate; }
 ul.ticks{ list-style:none; }
 ul.ticks li{ position:relative; padding-inline-start:6.5mm; margin-bottom:2.2mm;
   font-size:9.5pt; line-height:1.65; color:var(--ink-700); }
-ul.ticks li::before{ content:"✓"; position:absolute; inset-inline-start:0;
-  color:var(--g-600); font-weight:700; }
+/* العلامتان مرسومتان SVG لا محرفاً. المحرفان `✓`/`✕` خارج IBM Plex، فكانا يسحبان
+   خطّ رموز من النظام — `DejaVuSans` على لينكس و`SegoeUISymbol` على ويندوز — فيختلف
+   شكلهما حسب جهاز البناء. الرسم المتجهي يطبع متطابقاً في كل مكان، وهو نفس قاعدة
+   `↔` أدناه: لا رمز خارج الخطّين. */
+ul.ticks li::before{ content:""; position:absolute; inset-inline-start:0; top:1.15mm;
+  width:3.3mm; height:3.3mm; background-repeat:no-repeat;
+  background-position:center; background-size:contain;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2.5 8.6 L6.2 12.4 L13.5 3.9' fill='none' stroke='%23059669' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
 ul.ticks li:last-child{ margin-bottom:0; }
 ul.ticks.dense li{ margin-bottom:1.6mm; font-size:9pt; line-height:1.6; }
 ul.ticks b{ color:var(--ink-900); font-weight:600; }
 
 /* قائمة «ما لا نفعله» — نفس البنية بعلامة نفي بدل الصحّ. */
-ul.ticks.nos li::before{ content:"✕"; color:#B42318; }
+ul.ticks.nos li::before{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.6 3.6 L12.4 12.4 M12.4 3.6 L3.6 12.4' fill='none' stroke='%23B42318' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E"); }
 
 .steps{ counter-reset:s; display:grid; gap:3.5mm; }
 .step{ counter-increment:s; position:relative; padding-inline-start:12mm; }
