@@ -86,12 +86,10 @@ html[lang="en"] .kicker{ letter-spacing:.06em; text-transform:uppercase; }
 .card p{ font-size:9.5pt; line-height:1.7; }
 html[lang="en"] .card p{ line-height:1.6; }
 
-.num{ font-size:26pt; font-weight:700; color:var(--g-600); line-height:1.15; }
-.num-label{ font-size:10pt; font-weight:600; color:var(--ink-900); margin-top:.5mm; }
-/* المصدر والتاريخ سطران: الفاصل «·» يلتصق بالأرقام العربية-الهندية
-   فيُقرأ «١٢٠ أغسطس». واللاتيني داخل bdi كي لا يزحف. */
-.src{ font-size:8pt; color:var(--ink-500); margin-top:2mm; line-height:1.55; }
-.src .stamp{ display:block; margin-top:.6mm; font-size:7.5pt; }
+/* بديل الرقم الكبير: **عبارة موقع لا عدد.** الملف بلا أرقام ولا تواريخ بقرار
+   المالك — أي رقم يتقادم، والمكتبة والاستشهادات تكبر باستمرار فيصير الرقم سقفاً
+   لا إنجازاً. الوزن البصري يبقى عبر حجم الخط لا عبر خانة عددية. */
+.claim{ font-size:17pt; font-weight:700; color:var(--g-700); line-height:1.4; }
 bdi{ unicode-bidi:isolate; }
 
 ul.ticks{ list-style:none; }
