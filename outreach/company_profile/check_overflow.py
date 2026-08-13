@@ -6,14 +6,16 @@
 رسالة خطأ، والسطر المفقود لا يُكتشف إلا بعين تقرأ الملف كاملاً.
 
 **الآلية:** نعيد الطباعة بنسخة مُعدَّلة تُلغي القصّ (`height:auto` +
-`overflow:visible`). عندها الصفحة الفائضة **تنسكب إلى ورقة ثانية**، فيصير
+`overflow:visible`). عندها الصفحة الفائضة **تنسكب إلى ورقة إضافية**، فيصير
 عدد أوراق الـPDF أكبر من عدد أقسام `.page`. الفرق = عدد الصفحات الفائضة.
 
     python outreach/company_profile/check_overflow.py
 
+يفحص النسخ الثلاث (عربي · إنجليزي · المدمج). المدمج يُفحص أيضاً لأن الغلاف
+الداخلي `<div lang="en">` قد يغيّر التخطيط، فلا يكفي أن تكون النسختان نظيفتين.
+
 يرجّع 0 لو كل الصفحات ضمن حدّها، و1 لو فاضت أي صفحة.
 """
-import base64
 import pathlib
 import re
 import subprocess
@@ -21,7 +23,9 @@ import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from build_pdf import EDITIONS, LOGO, find_browser  # noqa: E402
+from build_pdf import (  # noqa: E402
+    EDITIONS, LOGO, SECTION_RE, edition_html, find_browser, logo_data_uri,
+)
 
 # إلغاء الحدّ الصارم: الارتفاع يتمدّد والفيض يظهر بدل أن يُقصّ.
 PROBE_CSS = """
@@ -46,9 +50,8 @@ def pdf_page_count(path: pathlib.Path) -> int:
 
 
 def probe(key: str, data_uri: str, browser: str) -> int:
-    src, _, _ = EDITIONS[key]
-    html = src.read_text(encoding="utf-8").replace("__LOGO__", data_uri)
-    sections = len(re.findall(r'<section class="page', html))
+    html = edition_html(key, data_uri)
+    sections = len(SECTION_RE.findall(html))
 
     # نحقن التجاوز قبل </head> كي يأتي بعد ورقة الأنماط فيغلبها.
     html = html.replace("</head>", PROBE_CSS + "</head>", 1)
@@ -58,13 +61,13 @@ def probe(key: str, data_uri: str, browser: str) -> int:
 
     cmd = [
         browser, "--headless=new", "--disable-gpu", "--no-sandbox",
-        "--run-all-compositor-stages-before-draw", "--virtual-time-budget=10000",
+        "--run-all-compositor-stages-before-draw", "--virtual-time-budget=15000",
         "--no-pdf-header-footer", f"--print-to-pdf={probe_pdf}", probe_html.as_uri(),
     ]
     subprocess.run(cmd, capture_output=True, text=True, timeout=180)
 
     if not probe_pdf.exists():
-        print(f"  {key.upper()}: !! probe PDF not produced")
+        print(f"  {key.upper():4s}: !! probe PDF not produced")
         return 1
 
     sheets = pdf_page_count(probe_pdf)
@@ -72,9 +75,9 @@ def probe(key: str, data_uri: str, browser: str) -> int:
     probe_pdf.unlink(missing_ok=True)
 
     if sheets == sections:
-        print(f"  {key.upper()}: ✓ {sections} صفحة، لا فيض")
+        print(f"  {key.upper():4s}: ✓ {sections} صفحة، لا فيض")
         return 0
-    print(f"  {key.upper()}: ✗ فيض — {sections} قسم .page لكن الطباعة أعطت {sheets} ورقة "
+    print(f"  {key.upper():4s}: ✗ فيض — {sections} قسم .page لكن الطباعة أعطت {sheets} ورقة "
           f"({sheets - sections} صفحة تتجاوز حدّها)")
     return 1
 
@@ -88,7 +91,7 @@ def main() -> int:
         print(f"!! logo missing: {LOGO}")
         return 1
 
-    data_uri = "data:image/png;base64," + base64.b64encode(LOGO.read_bytes()).decode("ascii")
+    data_uri = logo_data_uri()
     print("فحص الفيض (height:auto + overflow:visible):")
     rc = 0
     for key in EDITIONS:

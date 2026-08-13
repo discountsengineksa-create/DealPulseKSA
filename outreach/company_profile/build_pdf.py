@@ -1,21 +1,26 @@
 # -*- coding: utf-8 -*-
-"""يبني ملفَّي البروفايل PDF (عربي + إنجليزي) من profile.html و profile_en.html.
+"""يبني ملفات البروفايل PDF من profile.html و profile_en.html.
 
-يحقن الشعار كـdata URI (كي لا يعتمد الـPDF على مسار خارجي)، ثم يطبع عبر
-Edge/Chrome/Chromium headless. شغّله بعد أي تعديل على أيٍّ من الملفين:
+ثلاث نسخ:
+  ar   — عربي وحده        → DealPulse_Profile_AR.pdf
+  en   — إنجليزي وحده     → DealPulse_Profile_EN.pdf
+  both — عربي ثم إنجليزي  → DealPulse_Profile_AR_EN.pdf   (مستند واحد)
 
-    python outreach/company_profile/build_pdf.py            # الاثنان
-    python outreach/company_profile/build_pdf.py ar         # العربي فقط
-    python outreach/company_profile/build_pdf.py en         # الإنجليزي فقط
+المدمج **يُولَّد من المصدرين وقت البناء، لا ملفّ ثالث** — فأي تعديل على النسختين
+ينعكس عليه تلقائياً ولا يوجد نصّ يُصان مرّتين.
 
-⚠️ ‏`.page` ارتفاعها ثابت 297mm مع `overflow:hidden` — أي فيض محتوى يُقصّ
-بصمت ولا يظهر في عدد الصفحات. بعد أي تعديل على المحتوى شغّل الفاحص:
+    python outreach/company_profile/build_pdf.py            # الثلاثة
+    python outreach/company_profile/build_pdf.py both        # المدمج وحده
+
+⚠️ ‏`.page` ارتفاعها ثابت 297mm مع `overflow:hidden` — أي فيض محتوى يُقصّ بصمت
+ولا يظهر في عدد الصفحات. بعد أي تعديل على المحتوى شغّل الفاحص:
 
     python outreach/company_profile/check_overflow.py
 """
 import base64
 import os
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -24,11 +29,17 @@ HERE = pathlib.Path(__file__).resolve().parent
 # كانت تشير إلى ريبو الويب — مسار خارجي يكسر البناء على أي جهاز ثانٍ.
 LOGO = HERE / "logo_print.png"
 
-# (المفتاح، المصدر، ملف البناء الوسيط، المخرَج)
+AR_SRC = HERE / "profile.html"
+EN_SRC = HERE / "profile_en.html"
+
+# المفتاح → (ملف البناء الوسيط، المخرَج)
 EDITIONS = {
-    "ar": (HERE / "profile.html",    HERE / "_build_ar.html", HERE / "DealPulse_Profile_AR.pdf"),
-    "en": (HERE / "profile_en.html", HERE / "_build_en.html", HERE / "DealPulse_Profile_EN.pdf"),
+    "ar":   (HERE / "_build_ar.html",   HERE / "DealPulse_Profile_AR.pdf"),
+    "en":   (HERE / "_build_en.html",   HERE / "DealPulse_Profile_EN.pdf"),
+    "both": (HERE / "_build_both.html", HERE / "DealPulse_Profile_AR_EN.pdf"),
 }
+
+SECTION_RE = re.compile(r'<section class="page.*?</section>', re.S)
 
 BROWSERS = [
     # ويندوز (جهاز المالك)
@@ -50,14 +61,43 @@ def find_browser():
     return next((b for b in BROWSERS if os.path.exists(b)), None)
 
 
-def build(key, data_uri, browser):
-    src, build_html, out = EDITIONS[key]
-    if not src.exists():
-        print(f"!! source missing: {src}")
-        return 1
+def logo_data_uri() -> str:
+    return "data:image/png;base64," + base64.b64encode(LOGO.read_bytes()).decode("ascii")
 
-    html = src.read_text(encoding="utf-8").replace("__LOGO__", data_uri)
-    build_html.write_text(html, encoding="utf-8")
+
+def edition_html(key: str, data_uri: str) -> str:
+    """يرجّع HTML النسخة جاهزاً (الشعار محقون).
+
+    المدمج: يأخذ الملف العربي كاملاً كقاعدة (جذره `lang=ar dir=rtl`)، ثم يُلحق
+    أقسام الإنجليزي داخل `<div lang="en" dir="ltr">`. الأنماط تلتقط الغلاف الداخلي
+    لأن محدّداتها `[lang="en"]` بلا `html` أمامها (انظر التعليق في style.css).
+    """
+    if key == "ar":
+        return AR_SRC.read_text(encoding="utf-8").replace("__LOGO__", data_uri)
+    if key == "en":
+        return EN_SRC.read_text(encoding="utf-8").replace("__LOGO__", data_uri)
+
+    ar = AR_SRC.read_text(encoding="utf-8")
+    en = EN_SRC.read_text(encoding="utf-8")
+    en_pages = "\n\n".join(SECTION_RE.findall(en))
+    if not en_pages:
+        raise SystemExit("!! no <section class=\"page\"> found in profile_en.html")
+    block = (
+        '\n<!-- ══════════════ English edition — same document ══════════════ -->\n'
+        '<div lang="en" dir="ltr">\n\n' + en_pages + "\n\n</div>\n"
+    )
+    merged = ar.replace("</body>", block + "</body>", 1)
+    merged = merged.replace(
+        "<title>نبض الصفقات — الملف التعريفي</title>",
+        "<title>نبض الصفقات — الملف التعريفي · Deal Pulse KSA — Company Profile</title>",
+        1,
+    )
+    return merged.replace("__LOGO__", data_uri)
+
+
+def build(key, data_uri, browser):
+    build_html, out = EDITIONS[key]
+    build_html.write_text(edition_html(key, data_uri), encoding="utf-8")
     print(f"built  {build_html.name}  ({build_html.stat().st_size:,} bytes)")
 
     if out.exists():
@@ -69,7 +109,7 @@ def build(key, data_uri, browser):
         "--disable-gpu",
         "--no-sandbox",
         "--run-all-compositor-stages-before-draw",
-        "--virtual-time-budget=10000",
+        "--virtual-time-budget=15000",
         "--no-pdf-header-footer",
         f"--print-to-pdf={out}",
         build_html.as_uri(),
@@ -90,11 +130,15 @@ def main() -> int:
     if not LOGO.exists():
         print(f"!! logo missing: {LOGO}")
         return 1
+    for src in (AR_SRC, EN_SRC):
+        if not src.exists():
+            print(f"!! source missing: {src}")
+            return 1
 
     wanted = [a.lower() for a in sys.argv[1:]] or list(EDITIONS)
     unknown = [w for w in wanted if w not in EDITIONS]
     if unknown:
-        print(f"!! unknown edition(s): {', '.join(unknown)} — use: ar / en")
+        print(f"!! unknown edition(s): {', '.join(unknown)} — use: ar / en / both")
         return 1
 
     browser = find_browser()
@@ -102,8 +146,7 @@ def main() -> int:
         print("!! no Edge/Chrome/Chromium found")
         return 1
 
-    data_uri = "data:image/png;base64," + base64.b64encode(LOGO.read_bytes()).decode("ascii")
-
+    data_uri = logo_data_uri()
     rc = 0
     for key in wanted:
         rc |= build(key, data_uri, browser)

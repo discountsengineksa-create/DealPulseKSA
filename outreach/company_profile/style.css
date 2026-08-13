@@ -40,10 +40,14 @@
 /* سلّم 1.25 على أساس 10.5pt · تباعد الأحرف صفر في كل العربية.
    ترتيب العائلتين يُقلب في كل ملف (html[lang]) كي تفوز عائلة اللغة. */
 html{ font-family:"Plex AR","Plex LT","Segoe UI",Tahoma,sans-serif; }
-html[lang="en"]{ font-family:"Plex LT","Plex AR","Segoe UI",Tahoma,sans-serif; }
 body{ background:#EDF1F5; color:var(--ink-900); font-size:10.5pt;
       line-height:1.75; font-weight:400; letter-spacing:0; }
-html[lang="en"] body{ line-height:1.65; }
+/* محدِّد بلا `html` أمامه — بقصد: في الملفّ المنفصل يطابق الجذر، وفي الملفّ
+   المدمج (عربي ثم إنجليزي في مستند واحد) يطابق الغلاف الداخلي `<div lang="en">`.
+   الجذر لا يصلح للمدمج لأن المستند الواحد له لغة جذر واحدة. الخطّ وارتفاع السطر
+   يورَثان، فوضعهما على الغلاف يكفي. */
+[lang="en"]{ font-family:"Plex LT","Plex AR","Segoe UI",Tahoma,sans-serif;
+  line-height:1.65; }
 
 .page{ width:210mm; height:297mm; background:var(--paper); position:relative;
   padding:16mm 15mm 14mm; overflow:hidden; page-break-after:always;
@@ -64,10 +68,10 @@ h2{ font-size:19pt; font-weight:700; line-height:1.35; }
 h3{ font-size:12pt; font-weight:600; line-height:1.45; }
 p{ color:var(--ink-700); }
 .lead{ font-size:12.5pt; line-height:1.85; color:var(--ink-700); }
-html[lang="en"] .lead{ line-height:1.7; }
+[lang="en"] .lead{ line-height:1.7; }
 .kicker{ font-size:8.5pt; font-weight:600; color:var(--g-700); margin-bottom:1.5mm;
   letter-spacing:0; }
-html[lang="en"] .kicker{ letter-spacing:.06em; text-transform:uppercase; }
+[lang="en"] .kicker{ letter-spacing:.06em; text-transform:uppercase; }
 .rule{ width:20mm; height:2.5px; background:var(--g-500); border-radius:2px;
   margin:2.5mm 0 5mm; }
 .sp{ height:6mm; } .sp-lg{ height:8mm; } .sp-sm{ height:4mm; }
@@ -84,7 +88,7 @@ html[lang="en"] .kicker{ letter-spacing:.06em; text-transform:uppercase; }
 .card.tight{ padding:4.5mm; }
 .card h3{ margin-bottom:1.5mm; }
 .card p{ font-size:9.5pt; line-height:1.7; }
-html[lang="en"] .card p{ line-height:1.6; }
+[lang="en"] .card p{ line-height:1.6; }
 
 /* بديل الرقم الكبير: **عبارة موقع لا عدد.** الملف بلا أرقام ولا تواريخ بقرار
    المالك — أي رقم يتقادم، والمكتبة والاستشهادات تكبر باستمرار فيصير الرقم سقفاً
@@ -115,7 +119,7 @@ ul.ticks.nos li::before{ content:"✕"; color:#B42318; }
 .quote{ border-inline-start:3px solid var(--g-500); padding:3.5mm 5mm;
   background:var(--surface); border-radius:0 3mm 3mm 0; font-size:10.5pt;
   line-height:1.8; color:var(--ink-700); }
-html[lang="en"] .quote{ border-radius:0 3mm 3mm 0; line-height:1.7; }
+[lang="en"] .quote{ border-radius:0 3mm 3mm 0; line-height:1.7; }
 
 /* شريط الطبقات في صفحة «كيف تُبنى»: أربع طبقات متتابعة بسهم بينها. */
 .layers{ display:grid; gap:2.5mm; }
@@ -140,7 +144,7 @@ html[lang="en"] .quote{ border-radius:0 3mm 3mm 0; line-height:1.7; }
 .warn{ border-inline-start:3px solid #B42318; padding:3.5mm 5mm; background:#FEF3F2;
   border-radius:0 3mm 3mm 0; font-size:10pt; line-height:1.8; color:#7A271A; }
 .warn b{ color:#912018; }
-html[lang="en"] .warn{ line-height:1.7; }
+[lang="en"] .warn{ line-height:1.7; }
 
 /* ═══ رسم ٢ · الشبكة في الخلفية ═══════════════════════════════════════
    تدفّق **رأسي** بقصد: الرأسي محايد الاتجاه، فيقرأ نفسه في النسختين. */
@@ -160,6 +164,9 @@ html[lang="en"] .warn{ line-height:1.7; }
 .net-down{ display:flex; justify-content:center; padding:2.2mm 0; }
 .net-down i{ width:0; height:0; border-inline:1.8mm solid transparent;
   border-block-start:2.4mm solid var(--g-500); }
+/* ⚠️ نصّ فقط — لا رموز خارج IBM Plex/DejaVu. الحرف `↔` كان هنا فأسقط الصفحة
+   إلى `LiberationSans-Bold` (خط نظام يختلف بين ويندوز ولينكس ⇒ شكل يتغيّر حسب
+   جهاز البناء). الفحص: `/FontName` في الـPDF يجب ألّا يحوي إلا IBMPlex وDejaVu. */
 .net-tie{ font-size:8pt; color:var(--g-700); font-weight:600; text-align:center;
   padding:2mm 0 0; }
 
@@ -186,11 +193,11 @@ html[lang="en"] .warn{ line-height:1.7; }
 .cover-logo{ width:92mm; display:block; }
 .cover-body{ padding:12mm 15mm 0; flex:1; display:flex; flex-direction:column; }
 .cover-band{ height:4mm; background:linear-gradient(90deg,var(--g-500),var(--ink-900)); }
-html[lang="en"] .cover-band{ background:linear-gradient(90deg,var(--ink-900),var(--g-500)); }
+[lang="en"] .cover-band{ background:linear-gradient(90deg,var(--ink-900),var(--g-500)); }
 .cover h1{ font-size:31pt; }
 .cover .sub{ font-size:13pt; color:var(--ink-700); margin-top:5mm;
   line-height:1.9; max-width:154mm; }
-html[lang="en"] .cover .sub{ line-height:1.7; }
+[lang="en"] .cover .sub{ line-height:1.7; }
 .cover-pillars{ display:flex; gap:12mm; margin-top:auto; margin-bottom:12mm;
   padding-top:7mm; border-top:1px solid var(--line); }
 .cover-pillars .t{ font-size:11.5pt; font-weight:700; color:var(--ink-900); }
