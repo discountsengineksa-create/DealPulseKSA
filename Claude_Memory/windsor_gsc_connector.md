@@ -8,8 +8,26 @@ metadata:
   modified: 2026-08-01T07:18:13.503Z
 ---
 
+## ✅ انفكّ الحجب — مؤكَّد ببيانات حقيقية ٢٠٢٦-٠٨-١٣
+
+`get_data(connector="searchconsole", fields=["date","clicks","impressions","position"],
+date_preset="last_28d")` رجّع **٢٧ صفّاً يومياً بأرقام حقيقية** — لا رسالة خطة ولا أصفار.
+والفلترة تعمل أيضاً: `filters=[[["impressions","gte",25],"and",["position","lte",20]]]` مع
+`fields=["query","clicks","impressions","position"]` أعطى ٢٥ استعلاماً في مسافة الضربة.
+
+⇒ **المسار مفتوح لسحب بيانات البحث مباشرة بلا `GSC_SA_JSON` ولا لقطات من المالك.**
+والقاعدة التي أنقذت الموقف هي المكتوبة أسفل هذا الملف: **اختبر بـ`get_data` فعلياً، لا
+تفترض من ذاكرة عمرها أسبوعان.** (ما زال ينطبق: `date` للإجماليات، ولا تُجمع صفوف `query`.)
+
+⚠️ **ما لا يعطيه Windsor/API إطلاقاً:** تقرير الروابط وتقرير `Crawl Stats` — كلاهما
+واجهة GSC فقط، ويحتاج لقطة من المالك.
+
+---
+
 **Windsor.ai MCP** موصول بحسابين: `searchconsole` (`https://www.dealpulseksa.com/`) و
 `instagram` (`17841444145819859` — كوبونات خصم نبض الصفقات).
+
+**الحالة السابقة (٢٠٢٦-٠٨-٠١، متجاوَزة):**
 
 **المطبّ:** الخطة المجانية تسمح بحساب واحد، فأي `get_data` يرجع **صفوفاً وهمية** نصّها
 `"Uh-oh! You've connected more accounts than your Free plan allows"` مع أصفار — **لا يرجع
