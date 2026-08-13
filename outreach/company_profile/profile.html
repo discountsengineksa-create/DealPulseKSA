@@ -3,129 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>نبض الصفقات — الملف التعريفي</title>
-<style>
-  /* ═══ الخط ═══════════════════════════════════════════════════════════
-     IBM Plex Sans Arabic (OFL) مضمّن من fonts/ — لا يعتمد على خط مثبّت،
-     فالـPDF يطبع بنفس الشكل على أي جهاز، وهو كامل الأشكال العربية. */
-  @font-face{ font-family:"Plex AR"; font-weight:400; font-style:normal; font-display:block;
-    src:url("fonts/IBMPlexSansArabic-400-ar.woff2") format("woff2"); }
-  @font-face{ font-family:"Plex AR"; font-weight:500; font-style:normal; font-display:block;
-    src:url("fonts/IBMPlexSansArabic-500-ar.woff2") format("woff2"); }
-  @font-face{ font-family:"Plex AR"; font-weight:600; font-style:normal; font-display:block;
-    src:url("fonts/IBMPlexSansArabic-600-ar.woff2") format("woff2"); }
-  @font-face{ font-family:"Plex AR"; font-weight:700; font-style:normal; font-display:block;
-    src:url("fonts/IBMPlexSansArabic-700-ar.woff2") format("woff2"); }
-
-  @page { size: A4; margin: 0; }
-  * { margin:0; padding:0; box-sizing:border-box;
-      -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-
-  /* ═══ اللون ══════════════════════════════════════════════════════════
-     حبر العلامة #141C31 وأخضر النبض #10B981 فقط. كل زوج مقيس بـWCAG:
-     الأدنى المستخدم ٥٫٤٨:١ للنص الصغير و٣٫٣٢:١ للأرقام الكبيرة. */
-  :root{
-    --ink-900:#141C31;  --ink-700:#2C3A55;  --ink-500:#55637E;
-    --g-700:#047857;    --g-600:#059669;    --g-500:#10B981;
-    --g-100:#D1FAE5;    --g-50:#ECFDF5;
-    --paper:#FFFFFF;    --surface:#F7F9FB;  --line:#E3E8EF;
-  }
-
-  /* سلّم 1.25 على أساس 10.5pt · تباعد الأحرف صفر في كل العربية. */
-  html{ font-family:"Plex AR","Segoe UI",Tahoma,sans-serif; }
-  body{ background:#EDF1F5; color:var(--ink-900); font-size:10.5pt;
-        line-height:1.75; font-weight:400; letter-spacing:0; }
-
-  .page{ width:210mm; height:297mm; background:var(--paper); position:relative;
-    padding:16mm 15mm 14mm; overflow:hidden; page-break-after:always;
-    display:flex; flex-direction:column; }
-  .page:last-child{ page-break-after:auto; }
-
-  .runhead{ display:flex; justify-content:space-between; align-items:baseline;
-    padding-bottom:3.5mm; border-bottom:1px solid var(--line); margin-bottom:7mm; }
-  .runhead .brand{ font-weight:700; font-size:9.5pt; }
-  .runhead .brand span{ color:var(--g-700); }
-  .runhead .sec{ font-size:9pt; color:var(--ink-500); font-weight:500; }
-
-  .foot{ margin-top:auto; padding-top:4mm; border-top:1px solid var(--line);
-    display:flex; justify-content:space-between; font-size:8.5pt; color:var(--ink-500); }
-
-  h1{ font-size:26pt; font-weight:700; line-height:1.3; }
-  h2{ font-size:19pt; font-weight:700; line-height:1.35; }
-  h3{ font-size:12pt; font-weight:600; line-height:1.45; }
-  p{ color:var(--ink-700); }
-  .lead{ font-size:12.5pt; line-height:1.85; color:var(--ink-700); }
-  .kicker{ font-size:8.5pt; font-weight:600; color:var(--g-700); margin-bottom:1.5mm; }
-  .rule{ width:20mm; height:2.5px; background:var(--g-500); border-radius:2px;
-    margin:2.5mm 0 5mm; }
-  .sp{ height:6mm; } .sp-lg{ height:8mm; }
-
-  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:5mm; }
-  .grid3{ display:grid; grid-template-columns:repeat(3,1fr); gap:4.5mm; }
-
-  .card{ border:1px solid var(--line); border-radius:3.5mm; padding:5.5mm;
-    background:var(--paper); }
-  .card.mint{ background:var(--g-50); border-color:#C7EFDF; }
-  .card.ink{ background:var(--surface); }
-  .card.dark{ background:var(--ink-900); border-color:var(--ink-900); }
-  .card.dark h3{ color:#fff; } .card.dark p{ color:#C3CBDA; }
-  .card h3{ margin-bottom:1.5mm; }
-  .card p{ font-size:9.5pt; line-height:1.7; }
-
-  .num{ font-size:26pt; font-weight:700; color:var(--g-600); line-height:1.15; }
-  .num-label{ font-size:10pt; font-weight:600; color:var(--ink-900); margin-top:.5mm; }
-  /* المصدر والتاريخ سطران: الفاصل «·» يلتصق بالأرقام العربية-الهندية
-     فيُقرأ «١٢٠ أغسطس». واللاتيني داخل bdi كي لا يزحف. */
-  .src{ font-size:8pt; color:var(--ink-500); margin-top:2mm; line-height:1.55; }
-  .src .stamp{ display:block; margin-top:.6mm; font-size:7.5pt; }
-  bdi{ unicode-bidi:isolate; }
-
-  ul.ticks{ list-style:none; }
-  ul.ticks li{ position:relative; padding-inline-start:6.5mm; margin-bottom:2.2mm;
-    font-size:9.5pt; line-height:1.65; color:var(--ink-700); }
-  ul.ticks li::before{ content:"✓"; position:absolute; inset-inline-start:0;
-    color:var(--g-600); font-weight:700; }
-
-  .steps{ counter-reset:s; display:grid; gap:3.5mm; }
-  .step{ counter-increment:s; position:relative; padding-inline-start:12mm; }
-  .step::before{ content:counter(s); position:absolute; inset-inline-start:0; top:.5mm;
-    width:8.5mm; height:8.5mm; border-radius:50%; background:var(--g-600); color:#fff;
-    font-weight:700; font-size:10.5pt; display:flex; align-items:center;
-    justify-content:center; }
-  .step p{ font-size:9.5pt; }
-
-  .quote{ border-inline-start:3px solid var(--g-500); padding:3.5mm 5mm;
-    background:var(--surface); border-radius:0 3mm 3mm 0; font-size:10.5pt;
-    line-height:1.8; color:var(--ink-700); }
-
-  .cta{ background:var(--ink-900); color:#fff; border-radius:4mm; padding:8mm; }
-  .cta h2{ color:#fff; }
-  .cta p{ color:#C3CBDA; font-size:10pt; }
-  .cta .row{ display:flex; gap:9mm; margin-top:5mm; }
-  .cta .row div b{ display:block; font-size:8pt; color:var(--g-500); font-weight:600;
-    margin-bottom:.8mm; }
-  .cta .row div span{ font-size:11pt; color:#fff; font-weight:600; }
-
-  .note{ font-size:8.5pt; color:var(--ink-500); line-height:1.65; }
-
-  /* الغلاف: اللوقو ملف أبيض الخلفية، فمنطقته بيضاء نقية كي تذوب حافته. */
-  .cover{ padding:0; justify-content:flex-start; }
-  .cover-top{ background:var(--paper); padding:26mm 15mm 10mm; }
-  .cover-logo{ width:92mm; display:block; }
-  .cover-body{ padding:12mm 15mm 0; flex:1; display:flex; flex-direction:column; }
-  .cover-band{ height:4mm; background:linear-gradient(90deg,var(--g-500),var(--ink-900)); }
-  .cover h1{ font-size:31pt; }
-  .cover .sub{ font-size:13pt; color:var(--ink-700); margin-top:5mm;
-    line-height:1.9; max-width:154mm; }
-  .cover-pillars{ display:flex; gap:12mm; margin-top:auto; margin-bottom:12mm;
-    padding-top:7mm; border-top:1px solid var(--line); }
-  .cover-pillars .t{ font-size:11.5pt; font-weight:700; color:var(--ink-900); }
-  .cover-pillars .d{ font-size:9pt; color:var(--ink-500); margin-top:1mm; line-height:1.6; }
-  .cover-foot{ background:var(--ink-900); color:#fff; padding:9mm 15mm;
-    display:flex; gap:11mm; margin-top:auto; }
-  .cover-foot b{ display:block; font-size:8pt; color:var(--g-500); font-weight:600;
-    margin-bottom:1mm; }
-  .cover-foot span{ font-size:10.5pt; font-weight:500; }
-</style>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 
@@ -136,9 +14,9 @@
   <div class="cover-body">
     <div class="kicker">الملف التعريفي — ٢٠٢٦</div>
     <h1>نضع علامتك أمام المشتري السعودي<br>في لحظة القرار</h1>
-    <p class="sub">منصّة سعودية للعروض والمحتوى الشرائي، تصل بعلامتك إلى المتسوّق عبر
-      ثلاث قنوات يستخدمها فعلاً اليوم: البحث في جوجل، ومساعدات الذكاء الاصطناعي،
-      وتيليجرام.</p>
+    <p class="sub">منصّة سعودية للعروض والمحتوى الشرائي. نبني لعلامتك حضوراً دائماً —
+      صفحة، ومحتوى، ومقارنات — يصل إلى المتسوّق عبر ثلاث قنوات يستخدمها فعلاً اليوم:
+      البحث في جوجل، ومساعدات الذكاء الاصطناعي، وتيليجرام.</p>
 
     <div class="cover-pillars">
       <div>
@@ -170,10 +48,10 @@
   <div class="kicker">التعريف</div>
   <h2>منصّة سعودية للعرض الموثوق</h2>
   <div class="rule"></div>
-  <p class="lead">«نبض الصفقات» منصّة سعودية تجمع عروض العلامات التجارية ومحتواها الشرائي
-    في مكان واحد، وتوصّلها إلى المتسوّق في اللحظة التي يبحث فيها فعلاً. نعمل بمبدأ واحد
-    لا نحيد عنه: <b>لا يُنشر عرض قبل التحقّق منه</b> — لأن العرض المنتهي يضرّ بسمعة
-    العلامة قبل أن يضرّ بنا.</p>
+  <p class="lead">«نبض الصفقات» منصّة سعودية مملوكة بالكامل، تجمع عروض العلامات التجارية
+    ومحتواها الشرائي في مكان واحد، وتوصّلها إلى المتسوّق في اللحظة التي يبحث فيها فعلاً.
+    نعمل بمبدأ واحد لا نحيد عنه: <b>لا يُنشر عرض قبل التحقّق منه</b> — لأن العرض المنتهي
+    يضرّ بسمعة العلامة قبل أن يضرّ بنا.</p>
 
   <div class="sp-lg"></div>
   <div class="grid2">
@@ -218,45 +96,45 @@
   <div class="foot"><span>نبض الصفقات — الملف التعريفي</span><span>٢</span></div>
 </section>
 
-<!-- ══════════════ ٣ · ماذا نصنع للعلامة ══════════════ -->
+<!-- ══════════════ ٣ · الخدمات ══════════════ -->
 <section class="page">
   <div class="runhead"><div class="brand">نبض الصفقات · <span>Deal Pulse KSA</span></div>
     <div class="sec">خدماتنا للعلامات التجارية</div></div>
 
   <div class="kicker">ماذا نصنع لك</div>
-  <h2>خدماتنا للعلامات التجارية</h2>
+  <h2>ستّ خدمات، مخرَج ملموس لكلٍّ منها</h2>
   <div class="rule"></div>
 
   <div class="grid2">
-    <div class="card">
+    <div class="card tight">
       <h3>صفحة علامة دائمة</h3>
-      <p>صفحة باسم علامتك تحمل عروضها وتعريفها وهويتها البصرية، مُهيّأة للبحث ببيانات
+      <p>صفحة هبوط باسم علامتك تحمل عروضها وتعريفها وهويتها البصرية، برابط ثابت وبيانات
         منظّمة — أصل يعمل لك بعد انتهاء الحملة، لا إعلان ينطفئ بانتهاء ميزانيته.</p>
     </div>
-    <div class="card">
-      <h3>محتوى عربي مخصّص</h3>
-      <p>أدلّة ومقارنات ومراجعات مكتوبة لجمهورك ولأسئلته الحقيقية، مترابطة داخلياً
-        وموجّهة إلى علامتك — إنتاج تحريري كامل من طرفنا.</p>
+    <div class="card tight">
+      <h3>مقارنات وأدلّة شرائية</h3>
+      <p>«الأفضل في…»، ومقارنة علامة بعلامة، وأدلّة الفئة والأسعار — وهي الصيغ التي
+        يقرأها المشتري في الخطوة الأخيرة قبل الطلب، ويقتبسها المساعد الذكي.</p>
     </div>
-    <div class="card">
-      <h3>الحملات الموسمية</h3>
-      <p>رمضان، اليوم الوطني، الجمعة البيضاء، العودة للمدارس — صفحات موسم جاهزة وتقويم
-        مناسبات، حيث يرتفع الطلب ويقصر وقت القرار.</p>
+    <div class="card tight">
+      <h3>تهيئة الظهور في البحث</h3>
+      <p>بحث الكلمات المفتاحية بنيّة شرائية، وصياغة العناوين والأوصاف، والبيانات المنظّمة،
+        والربط الداخلي، وطلب الفهرسة ومتابعتها حتى تظهر الصفحة فعلاً.</p>
     </div>
-    <div class="card">
-      <h3>التوزيع المباشر</h3>
+    <div class="card tight">
+      <h3>صفحات المواسم</h3>
+      <p>رمضان، اليوم الوطني، الجمعة البيضاء، العودة للمدارس — صفحة موسم جاهزة مربوطة
+        بتقويم مناسبات دائم، حيث يرتفع الطلب ويقصر وقت القرار.</p>
+    </div>
+    <div class="card tight">
+      <h3>التوزيع وستوري العلامة</h3>
       <p>إيصال العرض عبر بوت تيليجرام والتطبيق المصغّر وحسابات التواصل، مع إبراز في
-        واجهة المنصّة.</p>
+        واجهة المنصّة، ومساحة عرض بصرية بنمط الستوري لإطلاق منتج أو حملة محدودة.</p>
     </div>
-    <div class="card">
-      <h3>ستوري العلامة</h3>
-      <p>مساحة عرض بصرية (فيديو أو صورة) أعلى الواجهة بنمط الستوري، لإطلاق منتج أو حملة
-        محدودة بمدّة محدّدة.</p>
-    </div>
-    <div class="card">
-      <h3>تقارير الأداء</h3>
-      <p>مشاهدات صفحتك والتفاعل مع عرضك، من نظام تتبّع داخلي — تُشارَك دورياً بلا تجميل،
-        فتقيس القناة بنفسك.</p>
+    <div class="card tight">
+      <h3>القياس والتقارير</h3>
+      <p>مشاهدات صفحتك، والتفاعل مع عرضك، وأداء الصفحات في البحث — من نظام تتبّع داخلي،
+        تُشارَك دورياً بلا تجميل، فتقيس القناة بنفسك.</p>
     </div>
   </div>
 
@@ -266,13 +144,79 @@
     <p>حملتك المدفوعة تشتري انتباهاً لحظياً ينتهي بانتهاء الميزانية. ما نبنيه معك يبقى:
       صفحة ومحتوى يستمرّان في جلب الباحث بعد شهور، ويُقتبسان في إجابات المساعدين
       الأذكياء التي صار المتسوّق يسأل فيها قبل أن يشتري. القناتان تكملان بعضهما — لا
-      تنافسان.</p>
+      تتنافسان.</p>
   </div>
 
   <div class="foot"><span>نبض الصفقات — الملف التعريفي</span><span>٣</span></div>
 </section>
 
-<!-- ══════════════ ٤ · ورقة التميّز ══════════════ -->
+<!-- ══════════════ ٤ · كيف تُبنى ══════════════ -->
+<section class="page">
+  <div class="runhead"><div class="brand">نبض الصفقات · <span>Deal Pulse KSA</span></div>
+    <div class="sec">كيف تُبنى</div></div>
+
+  <div class="kicker">داخل الخدمة</div>
+  <h2>كيف نبني حضور علامتك — طبقة فوق طبقة</h2>
+  <div class="rule"></div>
+  <p class="note" style="margin-bottom:6mm">لا ننشر صفحة واحدة ونتركها. الحضور الذي يصمد
+    في البحث يُبنى بأربع طبقات تتغذّى من بعضها، فوق بنية تقنية تجعلها مقروءة لمحرّكات
+    البحث ولمساعدات الذكاء الاصطناعي معاً.</p>
+
+  <div class="layers">
+    <div class="layer">
+      <div class="tag">الطبقة ١</div>
+      <div class="body"><b>صفحة العلامة</b><span>وجهة ثابتة باسمك تجمع العرض والتعريف
+        والهوية — إليها تشير كل الروابط، ومنها يخرج الزائر إلى متجرك.</span></div>
+    </div>
+    <div class="layer">
+      <div class="tag">الطبقة ٢</div>
+      <div class="body"><b>عنقود المقارنات والأدلّة</b><span>مجموعة مقالات مترابطة حول
+        فئتك وأسئلة جمهورها الحقيقية، كلٌّ منها يلتقط بحثاً مختلفاً ويعيد الزائر إلى
+        صفحتك.</span></div>
+    </div>
+    <div class="layer">
+      <div class="tag">الطبقة ٣</div>
+      <div class="body"><b>صفحة الموسم</b><span>بوابة موسمية ترتفع مع ذروة الطلب وتربط
+        بعلامتك في التوقيت الذي يقصر فيه وقت القرار.</span></div>
+    </div>
+    <div class="layer">
+      <div class="tag">الطبقة ٤</div>
+      <div class="body"><b>شبكة الربط الداخلي</b><span>الطبقات الثلاث موصولة ببعضها
+        بروابط مقصودة، فتتراكم قوّة الصفحات بدل أن تتبعثر.</span></div>
+    </div>
+  </div>
+
+  <div class="sp-lg"></div>
+  <div class="grid2">
+    <div class="card">
+      <h3 style="margin-bottom:2.5mm">الطبقة التقنية تحتها</h3>
+      <ul class="ticks dense">
+        <li><b>بيانات منظّمة</b> على كل صفحة علامة، بصيغة تقرأها محرّكات البحث</li>
+        <li><b>سرعة وفهرسة</b> — بنية حديثة، وصفحات تُطلب فهرستها وتُتابَع</li>
+        <li><b>انفتاح صريح لزواحف المساعدات الذكية</b> — إذن قراءة معلن لا محجوب</li>
+        <li><b>روابط ثابتة لا تنكسر</b> — الصفحة تبقى بعنوانها بعد انتهاء الحملة</li>
+      </ul>
+    </div>
+    <div class="card mint">
+      <h3 style="margin-bottom:2.5mm">ما تحصل عليه بالضبط</h3>
+      <ul class="ticks dense">
+        <li>صفحة علامة منشورة برابطها الثابت</li>
+        <li>عنقود مقالات ومقارنات مكتوب ومنشور ومترابط</li>
+        <li>صفحة موسم عند تزامن الحملة مع مناسبة</li>
+        <li>مواد التوزيع على قنواتنا الثلاث</li>
+        <li>تقرير أداء بالأرقام المسجّلة في نهاية الفترة</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="sp-lg"></div>
+  <div class="quote">الصفحات تبقى حيّة ومصانة طوال المدّة المتّفق عليها: العروض تُحدَّث،
+    والأكواد المنتهية تُسحب، والمحتوى يُراجَع مع تغيّر الموسم.</div>
+
+  <div class="foot"><span>نبض الصفقات — الملف التعريفي</span><span>٤</span></div>
+</section>
+
+<!-- ══════════════ ٥ · ورقة التميّز ══════════════ -->
 <section class="page">
   <div class="runhead"><div class="brand">نبض الصفقات · <span>Deal Pulse KSA</span></div>
     <div class="sec">ما يميّزنا</div></div>
@@ -286,10 +230,14 @@
 
   <div class="sp-lg"></div>
   <div class="grid2" style="align-items:stretch">
+    <!-- الرقم يتحرّك: يُقرأ حيّاً من Bing Webmaster Tools ← AI Performance، ويُحدَّث
+         هنا وفي profile_en.html مع تاريخه قبل أي إرسال. لا يُرفع تقديراً أبداً. -->
     <div class="card mint">
       <div class="num">٤١٣</div>
       <div class="num-label">مرة اقتُبست فيها صفحاتنا داخل إجابات المساعدات الذكية</div>
-      <div class="src">خلال ٣٠ يوماً — والمصدر يصف الرقم بأنه عيّنة من النشاط الكلي
+      <div class="src">خلال ٣٠ يوماً — والمصدر يصف الرقم بأنه عيّنة من النشاط الكلي.
+        وهو ٤١٣ من أصل ٤٢٥ استشهاداً في ثلاثة أشهر: أي أن القناة في صعود حادّ لا في
+        خطٍّ ثابت.
         <span class="stamp"><bdi>Bing Webmaster Tools — AI Performance</bdi>،
           ١١ أغسطس ٢٠٢٦</span></div>
     </div>
@@ -297,7 +245,7 @@
       <h3>لماذا هذا صعب على غيرنا</h3>
       <p style="margin-top:1.5mm">هذه القناة لا تُشترى بالإعلان ولا تُختصر بالميزانية.
         تحتاج بنية تقنية تسمح لزواحف الذكاء الاصطناعي بالقراءة، ومحتوى عربي أصلياً
-        عميقاً يصلح للاقتباس، وسنوات من العمل التحريري المتّسق. بنيناها مبكراً، وهي
+        عميقاً يصلح للاقتباس، وعملاً تحريرياً متّسقاً بلا انقطاع. بنيناها مبكراً، وهي
         تعمل اليوم.</p>
       <div class="sp"></div>
       <ul class="ticks">
@@ -326,14 +274,72 @@
     </div>
   </div>
 
-  <div class="sp-lg"></div>
-  <div class="quote">نعرض أرقامنا كما هي بمصادرها وتواريخها. الشريك الذي يقرّر بناءً على
-    رقم مضخّم يكتشف الحقيقة بعد شهر ويغادر — والذي يقرّر على رقم صادق يبقى ويكبر معنا.</div>
-
-  <div class="foot"><span>نبض الصفقات — الملف التعريفي</span><span>٤</span></div>
+  <div class="foot"><span>نبض الصفقات — الملف التعريفي</span><span>٥</span></div>
 </section>
 
-<!-- ══════════════ ٥ · نماذج التعاون ══════════════ -->
+<!-- ══════════════ ٦ · الثقة والالتزامات ══════════════ -->
+<section class="page">
+  <div class="runhead"><div class="brand">نبض الصفقات · <span>Deal Pulse KSA</span></div>
+    <div class="sec">الثقة والالتزامات</div></div>
+
+  <div class="kicker">ما تضمنه بالكتابة</div>
+  <h2>علامتك في يد لا تُتاجر بها</h2>
+  <div class="rule"></div>
+  <p class="note" style="margin-bottom:6mm">التعامل مع طرف ثالث ينشر باسم علامتك مخاطرة
+    قبل أن يكون فرصة. هذه الالتزامات هي ما يجعل المخاطرة محسوبة، وهي جزء من الاتفاقية
+    لا وعد شفهي.</p>
+
+  <div class="grid2">
+    <div class="card tight">
+      <h3>لا نشر لعرض غير محقّق</h3>
+      <p>كل عرض يُختبر قبل نشره، ويُسحب فور انتهائه. لا نترك كوداً ميتاً يحمل اسمك.</p>
+    </div>
+    <div class="card tight">
+      <h3>لا مزايدة على اسمك</h3>
+      <p>لا نزايد إعلانياً على اسم علامتك ولا على تنويعاته. لا ننافسك على زائرك، ولا
+        نرفع تكلفة كلمتك.</p>
+    </div>
+    <div class="card tight">
+      <h3>عرضك وحده على صفحتك</h3>
+      <p>صفحة علامتك لا تحمل عرض منافس ولا تحويلاً إليه — ولو كان خصمه أعلى.</p>
+    </div>
+    <div class="card tight">
+      <h3>محتواك يبقى لك</h3>
+      <p>ما يُنتج لعلامتك أصل دائم يعمل لك، ويبقى محكوماً بما تتّفق عليه الاتفاقية.</p>
+    </div>
+    <div class="card tight">
+      <h3>تقارير بلا تجميل</h3>
+      <p>نعرض الأرقام كما سجّلها النظام، بمصادرها وتواريخها — بما فيها ما لم ينجح.</p>
+    </div>
+    <div class="card tight">
+      <h3>سرّية تامة</h3>
+      <p>تفاصيل الاتفاقية وأرقامها لا تخرج منّا لأي طرف. جاهزون لتوقيع اتفاقية عدم
+        إفشاء قبل أي نقاش تفصيلي.</p>
+    </div>
+    <div class="card tight">
+      <h3>إفصاح واضح للقارئ</h3>
+      <p>نُفصح عن طبيعة العلاقة التجارية داخل المحتوى كما تشترط سياسات محرّكات البحث —
+        فلا يُقرأ محتواك يوماً كإعلان مستتر.</p>
+    </div>
+    <div class="card tight">
+      <h3>تسويق نظيف فقط</h3>
+      <p>لا صفحات مضلّلة، ولا حشو كلمات، ولا أي أسلوب يخالف إرشادات محرّكات البحث. ما
+        يُبنى باسمك لا يعرّض علامتك لعقوبة.</p>
+    </div>
+  </div>
+
+  <div class="sp-lg"></div>
+  <div class="card mint">
+    <h3 style="margin-bottom:2mm">وعن الأرقام التفصيلية</h3>
+    <p>نقيس بجودة النيّة لا بحجم الزيارة: من يصلنا يكون في نهاية رحلة الشراء لا بدايتها.
+      وأرقام الأداء التفصيلية نشاركها ضمن اتفاقية عدم إفشاء — أو، وهو الأوضح، نبدأ بحملة
+      تجريبية محدودة المدّة وتقيسون النتيجة بأنفسكم على أنظمتكم أنتم.</p>
+  </div>
+
+  <div class="foot"><span>نبض الصفقات — الملف التعريفي</span><span>٦</span></div>
+</section>
+
+<!-- ══════════════ ٧ · نماذج التعاون ══════════════ -->
 <section class="page">
   <div class="runhead"><div class="brand">نبض الصفقات · <span>Deal Pulse KSA</span></div>
     <div class="sec">نماذج التعاون</div></div>
@@ -374,10 +380,18 @@
       لا نطلب تكاملاً تقنياً ولا تعديلاً على متجركم — الإنتاج والنشر والقياس علينا.</p>
   </div>
 
-  <div class="foot"><span>نبض الصفقات — الملف التعريفي</span><span>٥</span></div>
+  <div class="sp-lg"></div>
+  <div class="legal">
+    <b>المعلومات النظامية</b>
+    <p>منشأة سعودية مملوكة بالكامل، موثّقة بوثيقة عمل حر صادرة من وزارة الموارد البشرية
+      والتنمية الاجتماعية. جاهزون لتوقيع اتفاقية عمل واتفاقية عدم إفشاء، ولإتمام إجراءات
+      تسجيل المورّد لديكم.</p>
+  </div>
+
+  <div class="foot"><span>نبض الصفقات — الملف التعريفي</span><span>٧</span></div>
 </section>
 
-<!-- ══════════════ ٦ · كيف نعمل + التواصل ══════════════ -->
+<!-- ══════════════ ٨ · كيف نعمل + التواصل ══════════════ -->
 <section class="page">
   <div class="runhead"><div class="brand">نبض الصفقات · <span>Deal Pulse KSA</span></div>
     <div class="sec">كيف نعمل</div></div>
@@ -422,9 +436,10 @@
   <div class="sp"></div>
   <p class="note">الأرقام الواردة في هذا الملف مسحوبة من مصادرها بتواريخها المذكورة
     تحتها. المنصّة سعودية ومملوكة بالكامل، وتعمل وفق ممارسات تسويق نظيفة: لا مزايدة
-    مدفوعة على أسماء العلامات الشريكة، ولا نشر لعرض لم يُتحقَّق منه.</p>
+    مدفوعة على أسماء العلامات الشريكة، ولا نشر لعرض لم يُتحقَّق منه. هذا الملف متاح
+    بالعربية والإنجليزية.</p>
 
-  <div class="foot"><span>نبض الصفقات — الملف التعريفي</span><span>٦</span></div>
+  <div class="foot"><span>نبض الصفقات — الملف التعريفي</span><span>٨</span></div>
 </section>
 
 </body>

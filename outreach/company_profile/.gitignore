@@ -1,1 +1,4 @@
-﻿_build.html
+_build*.html
+_probe_*
+_shot.html
+_one*.html
