@@ -112,62 +112,65 @@
   <div class="kicker">Where orders are lost</div>
   <h2>The promo code field takes your buyer<br>out of your store. Do they come back?</h2>
   <div class="rule"></div>
-  <p class="note" style="margin-bottom:6mm">This happens in your store today, whether we work
-    together or not. The buyer reaches checkout, sees the empty field, opens a new tab and
-    searches. What happens in that minute is the difference between a completed order and an
-    abandoned cart.</p>
+  <p class="note" style="margin-bottom:5mm">This happens in your store today, whether we work
+    together or not. What happens in that minute is the difference between a completed order
+    and an abandoned cart.</p>
 
-  <div class="journey">
-    <div class="jrow bad">
-      <div class="jhead"><span class="jtag">WITHOUT US</span>
-        <span class="jtitle">They leave to search — and do not return</span></div>
-      <div class="track">
-        <div class="node">Enters your store</div>
-        <div class="arw"></div>
-        <div class="node">Fills the cart</div>
-        <div class="arw"></div>
-        <div class="node">Promo code field</div>
-        <div class="arw"></div>
-        <div class="node">Leaves to hunt for a code</div>
-        <div class="arw"></div>
-        <div class="node stop">Cart abandoned</div>
-      </div>
-    </div>
+  <svg class="tri" viewBox="0 0 620 330" role="img"
+       aria-label="The buyer's loop between your store and Deal Pulse, in four steps">
+    <defs>
+      <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M0 0 L10 5 L0 10 z" fill="#059669"/></marker>
+      <marker id="an" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M0 0 L10 5 L0 10 z" fill="#55637E"/></marker>
+    </defs>
+    <line x1="194" y1="224" x2="420" y2="224" stroke="#55637E" stroke-width="2" marker-end="url(#an)"/>
+    <line x1="136" y1="200" x2="238" y2="72"  stroke="#55637E" stroke-width="2" marker-end="url(#an)"/>
+    <line x1="380" y1="72"  x2="470" y2="198" stroke="#059669" stroke-width="2" marker-end="url(#ag)"/>
+    <path d="M115 264 Q310 326 502 266" fill="none" stroke="#059669" stroke-width="2" marker-end="url(#ag)"/>
 
-    <div class="jrow good">
-      <div class="jhead"><span class="jtag">WITH US</span>
-        <span class="jtitle">They find your code — and complete the order</span></div>
-      <div class="track">
-        <div class="node">Enters your store</div>
-        <div class="arw"></div>
-        <div class="node">Fills the cart</div>
-        <div class="arw"></div>
-        <div class="node">Promo code field</div>
-        <div class="arw"></div>
-        <div class="node us">Finds your code with us</div>
-        <div class="arw"></div>
-        <div class="node win">Completes the order</div>
-      </div>
-    </div>
-  </div>
+    <ellipse cx="310" cy="46" rx="86" ry="32" fill="#059669"/>
+    <text x="310" y="52" text-anchor="middle" font-size="16" font-weight="700" fill="#ffffff">Deal Pulse</text>
+    <ellipse cx="104" cy="232" rx="88" ry="32" fill="#F7F9FB" stroke="#E3E8EF" stroke-width="1.5"/>
+    <text x="104" y="238" text-anchor="middle" font-size="16" font-weight="700" fill="#141C31">The buyer</text>
+    <ellipse cx="516" cy="232" rx="88" ry="32" fill="#141C31"/>
+    <text x="516" y="238" text-anchor="middle" font-size="16" font-weight="700" fill="#ffffff">Your store</text>
 
-  <div class="sp-lg"></div>
-  <div class="quote">When the buyer does not find your code, they usually do not return to the
-    cart: either they find a competitor's code and buy there, or they find nothing, postpone,
-    and abandon. <b>We do not create this moment — we make it far likelier that it ends with you.</b></div>
+    <text x="307" y="206" text-anchor="middle" font-size="13" fill="#2C3A55">Enters and fills the cart</text>
+    <circle cx="307" cy="224" r="11" fill="#ffffff" stroke="#55637E" stroke-width="1.5"/>
+    <text x="307" y="229" text-anchor="middle" font-size="12" font-weight="700" fill="#55637E">1</text>
+
+    <text x="108" y="140" text-anchor="middle" font-size="13" fill="#2C3A55">Leaves to hunt for a code</text>
+    <circle cx="187" cy="136" r="11" fill="#ffffff" stroke="#55637E" stroke-width="1.5"/>
+    <text x="187" y="141" text-anchor="middle" font-size="12" font-weight="700" fill="#55637E">2</text>
+
+    <text x="522" y="132" text-anchor="middle" font-size="13" fill="#047857">Takes your code with us</text>
+    <text x="522" y="150" text-anchor="middle" font-size="11" font-weight="600" fill="#059669">= confirmed intent to buy</text>
+    <circle cx="425" cy="135" r="11" fill="#ffffff" stroke="#059669" stroke-width="1.5"/>
+    <text x="425" y="140" text-anchor="middle" font-size="12" font-weight="700" fill="#047857">3</text>
+
+    <text x="310" y="320" text-anchor="middle" font-size="13" font-weight="600" fill="#047857">Returns to your store and completes the order</text>
+    <circle cx="310" cy="295" r="11" fill="#ffffff" stroke="#059669" stroke-width="1.5"/>
+    <text x="310" y="300" text-anchor="middle" font-size="12" font-weight="700" fill="#047857">4</text>
+  </svg>
+
+  <div class="sp-sm"></div>
+  <div class="warn"><b>Without us the loop breaks at step 2:</b> they search, do not find
+    your code, and either buy with a competitor's or abandon the cart. We do not create this
+    moment; we make it far likelier that it ends with you.</div>
 
   <div class="sp-lg"></div>
   <div class="kicker">Three questions usually asked here</div>
   <div class="grid3">
     <div class="card tight">
       <h3>How do you know the order came from us?</h3>
-      <p>Through an exclusive code in our name: every order using it is identifiable on its
-        own in your reports, so you measure this channel alone.</p>
+      <p>An exclusive code in our name: every order using it is identifiable on its own in
+        your reports, so you measure this channel alone.</p>
     </div>
     <div class="card tight">
       <h3>And if nobody buys?</h3>
-      <p>No discount is given except on an order that actually completed. A visitor who did
-        not buy costs you nothing — cost is tied to result, not exposure.</p>
+      <p>No discount is given except on an order that completed. A visitor who did not buy
+        costs you nothing — cost is tied to result, not exposure.</p>
     </div>
     <div class="card tight">
       <h3>Would you send our buyer to a competitor?</h3>

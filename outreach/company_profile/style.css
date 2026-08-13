@@ -129,34 +129,18 @@ html[lang="en"] .quote{ border-radius:0 3mm 3mm 0; line-height:1.7; }
 .layer .body span{ font-size:9pt; color:var(--ink-700); line-height:1.6;
   display:block; }
 
-/* ═══ رسم ١ · مسار المشتري ═══════════════════════════════════════════
-   صفّان متطابقان في أول ثلاث محطّات ويفترقان في الرابعة — الافتراق هو
-   الحجّة كلّها، فيجب أن يُرى قبل أن يُقرأ. */
-.journey{ display:grid; gap:5mm; }
-.jrow{ border:1px solid var(--line); border-radius:3.5mm; padding:5mm; }
-.jrow.bad{ background:var(--surface); }
-.jrow.good{ background:var(--g-50); border-color:#C7EFDF; }
-.jhead{ display:flex; align-items:baseline; gap:3mm; margin-bottom:3.5mm; }
-.jtag{ font-size:8pt; font-weight:700; padding:1mm 2.5mm; border-radius:2mm;
-  flex:0 0 auto; }
-.jrow.bad .jtag{ background:#FEE4E2; color:#B42318; }
-.jrow.good .jtag{ background:var(--g-100); color:var(--g-700); }
-.jtitle{ font-size:9.5pt; font-weight:600; color:var(--ink-900); }
+/* ═══ رسم ١ · دورة المشتري (SVG) ══════════════════════════════════════
+   ثلاث عُقد وأربعة أسهم مرقّمة — رسم المالك على السبورة. SVG لا CSS هنا
+   لأن الشكل مثلّث بمنحنى، والإحداثيات تُكتب مرّة لكل اتجاه (النسخة
+   الإنجليزية تعكس المواضع لا الرسم). النصّ يرث خطّ الصفحة. */
+.tri{ display:block; width:100%; max-width:168mm; height:auto;
+  margin-inline:auto; font-family:inherit; }
 
-.track{ display:flex; align-items:stretch; gap:1.5mm; }
-.node{ flex:1; text-align:center; padding:3mm 1.5mm; border-radius:2.5mm;
-  background:var(--paper); border:1px solid var(--line); font-size:8.5pt;
-  line-height:1.45; color:var(--ink-700);
-  display:flex; align-items:center; justify-content:center; }
-.node.stop{ background:#FEF3F2; border-color:#FDA29B; color:#B42318; font-weight:600; }
-.node.win{ background:var(--g-600); border-color:var(--g-600); color:#fff; font-weight:600; }
-.node.us{ background:var(--ink-900); border-color:var(--ink-900); color:#fff; font-weight:600; }
-
-/* السهم يتبع اتجاه القراءة **تلقائياً**: مثلّث حدوده الجانبية `inline-start`
-   يعطي رأساً لليسار في RTL ولليمين في LTR بلا أي قلب يدوي. */
-.arw{ flex:0 0 auto; align-self:center; width:0; height:0;
-  border-block:1.8mm solid transparent; border-inline-start:2.4mm solid var(--g-500); }
-.jrow.bad .arw{ border-inline-start-color:var(--ink-500); }
+/* شريط الحالة المكسورة — نفس بنية .quote بلون تحذير. */
+.warn{ border-inline-start:3px solid #B42318; padding:3.5mm 5mm; background:#FEF3F2;
+  border-radius:0 3mm 3mm 0; font-size:10pt; line-height:1.8; color:#7A271A; }
+.warn b{ color:#912018; }
+html[lang="en"] .warn{ line-height:1.7; }
 
 /* ═══ رسم ٢ · الشبكة في الخلفية ═══════════════════════════════════════
    تدفّق **رأسي** بقصد: الرأسي محايد الاتجاه، فيقرأ نفسه في النسختين. */
