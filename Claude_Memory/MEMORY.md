@@ -106,7 +106,7 @@
 - الدومين: [خطة السلطة](domain_authority_plan.md) (**الهَب السِتوايد أُعيد توجيهه للمناسبات ٢٠٢٦-٠٨-٠٨**؛ المتبقّي باكلينك) · [⚠️ فخّ الـcanonical](domain_canonical_trap.md) (الصح dealpulseksa.com؛ dealpulesksa ميّت)
 - [Content/Programmatic Strategy](content_programmatic_strategy.md) — «عربي فقط لا /en»؛ category-content + هَب أقسام؛ لا صفحات رقيقة
 - [Seasonal School Traffic Bridge](seasonal_school_traffic_bridge.md) — عنقود المدرسة يجرّ سعوديين موسمياً؛ الجسر ١٣ رابط
-- [Competitor Landscape](competitor_landscape.md) — الموفّر القائد؛ الفجوات: تحقّق/تيليجرام/نيش محلي/AEO
+- [Competitor Landscape](competitor_landscape.md) — الموفّر القائد؛ الفجوات: تحقّق/تيليجرام/نيش محلي/AEO — **+ فحص ٠٨-١٥: لا كارتل يملك هَب تقويم مؤرَّخاً (فجوة بنيوية) وتواريخهم بائتة**
 - [🔌 Claude SEO Plugin](claude_seo_plugin.md) — ١٨ agent+٢٥ skill مثبَّتة بمستوى الريبو عبر `.claude/settings.json` (لا الجهاز)؛ خريطة أولوية للعناقيد الحالية؛ **السحابة محجوبة عن dealpulseksa.com — تدقيق فعلي شغل ترمنال فقط**
 
 ## ٦) المحتوى والمدوّنة (٢٠)
