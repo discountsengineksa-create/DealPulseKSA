@@ -1,76 +1,138 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   نبض الصفقات — أنماط دليل الهوية وحده.
-   يُحمَّل **بعد** style.css فيرث نظام التصميم نفسه. الدليل مبنيّ بالنظام
-   الذي يصفه — فأي كسر فيه يظهر في الدليل قبل أن يظهر في غيره.
+   نبض الصفقات — دليل الهوية · طبقة الوضع الداكن + عناصر الدليل.
+   يُحمَّل **بعد** style.css فيرث نظام التصميم ثم يقلب أرضيته.
+
+   ⚠️ هذا الملف يُحمَّل من `brand_guidelines.html` وحده — البروفايل لا يمسّه.
+
+   ── لماذا داكن ──
+   الدليل مرجع داخلي يُقرأ على الشاشة، وأرضيته حبر العلامة نفسه `#141C31`
+   لا لون مخترع. والأرضية الداكنة تقلب سلّم النصّ بالكامل، فكل قيمة أدناه
+   مقيسة بـWCAG على الأرضية لا منقولة عن الوضع الفاتح.
    ═══════════════════════════════════════════════════════════════════════ */
+
+:root{
+  /* سلّم الداكن — كل قيمة مقيسة على #141C31 */
+  --d-bg:#141C31;        /* الأرضية = حبر العلامة */
+  --d-surface:#1B2440;   /* سطح مرتفع (بطاقة) — يحتاج حدّاً ليُرى */
+  --d-line:#2C3A55;      /* الحدّ الشعري = ink-700 */
+  --d-text:#E3E8EF;      /* نصّ المتن — 13.75:1 */
+  --d-dim:#C3CBDA;       /* ثانوي — 10.38:1 */
+  --d-mute:#9AA6BC;      /* حواشٍ وتسميات — 6.90:1 */
+  /* الأخضر ينقلب دوره: على الفاتح g-700 هو الحامل، وعلى الداكن g-500 (6.68:1) */
+  --d-accent:#10B981;
+}
+
+body{ background:#0B1120; }
+.page{ background:var(--d-bg); color:var(--d-text); }
+
+h1, h2{ color:#fff; }
+h3{ color:#fff; }
+p, .lead{ color:var(--d-text); }
+.note{ color:var(--d-mute); }
+.kicker{ color:var(--d-accent); }
+.rule{ background:var(--d-accent); }
+
+.runhead{ border-bottom-color:var(--d-line); }
+.runhead .brand{ color:#fff; }
+.runhead .brand span{ color:var(--d-accent); }
+.runhead .sec{ color:var(--d-mute); }
+.foot{ border-top-color:var(--d-line); color:var(--d-mute); }
+
+.card{ background:var(--d-surface); border-color:var(--d-line); }
+.card h3{ color:#fff; }
+.card p{ color:var(--d-dim); }
+.card .kicker{ color:var(--d-accent); }
+/* «mint» على الداكن لا تصير فاتحة — تُميَّز بحدّ أخضر لا بخلفية فاتحة. */
+.card.mint{ background:var(--d-surface); border-color:var(--d-accent); }
+.card.ink{ background:#111827; border-color:var(--d-line); }
+
+.quote{ background:var(--d-surface); border-inline-start-color:var(--d-accent);
+  color:var(--d-text); }
+ul.ticks li{ color:var(--d-dim); }
+ul.ticks li::before{ color:var(--d-accent); }
+ul.ticks b{ color:#fff; }
+bdi{ color:inherit; }
+
+/* الفاصل ينقلب: كان بطاقة داكنة على فاتح، فصار لوحاً فاتحاً على داكن —
+   نفس الوظيفة (إبراز) بنفس المنطق معكوساً. */
+.divider{ background:var(--d-accent); border-radius:3.5mm; padding:5mm 6mm; }
+.divider .n{ font-size:8pt; color:#053B2C; font-weight:700; }
+.divider h3{ color:#04231A; font-size:13pt; margin-top:1mm; }
+.divider p{ color:#053B2C; font-size:9pt; margin-top:1.5mm; line-height:1.65; }
+.divider b{ color:#04231A; }
+
+/* ── الغلاف ──────────────────────────────────────────────────────── */
+.cover-top{ background:var(--d-bg); }
+.cover .sub{ color:var(--d-dim); }
+.cover-pillars{ border-top-color:var(--d-line); }
+.cover-pillars .t{ color:#fff; }
+.cover-pillars .d{ color:var(--d-mute); }
+.cover-foot{ background:#0B1120; }
+.cover-foot b{ color:var(--d-accent); }
 
 /* ── عيّنات اللون ─────────────────────────────────────────────────── */
 .sw-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:4mm; }
-.sw{ border:1px solid var(--line); border-radius:3mm; overflow:hidden; }
-.sw .chip{ height:22mm; display:flex; align-items:flex-end; padding:2.5mm; }
-.sw .chip b{ font-size:8pt; font-weight:700; letter-spacing:.02em; }
+.sw{ border:1px solid var(--d-line); border-radius:3mm; overflow:hidden;
+  background:var(--d-surface); }
+.sw .chip{ height:20mm; display:flex; align-items:flex-end; padding:2.5mm; }
+.sw .chip b{ font-size:8pt; font-weight:700; }
 .sw .meta{ padding:2.5mm 3mm 3mm; }
-.sw .meta .name{ font-size:9pt; font-weight:600; color:var(--ink-900); }
-.sw .meta .hex{ font-size:8pt; color:var(--ink-500); margin-top:.4mm; }
-.sw .meta .use{ font-size:7.5pt; color:var(--ink-500); margin-top:1.2mm;
-  line-height:1.5; }
+.sw .meta .name{ font-size:9pt; font-weight:600; color:#fff; }
+.sw .meta .hex{ font-size:8pt; color:var(--d-mute); margin-top:.4mm; }
+.sw .meta .use{ font-size:7.5pt; color:var(--d-dim); margin-top:1.2mm; line-height:1.5; }
 
-/* ── جدول التباين المقيس ──────────────────────────────────────────── */
+/* ── جدول التباين ────────────────────────────────────────────────── */
 table.ct{ width:100%; border-collapse:collapse; font-size:8.5pt; }
-table.ct th, table.ct td{ border-bottom:1px solid var(--line); padding:2.2mm 2.5mm;
-  text-align:start; }
-table.ct th{ font-weight:600; color:var(--ink-900); font-size:8pt;
-  background:var(--surface); }
-table.ct td{ color:var(--ink-700); }
-table.ct td.num{ font-weight:700; color:var(--ink-900); white-space:nowrap; }
-table.ct td.ok{ color:var(--g-700); font-weight:600; }
-table.ct td.no{ color:#B42318; font-weight:600; }
+table.ct th, table.ct td{ border-bottom:1px solid var(--d-line);
+  padding:2.1mm 2.5mm; text-align:start; }
+table.ct th{ font-weight:600; color:#fff; font-size:8pt; background:var(--d-surface); }
+table.ct td{ color:var(--d-dim); }
+table.ct td.num{ font-weight:700; color:#fff; white-space:nowrap; }
+table.ct td.ok{ color:var(--d-accent); font-weight:600; }
+table.ct td.no{ color:#FDA29B; font-weight:600; }
 
-/* ── مربّعات افعل / لا تفعل ───────────────────────────────────────── */
+/* ── افعل / لا تفعل ──────────────────────────────────────────────── */
 .dd{ display:grid; grid-template-columns:1fr 1fr; gap:5mm; }
-.dd > div{ border:1px solid var(--line); border-radius:3mm; padding:4mm 4.5mm; }
-.dd .do{ background:var(--g-50); border-color:#C7EFDF; }
-.dd .no{ background:#FEF3F2; border-color:#FDA29B; }
+.dd > div{ border:1px solid var(--d-line); border-radius:3mm; padding:4mm 4.5mm;
+  background:var(--d-surface); }
+.dd .do{ border-color:var(--d-accent); }
+.dd .no{ border-color:#7A3B36; }
 .dd h4{ font-size:9pt; font-weight:700; margin-bottom:2mm; }
-.dd .do h4{ color:var(--g-700); }
-.dd .no h4{ color:#B42318; }
-.dd li{ font-size:8.5pt; line-height:1.6; margin-bottom:1.4mm;
-  list-style:none; padding-inline-start:4mm; position:relative; color:var(--ink-700); }
+.dd .do h4{ color:var(--d-accent); }
+.dd .no h4{ color:#FDA29B; }
+.dd li{ font-size:8.5pt; line-height:1.6; margin-bottom:1.4mm; list-style:none;
+  padding-inline-start:4mm; position:relative; color:var(--d-dim); }
+.dd li b{ color:#fff; }
 .dd .do li::before{ content:"✓"; position:absolute; inset-inline-start:0;
-  color:var(--g-600); font-weight:700; }
+  color:var(--d-accent); font-weight:700; }
 .dd .no li::before{ content:"✕"; position:absolute; inset-inline-start:0;
-  color:#B42318; font-weight:700; }
+  color:#FDA29B; font-weight:700; }
 
-/* ── سلّم الخط: كل صف يعرض حجمه بحجمه الحقيقي ────────────────────── */
-.scale{ display:grid; gap:0; }
+/* ── سلّم الخط ───────────────────────────────────────────────────── */
 .scale .row{ display:flex; align-items:baseline; gap:5mm;
-  border-bottom:1px solid var(--line); padding:2.5mm 0; }
-.scale .tag{ flex:0 0 30mm; font-size:8pt; color:var(--ink-500); }
-.scale .demo{ flex:1; color:var(--ink-900); }
+  border-bottom:1px solid var(--d-line); padding:2.4mm 0; }
+.scale .tag{ flex:0 0 32mm; font-size:8pt; color:var(--d-mute); }
+.scale .demo{ flex:1; color:#fff; }
 
-/* ── اختبار الحجم: اللوقو بأربعة عروض حقيقية على نفس السطر ───────── */
-.sizes{ display:flex; align-items:flex-end; gap:8mm; flex-wrap:wrap; }
+/* ── اختبار الحجم ────────────────────────────────────────────────── */
+.sizes{ display:flex; align-items:flex-end; gap:9mm; flex-wrap:wrap; }
 .sizes figure{ text-align:center; }
 .sizes img{ display:block; }
-.sizes figcaption{ font-size:7.5pt; color:var(--ink-500); margin-top:2mm; }
-.sizes .verdict{ display:block; font-weight:700; margin-top:.5mm; }
-.sizes .pass{ color:var(--g-700); } .sizes .fail{ color:#B42318; }
+.sizes figcaption{ font-size:7.5pt; color:var(--d-mute); margin-top:2.5mm; }
+.sizes .verdict{ display:block; font-weight:700; margin-top:.6mm; }
+.sizes .pass{ color:var(--d-accent); } .sizes .fail{ color:#FDA29B; }
 
-/* ── المسافة الآمنة: إطار منقّط حول اللوقو ───────────────────────── */
-.clearbox{ border:1.5px dashed var(--g-500); border-radius:2mm; padding:9mm;
-  display:inline-block; background:var(--paper); }
-.clearbox img{ display:block; width:78mm; }
+/* ── المسافة الآمنة ─────────────────────────────────────────────── */
+.clearbox{ border:1.5px dashed var(--d-accent); border-radius:2mm; padding:9mm;
+  display:inline-block; }
+.clearbox img{ display:block; width:74mm; }
+/* لوح فاتح لعرض النسخة الفاتحة داخل مستند داكن — وهو نفسه قاعدة الاستخدام. */
+.plate{ background:#fff; border-radius:2mm; padding:6mm 7mm; display:inline-block; }
+.plate img{ display:block; width:58mm; }
 
-/* ── صندوق مواصفة: سطر مفتاح/قيمة ────────────────────────────────── */
-.spec{ display:grid; gap:0; }
-.spec .r{ display:flex; gap:4mm; border-bottom:1px solid var(--line);
+/* ── مواصفة مفتاح/قيمة ───────────────────────────────────────────── */
+.spec .r{ display:flex; gap:4mm; border-bottom:1px solid var(--d-line);
   padding:2.2mm 0; font-size:9pt; }
-.spec .r .k{ flex:0 0 42mm; color:var(--ink-500); }
-.spec .r .v{ flex:1; color:var(--ink-900); font-weight:500; }
-
-/* الغلاف الداخلي للدليل: شريط حبر بعرض الصفحة يفصل الأقسام. */
-.divider{ background:var(--ink-900); color:#fff; border-radius:3.5mm;
-  padding:5mm 6mm; }
-.divider .n{ font-size:8pt; color:var(--g-500); font-weight:700; }
-.divider h3{ color:#fff; font-size:13pt; margin-top:1mm; }
-.divider p{ color:#C3CBDA; font-size:9pt; margin-top:1.5mm; line-height:1.65; }
+.spec .r .k{ flex:0 0 44mm; color:var(--d-mute); }
+.spec .r .v{ flex:1; color:#fff; font-weight:500; }
+.spec .r .v b{ color:var(--d-accent); }

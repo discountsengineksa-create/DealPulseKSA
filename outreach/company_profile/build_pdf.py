@@ -28,6 +28,9 @@ HERE = pathlib.Path(__file__).resolve().parent
 # نسخة طباعة داخل الريبو (3360×2166 ⇒ ~908dpi عند عرض 94mm في الغلاف).
 # كانت تشير إلى ريبو الويب — مسار خارجي يكسر البناء على أي جهاز ثانٍ.
 LOGO = HERE / "logo_print.png"
+# نسخة مفرَّغة (حبر أبيض بألفا + نبض #10B981 مصحَّح) للأرضيات الداكنة.
+# مولَّدة من الأصل بإعادة كتابة اللوحة — لا تُحرَّر يدوياً.
+LOGO_DARK = HERE / "logo_on_dark.png"
 
 AR_SRC = HERE / "profile.html"
 EN_SRC = HERE / "profile_en.html"
@@ -79,7 +82,11 @@ def edition_html(key: str, data_uri: str) -> str:
     if key == "en":
         return EN_SRC.read_text(encoding="utf-8").replace("__LOGO__", data_uri)
     if key == "brand":
-        return BRAND_SRC.read_text(encoding="utf-8").replace("__LOGO__", data_uri)
+        dark_uri = ("data:image/png;base64,"
+                    + base64.b64encode(LOGO_DARK.read_bytes()).decode("ascii"))
+        return (BRAND_SRC.read_text(encoding="utf-8")
+                .replace("__LOGO_DARK__", dark_uri)
+                .replace("__LOGO__", data_uri))
 
     ar = AR_SRC.read_text(encoding="utf-8")
     en = EN_SRC.read_text(encoding="utf-8")

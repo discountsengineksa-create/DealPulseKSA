@@ -28,9 +28,27 @@ from build_pdf import (  # noqa: E402
 )
 
 # إلغاء الحدّ الصارم: الارتفاع يتمدّد والفيض يظهر بدل أن يُقصّ.
-PROBE_CSS = """
+# تمريرتان — لأن الفيض صنفان لا صنف واحد:
+#
+#  أ) **المحتوى أطول من الصفحة.** يُكشف بارتفاع حرّ: الصفحة تنسكب لورقة ثانية.
+#     ولا بدّ من تحييد `margin-top:auto` و`flex:1`، وإلا انهارا مع الارتفاع الحرّ
+#     فبدا المحتوى مناسباً.
+#  ب) **التوزيع يدفع عنصراً خارج الصفحة** مع بقاء الارتفاع الثابت — كعنصر أسفل
+#     صفحة flex. الارتفاع المكدّس هنا **أقلّ** من 297mm فتمريرة (أ) تمرّره، لكنه
+#     يُقصّ فعلياً. يُكشف بإبقاء الارتفاع ثابتاً وفتح `overflow` وحده.
+#
+# (ب) أمسكت قصّ شريط التواصل في غلاف دليل الهوية بعدما مرّرته (أ).
+PROBE_STACKED = """
 <style id="overflow-probe">
   .page{ height:auto !important; min-height:297mm !important; overflow:visible !important; }
+  .cover-body{ flex:none !important; }
+  .foot, .cover-foot, .cover-pillars{ margin-top:0 !important; }
+</style>
+"""
+
+PROBE_SPILL = """
+<style id="overflow-probe">
+  .page{ overflow:visible !important; }
 </style>
 """
 
@@ -49,38 +67,38 @@ def pdf_page_count(path: pathlib.Path) -> int:
     return max(counts) if counts else 0
 
 
+def _sheets(key, html, css, browser, tag):
+    html = html.replace("</head>", css + "</head>", 1)
+    ph = HERE / f"_probe_{key}_{tag}.html"
+    pp = HERE / f"_probe_{key}_{tag}.pdf"
+    ph.write_text(html, encoding="utf-8")
+    subprocess.run([
+        browser, "--headless=new", "--disable-gpu", "--no-sandbox",
+        "--run-all-compositor-stages-before-draw", "--virtual-time-budget=15000",
+        "--no-pdf-header-footer", f"--print-to-pdf={pp}", ph.as_uri(),
+    ], capture_output=True, text=True, timeout=180)
+    n = pdf_page_count(pp) if pp.exists() else -1
+    ph.unlink(missing_ok=True); pp.unlink(missing_ok=True)
+    return n
+
+
 def probe(key: str, data_uri: str, browser: str) -> int:
     html = edition_html(key, data_uri)
     sections = len(SECTION_RE.findall(html))
 
-    # نحقن التجاوز قبل </head> كي يأتي بعد ورقة الأنماط فيغلبها.
-    html = html.replace("</head>", PROBE_CSS + "</head>", 1)
-    probe_html = HERE / f"_probe_{key}.html"
-    probe_pdf = HERE / f"_probe_{key}.pdf"
-    probe_html.write_text(html, encoding="utf-8")
+    stacked = _sheets(key, html, PROBE_STACKED, browser, "a")
+    spill = _sheets(key, html, PROBE_SPILL, browser, "b")
 
-    cmd = [
-        browser, "--headless=new", "--disable-gpu", "--no-sandbox",
-        "--run-all-compositor-stages-before-draw", "--virtual-time-budget=15000",
-        "--no-pdf-header-footer", f"--print-to-pdf={probe_pdf}", probe_html.as_uri(),
-    ]
-    subprocess.run(cmd, capture_output=True, text=True, timeout=180)
-
-    if not probe_pdf.exists():
-        print(f"  {key.upper():4s}: !! probe PDF not produced")
-        return 1
-
-    sheets = pdf_page_count(probe_pdf)
-    probe_html.unlink(missing_ok=True)
-    probe_pdf.unlink(missing_ok=True)
-
-    if sheets == sections:
-        print(f"  {key.upper():4s}: ✓ {sections} صفحة، لا فيض")
+    if stacked == sections and spill == sections:
+        print(f"  {key.upper():5s}: ✓ {sections} صفحة — لا فيض ولا قصّ")
         return 0
-    print(f"  {key.upper():4s}: ✗ فيض — {sections} قسم .page لكن الطباعة أعطت {sheets} ورقة "
-          f"({sheets - sections} صفحة تتجاوز حدّها)")
+    bad = []
+    if stacked != sections:
+        bad.append(f"محتوى أطول من الصفحة (+{stacked - sections})")
+    if spill != sections:
+        bad.append(f"عنصر يُدفع خارج الصفحة (+{spill - sections})")
+    print(f"  {key.upper():5s}: ✗ {sections} قسم — " + " · ".join(bad))
     return 1
-
 
 def main() -> int:
     browser = find_browser()

@@ -196,10 +196,16 @@ ul.ticks.nos li::before{ content:"✕"; color:#B42318; }
 
 /* الغلاف: اللوقو ملف أبيض الخلفية، فمنطقته بيضاء نقية كي تذوب حافته. */
 .cover{ padding:0; justify-content:flex-start; }
-.cover-top{ background:var(--paper); padding:26mm 15mm 10mm; }
+/* ⚠️ `flex:0 0 auto` على أشرطة الغلاف — بقصد: هي عناصر flex داخل صفحة عمودية،
+   و`.cover-body{flex:1}` يطالب بكل المساحة الحرّة فيضغطها دون ارتفاع محتواها
+   (الافتراضي `flex-shrink:1`). عندها ينزل نصّها خارج صندوقها فتقصّه
+   `overflow:hidden` — **وهذا فيض لا يراه فاحص الصفحات لأنه داخل عنصر لا داخل
+   الصفحة.** المنع عند المصدر أوثق من محاولة كشفه لاحقاً. */
+.cover-top{ background:var(--paper); padding:26mm 15mm 10mm; flex:0 0 auto; }
 .cover-logo{ width:92mm; display:block; }
 .cover-body{ padding:12mm 15mm 0; flex:1; display:flex; flex-direction:column; }
-.cover-band{ height:4mm; background:linear-gradient(90deg,var(--g-500),var(--ink-900)); }
+.cover-band{ height:4mm; flex:0 0 auto;
+  background:linear-gradient(90deg,var(--g-500),var(--ink-900)); }
 [lang="en"] .cover-band{ background:linear-gradient(90deg,var(--ink-900),var(--g-500)); }
 .cover h1{ font-size:31pt; }
 .cover .sub{ font-size:13pt; color:var(--ink-700); margin-top:5mm;
@@ -210,7 +216,7 @@ ul.ticks.nos li::before{ content:"✕"; color:#B42318; }
 .cover-pillars .t{ font-size:11.5pt; font-weight:700; color:var(--ink-900); }
 .cover-pillars .d{ font-size:9pt; color:var(--ink-500); margin-top:1mm; line-height:1.6; }
 .cover-foot{ background:var(--ink-900); color:#fff; padding:9mm 15mm;
-  display:flex; gap:11mm; margin-top:auto; }
+  display:flex; gap:11mm; margin-top:auto; flex:0 0 auto; }
 .cover-foot b{ display:block; font-size:8pt; color:var(--g-500); font-weight:600;
   margin-bottom:1mm; }
 .cover-foot span{ font-size:10.5pt; font-weight:500; }
