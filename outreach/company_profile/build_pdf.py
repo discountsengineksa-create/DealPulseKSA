@@ -35,6 +35,7 @@ LOGO_DARK = HERE / "logo_on_dark.png"
 AR_SRC = HERE / "profile.html"
 EN_SRC = HERE / "profile_en.html"
 BRAND_SRC = HERE / "brand_guidelines.html"
+BRAND_EN_SRC = HERE / "brand_guidelines_en.html"
 
 # المفتاح → (ملف البناء الوسيط، المخرَج)
 EDITIONS = {
@@ -42,6 +43,7 @@ EDITIONS = {
     "en":   (HERE / "_build_en.html",   HERE / "DealPulse_Profile_EN.pdf"),
     "both": (HERE / "_build_both.html", HERE / "DealPulse_Profile_AR_EN.pdf"),
     "brand": (HERE / "_build_brand.html", HERE / "DealPulse_Brand_Guidelines_AR.pdf"),
+    "brand_en": (HERE / "_build_brand_en.html", HERE / "DealPulse_Brand_Guidelines_EN.pdf"),
 }
 
 SECTION_RE = re.compile(r'<section class="page.*?</section>', re.S)
@@ -81,10 +83,12 @@ def edition_html(key: str, data_uri: str) -> str:
         return AR_SRC.read_text(encoding="utf-8").replace("__LOGO__", data_uri)
     if key == "en":
         return EN_SRC.read_text(encoding="utf-8").replace("__LOGO__", data_uri)
-    if key == "brand":
+    if key in ("brand", "brand_en"):
+        # الترتيب مقصود: `__LOGO_DARK__` أولاً، وإلا التهم `__LOGO__` بدايتَه.
         dark_uri = ("data:image/png;base64,"
                     + base64.b64encode(LOGO_DARK.read_bytes()).decode("ascii"))
-        return (BRAND_SRC.read_text(encoding="utf-8")
+        src = BRAND_SRC if key == "brand" else BRAND_EN_SRC
+        return (src.read_text(encoding="utf-8")
                 .replace("__LOGO_DARK__", dark_uri)
                 .replace("__LOGO__", data_uri))
 
@@ -141,7 +145,10 @@ def main() -> int:
     if not LOGO.exists():
         print(f"!! logo missing: {LOGO}")
         return 1
-    needed = {AR_SRC, EN_SRC} | ({BRAND_SRC} if "brand" in (sys.argv[1:] or list(EDITIONS)) else set())
+    wanted_now = sys.argv[1:] or list(EDITIONS)
+    needed = {AR_SRC, EN_SRC}
+    if "brand" in wanted_now: needed.add(BRAND_SRC)
+    if "brand_en" in wanted_now: needed.add(BRAND_EN_SRC)
     for src in needed:
         if not src.exists():
             print(f"!! source missing: {src}")
@@ -150,7 +157,7 @@ def main() -> int:
     wanted = [a.lower() for a in sys.argv[1:]] or list(EDITIONS)
     unknown = [w for w in wanted if w not in EDITIONS]
     if unknown:
-        print(f"!! unknown edition(s): {', '.join(unknown)} — use: ar / en / both / brand")
+        print(f"!! unknown edition(s): {', '.join(unknown)} — use: ar / en / both / brand / brand_en")
         return 1
 
     browser = find_browser()
