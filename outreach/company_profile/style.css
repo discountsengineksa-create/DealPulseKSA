@@ -94,7 +94,10 @@ p{ color:var(--ink-700); }
    المالك — أي رقم يتقادم، والمكتبة والاستشهادات تكبر باستمرار فيصير الرقم سقفاً
    لا إنجازاً. الوزن البصري يبقى عبر حجم الخط لا عبر خانة عددية. */
 .claim{ font-size:17pt; font-weight:700; color:var(--g-700); line-height:1.4; }
-bdi{ unicode-bidi:isolate; }
+/* ‏`direction:ltr` مع العزل: `<bdi>#10B981</bdi>` كان يطبع «10B981#» — لأن `#`
+   محرف محايد يأخذ اتجاه الفقرة العربية. الـbdi هنا لا يحمل إلا نصّاً لاتينياً
+   أو تقنياً، فإجباره على LTR هو المعالجة الصحيحة لا استثناءً. */
+bdi{ unicode-bidi:isolate; direction:ltr; }
 
 ul.ticks{ list-style:none; }
 ul.ticks li{ position:relative; padding-inline-start:6.5mm; margin-bottom:2.2mm;
@@ -110,8 +113,10 @@ ul.ticks.nos li::before{ content:"✕"; color:#B42318; }
 
 .steps{ counter-reset:s; display:grid; gap:3.5mm; }
 .step{ counter-increment:s; position:relative; padding-inline-start:12mm; }
+/* g-700 لا g-600: الأبيض على g-600 يقيس 3.77:1 — دون 4.5 المطلوبة للنصّ الصغير.
+   على g-700 يقيس 5.48:1. **أي سطح أخضر يحمل نصّاً يستخدم g-700.** */
 .step::before{ content:counter(s); position:absolute; inset-inline-start:0; top:.5mm;
-  width:8.5mm; height:8.5mm; border-radius:50%; background:var(--g-600); color:#fff;
+  width:8.5mm; height:8.5mm; border-radius:50%; background:var(--g-700); color:#fff;
   font-weight:700; font-size:10.5pt; display:flex; align-items:center;
   justify-content:center; }
 .step p{ font-size:9.5pt; }
@@ -157,13 +162,15 @@ ul.ticks.nos li::before{ content:"✕"; color:#B42318; }
   line-height:1.5; }
 .net-box.src{ background:var(--surface); }
 .net-box.hub{ background:var(--g-50); border-color:#C7EFDF; }
-.net-box.brand{ background:var(--g-600); border-color:var(--g-600); }
+.net-box.brand{ background:var(--g-700); border-color:var(--g-700); }  /* 5.48:1 للأبيض */
 .net-box.brand b{ color:#fff; } .net-box.brand span{ color:#D1FAE5; }
 .net-box.store{ background:var(--ink-900); border-color:var(--ink-900); }
 .net-box.store b{ color:#fff; } .net-box.store span{ color:#C3CBDA; }
 .net-down{ display:flex; justify-content:center; padding:2.2mm 0; }
+/* g-600 لا g-500: السهم عنصر واجهة ذو معنى، ويحتاج 3:1 على الورق —
+   g-500 يقيس 2.54:1 و g-600 يقيس 3.77:1. */
 .net-down i{ width:0; height:0; border-inline:1.8mm solid transparent;
-  border-block-start:2.4mm solid var(--g-500); }
+  border-block-start:2.4mm solid var(--g-600); }
 /* ⚠️ نصّ فقط — لا رموز خارج IBM Plex/DejaVu. الحرف `↔` كان هنا فأسقط الصفحة
    إلى `LiberationSans-Bold` (خط نظام يختلف بين ويندوز ولينكس ⇒ شكل يتغيّر حسب
    جهاز البناء). الفحص: `/FontName` في الـPDF يجب ألّا يحوي إلا IBMPlex وDejaVu. */

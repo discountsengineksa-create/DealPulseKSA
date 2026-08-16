@@ -31,12 +31,14 @@ LOGO = HERE / "logo_print.png"
 
 AR_SRC = HERE / "profile.html"
 EN_SRC = HERE / "profile_en.html"
+BRAND_SRC = HERE / "brand_guidelines.html"
 
 # المفتاح → (ملف البناء الوسيط، المخرَج)
 EDITIONS = {
     "ar":   (HERE / "_build_ar.html",   HERE / "DealPulse_Profile_AR.pdf"),
     "en":   (HERE / "_build_en.html",   HERE / "DealPulse_Profile_EN.pdf"),
     "both": (HERE / "_build_both.html", HERE / "DealPulse_Profile_AR_EN.pdf"),
+    "brand": (HERE / "_build_brand.html", HERE / "DealPulse_Brand_Guidelines_AR.pdf"),
 }
 
 SECTION_RE = re.compile(r'<section class="page.*?</section>', re.S)
@@ -76,6 +78,8 @@ def edition_html(key: str, data_uri: str) -> str:
         return AR_SRC.read_text(encoding="utf-8").replace("__LOGO__", data_uri)
     if key == "en":
         return EN_SRC.read_text(encoding="utf-8").replace("__LOGO__", data_uri)
+    if key == "brand":
+        return BRAND_SRC.read_text(encoding="utf-8").replace("__LOGO__", data_uri)
 
     ar = AR_SRC.read_text(encoding="utf-8")
     en = EN_SRC.read_text(encoding="utf-8")
@@ -130,7 +134,8 @@ def main() -> int:
     if not LOGO.exists():
         print(f"!! logo missing: {LOGO}")
         return 1
-    for src in (AR_SRC, EN_SRC):
+    needed = {AR_SRC, EN_SRC} | ({BRAND_SRC} if "brand" in (sys.argv[1:] or list(EDITIONS)) else set())
+    for src in needed:
         if not src.exists():
             print(f"!! source missing: {src}")
             return 1
@@ -138,7 +143,7 @@ def main() -> int:
     wanted = [a.lower() for a in sys.argv[1:]] or list(EDITIONS)
     unknown = [w for w in wanted if w not in EDITIONS]
     if unknown:
-        print(f"!! unknown edition(s): {', '.join(unknown)} — use: ar / en / both")
+        print(f"!! unknown edition(s): {', '.join(unknown)} — use: ar / en / both / brand")
         return 1
 
     browser = find_browser()
