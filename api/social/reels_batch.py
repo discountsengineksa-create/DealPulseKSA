@@ -144,7 +144,13 @@ def _shape_ar(text: str) -> str:
 
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_FONT = os.path.join(_ROOT, "NotoSansArabic-Bold.ttf")
+
+# خطّ الهوية + لهجتها من brand.py (مصدر واحد — انظر رأس brand.py).
+# الستارة هنا سوداء شفّافة فوق فيديو، وهي **ستارة قراءة لا أرضية علامة**،
+# فتبقى كما هي؛ الذي يتبع اللوحة هو النصّ ولهجته.
+import brand as _brand
+
+_FONT = _brand.font_path(700) or os.path.join(_ROOT, "NotoSansArabic-Bold.ttf")
 
 
 def _font(size: int):
@@ -190,7 +196,7 @@ def _draw_overlay(img, store: dict):
         f_disc = _font(56)
         db = draw.textbbox((0, 0), disc_t, font=f_disc)
         draw.text(((REEL_W - (db[2] - db[0])) // 2 - db[0], REEL_H - 240),
-                  disc_t, font=f_disc, fill=(16, 185, 129))
+                  disc_t, font=f_disc, fill=_brand.G_500)
 
     # كود الخصم
     if coupon:

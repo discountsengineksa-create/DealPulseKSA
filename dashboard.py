@@ -12551,27 +12551,33 @@ elif page == "استوديو المحتوى":
     from bidi.algorithm import get_display
 
     # ─── ثوابت الهوية (مقفولة — لا يلمسها المستخدم) ─────────────────────────────
+    # المصدر الوحيد: `brand.py` — النظير البرمجي لدليل الهوية. كانت هذه الصفحة
+    # تحمل لوحتها الخاصّة (كريمي/نعناعي + حبر (31,41,55)) وهي واحدة من **خمس**
+    # لوحات متباينة في المستودع، لا واحدة منها تطابق حبر العلامة #141C31.
+    import brand as _brand
     _CANVAS = 1080
     _STUDIO_DIR = os.path.dirname(os.path.abspath(__file__))
-    _FONT_AR = os.path.join(_STUDIO_DIR, "NotoSansArabic-Bold.ttf")
+    _FONT_AR = _brand.font_path(700) or os.path.join(_STUDIO_DIR, "NotoSansArabic-Bold.ttf")
     # الأرشيف للقراءة فقط (تصاميم قديمة). الجديد يُحمَّل عبر زر التحميل
     # بحيث المالك يختار مكان الحفظ (طلب صريح).
     _ARCHIVE_DIR = os.path.join(_STUDIO_DIR, "posters_archive")
     if not os.path.isdir(_ARCHIVE_DIR):
         try: os.makedirs(_ARCHIVE_DIR, exist_ok=True)
         except Exception: pass
-    if not os.path.exists(_FONT_AR):
-        st.warning("⚠️ الخط `NotoSansArabic-Bold.ttf` مفقود — البوسترات ستظهر بخط افتراضي لا يدعم العربي. ارفع الخط للمجلد ثم أعد التشغيل.")
+    if not _FONT_AR or not os.path.exists(_FONT_AR):
+        st.warning("⚠️ خط الهوية `IBMPlexSansArabic-*.ttf` مفقود من `assets/fonts/` — البوسترات ستظهر بخط افتراضي لا يدعم العربي.")
 
-    # لوحة الألوان: نسخة Apple/Keynote — كريمي فاخر + زمردي عميق
-    _STUDIO_BG_TOP     = (250, 250, 248)   # cream
-    _STUDIO_BG_BOTTOM  = (232, 240, 234)   # mint-cream
-    _STUDIO_EMERALD    = (16, 185, 129)
-    _STUDIO_EMERALD_DK = (5, 122, 85)
-    _STUDIO_INK        = (31, 41, 55)
-    _STUDIO_INK_SOFT   = (107, 114, 128)
-    _STUDIO_PILL_BG    = (15, 23, 35)
-    _STUDIO_PILL_FG    = (255, 255, 255)
+    # ─── لوحة الهوية المغلقة (دليل الهوية §اللون) ───────────────────────────
+    # كانت «كريمي فاخر + زمردي» بحبر (31,41,55): الكريمي دافئ (hue 36°) ضدّ
+    # حرارة العلامة الباردة، والحبر ليس حبر العلامة. الآن كلها من `brand.py`.
+    _STUDIO_BG_TOP     = _brand.PAPER        # #FFFFFF
+    _STUDIO_BG_BOTTOM  = _brand.SURFACE      # #F7F9FB
+    _STUDIO_EMERALD    = _brand.G_500        # زخرفي/وهج — لا يحمل نصّاً
+    _STUDIO_EMERALD_DK = _brand.G_700        # الأخضر الحامل — 5.48:1 مع أبيض
+    _STUDIO_INK        = _brand.INK_900      # #141C31 — 16.93:1 على أبيض
+    _STUDIO_INK_SOFT   = _brand.INK_500      # #55637E — 6.05:1 على أبيض
+    _STUDIO_PILL_BG    = _brand.INK_900
+    _STUDIO_PILL_FG    = _brand.PAPER
 
     _AR_RESHAPER = arabic_reshaper.ArabicReshaper(configuration={
         'delete_harakat': False, 'support_ligatures': True,

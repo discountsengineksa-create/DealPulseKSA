@@ -10,39 +10,48 @@
 <meta http-equiv="Expires" content="0">
 <title>نبض الصفقات | Deal Pulse KSA</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-/* ── VARIABLES ── */
+/* ── VARIABLES — اللوحة المغلقة (دليل الهوية §اللون) ──
+   الأرضية الداكنة هي **حبر العلامة نفسه #141C31** لا لون داكن مخترع؛ كانت
+   #080E1D/#0C1527/#0F2040 وثلاثتها خارج اللوحة. والأخضر لهجة لا خلفية.
+
+   `--em-carry` مضاف عمداً: أخضر النبض #10B981 يعطي **2.54:1** مع نصّ أبيض،
+   أي يسقط حتى لعنوان كبير. فكل سطح أخضر يحمل نصّاً ينتقل إلى الأخضر الحامل
+   g-700 ‏#047857 = **5.48:1**. القاعدة في الدليل: «الأخضر الفاتح يُرى ولا يُقرأ». */
 :root {
-  --bg:          #080E1D;
-  --bg2:         #0C1527;
+  --bg:          #141C31;
+  --bg2:         #1B2440;
   --card:        rgba(255,255,255,0.04);
   --card-h:      rgba(255,255,255,0.08);
   --border:      rgba(255,255,255,0.08);
   --blur:        blur(22px);
-  --em:          #10B981;
-  --em2:         #059669;
+  --em:          #10B981;   /* g-500 · لون العلامة — زخرفي/أيقوني فقط */
+  --em2:         #059669;   /* g-600 · رسومي */
+  --em-carry:    #047857;   /* g-700 · أي سطح أخضر يحمل نصّاً */
   --em-glow:     rgba(16,185,129,0.20);
-  --t1:          #F1F5F9;
-  --t2:          rgba(241,245,249,0.70);
-  --t3:          rgba(241,245,249,0.40);
-  --grad-bg:     linear-gradient(160deg,#080E1D 0%,#0C1527 45%,#0F2040 100%);
-  --font:        'Cairo', -apple-system, sans-serif;
+  --t1:          #E3E8EF;   /* متن — 13.75:1 على الأرضية */
+  --t2:          rgba(227,232,239,0.72);
+  --t3:          rgba(227,232,239,0.45);
+  --grad-bg:     linear-gradient(160deg,#141C31 0%,#1B2440 45%,#141C31 100%);
+  --font:        'IBM Plex Sans Arabic', -apple-system, sans-serif;
 }
 
 /* ── الوضع النهاري (يُفعَّل بإضافة class="light" على body) ──
    الأيقونة في الهيدر تبدّل بين الوضعين، والاختيار محفوظ في localStorage.
    ثيم المناسبة يتغيّر معه: نهاري → mobile_url / ليلي → mobile_dark_url. */
 body.light {
-  --bg:          #F8FAFC;
+  --bg:          #F7F9FB;
   --bg2:         #FFFFFF;
   --card:        rgba(255,255,255,0.62);
   --card-h:      rgba(255,255,255,0.82);
-  --border:      rgba(15,23,42,0.10);
-  --t1:          #0F172A;
-  --t2:          rgba(15,23,42,0.72);
-  --t3:          rgba(15,23,42,0.50);
-  --grad-bg:     linear-gradient(160deg,#F0FDF4 0%,#F8FAFC 45%,#ECFDF5 100%);
+  --border:      rgba(20,28,49,0.10);
+  --t1:          #141C31;
+  --t2:          rgba(20,28,49,0.72);
+  --t3:          rgba(20,28,49,0.50);
+  /* كانت خضراء الطرفين (#F0FDF4 → #ECFDF5) — والدليل يقول الأخضر **لهجة لا
+     خلفية**، نسبته تحت ١٠–١٥٪. صارت حياديات اللوحة، والأخضر يبقى للهجة. */
+  --grad-bg:     linear-gradient(160deg,#FFFFFF 0%,#F7F9FB 45%,#EDF1F5 100%);
 }
 /* ستارة الثيم في الوضع النهاري: أفتح + شفافة أكثر لإظهار الخلفية بنقاء */
 body.light #themeBg.on::after {
@@ -144,7 +153,7 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
     text-align:center; background:rgba(16,185,129,0.05); cursor:pointer;
 }
 .big-cpn{font-size:24px;font-weight:900;color:var(--em);letter-spacing:4px;font-family:monospace}
-.btn-p{ width:100%; padding:16px; border-radius:15px; background:var(--em); color:#fff; border:none; font-weight:800; font-size:16px; cursor:pointer; }
+.btn-p{ width:100%; padding:16px; border-radius:15px; background:var(--em-carry); color:#fff; border:none; font-weight:800; font-size:16px; cursor:pointer; }
 
 /* ── NAV ── */
 .bnav{ position:fixed;bottom:0;width:100%; padding:12px 20px calc(12px + env(safe-area-inset-bottom)); display:flex;justify-content:space-around; background:rgba(8,14,29,0.8); border-top:1px solid var(--border); z-index:150; }
@@ -154,7 +163,7 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
 .fav-btn:active{transform:scale(0.82)}
 .fav-btn.on{background:rgba(239,68,68,0.16);border-color:rgba(239,68,68,0.35)}
 
-.toast{ position:fixed; top:20px; left:50%; transform:translateX(-50%); padding:12px 24px; background:var(--em); color:#fff; border-radius:50px; font-weight:700; z-index:600; opacity:0; transition:0.3s; }
+.toast{ position:fixed; top:20px; left:50%; transform:translateX(-50%); padding:12px 24px; background:var(--em-carry); color:#fff; border-radius:50px; font-weight:700; z-index:600; opacity:0; transition:0.3s; }
 .toast.on{opacity:1; top:40px}
 
 </style>
@@ -226,7 +235,7 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
   .store-hero p{color:var(--t3);font-size:13px;line-height:1.6}
   /* صف الخصم السريع: زر نسخ + شارة النسبة جنبه — يحل محل سطر «الخصم» الستاتيكي. */
   .disc-row{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin:12px 0 4px}
-  .disc-copy-btn{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:14px;border:none;cursor:pointer;font-family:var(--font);font-weight:900;font-size:15px;letter-spacing:3px;background:linear-gradient(135deg,#10b981 0%,#059669 100%);color:#fff;box-shadow:0 4px 14px rgba(16,185,129,0.35);transition:transform .2s ease, box-shadow .2s ease}
+  .disc-copy-btn{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:14px;border:none;cursor:pointer;font-family:var(--font);font-weight:900;font-size:15px;letter-spacing:3px;background:linear-gradient(135deg,#047857 0%,#059669 100%);color:#fff;box-shadow:0 4px 14px rgba(16,185,129,0.35);transition:transform .2s ease, box-shadow .2s ease}
   .disc-copy-btn:active{transform:translateY(1px);box-shadow:0 2px 8px rgba(16,185,129,0.25)}
   .disc-copy-btn svg{width:16px;height:16px;flex-shrink:0}
   .disc-badge{padding:8px 14px;border-radius:14px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.30);color:var(--em);font-weight:900;font-size:18px}
@@ -235,7 +244,7 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
   .coupon-box .code{font-size:28px;font-weight:900;color:var(--em);letter-spacing:5px;font-family:monospace}
   .cta-row{display:flex;flex-direction:column;gap:10px;margin-top:6px}
   .cta-row button{padding:16px;border-radius:14px;border:none;font-weight:800;font-size:15px;cursor:pointer;font-family:var(--font)}
-  .cta-primary{background:var(--em);color:#fff}
+  .cta-primary{background:var(--em-carry);color:#fff}
   .cta-ghost{background:rgba(255,255,255,0.04);color:var(--t2);border:1px solid var(--border) !important}
   .store-meta{margin-top:18px;padding-top:18px;border-top:1px solid var(--border);font-size:12px;color:var(--t3);text-align:center;line-height:1.8}
 
@@ -268,7 +277,7 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
   html[dir="rtl"] .story-tap-prev{right:0} html[dir="rtl"] .story-tap-next{left:0}
   html[dir="ltr"] .story-tap-prev{left:0} html[dir="ltr"] .story-tap-next{right:0}
   .story-content{position:absolute;inset:0;z-index:15;color:#fff;pointer-events:none}
-  .story-content .s-stage{position:absolute;inset:0;display:grid;place-items:center;background:linear-gradient(135deg,#0f172a,#1e293b,#0f172a)}
+  .story-content .s-stage{position:absolute;inset:0;display:grid;place-items:center;background:linear-gradient(135deg,#141C31,#1B2440,#141C31)}
   .story-content .s-stage>video,.story-content .s-stage>img{width:100%;height:100%;object-fit:cover}
   .story-content .s-overlay{position:absolute;left:0;right:0;bottom:0;z-index:16;text-align:center;
     padding:90px 28px calc(26px + env(safe-area-inset-bottom,0));
@@ -281,7 +290,7 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
   .story-content .s-code{display:inline-block;padding:12px 20px;border-radius:14px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);
     font-family:monospace;font-size:18px;font-weight:900;letter-spacing:3px;margin-bottom:26px}
   .story-content .s-visit{pointer-events:all;display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;max-width:300px;
-    padding:15px;border-radius:14px;background:#fff;color:#0C1527;font-weight:800;font-size:15px;border:none;cursor:pointer;font-family:var(--font)}
+    padding:15px;border-radius:14px;background:#fff;color:#141C31;font-weight:800;font-size:15px;border:none;cursor:pointer;font-family:var(--font)}
 
   /* ── LIST CONTROLS (فرز + فلتر الأقسام في «كل المتاجر») ── */
   .list-controls{margin-bottom:16px}
@@ -292,7 +301,7 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
     cursor:pointer;white-space:nowrap;font-family:var(--font);transition:0.18s;
     background:rgba(255,255,255,0.04);border:1px solid var(--border);color:var(--t2)}
   .lc-pill:active{transform:scale(0.95)}
-  .lc-pill.on{background:linear-gradient(to left,#10B981,#059669);border-color:transparent;color:#fff;
+  .lc-pill.on{background:linear-gradient(to left,#047857,#059669);border-color:transparent;color:#fff;
     box-shadow:0 2px 8px rgba(16,185,129,0.25)}
   /* قائمة الأقسام المنسدلة — بديل الـ chips (تتحمّل 100+ قسم بلا تشوّه) */
   .lc-select{width:100%;padding:12px 14px;border-radius:14px;font-size:13px;font-weight:700;
@@ -380,23 +389,23 @@ html[dir="ltr"] .srch{ padding:14px 18px 14px 44px; }
     /* شارة الترند (ترند اليوم / ترند هذا الأسبوع) في أعلى الكرت — inline لتفادي تداخل
        مع لقب المركز. تدرج برتقالي-أحمر مطابق لشارة صفحة المتجر في الموقع. */
     .trend-card .tc-badge{display:inline-block;
-      background:linear-gradient(to left,#F97316,#EF4444);color:#fff;
+      background:linear-gradient(to left,#047857,#059669);color:#fff;
       font-size:9px;font-weight:800;padding:2px 8px;border-radius:9px;
       box-shadow:0 1px 3px rgba(0,0,0,0.2);white-space:nowrap;margin-bottom:6px}
     /* شارة في صفحة المتجر — أكبر من شارة الكرت */
     .store-trend-badge{display:inline-flex;align-items:center;gap:5px;
-      background:linear-gradient(to left,#F97316,#EF4444);color:#fff;
+      background:linear-gradient(to left,#047857,#059669);color:#fff;
       font-size:11px;font-weight:800;padding:5px 11px;border-radius:14px;
       margin-bottom:10px;box-shadow:0 2px 6px rgba(239,68,68,0.25)}
     .store-trend-badge::before{content:"🔥";font-size:11px}
     /* وسام الترند على كروت المتاجر (أبرز المتاجر/الأقسام/كل المتاجر) — أعلى الكرت */
     .card-trend-badge{position:absolute;top:8px;z-index:6;
-      background:linear-gradient(to left,#F97316,#EF4444);color:#fff;
+      background:linear-gradient(to left,#047857,#059669);color:#fff;
       font-size:9px;font-weight:800;padding:3px 8px;border-radius:9px;white-space:nowrap;
       box-shadow:0 1px 4px rgba(239,68,68,0.3)}
     /* حلقة برتقالية للستوري لو المتجر ترند */
-    .story-ring.trend{background:conic-gradient(from 0deg,#F97316,#EF4444,#F97316)}
-    .story-ring.trend-weekly{background:conic-gradient(from 0deg,#3B82F6,#1D4ED8,#3B82F6)}
+    .story-ring.trend{background:conic-gradient(from 0deg,#34D399,#10B981,#34D399)}
+    .story-ring.trend-weekly{background:conic-gradient(from 0deg,#047857,#065F46,#047857)}
     .trend-card:active{transform:scale(0.96)}
     .trend-card:hover{box-shadow:0 2px 10px rgba(16,185,129,0.08)}
     .trend-card .tc-title{font-size:10px;color:var(--em);font-weight:800;
@@ -455,8 +464,8 @@ if (tg) {
     tg.expand();       // يفتح كامل الشاشة (vs نصف الشاشة الافتراضي)
     tg.enableClosingConfirmation();  // يطلب تأكيد قبل الإغلاق
     // theme: ندمج لون header مع gradient التطبيق
-    if (tg.setHeaderColor) tg.setHeaderColor('#080E1D');
-    if (tg.setBackgroundColor) tg.setBackgroundColor('#080E1D');
+    if (tg.setHeaderColor) tg.setHeaderColor('#141C31');
+    if (tg.setBackgroundColor) tg.setBackgroundColor('#141C31');
   } catch (e) { /* تجاهل لو نسخة قديمة من Telegram */ }
 }
 
@@ -1281,8 +1290,8 @@ function applyTheme(mode) {
     try { localStorage.setItem('dpk_theme', mode); } catch (e) {}
     // تحديث لون header في Telegram WebApp
     try {
-        if (tg && tg.setHeaderColor) tg.setHeaderColor(isLight ? '#FFFFFF' : '#080E1D');
-        if (tg && tg.setBackgroundColor) tg.setBackgroundColor(isLight ? '#F8FAFC' : '#080E1D');
+        if (tg && tg.setHeaderColor) tg.setHeaderColor(isLight ? '#FFFFFF' : '#141C31');
+        if (tg && tg.setBackgroundColor) tg.setBackgroundColor(isLight ? '#F7F9FB' : '#141C31');
     } catch (e) {}
 }
 function toggleTheme() {

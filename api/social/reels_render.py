@@ -1,8 +1,9 @@
-"""مولّد ريلز متحرّك (Programmatic) بهوية «Dark Luxe» — كروت أكواد من master.
+"""مولّد ريلز متحرّك (Programmatic) بهوية العلامة — كروت أكواد من master.
 
-يبني فيديو عمودي 1080×1920 (9:16) بحركة حقيقية: خلفية زمردية-فحمية متدرّجة،
-توهّج، جزيئات ذهبية طافية، لوقو، اسم المتجر يظهر بتكبير مرن، قيمة الخصم تنبض،
-شريحة الكود بلمعان (shimmer) يمرّ عليها، ونداء ختامي نابض. لا صوت (يُضاف لاحقاً).
+يبني فيديو عمودي 1080×1920 (9:16) بحركة حقيقية: خلفية **حبر العلامة** متدرّجة
+(‏#1B2440 → #141C31)، توهّج، جزيئات طافية محايدة وخضراء، لوقو، اسم المتجر يظهر
+بتكبير مرن، قيمة الخصم تنبض، شريحة الكود بلمعان (shimmer) يمرّ عليها، ونداء
+ختامي نابض. لا صوت (يُضاف لاحقاً).
 
 المصدر: جدول master (بيانات حقيقية) — اسم المتجر + خصم العميل + الكود.
 التقنية: Pillow يرسم كل فريم → يُبثّ خام إلى ffmpeg (بلا ملفات مؤقتة) → MP4/H.264.
@@ -33,21 +34,30 @@ DUR    = 7.0                      # ثوانٍ
 NFRAME = int(FPS * DUR)
 MARGIN = 96
 
-# ─── لوحة Dark Luxe (زمردي + ذهبي) ─────────────────────────────────────────
-BG_TOP    = (9, 33, 27)
-BG_BOTTOM = (3, 12, 9)
-EMERALD        = (16, 185, 129)
-EMERALD_BRIGHT = (52, 211, 153)
-EMERALD_DEEP   = (6, 78, 59)
-GOLD        = (214, 178, 94)
-GOLD_BRIGHT = (241, 214, 143)
-WHITE = (255, 255, 255)
-MUTED = (150, 176, 165)
-INK   = (5, 26, 20)
-CHIP  = (12, 38, 31)
+# ─── لوحة الهوية المغلقة (دليل الهوية §اللون) ──────────────────────────────
+# كانت «Dark Luxe: زمردي + ذهبي» وفيها خرقان صريحان:
+#   ١. الأرضية خضراء (9,33,27) — والدليل: الأخضر لهجة لا خلفية، والأرضية هي
+#      حبر العلامة #141C31 نفسه لا لون مخترع.
+#   ٢. **الذهبي لون سادس** في لوحة موصوفة بأنها مغلقة: «كل لون خارجها يُضعف
+#      التعرّف». فحلّ محلّه دور القيمة: الأبيض للتشديد وg-500 للهجة.
+import brand as _brand
+
+BG_TOP    = _brand.DARK_RAISED     # #1B2440
+BG_BOTTOM = _brand.DARK_GROUND     # #141C31
+EMERALD        = _brand.G_500      # 6.68:1 على الأرضية
+EMERALD_BRIGHT = _brand.G_500
+EMERALD_DEEP   = _brand.G_700
+# الذهبي كان دور «تشديد» — أُبقي الدور وتغيّر لونه إلى حياديات اللوحة،
+# وأُعيدت التسمية لأن اسم `GOLD` بقيمة رمادية اسمٌ يكذب على قارئه.
+EMPH        = _brand.DARK_BODY     # #E3E8EF — 13.75:1 على الأرضية
+EMPH_BRIGHT = _brand.PAPER
+WHITE = _brand.PAPER
+MUTED = _brand.DARK_CAPTION        # #9AA6BC — 6.90:1
+INK   = _brand.INK_900
+CHIP  = _brand.DARK_RAISED
 
 _ROOT      = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_FONT_PATH = os.path.join(_ROOT, "NotoSansArabic-Bold.ttf")
+_FONT_PATH = _brand.font_path(700) or os.path.join(_ROOT, "NotoSansArabic-Bold.ttf")
 _LOGO      = os.path.join(_ROOT, "logo_for_watermark.png")
 
 _AR_NUMS = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")
@@ -108,7 +118,7 @@ def _base_background() -> Image.Image:
     glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     gd = ImageDraw.Draw(glow)
     gd.ellipse([W - 620, -420, W + 380, 520], fill=(*EMERALD, 46))      # زمردي أعلى يمين
-    gd.ellipse([-360, H - 560, 460, H + 360], fill=(*GOLD, 26))         # ذهبي أسفل يسار
+    gd.ellipse([-360, H - 560, 460, H + 360], fill=(*EMPH, 26))         # وهج محايد أسفل يسار
     img.alpha_composite(glow.filter(ImageFilter.GaussianBlur(190)))
     # فينييت خفيف لتركيز المركز
     vig = Image.new("L", (W, H), 0)
@@ -167,7 +177,7 @@ def _paste_center(img: Image.Image, sprite: Image.Image, cy: float,
     img.alpha_composite(sp, ((W - w) // 2, int(cy - h / 2)))
 
 
-# ─── جزيئات طافية (ذهبي/زمردي) ──────────────────────────────────────────────
+# ─── جزيئات طافية (محايد فاتح / أخضر النبض) ─────────────────────────────────
 def _particles(seed: int, n: int = 46) -> list[dict]:
     rnd = random.Random(seed)
     out = []
@@ -176,7 +186,7 @@ def _particles(seed: int, n: int = 46) -> list[dict]:
             x=rnd.uniform(0, W), y=rnd.uniform(0, H),
             r=rnd.uniform(1.6, 4.8), spd=rnd.uniform(14, 46),
             ph=rnd.uniform(0, 6.28), amp=rnd.uniform(6, 26),
-            gold=rnd.random() < 0.45,
+            emph=rnd.random() < 0.45,
         ))
     return out
 
@@ -189,7 +199,7 @@ def _draw_particles(img: Image.Image, parts: list[dict], t: float) -> None:
         x = p["x"] + math.sin(t * 1.15 + p["ph"]) * p["amp"]
         a = int(70 + 55 * math.sin(t * 2.1 + p["ph"]))
         a = max(18, min(130, a))
-        col = GOLD_BRIGHT if p["gold"] else EMERALD_BRIGHT
+        col = EMPH_BRIGHT if p["emph"] else EMERALD_BRIGHT
         r = p["r"]
         d.ellipse([x - r, y - r, x + r, y + r], fill=(*col, a))
     img.alpha_composite(layer.filter(ImageFilter.GaussianBlur(0.6)))
@@ -265,7 +275,7 @@ def _compose(store: dict, sprites: dict, parts: list[dict], t: float) -> Image.I
         box = ((W - chip_w) // 2, int(cy), (W + chip_w) // 2, int(cy) + chip_h)
         if ca > 0.02:
             tmp = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-            _rounded(tmp, box, rad, (*CHIP, 250), outline=(*GOLD, 255), ow=3)
+            _rounded(tmp, box, rad, (*CHIP, 250), outline=(*EMPH, 255), ow=3)
             label = _text_sprite("كود الخصم", _font(40), EMERALD_BRIGHT)
             tmp.alpha_composite(label, ((W - label.width) // 2, box[1] + 26))
             tmp.alpha_composite(sprites["code"], ((W - sprites["code"].width) // 2, box[1] + 78))
@@ -307,7 +317,7 @@ def _build_sprites(store: dict) -> dict:
     benefit = store["benefit"]
     code = store.get("code")
     sprites = {
-        "kicker":  _text_sprite("كود خصم حصري", _font(46), GOLD_BRIGHT),
+        "kicker":  _text_sprite("كود خصم حصري", _font(46), EMPH_BRIGHT),
         "store":   _text_sprite(store["name"], _font(96), WHITE, glow=EMERALD_DEEP),
         "benefit": _text_sprite(benefit, _font(118 if len(benefit) <= 5 else 84),
                                 EMERALD_BRIGHT, glow=EMERALD_DEEP),
@@ -316,7 +326,7 @@ def _build_sprites(store: dict) -> dict:
         "footer":  _text_sprite("@dealpulseksa  ·  نبض الصفقات", _font(34), MUTED),
     }
     if code:
-        sprites["code"] = _text_sprite(code, _font(92), GOLD_BRIGHT)
+        sprites["code"] = _text_sprite(code, _font(92), EMPH_BRIGHT)
     return sprites
 
 
