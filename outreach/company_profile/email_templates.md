@@ -9,12 +9,13 @@
 
 ---
 
-## ١) الرسالة الأولى — إرسال ابتدائي (عربي)
+## ١) الرسالة الأولى — إرسال ابتدائي مع الملف (عربي)
 
-**السطر الأهمّ في البريد كلّه هو الموضوع.** الأول أوضح، والثاني أعلى فتحاً:
+**السطر الأهمّ في البريد كلّه هو الموضوع.** الأول أعلى فتحاً لأنه يتكلّم عنهم،
+والثاني أوضح لمن يفرز بريده بالعنوان:
 
-- `شراكة مع نبض الصفقات — كود خصم حصري لـ{العلامة}`
 - `عن خانة «كود الخصم» في صفحة الدفع لديكم`
+- `{العلامة} × نبض الصفقات — اقتراح شراكة (الملف التعريفي مرفق)`
 
 ```
 الأستاذ/ة {الاسم}، السلام عليكم ورحمة الله،
@@ -27,11 +28,16 @@
 فيترك السلة.
 
 ما نقترحه ببساطة: كود حصري لجمهورنا، وصفحة دائمة باسم {العلامة} يسندها محتوى
-ومقارنات تلتقط الباحث في لحظة نيّة الشراء. الإنتاج والنشر والقياس من طرفنا،
-ولا نطلب أي تكامل تقني ولا تعديلاً على متجركم.
+عربي ومقارنات تلتقط الباحث في لحظة نيّة الشراء — على الموقع وبوت تيليجرام
+والتطبيق المصغّر وحساباتنا. الإنتاج والنشر من طرفنا، ولا نطلب أي تكامل تقني
+ولا تعديلاً على متجركم، والإسناد يجري على نظام العمولة لديكم فالرقم رقمكم.
+
+ومن مبادئنا التي تهمّكم: لا يُنشر عرض قبل التحقّق منه، ولا نزايد إعلانياً على
+اسم {العلامة}، ولا نضع كود منافس على صفحتكم، ولا يخرج منّا اسم ولا رقم بلا
+إذن مكتوب منكم.
 
 مرفق الملف التعريفي فيه التفاصيل. وإن رأيتم، أسعد بمكالمة قصيرة — أو نبدأ
-بتجربة محدودة المدّة وتقيسون نتيجتها على أنظمتكم أنتم.
+بتجربة محدودة المدّة تقيسون نتيجتها على أنظمتكم أنتم.
 
 تحياتي،
 {الاسم}
@@ -39,15 +45,24 @@
 dealpulseksa@gmail.com · واتساب 0534448900
 ```
 
-**لماذا كُتبت هكذا:** لا تبدأ بنا بل بمشتريهم · حجّة واحدة لا خمس · صفر أرقام
+**لماذا كُتبت هكذا:** تبدأ بمشتريهم لا بنا · حجّة واحدة لا خمس · صفر أرقام
 (تُطلب فتُعطى شفهياً) · صفر وعد ملزم · طلب واحد منخفض الكلفة. **لا تُطل** —
 مدير تسويق يقرأ أول سطرين ويقرّر.
+
+**وفقرة المبادئ ليست حشواً:** مدير تسويق في شركة كبيرة يخاف من طرف ثالث ينشر
+باسم علامته أكثر ممّا يطمع في طلبات إضافية. أربعة أسطر تنزع الخوف تفتح الباب
+أكثر من صفحة تصف الخدمات — **وهي نفسها إجابة سؤال صفحة الشركاء الفارغة قبل
+أن يُسأل.**
+
+**نسخة أقصر** لمن تعرفه أو لجهة صغيرة: احذف فقرة المبادئ واكتفِ بالفقرتين
+الأولى والثانية ثم سطر المرفق.
 
 ---
 
 ## ٢) The first email — cold outreach (English)
 
-Subject: `Partnership with Deal Pulse KSA — an exclusive code for {Brand}`
+Subject: `About the "promo code" field on your checkout page`
+or: `{Brand} × Deal Pulse KSA — partnership proposal (profile attached)`
 
 ```
 Dear {Name},
@@ -60,9 +75,15 @@ the only variable is what they find in that minute: your code, so they return an
 complete the order; a competitor's; or nothing at all, and the cart is abandoned.
 
 What we're proposing is simple: an exclusive code for our audience, and a
-permanent page for {Brand} supported by content and comparisons that capture the
-shopper at the moment of purchase intent. Production, publishing and measurement
-are on us — no technical integration and no change to your storefront.
+permanent page for {Brand} supported by Arabic content and comparisons that
+capture the shopper at the moment of purchase intent — across the website, the
+Telegram bot, the mini app and our social accounts. Production and publishing are
+on us, we ask for no technical integration and no change to your storefront, and
+attribution runs on your own affiliate system, so the number is yours.
+
+A few of our principles that matter to you: no offer is published before it is
+verified, we do not bid on the {Brand} name in paid search, no competitor code
+sits on your page, and no name or figure leaves us without your written consent.
 
 The attached profile has the detail. If it's of interest, I'd welcome a short
 call — or we can start with a limited pilot you measure on your own systems.
@@ -125,6 +146,22 @@ dealpulseksa@gmail.com · WhatsApp +966 53 444 8900
 {الاسم} — نبض الصفقات
 dealpulseksa.com · dealpulseksa@gmail.com · واتساب 0534448900
 ```
+
+---
+
+## ٦) «صفحة الشركاء فارغة — ليش؟»
+
+سؤال متوقّع، وهو **فرصة لا ورطة**. الجواب الجاهز:
+
+```
+لأننا لا ندرج شعار أي جهة قبل موافقتها الخطّية. تعاوناتنا القائمة تخضع لنفس
+القاعدة، والصفحة تبقى فارغة إلى أن يأذن أصحابها. ونفس الحماية تنطبق عليكم:
+اسمكم وأرقامكم لا تخرج منّا لأي طرف، ونوقّع اتفاقية عدم إفشاء قبل النقاش
+التفصيلي إن رغبتم.
+```
+
+**لا تخترع اسماً ولا تقل «قريباً» ولا تلمّح إلى أسماء.** الجواب أعلاه صادق
+ويقلب السؤال إلى ضمانة يسمعها المعلن عن نفسه — وأي التفاف يُكشف في اجتماع واحد.
 
 ---
 
