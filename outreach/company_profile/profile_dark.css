@@ -1,0 +1,155 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   نبض الصفقات — الملف التعريفي · طبقة الوضع الداكن + الأيقونات.
+   تُحمَّل **بعد** style.css فترث نظام التصميم ثم تقلب أرضيته.
+
+   ⚠️ لا تنسخ من `guidelines.css` ولا تعدّله — دليل الهوية مستند مستقلّ.
+      القيم هنا هي **نفس** سلّم الدليل الداكن لأن السلّم واحد للعلامة،
+      لا لأن الملف نسخة من ذاك.
+
+   ── لماذا داكن ──
+   الأرضية `#141C31` **حبر العلامة نفسه** لا لون مخترع. والأرضية الداكنة
+   تقلب أدوار السلّم بالكامل، فكل قيمة أدناه مقيسة بـWCAG على الأرضية
+   التي تجلس عليها فعلاً — لا منقولة عن الوضع الفاتح.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+:root{
+  --d-bg:#141C31;        /* الأرضية = حبر العلامة */
+  --d-deep:#0B1120;      /* أعمق من الأرضية — للأشرطة والمتجر */
+  --d-surface:#1B2440;   /* سطح مرتفع (بطاقة) */
+  --d-line:#2C3A55;      /* الحدّ الشعري */
+  --d-text:#E3E8EF;      /* متن — 13.75:1 */
+  --d-dim:#C3CBDA;       /* ثانوي — 10.38:1 */
+  --d-mute:#9AA6BC;      /* حواشٍ — 6.90:1 */
+  --d-accent:#10B981;    /* الأخضر الحامل على الداكن — 6.68:1 */
+  --d-onaccent:#04231A;  /* نصّ فوق لوح أخضر */
+  --d-danger:#FDA29B;    /* الأحمر الوظيفي، نسخته الفاتحة للداكن */
+}
+
+body{ background:var(--d-deep); }
+.page{ background:var(--d-bg); color:var(--d-text); }
+
+h1, h2, h3{ color:#fff; }
+p{ color:var(--d-dim); }
+.lead{ color:var(--d-text); }
+.note{ color:var(--d-mute); }
+.kicker{ color:var(--d-accent); }
+.rule{ background:var(--d-accent); }
+
+.runhead{ border-bottom-color:var(--d-line); }
+.runhead .brand{ color:#fff; }
+.runhead .brand span{ color:var(--d-accent); }
+.runhead .sec{ color:var(--d-mute); }
+.foot{ border-top-color:var(--d-line); color:var(--d-mute); }
+
+/* ── البطاقات ─────────────────────────────────────────────────────── */
+.card{ background:var(--d-surface); border-color:var(--d-line); }
+.card h3{ color:#fff; }
+.card p{ color:var(--d-dim); }
+.card .kicker{ color:var(--d-accent); }
+/* «النعناعية» لا معنى لها على داكن — تُميَّز بحدّ أخضر لا بخلفية فاتحة. */
+.card.mint{ background:var(--d-surface); border-color:var(--d-accent); }
+.card.ink{ background:var(--d-deep); border-color:var(--d-line); }
+/* البطاقة الداكنة على مستند داكن تختفي — فتنقلب لوحاً أخضر، نفس الوظيفة
+   (إبراز) بنفس المنطق معكوساً. */
+.card.dark{ background:var(--d-accent); border-color:var(--d-accent); }
+.card.dark h3{ color:var(--d-onaccent); }
+.card.dark p{ color:#053B2C; }
+
+.quote{ background:var(--d-surface); border-inline-start-color:var(--d-accent);
+  color:var(--d-text); }
+.quote b{ color:#fff; }
+ul.ticks li{ color:var(--d-dim); }
+ul.ticks li::before{ color:var(--d-accent); }
+ul.ticks.nos li::before{ color:var(--d-danger); }
+ul.ticks b{ color:#fff; }
+.claim{ color:var(--d-accent); }
+.legal{ background:var(--d-surface); border-color:var(--d-line); }
+.legal b{ color:var(--d-accent); }
+.legal p{ color:var(--d-dim); }
+
+/* شريط الحالة المكسورة — الأحمر الداكن #B42318 يختفي على أرضية داكنة،
+   فينقلب إلى أرضية حمراء عميقة بنصّ فاتح. القيم مقيسة لا مقدَّرة. */
+.warn{ background:#2A1517; border-inline-start-color:var(--d-danger);
+  color:#FBC9C4; }
+.warn b{ color:#FFE4E1; }
+
+/* ── الأيقونات ────────────────────────────────────────────────────────
+   ⚠️ SVG داخلية بمسارات مرسومة — **لا إيموجي ولا خطّ أيقونات ولا رمز
+   يونيكود زخرفي**. أي محرف خارج IBM Plex/DejaVu يسحب خطّ نظام إلى الـPDF
+   فيتغيّر شكله بين الأجهزة (وقع فعلاً مع ↔ و≈). الفحص يمسكها، فلا تُدخلها.
+
+   الطقم كلّه: 24×24 · بلا تعبئة · حدّ 1.6 · نهايات مستديرة · لون واحد. */
+.i{ display:block; width:7.5mm; height:7.5mm; margin-bottom:2.5mm;
+  fill:none; stroke:var(--d-accent); stroke-width:1.6;
+  stroke-linecap:round; stroke-linejoin:round; }
+.i-sm{ width:6mm; height:6mm; margin-bottom:2mm; }
+/* ⚠️ الأيقونة **في سطر العنوان** لا فوقه داخل شبكات البطاقات — والسبب حسابي:
+   أيقونة مكدّسة تضيف نحو 10mm لكل صفٍّ من الشبكة، وصفحة الخدمات أربعة صفوف
+   ⇒ 40mm زائدة على صفحة كانت تملأ حدّها. المكدّسة تبقى حيث المساحة تسمح
+   (أركان الغلاف وشبكة الثلاثة). */
+.ic-head{ display:flex; align-items:center; gap:2.5mm; margin-bottom:1.5mm; }
+.ic-head .i{ flex:0 0 auto; width:5.5mm; height:5.5mm; margin-bottom:0; }
+.ic-head h3{ margin-bottom:0; }
+
+/* ── شريط أركان الغلاف ───────────────────────────────────────────── */
+.cover-top{ background:var(--d-bg); }
+.cover .sub{ color:var(--d-dim); }
+.cover-pillars{ border-top-color:var(--d-line); }
+.cover-pillars .t{ color:#fff; }
+.cover-pillars .d{ color:var(--d-mute); }
+.cover-foot{ background:var(--d-deep); }
+.cover-foot b{ color:var(--d-accent); }
+.cover-foot span{ color:#fff; }
+
+/* ── الشبكة ──────────────────────────────────────────────────────── */
+.net-box{ background:var(--d-surface); border-color:var(--d-line); }
+.net-box b{ color:#fff; }
+.net-box span{ color:var(--d-mute); }
+.net-box.src{ background:var(--d-deep); }
+.net-box.hub{ background:var(--d-surface); border-color:var(--d-line); }
+.net-box.hub b{ color:var(--d-accent); }
+.net-box.brand{ background:var(--d-accent); border-color:var(--d-accent); }
+.net-box.brand b{ color:var(--d-onaccent); }
+.net-box.brand span{ color:#053B2C; }
+.net-box.store{ background:var(--d-deep); border-color:var(--d-accent); }
+.net-box.store b{ color:#fff; } .net-box.store span{ color:var(--d-dim); }
+.net-down i{ border-block-start-color:var(--d-accent); }
+.net-tie{ color:var(--d-accent); }
+
+/* ── الخطوات ─────────────────────────────────────────────────────── */
+/* على الفاتح: قرص g-700 بنصّ أبيض. على الداكن ينقلب — قرص g-500 بنصّ حبري،
+   لأن الأخضر الحامل على الداكن هو g-500 لا g-700. */
+.step::before{ background:var(--d-accent); color:var(--d-onaccent); }
+
+/* ── الدعوة ──────────────────────────────────────────────────────── */
+.cta{ background:var(--d-accent); color:var(--d-onaccent); }
+.cta h2{ color:var(--d-onaccent); }
+.cta p{ color:#053B2C; }
+.cta .row div b{ color:#053B2C; }
+.cta .row div span{ color:var(--d-onaccent); }
+
+/* ── لوح فاصل بعرض الصفحة ────────────────────────────────────────── */
+.slab{ background:var(--d-accent); border-radius:3.5mm; padding:5mm 6mm;
+  display:flex; align-items:center; gap:5mm; }
+.slab .i{ stroke:var(--d-onaccent); flex:0 0 auto; margin-bottom:0; }
+.slab b{ display:block; font-size:11pt; color:var(--d-onaccent); font-weight:700; }
+.slab span{ display:block; font-size:9pt; color:#053B2C; line-height:1.6;
+  margin-top:.8mm; }
+
+/* ── صفحة شركاء النجاح ───────────────────────────────────────────────
+   خانات فارغة **منتظمة**: المنتظمة تُقرأ «مكان محجوز»، والعشوائية تُقرأ
+   «لم يكتمل». ولا شعار ولا اسم — ولا حتى باهتاً؛ العين تلتقطه والسؤال
+   عنه يُحرج.
+
+   ▸ لإضافة شعار شريك لاحقاً: ضع <img> داخل .slot، بنسخة أحادية اللون
+     بيضاء بألفا (لا PNG بخلفية بيضاء)، و**ارتفاع بصري موحّد** لا عرض
+     موحّد — الشعارات تختلف نسبها، وتوحيد العرض يجعل الطويل يطغى. */
+.partners{ display:grid; grid-template-columns:repeat(4,1fr); gap:5.5mm; }
+/* نسبة 2:1 لا 5:2 — الخانة القصيرة تُقرأ حاجزاً، والأقرب لنسبة الشعار الأفقي
+   تُقرأ مكاناً محجوزاً لشعار. والحجم الأكبر يجعل الشبكة تحمل الصفحة بصرياً،
+   وهي وظيفتها: الصفحة جدار شعارات لا فقرة نصّ. */
+.slot{ aspect-ratio:2 / 1; border:1px solid var(--d-line); border-radius:2.5mm;
+  background:var(--d-surface); display:flex; align-items:center;
+  justify-content:center; }
+.slot i{ display:block; width:9mm; height:1px; background:var(--d-line); }
+.slot img{ max-width:74%; max-height:52%; display:block; }

@@ -79,18 +79,21 @@ def edition_html(key: str, data_uri: str) -> str:
     أقسام الإنجليزي داخل `<div lang="en" dir="ltr">`. الأنماط تلتقط الغلاف الداخلي
     لأن محدّداتها `[lang="en"]` بلا `html` أمامها (انظر التعليق في style.css).
     """
+    # الترتيب مقصود في كل استبدال: `__LOGO_DARK__` أولاً، وإلا التهم
+    # `__LOGO__` بدايتَه فبقيت `_DARK__` نصّاً في الصفحة.
+    dark_uri = ("data:image/png;base64,"
+                + base64.b64encode(LOGO_DARK.read_bytes()).decode("ascii"))
+
+    def inject(text: str) -> str:
+        return text.replace("__LOGO_DARK__", dark_uri).replace("__LOGO__", data_uri)
+
     if key == "ar":
-        return AR_SRC.read_text(encoding="utf-8").replace("__LOGO__", data_uri)
+        return inject(AR_SRC.read_text(encoding="utf-8"))
     if key == "en":
-        return EN_SRC.read_text(encoding="utf-8").replace("__LOGO__", data_uri)
+        return inject(EN_SRC.read_text(encoding="utf-8"))
     if key in ("brand", "brand_en"):
-        # الترتيب مقصود: `__LOGO_DARK__` أولاً، وإلا التهم `__LOGO__` بدايتَه.
-        dark_uri = ("data:image/png;base64,"
-                    + base64.b64encode(LOGO_DARK.read_bytes()).decode("ascii"))
         src = BRAND_SRC if key == "brand" else BRAND_EN_SRC
-        return (src.read_text(encoding="utf-8")
-                .replace("__LOGO_DARK__", dark_uri)
-                .replace("__LOGO__", data_uri))
+        return inject(src.read_text(encoding="utf-8"))
 
     ar = AR_SRC.read_text(encoding="utf-8")
     en = EN_SRC.read_text(encoding="utf-8")
@@ -107,7 +110,7 @@ def edition_html(key: str, data_uri: str) -> str:
         "<title>نبض الصفقات — الملف التعريفي · Deal Pulse KSA — Company Profile</title>",
         1,
     )
-    return merged.replace("__LOGO__", data_uri)
+    return inject(merged)
 
 
 def build(key, data_uri, browser):

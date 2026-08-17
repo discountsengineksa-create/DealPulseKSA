@@ -4,12 +4,13 @@
 <meta charset="utf-8">
 <title>Deal Pulse KSA — Company Profile</title>
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="profile_dark.css">
 </head>
 <body>
 
 <!-- ══════════════ 1 · Cover ══════════════ -->
 <section class="page cover">
-  <div class="cover-top"><img class="cover-logo" src="__LOGO__" alt="Deal Pulse KSA"></div>
+  <div class="cover-top"><img class="cover-logo" src="__LOGO_DARK__" alt="Deal Pulse KSA"></div>
   <div class="cover-band"></div>
   <div class="cover-body">
     <div class="kicker">Company Profile</div>
@@ -23,14 +24,17 @@
 
     <div class="cover-pillars">
       <div>
+        <svg class="i i-sm" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M8 8.5h8M8 12.5h8M8 16.5h4.5"/></svg>
         <div class="t">Original Arabic content</div>
         <div class="d">An ever-growing library of buying<br>guides for the Saudi market</div>
       </div>
       <div>
+        <svg class="i i-sm" viewBox="0 0 24 24"><rect x="4.5" y="8" width="15" height="11" rx="3"/><path d="M12 4.6V8"/><circle cx="12" cy="3.4" r="1.2"/><path d="M9 13v1.6M15 13v1.6"/></svg>
         <div class="t">Presence inside AI answers</div>
         <div class="d">A growing presence inside<br>AI assistant answers</div>
       </div>
       <div>
+        <svg class="i i-sm" viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="5.8" r="2.6"/><circle cx="18" cy="18.2" r="2.6"/><path d="M8.4 10.8 15.6 7M8.4 13.2 15.6 17"/></svg>
         <div class="t">A direct distribution channel</div>
         <div class="d">Website, Telegram bot, mini app<br>and social accounts</div>
       </div>
@@ -79,22 +83,22 @@
   <div class="kicker">Four channels, one audience</div>
   <div class="grid2">
     <div class="card tight">
-      <h3>Website &amp; content</h3>
+      <div class="ic-head"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.6 2.6 2.6 15.4 0 18M12 3c-2.6 2.6-2.6 15.4 0 18"/></svg><h3>Website &amp; content</h3></div>
       <p>A permanent page for every brand, an Arabic buying-guide library, and seasonal
         campaign pages.</p>
     </div>
     <div class="card tight">
-      <h3>Telegram bot</h3>
+      <div class="ic-head"><svg class="i" viewBox="0 0 24 24"><path d="M21.5 3.5 2.5 10.2l6.8 2.6 2.5 7z"/><path d="M9.3 12.8 21.5 3.5"/></svg><h3>Telegram bot</h3></div>
       <p>Direct reach to the shopper: search, instant offers, favourites and alerts — no
         app download, no sign-up.</p>
     </div>
     <div class="card tight">
-      <h3>Mini app</h3>
+      <div class="ic-head"><svg class="i" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.8"/><path d="M10.5 18.6h3"/></svg><h3>Mini app</h3></div>
       <p>A full browsing interface inside Telegram, on the same source and the same
         update.</p>
     </div>
     <div class="card tight">
-      <h3>Social accounts</h3>
+      <div class="ic-head"><svg class="i" viewBox="0 0 24 24"><path d="M21 11.5a8 8 0 0 1-8 8H4.5l2.3-2.3A8 8 0 1 1 21 11.5z"/><path d="M8.6 11.5h6.8"/></svg><h3>Social accounts</h3></div>
       <p>A visual presence carrying the offer to an audience search does not reach.</p>
     </div>
   </div>
@@ -108,7 +112,7 @@
   <div class="foot"><span>Deal Pulse KSA — Company Profile</span><span>2</span></div>
 </section>
 
-<!-- ══════════════ The leak (diagram 1) ══════════════ -->
+<!-- ══════════════ 3 · Where orders leak (diagram 1) ══════════════ -->
 <section class="page">
   <div class="runhead"><div class="brand">Deal Pulse KSA · <span>نبض الصفقات</span></div>
     <div class="sec">Where orders leak</div></div>
@@ -116,54 +120,57 @@
   <div class="kicker">Where orders are lost</div>
   <h2>The promo code field takes your buyer<br>out of your store. Do they come back?</h2>
   <div class="rule"></div>
-  <p class="note" style="margin-bottom:5mm">This happens in your store today, with or without
-    us: the buyer reaches checkout, sees an empty "promo code" field, and leaves to find one.
-    That minute decides between a completed order and an abandoned cart.</p>
+  <p class="note" style="margin-bottom:6mm">This happens in your store today, with or without
+    us: the buyer reaches checkout — mada, wallet or instalments in hand — sees an empty
+    "promo code" field, and leaves to find one. That minute decides between a completed
+    order and an abandoned cart.</p>
 
+  <!-- ⚠️ Colours tuned for the #141C31 ground. Node positions are mirrored against the
+       Arabic edition (buyer left, store right) because SVG coordinates are absolute and
+       do not flip with dir — same grid, not a second drawing. -->
   <svg class="tri" viewBox="0 0 620 330" role="img"
-       aria-label="The buyer's loop between your store and Deal Pulse, in four steps">
+       aria-label="The buyer loop between your store and Deal Pulse in four steps">
     <defs>
       <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-        <path d="M0 0 L10 5 L0 10 z" fill="#059669"/></marker>
+        <path d="M0 0 L10 5 L0 10 z" fill="#10B981"/></marker>
       <marker id="an" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-        <path d="M0 0 L10 5 L0 10 z" fill="#55637E"/></marker>
+        <path d="M0 0 L10 5 L0 10 z" fill="#9AA6BC"/></marker>
     </defs>
-    <line x1="194" y1="224" x2="420" y2="224" stroke="#55637E" stroke-width="2" marker-end="url(#an)"/>
-    <line x1="136" y1="200" x2="238" y2="72"  stroke="#55637E" stroke-width="2" marker-end="url(#an)"/>
-    <line x1="380" y1="72"  x2="470" y2="198" stroke="#059669" stroke-width="2" marker-end="url(#ag)"/>
-    <path d="M115 264 Q310 326 502 266" fill="none" stroke="#059669" stroke-width="2" marker-end="url(#ag)"/>
+    <line x1="194" y1="224" x2="420" y2="224" stroke="#9AA6BC" stroke-width="2" marker-end="url(#an)"/>
+    <line x1="136" y1="200" x2="238" y2="72"  stroke="#9AA6BC" stroke-width="2" marker-end="url(#an)"/>
+    <line x1="380" y1="72"  x2="470" y2="198" stroke="#10B981" stroke-width="2" marker-end="url(#ag)"/>
+    <path d="M115 264 Q310 326 502 266" fill="none" stroke="#10B981" stroke-width="2" marker-end="url(#ag)"/>
 
-    <ellipse cx="310" cy="46" rx="86" ry="32" fill="#047857"/>
-    <text x="310" y="52" text-anchor="middle" font-size="16" font-weight="700" fill="#ffffff">Deal Pulse</text>
-    <ellipse cx="104" cy="232" rx="88" ry="32" fill="#F7F9FB" stroke="#E3E8EF" stroke-width="1.5"/>
-    <text x="104" y="238" text-anchor="middle" font-size="16" font-weight="700" fill="#141C31">The buyer</text>
-    <ellipse cx="516" cy="232" rx="88" ry="32" fill="#141C31"/>
-    <text x="516" y="238" text-anchor="middle" font-size="16" font-weight="700" fill="#ffffff">Your store</text>
-
+    <ellipse cx="310" cy="46" rx="86" ry="32" fill="#10B981"/>
+    <text x="310" y="52" text-anchor="middle" font-size="16" font-weight="700" fill="#04231A">Deal Pulse</text>
+    <ellipse cx="104" cy="232" rx="88" ry="32" fill="#1B2440" stroke="#2C3A55" stroke-width="1.5"/>
+    <text x="104" y="238" text-anchor="middle" font-size="16" font-weight="700" fill="#E3E8EF">The buyer</text>
+    <ellipse cx="516" cy="232" rx="88" ry="32" fill="#0B1120" stroke="#10B981" stroke-width="1.5"/>
+    <text x="516" y="238" text-anchor="middle" font-size="16" font-weight="700" fill="#FFFFFF">Your store</text>
 
     <!-- The empty promo code field: the cause of step 2, and the red counterpart to the
          green "confirmed intent" on step 3. Placed in the heart of the loop. -->
-    <rect x="212" y="130" width="204" height="30" rx="5" fill="#ffffff"
+    <rect x="212" y="130" width="204" height="30" rx="5" fill="#1B2440"
           stroke="#FDA29B" stroke-width="1.5" stroke-dasharray="4 3"/>
-    <text x="314" y="150" text-anchor="middle" font-size="12" fill="#98A2B3">Promo code</text>
+    <text x="314" y="150" text-anchor="middle" font-size="12" fill="#9AA6BC">Promo code</text>
     <text x="314" y="180" text-anchor="middle" font-size="11.5" font-weight="600"
-          fill="#B42318">= high chance of no purchase</text>
-    <text x="307" y="206" text-anchor="middle" font-size="13" fill="#2C3A55">Enters and fills the cart</text>
-    <circle cx="307" cy="224" r="11" fill="#ffffff" stroke="#55637E" stroke-width="1.5"/>
-    <text x="307" y="229" text-anchor="middle" font-size="12" font-weight="700" fill="#55637E">1</text>
+          fill="#FDA29B">= high chance of no purchase</text>
+    <text x="307" y="206" text-anchor="middle" font-size="13" fill="#C3CBDA">Enters and fills the cart</text>
+    <circle cx="307" cy="224" r="11" fill="#141C31" stroke="#9AA6BC" stroke-width="1.5"/>
+    <text x="307" y="229" text-anchor="middle" font-size="12" font-weight="700" fill="#C3CBDA">1</text>
 
-    <text x="108" y="140" text-anchor="middle" font-size="13" fill="#2C3A55">Leaves to hunt for a code</text>
-    <circle cx="187" cy="136" r="11" fill="#ffffff" stroke="#55637E" stroke-width="1.5"/>
-    <text x="187" y="141" text-anchor="middle" font-size="12" font-weight="700" fill="#55637E">2</text>
+    <text x="108" y="140" text-anchor="middle" font-size="13" fill="#C3CBDA">Leaves to hunt for a code</text>
+    <circle cx="187" cy="136" r="11" fill="#141C31" stroke="#9AA6BC" stroke-width="1.5"/>
+    <text x="187" y="141" text-anchor="middle" font-size="12" font-weight="700" fill="#C3CBDA">2</text>
 
-    <text x="522" y="132" text-anchor="middle" font-size="13" fill="#047857">Takes your code with us</text>
-    <text x="522" y="150" text-anchor="middle" font-size="11" font-weight="600" fill="#059669">= confirmed intent to buy</text>
-    <circle cx="425" cy="135" r="11" fill="#ffffff" stroke="#059669" stroke-width="1.5"/>
-    <text x="425" y="140" text-anchor="middle" font-size="12" font-weight="700" fill="#047857">3</text>
+    <text x="522" y="132" text-anchor="middle" font-size="13" fill="#10B981">Takes your code with us</text>
+    <text x="522" y="150" text-anchor="middle" font-size="11" font-weight="600" fill="#10B981">= confirmed intent to buy</text>
+    <circle cx="425" cy="135" r="11" fill="#141C31" stroke="#10B981" stroke-width="1.5"/>
+    <text x="425" y="140" text-anchor="middle" font-size="12" font-weight="700" fill="#10B981">3</text>
 
-    <text x="310" y="320" text-anchor="middle" font-size="13" font-weight="600" fill="#047857">Returns to your store and completes the order</text>
-    <circle cx="310" cy="295" r="11" fill="#ffffff" stroke="#059669" stroke-width="1.5"/>
-    <text x="310" y="300" text-anchor="middle" font-size="12" font-weight="700" fill="#047857">4</text>
+    <text x="310" y="320" text-anchor="middle" font-size="13" font-weight="600" fill="#10B981">Returns to your store and completes the order</text>
+    <circle cx="310" cy="295" r="11" fill="#141C31" stroke="#10B981" stroke-width="1.5"/>
+    <text x="310" y="300" text-anchor="middle" font-size="12" font-weight="700" fill="#10B981">4</text>
   </svg>
 
   <div class="sp-sm"></div>
@@ -194,7 +201,7 @@
   <div class="foot"><span>Deal Pulse KSA — Company Profile</span><span>3</span></div>
 </section>
 
-<!-- ══════════════ 3 · Services ══════════════ -->
+<!-- ══════════════ 4 · Services ══════════════ -->
 <section class="page">
   <div class="runhead"><div class="brand">Deal Pulse KSA · <span>نبض الصفقات</span></div>
     <div class="sec">Services for brands</div></div>
@@ -205,58 +212,66 @@
 
   <div class="grid2">
     <div class="card tight">
-      <h3>A permanent brand page</h3>
+      <div class="ic-head"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M8 8.5h8M8 12.5h8M8 16.5h4.5"/></svg><h3>A permanent brand page</h3></div>
       <p>A landing page in your brand's name carrying <b>several offers and several codes at
         once</b>, with your description and identity — an asset that keeps working after the
         campaign ends, not an ad that switches off with the budget.</p>
     </div>
     <div class="card tight">
-      <h3>Comparisons &amp; buying guides</h3>
+      <div class="ic-head"><svg class="i" viewBox="0 0 24 24"><path d="M12 4.5v15.5"/><path d="M5 8.5h5M14 8.5h5"/><path d="M4.2 14.6a2.9 2.9 0 0 0 5.8 0L7.1 8.6z"/><path d="M14 14.6a2.9 2.9 0 0 0 5.8 0L16.9 8.6z"/></svg><h3>Comparisons &amp; guides</h3></div>
       <p>"Best of" round-ups, brand-versus-brand comparisons, category and pricing guides —
-        the formats the shopper reads in the last step before ordering, and the formats AI
-        assistants quote.</p>
+        the formats the shopper reads last before ordering, and that AI assistants quote.</p>
     </div>
     <div class="card tight">
-      <h3>Search visibility (SEO)</h3>
-      <p>Purchase-intent keyword research, title and description craft, structured data,
-        internal linking, and indexing requests followed through until the page actually
-        appears.</p>
+      <div class="ic-head"><svg class="i" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.4 15.4 21 21"/></svg><h3>Search visibility (SEO)</h3></div>
+      <p>Purchase-intent keyword research <b>in the words the market actually types</b> —
+        your name in Arabic and Latin alike. Then structured data, internal linking, and
+        indexing followed through until the page appears.</p>
     </div>
     <div class="card tight">
-      <h3>Seasonal campaign pages</h3>
-      <p>Ramadan, National Day, White Friday, back to school — a ready season page wired to
-        a permanent occasions calendar, for the windows where demand peaks and the decision
-        window narrows.</p>
+      <div class="ic-head"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10.5h18M8 3v4M16 3v4"/></svg><h3>Seasonal campaign pages</h3></div>
+      <p>Ramadan and the two Eids, Founding Day, National Day, White Friday, back to school —
+        <b>and our calendar tracks the Hijri year</b>, so the page is ready before the peak,
+        not after it.</p>
     </div>
     <div class="card tight">
-      <h3>Distribution across our four channels</h3>
+      <div class="ic-head"><svg class="i" viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="5.8" r="2.6"/><circle cx="18" cy="18.2" r="2.6"/><path d="M8.4 10.8 15.6 7M8.4 13.2 15.6 17"/></svg><h3>Distribution across four channels</h3></div>
       <p>Delivering your offer through the website, the Telegram bot, the mini app and our
         social accounts, with placement on the platform's front end.</p>
     </div>
     <div class="card tight">
-      <h3>Brand story</h3>
+      <div class="ic-head"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="2.5" width="16" height="19" rx="3.5"/><path d="M10.3 9.2 15 12l-4.7 2.8z"/></svg><h3>Brand story</h3></div>
       <p>A story-format visual slot (video or image) at the top of the interface — for a
-        launch or campaign, and for a recurring presence that keeps your brand in front of
-        the shopper rather than once.</p>
+        launch or campaign, and for a recurring presence rather than a one-off.</p>
     </div>
     <div class="card tight">
-      <h3>Daily &amp; weekly trending</h3>
+      <div class="ic-head"><svg class="i" viewBox="0 0 24 24"><path d="M3 17.5 9 11.5l4 3.5 8-9"/><path d="M16 6h5v5"/></svg><h3>Daily &amp; weekly trending</h3></div>
       <p>A trending list refreshed daily and weekly from real shopper engagement. Rising in
         it puts your brand at the front of the interface — and the spots are limited, so
         brands race for them.</p>
     </div>
     <div class="card tight ink">
-      <h3>Why this works for a large brand</h3>
+      <div class="ic-head"><svg class="i" viewBox="0 0 24 24"><path d="M12 3 3 7.8l9 4.8 9-4.8z"/><path d="M3 12.6 12 17.4l9-4.8"/></svg><h3>Why this works for a large brand</h3></div>
       <p>Your paid campaign stops when the budget does. What we build keeps bringing in
-        searchers months later, and gets quoted in AI answers. The two channels complement
-        each other rather than compete.</p>
+        searchers months later and gets quoted in AI answers — the two channels complement
+        rather than compete.</p>
+    </div>
+  </div>
+
+  <div class="sp"></div>
+  <div class="slab">
+    <svg class="i" viewBox="0 0 24 24" style="width:9mm;height:9mm"><rect x="3" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6"/><path d="M13.5 17.2h7.5M17.2 13.5v7.5"/></svg>
+    <div>
+      <b>Taken alone or combined</b>
+      <span>Each service stands on its own; how they combine follows the campaign
+        objective and its season, not a fixed bundle.</span>
     </div>
   </div>
 
   <div class="foot"><span>Deal Pulse KSA — Company Profile</span><span>4</span></div>
 </section>
 
-<!-- ══════════════ The network behind it (diagram 2) ══════════════ -->
+<!-- ══════════════ 5 · The network behind it (diagram 2) ══════════════ -->
 <section class="page">
   <div class="runhead"><div class="brand">Deal Pulse KSA · <span>نبض الصفقات</span></div>
     <div class="sec">The network behind it</div></div>
@@ -316,7 +331,6 @@
     </div>
   </div>
 
-  
   <div class="sp"></div>
   <div class="quote">Pages stay live and maintained for the whole agreed term — offers
     refreshed, expired codes pulled, content revised as the season turns.</div>
@@ -324,7 +338,7 @@
   <div class="foot"><span>Deal Pulse KSA — Company Profile</span><span>5</span></div>
 </section>
 
-<!-- ══════════════ 5 · Differentiator ══════════════ -->
+<!-- ══════════════ 6 · What sets us apart ══════════════ -->
 <section class="page">
   <div class="runhead"><div class="brand">Deal Pulse KSA · <span>نبض الصفقات</span></div>
     <div class="sec">What sets us apart</div></div>
@@ -338,9 +352,6 @@
 
   <div class="sp-lg"></div>
   <div class="grid2" style="align-items:stretch">
-    <!-- No figure and no date, by the owner's decision: citations keep climbing, so any
-         published number becomes a ceiling within weeks. The live figure is given verbally
-         or under NDA — see talking_points. -->
     <div class="card mint">
       <div class="claim">The search engines of<br>the next generation</div>
       <div class="sp-sm"></div>
@@ -368,26 +379,33 @@
   <div class="kicker">And the rest of what we do well</div>
   <div class="grid3">
     <div class="card">
+      <svg class="i" viewBox="0 0 24 24"><path d="M12 3 19 5.8v5.7c0 4.4-2.9 7.4-7 9.2-4.1-1.8-7-4.8-7-9.2V5.8z"/><path d="M9 12.2l2.2 2.2 4.3-4.6"/></svg>
       <h3>Verified before published</h3>
       <p>No offer goes live before it is tested. An expired code on a third-party site reads
         as a let-down by the brand itself.</p>
     </div>
     <div class="card">
+      <svg class="i" viewBox="0 0 24 24"><path d="M4 4.5h16v12H8.5L4 20z"/><path d="M8 9h8M8 12.5h5"/></svg>
       <h3>Genuine Arabic depth</h3>
       <p>An Arabic guide library that keeps growing, written for the Saudi market, its
         dialect and its questions — not translated content.</p>
     </div>
     <div class="card">
+      <svg class="i" viewBox="0 0 24 24"><path d="M21.5 3.5 2.5 10.2l6.8 2.6 2.5 7z"/><path d="M9.3 12.8 21.5 3.5"/></svg>
       <h3>Telegram as a channel</h3>
       <p>A presence built on a platform with wide local reach that most competitors
         overlook.</p>
     </div>
   </div>
 
+  <div class="sp"></div>
+  <p class="note">Arabic digital content and e-commerce are among the growth tracks Saudi
+    Vision 2030 is driving — and this channel is built early or not at all.</p>
+
   <div class="foot"><span>Deal Pulse KSA — Company Profile</span><span>6</span></div>
 </section>
 
-<!-- ══════════════ 6 · Trust & working principles ══════════════ -->
+<!-- ══════════════ 7 · Trust & principles ══════════════ -->
 <section class="page">
   <div class="runhead"><div class="brand">Deal Pulse KSA · <span>نبض الصفقات</span></div>
     <div class="sec">Trust &amp; principles</div></div>
@@ -402,42 +420,42 @@
 
   <div class="grid2">
     <div class="card tight">
-      <h3>No unverified offer published</h3>
+      <div class="ic-head"><svg class="i" viewBox="0 0 24 24"><path d="M12 3 19 5.8v5.7c0 4.4-2.9 7.4-7 9.2-4.1-1.8-7-4.8-7-9.2V5.8z"/><path d="M9 12.2l2.2 2.2 4.3-4.6"/></svg><h3>No unverified offer published</h3></div>
       <p>Every offer is tested before it goes live and pulled the moment it expires. We do
         not leave a dead code carrying your name.</p>
     </div>
     <div class="card tight">
-      <h3>No bidding on your brand name</h3>
+      <div class="ic-head"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M6.4 17.6 17.6 6.4"/></svg><h3>No bidding on your brand name</h3></div>
       <p>We do not bid on your brand name or its variants in paid search. We do not compete
         for your own visitor, and we do not inflate your keyword cost.</p>
     </div>
     <div class="card tight">
-      <h3>No competitor code beside yours</h3>
+      <div class="ic-head"><svg class="i" viewBox="0 0 24 24"><rect x="4.5" y="10" width="15" height="10.5" rx="2.5"/><path d="M8.2 10V7.2a3.8 3.8 0 0 1 7.6 0V10"/></svg><h3>No competitor code beside yours</h3></div>
       <p>Your brand page carries no competing offer and no diversion to one — even where the
         competing discount is larger.</p>
     </div>
     <div class="card tight">
-      <h3>Your content stays yours</h3>
+      <div class="ic-head"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M14.8 9.6a3.6 3.6 0 1 0 0 4.8"/></svg><h3>Your content stays yours</h3></div>
       <p>What we produce for your brand is a lasting asset that works for you; its rights are
         settled in the collaboration agreement itself.</p>
     </div>
     <div class="card tight">
-      <h3>Attribution on your systems</h3>
+      <div class="ic-head"><svg class="i" viewBox="0 0 24 24"><path d="M10.2 13.8a4.2 4.2 0 0 0 6.2.4l2-2a4.2 4.2 0 1 0-5.9-5.9l-1.1 1.1"/><path d="M13.8 10.2a4.2 4.2 0 0 0-6.2-.4l-2 2a4.2 4.2 0 1 0 5.9 5.9l1.1-1.1"/></svg><h3>Attribution on your systems</h3></div>
       <p>We never ask you to trust a figure of ours: the code is recorded in your own
         affiliate system or the network you subscribe to. The number is yours.</p>
     </div>
     <div class="card tight">
-      <h3>Full confidentiality</h3>
+      <div class="ic-head"><svg class="i" viewBox="0 0 24 24"><path d="M3 12s3.6-6.2 9-6.2 9 6.2 9 6.2-3.6 6.2-9 6.2S3 12 3 12z"/><circle cx="12" cy="12" r="2.6"/><path d="M4 4 20 20"/></svg><h3>Full confidentiality</h3></div>
       <p>The terms and figures of any collaboration never leave us, and we have no objection
         to an NDA before a detailed discussion.</p>
     </div>
     <div class="card tight">
-      <h3>Clear disclosure to the reader</h3>
+      <div class="ic-head"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11.2v5.4"/><path d="M12 7.7v.15"/></svg><h3>Clear disclosure to the reader</h3></div>
       <p>We disclose the commercial relationship inside the content, as search engine
         policy requires — your content is never read as a hidden ad.</p>
     </div>
     <div class="card tight">
-      <h3>White-hat marketing only</h3>
+      <div class="ic-head"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.4"/><path d="M12 3.2v3M12 17.8v3M3.2 12h3M17.8 12h3"/><path d="M5.9 5.9 8 8M16 16l2.1 2.1M18.1 5.9 16 8M8 16l-2.1 2.1"/></svg><h3>White-hat marketing only</h3></div>
       <p>No doorway pages, no keyword stuffing, no technique that breaches search engine
         guidelines. What we build in your name cannot expose you to a penalty.</p>
     </div>
@@ -448,14 +466,77 @@
     <h3 style="margin-bottom:2mm">And the measuring happens on your side</h3>
     <p>We never ask you to take a number on our word. The exclusive code makes every order
       recorded in your own affiliate system, or in the network you subscribe to — so the
-      number you decide on is your own. The simplest start is a short pilot you measure
-      yourselves.</p>
+      number you build your decision on is your own. The simplest start is a short pilot you
+      measure yourselves.</p>
   </div>
 
   <div class="foot"><span>Deal Pulse KSA — Company Profile</span><span>7</span></div>
 </section>
 
-<!-- ══════════════ 7 · Engagement models ══════════════ -->
+<!-- ══════════════ 8 · Our Partners ══════════════
+     ⚠️ Deliberately empty. **No logo, no company name** — not even a faded or blurred
+     one; the eye catches it and the question is awkward. The slots are regular so they
+     read "reserved", not "unfinished", and the confidentiality line turns the emptiness
+     into a position the advertiser reads as a guarantee for themselves.
+
+     ▸ To add a partner later: replace <i></i> inside .slot with <img src="…" alt="…">,
+       a white-with-alpha monochrome version (not a PNG on a white ground), at a uniform
+       optical HEIGHT, not a uniform width. Rule lives in profile_dark.css. -->
+<section class="page">
+  <div class="runhead"><div class="brand">Deal Pulse KSA · <span>نبض الصفقات</span></div>
+    <div class="sec">Our Partners</div></div>
+
+  <div class="kicker">Who we work with</div>
+  <h2>Our Partners</h2>
+  <div class="rule"></div>
+  <p class="lead" style="max-width:150mm">We work with brands across delivery, retail,
+    fashion and e-commerce. <b>No partner logo appears here without their written
+    consent</b> — what is not cleared is not published, in a profile, a deck or a post.</p>
+
+  <div class="sp-lg"></div>
+  <div class="partners">
+    <div class="slot"><i></i></div>
+    <div class="slot"><i></i></div>
+    <div class="slot"><i></i></div>
+    <div class="slot"><i></i></div>
+    <div class="slot"><i></i></div>
+    <div class="slot"><i></i></div>
+    <div class="slot"><i></i></div>
+    <div class="slot"><i></i></div>
+  </div>
+
+  <div class="sp-lg"></div>
+  <div class="slab">
+    <svg class="i" viewBox="0 0 24 24" style="width:9mm;height:9mm"><circle cx="9" cy="12" r="5.6"/><circle cx="15" cy="12" r="5.6"/></svg>
+    <div>
+      <b>The same rule protects you</b>
+      <span>Your name, your figures and the terms of our work together never leave us — and
+        we have no objection to signing an NDA before a detailed discussion.</span>
+    </div>
+  </div>
+
+  <div class="sp-lg"></div>
+  <div class="grid3">
+    <div class="card tight">
+      <h3>Written consent first</h3>
+      <p>No name, logo or quote is published without written permission from the brand owner.</p>
+    </div>
+    <div class="card tight">
+      <h3>And no figures leave</h3>
+      <p>The size and results of our work stay between us. The number lives in your system,
+        not in our files.</p>
+    </div>
+    <div class="card tight">
+      <h3>Withdrawable any time</h3>
+      <p>Withdraw consent and the logo and name come off every piece of our material, no
+        discussion.</p>
+    </div>
+  </div>
+
+  <div class="foot"><span>Deal Pulse KSA — Company Profile</span><span>8</span></div>
+</section>
+
+<!-- ══════════════ 9 · Engagement models ══════════════ -->
 <section class="page">
   <div class="runhead"><div class="brand">Deal Pulse KSA · <span>نبض الصفقات</span></div>
     <div class="sec">Engagement models</div></div>
@@ -469,26 +550,26 @@
 
   <div class="grid2">
     <div class="card mint">
-      <h3>Seasonal campaign</h3>
-      <p style="margin-top:1.5mm">An integrated package around one season: a season page,
+      <div class="ic-head"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10.5h18M8 3v4M16 3v4"/></svg><h3>Seasonal campaign</h3></div>
+      <p>An integrated package around one season: a season page,
         supporting content, front-end placement, and distribution across our channels — for
         an agreed duration and fee.</p>
     </div>
     <div class="card">
-      <h3>Content sponsorship</h3>
-      <p style="margin-top:1.5mm">Arabic editorial production around your category and
+      <div class="ic-head"><svg class="i" viewBox="0 0 24 24"><path d="M5 3.5h14v17l-7-3.5-7 3.5z"/><path d="M9 8.5h6M9 12h4"/></svg><h3>Content sponsorship</h3></div>
+      <p>Arabic editorial production around your category and
         products, serving your presence in search and in AI answers, and remaining a
         permanent asset for you.</p>
     </div>
     <div class="card">
-      <h3>An exclusive offer for our audience</h3>
-      <p style="margin-top:1.5mm">One or more offers with multiple codes for Deal Pulse
+      <div class="ic-head"><svg class="i" viewBox="0 0 24 24"><path d="M3 10.5 10.5 3H21v10.5L13.5 21z"/><circle cx="16.5" cy="7.5" r="1.6"/></svg><h3>An exclusive offer for our audience</h3></div>
+      <p>One or more offers with multiple codes for Deal Pulse
         users — a code per segment, category or season, so attribution splits inside your
         system and you see which one sells.</p>
     </div>
     <div class="card">
-      <h3>Performance partnership</h3>
-      <p style="margin-top:1.5mm">A collaboration based on results achieved, with no upfront
+      <div class="ic-head"><svg class="i" viewBox="0 0 24 24"><path d="M3 17.5 9 11.5l4 3.5 8-9"/><path d="M16 6h5v5"/></svg><h3>Performance partnership</h3></div>
+      <p>A collaboration based on results achieved, with no upfront
         cost — through whichever attribution mechanism your brand uses.</p>
     </div>
   </div>
@@ -498,7 +579,7 @@
     <h3 style="margin-bottom:2mm">What we need from you to start</h3>
     <p>Your visual identity, an approved boilerplate, the offer details and duration, and a
       single point of contact. We ask for no technical integration and no change to your
-      storefront — production, publishing and measurement are on us.</p>
+      storefront — production and publishing are on us.</p>
   </div>
 
   <div class="sp-lg"></div>
@@ -509,10 +590,10 @@
       agreement and an NDA, and to complete your vendor registration process.</p>
   </div>
 
-  <div class="foot"><span>Deal Pulse KSA — Company Profile</span><span>8</span></div>
+  <div class="foot"><span>Deal Pulse KSA — Company Profile</span><span>9</span></div>
 </section>
 
-<!-- ══════════════ 8 · Process & contact ══════════════ -->
+<!-- ══════════════ 10 · How we work + contact ══════════════ -->
 <section class="page">
   <div class="runhead"><div class="brand">Deal Pulse KSA · <span>نبض الصفقات</span></div>
     <div class="sec">How we work</div></div>
@@ -561,7 +642,7 @@
     and pricing of any collaboration are settled in a separate agreement between the parties.
     This profile is available in Arabic and English.</p>
 
-  <div class="foot"><span>Deal Pulse KSA — Company Profile</span><span>9</span></div>
+  <div class="foot"><span>Deal Pulse KSA — Company Profile</span><span>10</span></div>
 </section>
 
 </body>
