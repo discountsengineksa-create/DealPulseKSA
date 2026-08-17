@@ -12599,17 +12599,20 @@ elif page == "استوديو المحتوى":
         return s
 
     def _font(size: int, weight: int = 700) -> ImageFont.FreeTypeFont:
-        """خط نوتو السعودي العربي — متغيّر الوزن. 700=Bold، 900=Black."""
-        try:
-            f = ImageFont.truetype(_FONT_AR, size)
-            try:
-                # axis order: [Weight, Width]
-                f.set_variation_by_axes([weight, 100])
-            except Exception:
-                pass
-            return f
-        except Exception:
-            return ImageFont.load_default()
+        """خط الهوية IBM Plex Sans Arabic — **أوزان ثابتة، لا محاور متغيّرة**.
+
+        ⚠️ كان هنا `set_variation_by_axes([weight, 100])` داخل `except: pass`.
+        ذلك يعمل مع `NotoSansArabic-Bold.ttf` لأنه **خطّ متغيّر** (محورا
+        `wght 100–900` و`wdth`)، بينما وجوه Plex **ثابتة** — فالنداء يرمي،
+        والـ`except` يبتلعه، ويُرسم كل شيء بوزن واحد **بلا أي إنذار**.
+        هذا بالضبط نمط العطب الصامت الذي تفادته بقيّة هذا الملف.
+
+        والأهم: الاستوديو كان يطلب **٩٠٠ و٨٠٠**، وهما خارج أوزان الدليل
+        أصلاً («الأوزان المستخدمة: 400 · 500 · 600 · 700 لا غير»)، وIBM Plex
+        Sans Arabic لا تملك أثقل من 700. فالقصّ إلى 700 هنا **مقصود ومعلن**
+        لا فقدُ ميزة: `brand.font` يختار أقرب ملفٍّ ثابت متاح.
+        """
+        return _brand.font(size, weight)
 
     def _vgradient(w: int, h: int, top, bottom) -> Image.Image:
         base = Image.new("RGB", (w, h), top)
