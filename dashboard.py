@@ -12807,21 +12807,58 @@ elif page == "استوديو المحتوى":
         ground_bot = _brand.DARK_GROUND if dark else _brand.SURFACE
         img = _vgradient(W, H, ground_top, ground_bot).convert("RGBA")
 
-        # ── نقش التقطيع: تذاكر خفيفة على الأطراف، الوسط نظيف ───────────────
-        # الشدّة تحت العتبة التي تجعل العين تقرأها أرضيةً لا شكلاً (نفس منطق
-        # `watermark-bg` في ريبو الويب).
-        deco = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        dd = ImageDraw.Draw(deco)
-        stroke = (*(_brand.DARK_BODY if dark else _brand.INK_900), 26 if dark else 20)
-        tw, th, rad = 190, 118, 22
-        for cx, cy in ((122, 150), (W - 132, 232), (150, H - 190), (W - 118, H - 128)):
-            x0, y0 = cx - tw // 2, cy - th // 2
-            dd.rounded_rectangle([x0, y0, x0 + tw, y0 + th], radius=rad,
-                                 outline=stroke, width=3)
-            # خطّ التقطيع المنقّط — الموتيف الذي يجعلها «تذكرة» لا مستطيلاً
-            for seg in range(x0 + 12, x0 + tw - 10, 16):
-                dd.line([(seg, cy), (seg + 8, cy)], fill=stroke, width=3)
-        img.alpha_composite(deco)
+        # ── نقش الخلفية: **نفس لغة `watermark-bg` في ريبو الويب** ───────────
+        # تذاكر مائلة + نِسب + كلمات السوق مبعثرة. الشدّة تحت العتبة التي تجعل
+        # العين تقرأها أرضيةً لا شكلاً (الويب: حدود ٪١٠ ونصّ ٪٨٫٥) — أي حاضرة
+        # لا مزاحِمة، فالكارت والنسبة يجلسان فوقها بلا إجهاد.
+        #
+        # ⚠️ النِسب بأرقام لاتينية بقصد: القيم التجارية لاتينية في هذا المنتج،
+        # والعربية-الهندية تُترك للإحصاءات — خلطهما على سطح واحد يُقرأ عطباً.
+        base = _brand.DARK_BODY if dark else _brand.INK_900
+        a_line = 30 if dark else 22          # حدّ التذكرة
+        a_text = 26 if dark else 20          # النصّ والنِسب
+
+        def _rot(w: int, h: int, painter, angle: float, cx: int, cy: int) -> None:
+            """يرسم عنصراً على لوح شفّاف ثم يميله ويلصقه موسَّطاً على (cx, cy).
+            PIL لا يميل النصّ مباشرة — نفس حيلة `transform=rotate` في SVG الويب."""
+            tile = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+            painter(ImageDraw.Draw(tile))
+            tile = tile.rotate(angle, resample=Image.BICUBIC, expand=True)
+            img.alpha_composite(tile, (int(cx - tile.width / 2), int(cy - tile.height / 2)))
+
+        def _ticket(d, w, h):
+            col = (*base, a_line)
+            d.rounded_rectangle([2, 2, w - 3, h - 3], radius=20, outline=col, width=3)
+            for sx in range(14, w - 12, 15):          # خطّ التقطيع المنقّط
+                d.line([(sx, h // 2), (sx + 7, h // 2)], fill=col, width=3)
+
+        # تذاكر مائلة — تملأ الأطراف وتترك عمود المحتوى أهدأ
+        for cx, cy, ang, tw, th in (
+            (118, 168, 8, 210, 128), (W - 128, 246, -7, 196, 120),
+            (150, H - 214, -5, 200, 124), (W - 118, H - 132, 6, 188, 116),
+            (W - 96, 620, -9, 170, 106), (96, 604, 7, 164, 102),
+        ):
+            _rot(tw, th, lambda d, w=tw, h=th: _ticket(d, w, h), ang, cx, cy)
+
+        # نِسب + كلمات السوق — نفس مفردات خلفية الموقع، ومعها «كاش باك»
+        scatter = [
+            ("50%", 66, -6, 250, 96),   ("30%", 54, -4, 92, 470),
+            ("20%", 46, 5, W - 92, 442), ("15%", 44, 5, W - 128, 812),
+            ("10%", 40, 6, 300, 962),   ("5%", 34, -3, 336, 206),
+            ("عروض", 40, -6, W - 150, 990),  ("كاش باك", 36, 4, 168, 330),
+            ("خصم", 36, 5, W - 210, 128),    ("كود خصم", 32, -5, 236, 742),
+            ("خصومات", 30, 4, 108, 862),     ("تنزيلات", 28, 3, W - 250, 690),
+        ]
+        for txt, size, ang, cx, cy in scatter:
+            shaped = _ar_smart(txt)
+            f = _font(size, 700)
+            probe = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+            bb = probe.textbbox((0, 0), shaped, font=f)
+            tw_, th_ = bb[2] - bb[0] + 12, bb[3] - bb[1] + 12
+            _rot(tw_, th_,
+                 lambda d, s=shaped, ff=f, o=bb: d.text((6 - o[0], 6 - o[1]), s,
+                                                        font=ff, fill=(*base, a_text)),
+                 ang, cx, cy)
 
         # ── الهيدر: أيقونة + اسم نصّي (الدليل: لا علامة كاملة حيث يُكتب الاسم) ──
         mark_file = "mark_white.png" if dark else "mark.png"
