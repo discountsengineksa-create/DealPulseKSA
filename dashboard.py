@@ -12572,17 +12572,27 @@ elif page == "استوديو المحتوى":
     if not _FONT_AR or not os.path.exists(_FONT_AR):
         st.warning("⚠️ خط الهوية `IBMPlexSansArabic-*.ttf` مفقود من `assets/fonts/` — البوسترات ستظهر بخط افتراضي لا يدعم العربي.")
 
-    # ─── لوحة الهوية المغلقة (دليل الهوية §اللون) ───────────────────────────
+    # ─── لوحة الهوية المغلقة (دليل الهوية §اللون · §التباين) ────────────────
     # كانت «كريمي فاخر + زمردي» بحبر (31,41,55): الكريمي دافئ (hue 36°) ضدّ
     # حرارة العلامة الباردة، والحبر ليس حبر العلامة. الآن كلها من `brand.py`.
-    _STUDIO_BG_TOP     = _brand.PAPER        # #FFFFFF
-    _STUDIO_BG_BOTTOM  = _brand.SURFACE      # #F7F9FB
+    #
+    # ⚠️ **الأدوار تنقلب على الداكن** — والبوستر صار له وضعان، فاللوحة تتبع
+    # مبدّل «المظهر». القيم مقيسة، وكلّها كانت تسقط قبل القلب:
+    #   الأخضر الحامل: g-700 على الأرضية الداكنة = **3.09:1** (يسقط للنصّ
+    #     الصغير) ⇐ ينقلب إلى g-500 = **6.68:1**.
+    #   شريحة الكود: حبر على حبر = **1.00:1** أي **غير مرئية إطلاقاً**
+    #     (أُثبت بالرندر) ⇐ تنقلب إلى ورق بحبر = **16.93:1**.
+    _STUDIO_DARK       = bool(_ui_dark)
+    _STUDIO_BG_TOP     = _brand.DARK_RAISED if _STUDIO_DARK else _brand.PAPER
+    _STUDIO_BG_BOTTOM  = _brand.DARK_GROUND if _STUDIO_DARK else _brand.SURFACE
     _STUDIO_EMERALD    = _brand.G_500        # زخرفي/وهج — لا يحمل نصّاً
-    _STUDIO_EMERALD_DK = _brand.G_700        # الأخضر الحامل — 5.48:1 مع أبيض
-    _STUDIO_INK        = _brand.INK_900      # #141C31 — 16.93:1 على أبيض
+    # الأخضر الحامل: g-700 على الفاتح (5.48:1) · g-500 على الداكن (6.68:1)
+    _STUDIO_EMERALD_DK = _brand.G_500 if _STUDIO_DARK else _brand.G_700
+    _STUDIO_INK        = _brand.INK_900      # يُرسم على الكارت الأبيض — 16.93:1
     _STUDIO_INK_SOFT   = _brand.INK_500      # #55637E — 6.05:1 على أبيض
-    _STUDIO_PILL_BG    = _brand.INK_900
-    _STUDIO_PILL_FG    = _brand.PAPER
+    # الشريحة تنقلب كاملةً كي تبقى مرئية على أرضيتها
+    _STUDIO_PILL_BG    = _brand.PAPER   if _STUDIO_DARK else _brand.INK_900
+    _STUDIO_PILL_FG    = _brand.INK_900 if _STUDIO_DARK else _brand.PAPER
 
     _AR_RESHAPER = arabic_reshaper.ArabicReshaper(configuration={
         'delete_harakat': False, 'support_ligatures': True,
@@ -12695,35 +12705,6 @@ elif page == "استوديو المحتوى":
         except Exception:
             return None
 
-    def _cover_logo(logo_bytes: bytes, box_w: int, box_h: int) -> Image.Image | None:
-        """يكبّر/يصغّر الصورة لتملأ الكارت بالكامل (cover) مع قص مركزي —
-        أي صورة تملأ المقاس 540×400 بدون تشويه نسبتها."""
-        try:
-            lg = Image.open(io.BytesIO(logo_bytes)).convert("RGBA")
-            w, h = lg.size
-            scale = max(box_w / w, box_h / h)
-            nw, nh = max(int(w * scale + 0.5), box_w), max(int(h * scale + 0.5), box_h)
-            lg = lg.resize((nw, nh), Image.LANCZOS)
-            left, top = (nw - box_w) // 2, (nh - box_h) // 2
-            return lg.crop((left, top, left + box_w, top + box_h))
-        except Exception:
-            return None
-
-    def _cover_top(logo_bytes: bytes, box_w: int, box_h: int) -> Image.Image | None:
-        """مثل _cover_logo لكن يقصّ من الأعلى (يحفظ الجزء العلوي بدل المركز).
-        ضروري لخلفية logo5 (768×1376): الـheader 'نبض الصفقات DEAL PULSE KSA'
-        موجود في النصف العلوي — لو قطعنا من المركز يضيع، فنقطع من الأعلى."""
-        try:
-            lg = Image.open(io.BytesIO(logo_bytes)).convert("RGBA")
-            w, h = lg.size
-            scale = max(box_w / w, box_h / h)
-            nw, nh = max(int(w * scale + 0.5), box_w), max(int(h * scale + 0.5), box_h)
-            lg = lg.resize((nw, nh), Image.LANCZOS)
-            left = (nw - box_w) // 2
-            return lg.crop((left, 0, left + box_w, box_h))
-        except Exception:
-            return None
-
     def _remove_bg_api(image_bytes: bytes):
         """يشيل خلفية الصورة عبر remove.bg API → PNG شفاف.
         يرجع (bytes, None) عند النجاح أو (None, رسالة الخطأ)."""
@@ -12810,6 +12791,55 @@ elif page == "استوديو المحتوى":
         return out.getvalue()
 
 
+    def _brand_backdrop(W: int, H: int) -> Image.Image:
+        """خلفية البوستر مبنيّة من اللوحة المغلقة — لا صورة مخبوزة.
+
+        ثلاث طبقات: أرضية اللوحة · نقش التقطيع (موتيف التذكرة، لغة العلامة
+        نفسها) · هيدر = أيقونة DP + الاسم نصّاً. الوسط يُترك خالصاً للكارت.
+
+        الوضع يتبع مبدّل «المظهر» في الشريط الجانبي، فالمادة تخرج بنفس الوضع
+        الذي يراه المالك. الأصول: `mark.png` (DP بحبر، للأرضية الفاتحة) و
+        `mark_white.png` (DP أبيض، للداكنة) — كلاهما شفّاف ومن لوقو التذكرة
+        المعتمد ٢٠٢٦-٠٨-١٢، لا من أصول يونيو.
+        """
+        dark = bool(_ui_dark)
+        ground_top = _brand.DARK_RAISED if dark else _brand.PAPER
+        ground_bot = _brand.DARK_GROUND if dark else _brand.SURFACE
+        img = _vgradient(W, H, ground_top, ground_bot).convert("RGBA")
+
+        # ── نقش التقطيع: تذاكر خفيفة على الأطراف، الوسط نظيف ───────────────
+        # الشدّة تحت العتبة التي تجعل العين تقرأها أرضيةً لا شكلاً (نفس منطق
+        # `watermark-bg` في ريبو الويب).
+        deco = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        dd = ImageDraw.Draw(deco)
+        stroke = (*(_brand.DARK_BODY if dark else _brand.INK_900), 26 if dark else 20)
+        tw, th, rad = 190, 118, 22
+        for cx, cy in ((122, 150), (W - 132, 232), (150, H - 190), (W - 118, H - 128)):
+            x0, y0 = cx - tw // 2, cy - th // 2
+            dd.rounded_rectangle([x0, y0, x0 + tw, y0 + th], radius=rad,
+                                 outline=stroke, width=3)
+            # خطّ التقطيع المنقّط — الموتيف الذي يجعلها «تذكرة» لا مستطيلاً
+            for seg in range(x0 + 12, x0 + tw - 10, 16):
+                dd.line([(seg, cy), (seg + 8, cy)], fill=stroke, width=3)
+        img.alpha_composite(deco)
+
+        # ── الهيدر: أيقونة + اسم نصّي (الدليل: لا علامة كاملة حيث يُكتب الاسم) ──
+        mark_file = "mark_white.png" if dark else "mark.png"
+        mark_path = os.path.join(_STUDIO_DIR, mark_file)
+        y_cursor = 74
+        if os.path.exists(mark_path):
+            mk = Image.open(mark_path).convert("RGBA")
+            target_w = 190
+            mk = mk.resize((target_w, max(1, int(mk.height * target_w / mk.width))),
+                           Image.LANCZOS)
+            img.alpha_composite(mk, ((W - mk.width) // 2, y_cursor))
+            y_cursor += mk.height + 16
+
+        name_col = _brand.DARK_BODY if dark else _brand.INK_900
+        _center_text(ImageDraw.Draw(img), _ar("نبض الصفقات"),
+                     y_cursor, _font(46, 700), name_col)
+        return img
+
     def _render_poster(
         store_name: str,
         store_logo_bytes: bytes | None,
@@ -12817,30 +12847,37 @@ elif page == "استوديو المحتوى":
         discount_value: str,
         code: str,
         tagline: str,
-        deal_pulse_logo_bytes: bytes | None,
         card_w: int = 620,
         card_h: int = 320,
         logo_scale: int = 80,
         discount_font_size: int = 140,
     ) -> bytes:
-        """البوستر النهائي 1080×1080 — تصميم نبض الصفقات الفاخر.
-        الخلفية logo6.png مصمَّمة جاهزة (DP + 'نبض الصفقات DEAL PULSE KSA' header
-        + ✦ ديكور + مساحة وسطى فارغة). نضع فوقها الكارت + الخصم + الكود."""
-        W = H = _CANVAS  # 1080×1080 = نفس مقاس logo6
+        """البوستر النهائي 1080×1080 — الخلفية **تُبنى من اللوحة، لا من صورة**.
 
-        # خلفية كريم احتياطية (لو ما تحمّلت)
-        img = _vgradient(W, H, _STUDIO_BG_TOP, _STUDIO_BG_BOTTOM).convert("RGBA")
+        🔴 كانت الخلفية `logo6.png`: صورة مخبوزة بكل شيء داخلها. وهذا يعني أن
+        الهوية كانت **مجمَّدة عند تاريخ تصدير الملف** لا مشتقّة من اللوحة —
+        فتغيير الألوان في الكود لم يكن يلمسها إطلاقاً، وكان التدرّج أدناه
+        مجرّد احتياطي «لو ما تحمّلت» لا يعمل أبداً.
 
-        # ─── الخلفية الرسمية (logo6) — جاهزة بدون أي شفافية ──────────────
-        if deal_pulse_logo_bytes:
-            bg = _cover_logo(deal_pulse_logo_bytes, W, H)
-            if bg is not None:
-                img.paste(bg, (0, 0), bg)
+        وما كان مخبوزاً فيها (قِيس ٢٠٢٦-٠٨-١٧):
+          · كريمي دافئ #F5F2DF — قياس hue ‏36° بينما العلامة باردة كلها
+          · **اللوقو القديم بلا إطار التذكرة** (الملف من ١٤ يونيو، ولوقو
+            التذكرة اعتُمد ١٢ أغسطس) — أي بوستر منشور كان يحمل علامة قديمة
+          · أشكال زخرفية سيج/تركوازية خارج اللوحة المغلقة
+          · مقاسها 1024 بينما الكود يعلن 1080
+
+        البديل يتبع الدليل حرفياً: «المسافة الآمنة تُترك للتخطيط لا للملف»،
+        و«الاتساق يأتي من تكرار اللون والخط والمسافة لا من تكرار الشعار»،
+        و«في الهيدرات: أيقونة + اسم نصّي — لا علامة كاملة».
+        """
+        W = H = _CANVAS
+
+        img = _brand_backdrop(W, H)
 
         draw = ImageDraw.Draw(img)
 
         # ─── الكارت الأبيض الفاخر ────────────────────────────────────────
-        # يقع وسط البوستر، تحت header logo6 (DP + كتابة البراند).
+        # يقع وسط البوستر، تحت هيدر الخلفية (أيقونة DP + الاسم نصّاً).
         card_x = (W - card_w) // 2
         card_y = 360
         _drop_shadow(img, card_x, card_y, card_w, card_h, radius=50, blur=30, alpha=50)
@@ -12925,7 +12962,7 @@ elif page == "استوديو المحتوى":
             f_tag = _font(22, weight=700)
             _center_text(draw, _ar(_tag_clean), tag_y, f_tag, _STUDIO_EMERALD_DK)
 
-        # ملاحظة: الديكور ✦ موجود في خلفية logo6 — لا نرسمه يدوياً
+        # الديكور (نقش التقطيع) يرسمه `_brand_backdrop` من اللوحة — لا يدوياً هنا.
 
         out = io.BytesIO()
         img.convert("RGB").save(out, format="PNG", optimize=True)
@@ -12974,9 +13011,10 @@ elif page == "استوديو المحتوى":
 
             # ─── تنبيه عن الخلفية الرسمية ───────────────────────────────────
             st.info(
-                "🎨 **الخلفية الرسمية = logo6.png** (مربّع 1080×1080 جاهز للنشر). "
-                "تحتوي على DP + 'نبض الصفقات DEAL PULSE KSA' + لمسة ✦ في الزاوية. "
-                "لا تحتاج لأي تحكّم بالشفافية — المنتج النهائي جاهز للنشر مباشرة."
+                "🎨 **الخلفية تُبنى من اللوحة المغلقة** (1080×1080 جاهز للنشر): أرضية "
+                "الهوية + نقش تقطيع التذكرة + هيدر بأيقونة DP والاسم نصّاً. "
+                "كانت صورة مخبوزة `logo6.png` تُجمّد الهوية عند تاريخ تصديرها — "
+                "الآن تتبع اللوحة ومبدّل المظهر تلقائياً."
             )
 
             generate = st.button("✨ توليد البوسترين (نظيف + بالثيم)", type="primary", width='stretch')
@@ -13000,21 +13038,6 @@ elif page == "استوديو المحتوى":
                         st.caption(f"🪄 تمت إزالة الخلفية ({_method}).")
                     else:
                         st.warning(f"تعذّر إزالة الخلفية: {_rmbg_err} — سنستخدم الصورة كما هي.")
-                # ترتيب الأفضليّة لخلفية البوستر الرسمية:
-                #   1) logo6.png — الخلفية المربّعة 1024×1024 الجاهزة (الافتراضي).
-                #   2) logo5.png — الخلفية الطولية 768×1376 (احتياط).
-                #   3) logo_for_watermark.png — نسخة معالَجة بعتبة السطوع.
-                #   4) logo.png — اللوقو العادي بخلفيته الكريم.
-                dp_logo_bytes = None
-                _wm_path = None
-                for _cand in ("logo6.png", "logo5.png", "logo_for_watermark.png", "logo.png"):
-                    _p = os.path.join(_STUDIO_DIR, _cand)
-                    if os.path.exists(_p):
-                        _wm_path = _p
-                        break
-                if _wm_path:
-                    with open(_wm_path, "rb") as _f:
-                        dp_logo_bytes = _f.read()
                 with st.spinner("جاري رسم الصورتين…"):
                     # 1) الشعار النظيف (1080×1080 أبيض + لوقو موسَّط) → master.logo_url
                     clean_png = _render_clean_logo(store_logo_bytes, store_name_in)
@@ -13026,7 +13049,6 @@ elif page == "استوديو المحتوى":
                         discount_value=discount_value_in,
                         code=code_in,
                         tagline=tagline_in,
-                        deal_pulse_logo_bytes=dp_logo_bytes,
                         logo_scale=logo_scale,
                         discount_font_size=discount_font_size_in,
                     )
