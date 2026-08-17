@@ -2084,15 +2084,16 @@ function renderStoryRow() {
         if (ta !== tb) return ta - tb;
         return _rankIdx(b, tb) - _rankIdx(a, ta);   // الأعلى rank آخر DOM
     }).slice(0, 12);
-    // ألوان حلقة الستوري العادي (تطابق الموقع والداشبورد).
+    // حلقات الستوري المُشهَر — اللوحة المغلقة (المصدر: brand.py::STORY_RING_TIERS).
+    // كانت سبعة ألوان مخترعة وأحدها أحمر، واللوحة تحجز الأحمر للخطر لا للترويج.
+    // صارت ثلاثة لأن الأخضر الساطع والعميق **محجوزان للترند** أدناه، فلا يجوز
+    // أن تطابقهما حلقة إشهار وإلا اختلط المُشهَر بالترند على القارئ.
+    // «تقطيع» يفرّق بالنمط لا باللون: أي تدرّج حبري كان نصفه يذوب في الأرضية
+    // الحبرية فيُقرأ حلقةً خضراء ناقصة — كُشف بالرندر لا بالأرقام.
     const RING_GRAD = {
-        gold:'linear-gradient(135deg,#fde047,#d4af37,#fde047)',
-        silver:'linear-gradient(135deg,#e5e7eb,#9ca3af,#e5e7eb)',
-        bronze:'linear-gradient(135deg,#e8b486,#cd7f32,#e8b486)',
-        red:'linear-gradient(135deg,#f87171,#dc2626,#f87171)',
-        green:'linear-gradient(135deg,#34d399,#059669,#34d399)',
-        purple:'linear-gradient(135deg,#c084fc,#7c3aed,#c084fc)',
-        pink:'linear-gradient(135deg,#f9a8d4,#db2777,#f9a8d4)'
+        paper:'linear-gradient(135deg,#FFFFFF 0%,#C3CBDA 50%,#FFFFFF 100%)',
+        mint: 'linear-gradient(135deg,#ECFDF5 0%,#6EE7B7 50%,#ECFDF5 100%)',
+        perf: 'repeating-conic-gradient(#10B981 0deg 11deg,#E3E8EF 11deg 22deg)'
     };
     const _side = LANG_CURRENT === 'en' ? 'left' : 'right';
     row.innerHTML = STORY.map((s, i) => {

@@ -125,3 +125,90 @@ def on_green(large: bool = False) -> tuple[int, int, int]:
 
 def hex_of(rgb: tuple[int, int, int]) -> str:
     return "#%02X%02X%02X" % rgb
+
+
+# ═══ حلقات ستوري الإشهار — داخل اللوحة ════════════════════════════════════
+# كانت سبعة ألوان مخترعة (ذهبي/فضّي/برونزي/أحمر/بنفسجي/وردي/أخضر)، ستّة منها
+# خارج اللوحة تماماً وأحدها **أحمر** — واللوحة تحجز الأحمر للخطر والفقد ولا
+# تُدخله مادةً ترويجية إطلاقاً.
+#
+# **العدد نزل من سبعة إلى ثلاثة، وهذا قيد حقيقي لا تقصير:** حلقتان خضراوان
+# محجوزتان أصلاً للترند اليومي والأسبوعي، وحلقة ثالثة للافتراضي. فما يتبقّى
+# داخل لوحة مغلقة من تدرّجات **يمكن تمييزها فعلاً** ثلاثةٌ لا أكثر.
+#
+# الفصل مقيس لا مذوَّق (متوسط الإضاءة · التشبّع):
+#   محجوز يومي   0.430 · 74.2      محجوز أسبوعي 0.114 · 90.8
+#   محجوز افتراضي 0.155 · 29.5
+#   فضّي          0.797 · 11.9      نعناعي       0.793 · 76.3
+# فضّي ونعناعي يتساويان إضاءةً ويفترقان تشبّعاً (11.9 مقابل 76.3).
+#
+# 🔴 والثالث لم يُحسم بالأرقام بل بالرندر: أول محاولة كانت تدرّجاً حبرياً-أخضر
+# (‏`#141C31 → #10B981`)، وقياسه بدا مقبولاً (0.188 مقابل 0.114 للأسبوعي)،
+# **لكن الصورة كشفت أن نصفه الحبريّ يذوب في الأرضية الحبرية** فيُقرأ حلقةً
+# خضراء ناقصة تشبه الأسبوعي. فاستُبدل بفصلٍ **بالنمط لا باللون**: تقطيع
+# التذكرة نفسه — موتيف الهوية الأصلي — عبر `repeating-conic-gradient`.
+# لا يشبه أي تدرّج ناعم آخر، ويعرّف بالعلامة لا بلونٍ وحده.
+# (‏`repeating-conic-gradient`: Chrome 69+ · Safari 12.1+ — فوق حدّ
+#  browserslist في ريبو الويب وفوق WebView تيليجرام.)
+#
+# ⚠️ القيم مكرّرة نصّياً في `miniapp.html::RING_GRAD` و`StoreStories.tsx::
+# RING_GRADIENTS` لأنهما لا يستوردان بايثون. **أي تعديل هنا يُنسخ إليهما**،
+# ويوجد فاحص تطابق في نهاية هذا الملف.
+STORY_RING_TIERS: dict[str, dict[str, str]] = {
+    "paper": {
+        "label": "⚪ فضّي",
+        "css": "linear-gradient(135deg,#FFFFFF 0%,#C3CBDA 50%,#FFFFFF 100%)",
+    },
+    "mint": {
+        "label": "🌿 نعناعي",
+        "css": "linear-gradient(135deg,#ECFDF5 0%,#6EE7B7 50%,#ECFDF5 100%)",
+    },
+    "perf": {
+        "label": "🎫 تقطيع التذكرة",
+        "css": "repeating-conic-gradient(#10B981 0deg 11deg,#E3E8EF 11deg 22deg)",
+    },
+}
+
+#: تدرّجا الترند — محجوزان، ولا يجوز أن تطابقهما حلقة إشهار وإلا اختلط
+#: «متجر مُشهَر» بـ«متجر ترند» على القارئ.
+TREND_RING_DAILY  = "linear-gradient(135deg,#34D399 0%,#10B981 50%,#34D399 100%)"
+TREND_RING_WEEKLY = "linear-gradient(135deg,#047857 0%,#065F46 50%,#047857 100%)"
+
+
+def check_ring_parity() -> list[str]:
+    """يتحقّق أن الأسطح الثلاثة تحمل **نفس** تعريفات الحلقات، ويرجّع الفروق.
+
+    القيم مكرّرة في ثلاث لغات (بايثون · HTML/JS · TSX) لأن أياً منها لا يستورد
+    الآخر — والتكرار يصمت حين ينحرف. هذا الفاحص يجعل الانحراف **مرئياً**:
+
+        python -c "import brand,sys; d=brand.check_ring_parity(); \
+                   print('\\n'.join(d) or 'OK'); sys.exit(1 if d else 0)"
+
+    يفترض أن ريبو الويب شقيق لهذا الريبو على القرص؛ يتخطّاه بصمت لو غاب.
+    """
+    import re
+
+    here = _HERE
+    web = os.path.join(os.path.dirname(here), "dealpulseksa-web",
+                       "components", "StoreStories.tsx")
+    mini = os.path.join(here, "miniapp.html")
+    norm = lambda s: re.sub(r"\s+", "", s).lower()
+    want = {k: norm(v["css"]) for k, v in STORY_RING_TIERS.items()}
+    problems: list[str] = []
+
+    for path, pattern in ((mini, r"const RING_GRAD = \{(.*?)\};"),
+                          (web, r"const RING_GRADIENTS: Record<string, string> = \{(.*?)\};")):
+        if not os.path.exists(path):
+            continue
+        src = open(path, encoding="utf-8").read()
+        m = re.search(pattern, src, re.S)
+        if not m:
+            problems.append(f"{os.path.basename(path)}: لم يُعثر على خريطة الحلقات")
+            continue
+        got = {k: norm(v) for k, v in re.findall(r"(\w+)\s*:\s*'([^']+)'", m.group(1))}
+        for k in set(want) | set(got):
+            if want.get(k) != got.get(k):
+                problems.append(
+                    f"{os.path.basename(path)}: '{k}' مختلف — "
+                    f"brand={want.get(k)!r} vs file={got.get(k)!r}")
+    return problems
