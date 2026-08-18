@@ -53,6 +53,44 @@ metadata:
 بـ`npx tsc <file> --outDir <tmp> --module commonjs` ثم `require` وتشغيل دوالها الحقيقية
 على البيانات الحقيقية (وصفة ٢ أدناه). ما بعدهما يُتحقَّق **حيّاً بـcurl بعد النشر**.
 
+## ١د) 🔴 إشعار المهمة الخلفية **يكذب** على كود الخروج
+
+شغّلتُ `next build` في الخلفية داخل أمر ملتفّ (`build > log; echo EXIT=$? >> log; tail`).
+**الإشعار قال `exit code 0` بينما البناء فشل** (`EXIT=1` · `Failed to type check`) — لأن
+الإشعار يقرأ كود **الأمر الملتفّ** لا كود البناء. لو صُدِّق لدُمج بناءٌ فاشل على الإنتاج.
+
+⇒ **القاعدة: اقرأ `EXIT=` من داخل السجل، ولا تعتمد على حالة الإشعار إطلاقاً.**
+
+## ١هـ) التحقّق الأقوى — شغّل خادم الإنتاج محلياً واختبره
+
+بعد نجاح البناء، البناء وحده لا يثبت التشغيل:
+
+```bash
+PORT=3100 npx next start -p 3100 &     # جاهز خلال ~1.5 ثانية
+# ثم اختبر ٩ أنواع مسارات: 200 + <title> + canonical + og:image + عدد H1
+# و/sitemap.xml (عدد الروابط وlastmod) و/robots.txt (عدد User-agent)
+```
+
+استُعمل للتحقّق من هجرة Next 16 قبل لمس `main`: تسعة مسارات ٢٠٠ بعنوان وcanonical وog
+وH1 واحد، و`sitemap` ١٬٧٢٨ رابطاً بـ`lastmod` على ١٬٦٠١ فقط، و`robots` بـ١٦ زاحفاً.
+⚠️ أوقف الخادم بعدها: `Get-NetTCPConnection -LocalPort 3100 -State Listen`.
+
+## ١و) هجرة Next 15 → 16 (٢٠٢٦-٠٨-١٨) — ما كسر وما لم يكسر
+
+`next@16.3.1` + `postcss@8.5.26` ⇒ **`npm audit` صفر ثغرة** (كانت ٦ عالية)، و`sharp` خرج
+من الشجرة كلياً.
+
+- **الكاسر الوحيد:** `revalidateTag(tag)` صار `revalidateTag(tag, profile)` — الوسيط الثاني
+  إلزامي. البروفايلات: `default · seconds · minutes · hours · days · weeks · max`.
+  في `app/api/revalidate/route.ts` الصحيح `'max'` (خطّاف إبطال عند الطلب).
+  و`updateTag` **ليست بديلاً** — محصورة بـServer Actions.
+- **`eslint-config-next@16` يتطلّب `eslint>=9`** فتُرك على ١٥ عمداً: لا علاقة له بالثغرات،
+  وترقيته هجرة flat-config منفصلة.
+- **Next يعيد كتابة `tsconfig.json`**: `jsx: "preserve"` ← `"react-jsx"` (تشغيل React
+  التلقائي) + `.next/dev/types` في `include`. تغيير متوقَّع لا يُعكَس.
+- **لم يكسر:** لا `middleware`، لا `'use server'`، لا `next/legacy/image`، لا `next/amp`،
+  و`await params` كان بالنمط الصحيح أصلاً في ٦ ملفات.
+
 ## ١ج) قياس Core Web Vitals بلا مفتاح — Lighthouse محلياً
 
 `PageSpeed Insights API` يرجّع **429 بلا مفتاح**، و`CrUX API` يرجّع **403**. البديل الذي
