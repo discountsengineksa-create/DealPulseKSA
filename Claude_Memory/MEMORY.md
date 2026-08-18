@@ -87,7 +87,7 @@
 
 ## ٥) التحليلات والسيو (٢٩)
 
-- [🧪 فلتر النصائح الخارجية](seo_external_advice_filter.md) — كل سلسلة SEO تُصنَّف قبل التنفيذ؛ ٧ من ١٠٠ ضارّة عندنا؛ الوجهة skill `dealpulse-seo`
+- [🧪 فلتر النصائح الخارجية](seo_external_advice_filter.md) — كل سلسلة SEO تُصنَّف قبل التنفيذ؛ ٧ من ١٠٠ ضارّة عندنا؛ **+ كتاب حسوب ٠٨-١٨: اقرأ تاريخ المادة — ٣ فصول توصي بأدوات سحبتها جوجل**؛ الوجهة skill `dealpulse-seo`
 
 - تحليل المتاجر: [الجناح](store_analytics_bi.md) (٤ تبويبات + AI عبر Groq) · [استراتيجية إعادة البناء](analysis_rebuild_strategy.md) (٦ صفحات، ٣ مسارات دخل، zero-fakery) · [البنية النهائية](analytics_store_structure.md) (٦ أقسام؛ «أبرز» = top favorites)
 - الكلمات المفتاحية: [⛔ Keyword Planner](google_ads_keyword_planner.md) (**رفضته Google نهائياً — التكامل مُتراجَع عنه بـ5ad4f7b، لا كود حيّ**) · [طلب السوق السعودي](keyword_demand_ksa.md) (البراندات 10K-100K؛ متاجرك ~10-100) · [⚠️ Windsor GSC](windsor_gsc_connector.md) (المجاني يرجع أصفاراً وهمية بلا خطأ)
