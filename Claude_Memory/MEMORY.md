@@ -94,7 +94,7 @@
 - الكلمات المفتاحية: [⛔ Keyword Planner](google_ads_keyword_planner.md) (**رفضته Google نهائياً — التكامل مُتراجَع عنه بـ5ad4f7b، لا كود حيّ**) · [طلب السوق السعودي](keyword_demand_ksa.md) (البراندات 10K-100K؛ متاجرك ~10-100) · [⚠️ Windsor GSC](windsor_gsc_connector.md) (المجاني يرجع أصفاراً وهمية بلا خطأ)
 - [SEO Indexation Status](seo_indexation_status.md) — الفهرسة 4→150؛ انفجار ظهور يوليو؛ العنق = المركز+CTR
 - [SEO Deep Audit Fixes](seo_deep_audit_fixes.md) — بق light-AR 500 (is_trending BOOLEAN) أفرغ الخريطة صامتاً؛ اسحب الباك-إند أولاً
-- [SEO Authority Building](seo_authority_building.md) — crawled-not-indexed سقف سلطة؛ باكلينكس White-Hat
+- [SEO Authority Building](seo_authority_building.md) — crawled-not-indexed سقف سلطة؛ باكلينكس White-Hat؛ **+ ٠٨-١٨: صفر رابط خارج لأي تاجر ⇒ مسار الشركاء ليس تبادلاً (٥ أهداف بدليل مالي)**
 - [SEO High-Demand Front](seo_high_demand_front_opened.md) — فخّ AR=draft+EN=noindex؛ نُشرت 23 صفحة؛ نون/نمشي محجوبان بالسلطة
 - [🤖 AI Citation Channel](ai_citation_channel.md) — **٤١٣ استشهاد Copilot/٣٠ يوماً مقابل ١٣٢ نقرة جوجل**؛ يقاس بـBing AI Performance؛ **يسقط حكم «صفر نقرة = ميت»**؛ قاعدتان لا واحدة
 - [SEO Page Portfolio Verdict](seo_page_portfolio_verdict.md) — ٧١٠/٧٦٤ صفحة صفر نقرة؛ المتاجر نيّة ميتة؛ التجميع وحده يكسب — ⚠️ **عُدِّل بـ[[ai_citation_channel]]: صفر نقرة ≠ صفر قيمة**
