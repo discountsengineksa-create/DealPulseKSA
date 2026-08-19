@@ -102,7 +102,7 @@
 - [SEO Category Query Alignment](seo_category_query_alignment.md) — وزن المفردات: «كوبون» م49 و«متاجر» م19؛ ٨٧٪ من الظهور غارق؛ CTR المتاجر منخفض **بقرار الإسناد** لا بعطل
 - [🔁 تكاذُب /c/ ↔ /store](seo_c_store_cannibalization.md) — صفحتان بعنوان واحد تُسقطان الترتيب؛ canonical مشتقّ لـ١٩ + اسم المتجر العربي مضمون بكل عنوان
 - [🔴 SEO Meta Code — التفريع نُسِخ](seo_meta_code_leak.md) — الكود يُكشف لكل الكتالوج في سنِبت المتجر **و llms.txt**؛ isCodeAttributed لشارات المدوّنة فقط
-- [⚖️ ثقة أدوات الفحص](seo_audit_tools_trust.md) — **آخر يومين في GSC ناقصان (سقوط كل الخطوط معاً = تأخّر لا هبوط)**؛ «هبوط الترافيك» في Ahrefs تقدير لا قياس؛ سيمرش مجمّد + عيّنة ٦٪
+- [⚖️ ثقة أدوات الفحص](seo_audit_tools_trust.md) — **آخر يومين في GSC ناقصان (سقوط كل الخطوط معاً = تأخّر لا هبوط)**؛ «هبوط الترافيك» في Ahrefs تقدير لا قياس؛ سيمرش مجمّد + عيّنة ٦٪ — **+ ٠٨-١٩: بندٌ رقمه = عدد صفحات الموقع ⇒ المصدر قالبيّ (الفوتر)، وصفوف «changed» تُعزى لالتزاماتك أنت**
 - الفهرسة: [Google Indexing حيّ](seo_google_indexing_live.md) (٢٠٠/يوم) · [الدفع بالجملة](seo_bulk_reindex_ops.md) (دفعات ٦؛ IndexNow بلا حصة؛ Yandex 202 = نجاح) · [الظهور لمحرّكات AI](seo_ai_visibility_optin.md) (١٥ كراولر + llms.txt)
 - الترويج: [محور القنوات المملوكة](seo_owned_channels_pivot.md) (رفض Reddit/Quora؛ X+Telegram+IG) · [PR Blitz Kit](seo_pr_blitz_kit.md) (لترويج /calendar)
 - [🔗 SaaSHub Directory Listing](saashub_directory_listing.md) — رابط الدليل nofollow حتى تُوثَّق الملكية (٢٢ صفحة مقيسة)؛ التوثيق مجاني بلا رابط متبادل
