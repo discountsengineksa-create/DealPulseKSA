@@ -16526,6 +16526,56 @@ elif page == "🎯 إدارة الحملات":
                         "صفحة «📊 تقرير البحث» تفكّكها جاهزةً — لا نكرّرها هنا."
                     )
 
+                # ── أداء الصفحة المقصودة نفسها في البحث (migration 071) ──
+                _has_pg = int(pd.read_sql("""
+                    SELECT COUNT(*) AS n FROM information_schema.tables
+                    WHERE table_schema='public' AND table_name='seo_gsc_pages'
+                """, _cc).iloc[0]["n"]) == 1
+                if _has_pg:
+                    _lp = (_c["landing_url"] or "").split("?")[0].split("#")[0]
+                    _pg = pd.read_sql("""
+                        SELECT snapshot_date AS "اللقطة", clicks AS "نقرات",
+                               impressions AS "ظهور", ctr AS "CTR", position AS "المركز"
+                        FROM seo_gsc_pages
+                        WHERE page LIKE %(u)s
+                        ORDER BY snapshot_date DESC LIMIT 1
+                    """, _cc, params={"u": _lp.rstrip("/") + "%"})
+                    st.markdown("**أداء الصفحة المقصودة نفسها** (لا إجمالي الموقع)")
+                    if _pg.empty:
+                        st.caption(
+                            "لا صفّ لهذه الصفحة بعد — الكرون اليومي يملأ `seo_gsc_pages` على Railway، "
+                            "وGSC يتأخّر يومين. أو الصفحة لم تنل ظهوراً في النافذة."
+                        )
+                    else:
+                        _p0 = _pg.iloc[0]
+                        _p1c, _p2c, _p3c = st.columns(3)
+                        with _p1c: kpi_card("🖱️", "نقرات الصفحة", int(_p0["نقرات"] or 0))
+                        with _p2c: kpi_card("👁️", "ظهور الصفحة", int(_p0["ظهور"] or 0))
+                        with _p3c: kpi_card("📍", "مركز الصفحة",
+                                            "{:.1f}".format(float(_p0["المركز"] or 0)))
+                        st.caption("نافذة ٢٨ يوماً منتهية بـ {} — لا تُجمع مع لقطات أخرى.".format(_p0["اللقطة"]))
+
+                    if st.button("🔍 اسحب استعلامات هذه الصفحة من GSC", key="cmp_gsc_q"):
+                        try:
+                            from api.seo.gsc_detail import queries_for_page
+                            _rows = queries_for_page(_lp)
+                            if not _rows:
+                                st.info(
+                                    "لا نتائج — إمّا `GSC_SA_JSON` غير مضبوط حيث يعمل الداشبورد، "
+                                    "أو الصفحة بلا ظهور في آخر ٢٨ يوماً."
+                                )
+                            else:
+                                _qdf = pd.DataFrame(_rows).rename(columns={
+                                    "query": "الاستعلام", "clicks": "نقرات",
+                                    "impressions": "ظهور", "ctr": "CTR", "position": "المركز"})
+                                st.dataframe(_qdf, width="stretch", hide_index=True)
+                                st.caption(
+                                    "هذه **الاستعلامات التي جلبت الصفحة فعلاً** — مصدر كلمات "
+                                    "أصدق من أي تقدير، ويُقرأ مع الكلمات السلبية التعاقدية."
+                                )
+                        except Exception as _e:
+                            st.warning("تعذّر السحب: {}".format(_e))
+
                 st.markdown("#### 📝 قراءة جديدة — لا تُحفظ بلا فعل")
                 _r1, _r2 = st.columns(2)
                 _r_actual = _r1.number_input("المؤشّر المعدود", min_value=0,

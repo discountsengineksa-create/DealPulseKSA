@@ -125,6 +125,14 @@ def _seo_snapshot_cycle() -> None:
         capture_snapshot()
     except Exception as exc:
         _log.warning("seo snapshot cycle failed (non-fatal): %s", exc)
+    # تفصيل GSC بالصفحة والاستعلام (migration 071) — تقرأه صفحة إدارة الحملات
+    # لترى أداء صفحتها المقصودة لا إجمالي الموقع. مستقلّ عن اللقطة أعلاه كي لا
+    # يُسقط فشلُ أحدهما الآخر.
+    try:
+        from api.seo.gsc_detail import capture_gsc_detail
+        capture_gsc_detail()
+    except Exception as exc:
+        _log.warning("gsc detail cycle failed (non-fatal): %s", exc)
 
 
 def _llm_cache_cleanup_cycle() -> None:
