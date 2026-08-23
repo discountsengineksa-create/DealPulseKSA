@@ -40,6 +40,31 @@ router = APIRouter(prefix="/track", tags=["tracking"])
 # (يمنع bots من تضخيم الأرقام الظاهرة في الواجهة).
 QUALITY_THRESHOLD_FOR_COUNTERS = 50
 
+# هل عمودا الإسناد موجودان؟ يُفحص مرة واحدة عند أول طلب ثم يُخزَّن.
+# السبب: الواجهة ترسل gclid/client_id منذ web bd208e3، والـmigration 070 قد
+# لا يكون طُبِّق بعد على قاعدة الإنتاج. الكتابة **تتكيّف** بدل أن تنكسر —
+# لأن ترتيب النشر (كود قبل مايجريشن) يقع فعلاً، ولا يجوز أن يُسقط التتبّع كلّه.
+_ATTRIB_COLS: bool | None = None
+
+
+def _attrib_cols_ready(conn) -> bool:
+    global _ATTRIB_COLS
+    if _ATTRIB_COLS is None:
+        try:
+            with conn.cursor() as _c:
+                _c.execute(
+                    """
+                    SELECT COUNT(*) FROM information_schema.columns
+                    WHERE table_name = 'action_logs'
+                      AND column_name IN ('gclid', 'client_id')
+                    """
+                )
+                _ATTRIB_COLS = int(_c.fetchone()[0]) == 2
+        except Exception:
+            _ATTRIB_COLS = False
+        _log.info("attribution columns ready: %s", _ATTRIB_COLS)
+    return _ATTRIB_COLS
+
 
 @router.post("", response_model=TrackResponse, status_code=201)
 @limiter.limit(LIMIT_TRACK)
@@ -93,6 +118,7 @@ def track_action(payload: TrackRequest, request: Request, conn=Depends(get_db)):
             raise HTTPException(status_code=404, detail=f"store '{payload.store_id}' not found")
 
     # 3) Idempotent INSERT في action_logs
+    _attrib_ok = _attrib_cols_ready(conn)
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -102,8 +128,8 @@ def track_action(payload: TrackRequest, request: Request, conn=Depends(get_db)):
                 country_code, region_code, city, postal_code,
                 lat, lng, isp, asn,
                 is_datacenter, is_proxy, device_class,
-                cf_bot_score, quality_score, story_view_id, visitor_id,
-                gclid, client_id
+                cf_bot_score, quality_score, story_view_id, visitor_id
+                {extra_cols}
             )
             VALUES (
                 %s, %s, %s, %s, %s,
@@ -111,11 +137,14 @@ def track_action(payload: TrackRequest, request: Request, conn=Depends(get_db)):
                 %s, %s, %s, %s,
                 %s, %s, %s, %s,
                 %s, %s, %s,
-                %s, %s, %s::uuid, %s::uuid,
-                %s, %s
+                %s, %s, %s::uuid, %s::uuid
+                {extra_vals}
             )
             ON CONFLICT (event_id) DO NOTHING
-            """,
+            """.format(
+                extra_cols=", gclid, client_id" if _attrib_ok else "",
+                extra_vals=", %s, %s" if _attrib_ok else "",
+            ),
             (
                 payload.user_id, payload.store_id, payload.action, payload.details, payload.source,
                 event_id, geo.ip_hash, geo.ua_hash,
@@ -123,8 +152,7 @@ def track_action(payload: TrackRequest, request: Request, conn=Depends(get_db)):
                 geo.lat, geo.lng, geo.isp, geo.asn,
                 is_dc, is_proxy, geo.device_class,
                 geo.cf_bot_score, quality, payload.story_view_id, payload.visitor_id,
-                payload.gclid, payload.client_id,
-            ),
+            ) + ((payload.gclid, payload.client_id) if _attrib_ok else ()),
         )
 
         # 4) تحديث عدادات master — فقط للأحداث عالية الجودة
