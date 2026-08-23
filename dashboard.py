@@ -16562,6 +16562,26 @@ elif page == "🎯 إدارة الحملات":
                                             "{:.1f}".format(float(_p0["المركز"] or 0)))
                         st.caption("نافذة ٢٨ يوماً منتهية بـ {} — لا تُجمع مع لقطات أخرى.".format(_p0["اللقطة"]))
 
+                    if _pg.empty and st.button("🔄 املأ جداول GSC التفصيلية الآن", key="cmp_gsc_fill"):
+                        # الخدمة التي تحمل GSC_SA_JSON هي الـAPI لا الداشبورد،
+                        # فيُستدعى السحب عبر نقطة إدارية بدل تنفيذه هنا.
+                        _sec = os.getenv("ADMIN_SHARED_SECRET")
+                        _api = os.getenv("INTERNAL_API_URL", "https://api.dealpulseksa.com").rstrip("/")
+                        if not _sec:
+                            st.warning("أضف `ADMIN_SHARED_SECRET` على خدمة الداشبورد (بنفس قيمة الـAPI).")
+                        else:
+                            try:
+                                _rr = requests.post(
+                                    f"{_api}/api/v1/admin/seo-gsc-detail",
+                                    headers={"X-Admin-Secret": _sec}, timeout=90)
+                                if _rr.status_code < 300:
+                                    st.success("✅ {}".format(_rr.json()))
+                                    st.rerun()
+                                else:
+                                    st.error("HTTP {} — {}".format(_rr.status_code, _rr.text[:160]))
+                            except Exception as _e:
+                                st.error("تعذّر الاستدعاء: {}".format(_e))
+
                     if st.button("🔍 اسحب استعلامات هذه الصفحة من GSC", key="cmp_gsc_q"):
                         try:
                             from api.seo.gsc_detail import queries_for_page

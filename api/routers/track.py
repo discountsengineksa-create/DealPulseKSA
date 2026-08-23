@@ -1,4 +1,5 @@
 import logging
+import time as _time
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from psycopg2.extras import RealDictCursor
@@ -44,25 +45,40 @@ QUALITY_THRESHOLD_FOR_COUNTERS = 50
 # السبب: الواجهة ترسل gclid/client_id منذ web bd208e3، والـmigration 070 قد
 # لا يكون طُبِّق بعد على قاعدة الإنتاج. الكتابة **تتكيّف** بدل أن تنكسر —
 # لأن ترتيب النشر (كود قبل مايجريشن) يقع فعلاً، ولا يجوز أن يُسقط التتبّع كلّه.
-_ATTRIB_COLS: bool | None = None
+_ATTRIB_COLS: bool = False
+_ATTRIB_CHECKED_AT: float = 0.0
+_ATTRIB_RECHECK_SECONDS = 300   # ٥ دقائق
 
 
 def _attrib_cols_ready(conn) -> bool:
-    global _ATTRIB_COLS
-    if _ATTRIB_COLS is None:
-        try:
-            with conn.cursor() as _c:
-                _c.execute(
-                    """
-                    SELECT COUNT(*) FROM information_schema.columns
-                    WHERE table_name = 'action_logs'
-                      AND column_name IN ('gclid', 'client_id')
-                    """
-                )
-                _ATTRIB_COLS = int(_c.fetchone()[0]) == 2
-        except Exception:
-            _ATTRIB_COLS = False
-        _log.info("attribution columns ready: %s", _ATTRIB_COLS)
+    """هل عمودا الإسناد موجودان؟
+
+    ⚠️ **النتيجة السالبة لا تُخزَّن للأبد.** المايجريشن قد يُطبَّق بينما الخدمة
+    شغّالة (وقع فعلاً: طُبِّق من زرّ الداشبورد بعد نشر الكود)، ولو خُزِّن «غير
+    موجود» دائماً لبقي `gclid`/`client_id` يُسقطان حتى إعادة تشغيل الخدمة —
+    أي تفقد أياماً من مفاتيح الإسناد بلا سبب. لذا يُعاد الفحص كل ٥ دقائق حتى
+    ينجح، ثم يُثبَّت الموجب بلا فحص إضافي.
+    """
+    global _ATTRIB_COLS, _ATTRIB_CHECKED_AT
+    if _ATTRIB_COLS:
+        return True
+    now = _time.time()
+    if now - _ATTRIB_CHECKED_AT < _ATTRIB_RECHECK_SECONDS:
+        return False
+    _ATTRIB_CHECKED_AT = now
+    try:
+        with conn.cursor() as _c:
+            _c.execute(
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_name = 'action_logs'
+                  AND column_name IN ('gclid', 'client_id')
+                """
+            )
+            _ATTRIB_COLS = int(_c.fetchone()[0]) == 2
+    except Exception:
+        _ATTRIB_COLS = False
+    _log.info("attribution columns ready: %s", _ATTRIB_COLS)
     return _ATTRIB_COLS
 
 

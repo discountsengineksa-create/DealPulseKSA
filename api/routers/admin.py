@@ -505,6 +505,18 @@ def seo_snapshot(x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
     return capture_snapshot()
 
 
+@router.post("/seo-gsc-detail")
+def seo_gsc_detail(x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
+    """يسحب تفصيل Search Console بالصفحة والاستعلام الآن (migration 071).
+
+    الكرون اليومي يفعلها تلقائياً؛ هذه للتشغيل الفوري بعد إنشاء الجداول بدل
+    انتظار دورة الغد. تعمل على الخدمة التي تحمل GSC_SA_JSON.
+    """
+    _verify_admin(x_admin_secret)
+    from api.seo.gsc_detail import capture_gsc_detail
+    return capture_gsc_detail()
+
+
 @router.post("/seo-auto-run")
 def seo_auto_run(x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
     """تشغيل يدوي لدورة محرّك SEO الأوتوماتيكية الكاملة (نفس دورة 3 صباحاً):
