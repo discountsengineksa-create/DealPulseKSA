@@ -21,6 +21,8 @@ class TrackRequest(BaseModel):
     source: Literal["bot", "web", "dashboard", "telegram_miniapp"] = "web"
     event_id: Optional[str] = Field(None, max_length=64, description="UUID اختياري لحماية الـ idempotency")
     story_view_id: Optional[str] = Field(None, max_length=64, description="UUID story_views.view_id لو الحدث من داخل ستوري")
+    gclid: Optional[str] = Field(None, max_length=200, description="معرّف نقرة الإعلان (gclid/gbraid/wbraid) — مفتاح OCI إلى Google Ads")
+    client_id: Optional[str] = Field(None, max_length=64, description="client_id من كوكي _ga — مفتاح Measurement Protocol إلى GA4")
 
 
 class TrackResponse(BaseModel):

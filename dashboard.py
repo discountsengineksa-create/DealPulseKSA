@@ -1889,6 +1889,7 @@ _ANALYSIS_PAGES = [
 "تحليل طلبات الأكواد", "تحليل المستخدمين",
 "👣 زوّار الموقع",
 "💰 إسناد الإيراد",
+"🎯 إدارة الحملات",
 ]
 _OTHER_PAGES = [
 "📣 بلاغات الأكواد",  # ← Migration 029: بلاغات لا يعمل + إدارة المتاجر المسحوبة
@@ -16175,3 +16176,468 @@ elif page == "💰 إسناد الإيراد":
         st.error(f"تعذّر بناء الجسر: {_e}")
     finally:
         _rc.close()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 🎯 إدارة الحملات — عقد القياس قبل الإطلاق
+#
+# مبنية حرفياً على ما استُخلص من شهادات القياس والإسناد
+# (المرجع الكامل: seo/ads_measurement_doctrine.md):
+#   §10 أسماء المتاجر الشريكة كلمات سلبية إلزامية — التزام تعاقدي لا ضبط أداء.
+#   §16 هدف واحد لكل مرحلة، والوكيل يُعلَن وكيلاً لا يُخفى.
+#   §17 لا تقرير يُغلق بلا «فعل»؛ ومرجعيتنا أداؤنا الماضي المعدود لا مرجعية عامّة.
+#   §20 لا يُحكَم على آخر ٧–١٤ يوماً (تأخّر التحويل)، ولا يُشخَّص هبوط قبل سجلّ التغييرات.
+#   §23 القنوات غير-جوجل لا يُنسب إليها تحويل بلا UTM.
+# ═══════════════════════════════════════════════════════════════════════════
+elif page == "🎯 إدارة الحملات":
+    page_title("🎯", "إدارة الحملات",
+               "عقد قياس قبل الإطلاق — لا حملة تُطلق بلا حَكَم، ولا قراءة تُغلق بلا فعل")
+
+    _GA4_ID   = "G-VRBHD0VK66"
+    _MIN_DAYS = 21          # الاختبار يحتاج ٣–٤ أسابيع لبلوغ دلالة
+    _LAG_DAYS = 7           # آخر ٧ أيام لا يُحكم عليها — التحويل لم يصل بعد
+
+    _CHANNELS = {
+        "google_search": "🔍 بحث جوجل (مدفوع)",
+        "snapchat":      "👻 سناب شات",
+        "tiktok":        "🎵 تيك توك",
+        "instagram":     "📸 إنستقرام",
+        "telegram":      "✈️ تيليجرام (مملوك)",
+        "email":         "✉️ بريد (مملوك)",
+        "organic":       "🌱 عضوي/محتوى",
+    }
+    _PAID_NON_GOOGLE = {"snapchat", "tiktok", "instagram"}
+    _STAGES = {
+        "awareness":     "① وعي",
+        "consideration": "② اعتبار",
+        "purchase":      "③ شراء",
+        "loyalty":       "④ ولاء",
+    }
+    _KPI_EVENTS = {
+        "copy_coupon":     "نسخ كود (وكيل)",
+        "click_link":      "نقر رابط المتجر",
+        "view_store":      "مشاهدة متجر",
+        "order_confirmed": "طلب مؤكَّد (سلة/أدميتاد)",
+    }
+    _PROXY_KPIS = {"copy_coupon", "click_link", "view_store"}
+
+    _cc = get_conn()
+    try:
+        _cc.rollback()   # تنظيف أي معاملة معلّقة من صفحة سابقة
+
+        _tbl_n = int(pd.read_sql("""
+            SELECT COUNT(*) AS n FROM information_schema.tables
+            WHERE table_schema='public' AND table_name IN ('campaigns','campaign_readings')
+        """, _cc).iloc[0]["n"])
+
+        if _tbl_n < 2:
+            st.warning(
+                "**جداول الحملات غير منشأة بعد.** الملف `migration_070_campaigns.sql` في جذر "
+                "المشروع — ينشئ `campaigns` و`campaign_readings` وعمودَي الإسناد "
+                "`gclid`/`client_id` في `action_logs`."
+            )
+            if st.button("🛠️ إنشاء الجداول الآن (migration_070)", type="primary"):
+                try:
+                    with open("migration_070_campaigns.sql", encoding="utf-8") as _f:
+                        _sql_txt = _f.read()
+                    with _cc.cursor() as _cur:
+                        _cur.execute(_sql_txt)
+                    _cc.commit()
+                    st.success("✅ أُنشئت الجداول والأعمدة.")
+                    st.rerun()
+                except Exception as _e:
+                    _cc.rollback()
+                    st.error(f"تعذّر الإنشاء: {_e}")
+            st.stop()
+
+        _t_new, _t_run, _t_dem = st.tabs(
+            ["🧾 حملة جديدة (عقد القياس)", "📊 الحملات والقراءات", "🔍 الطلب المرصود + UTM"])
+
+        # ── التبويب ١: سبعة فحوص تمنع إطلاق حملة لا تُقاس ────────────────
+        with _t_new:
+            st.caption(
+                "لا تُحفظ الحملة «جاهزة» إلا باجتياز الفحوص. كل فحص يقابل خسارة وقعت "
+                "فعلاً في سوقنا أو بنداً تعاقدياً."
+            )
+
+            _f1, _f2 = st.columns(2)
+            _name    = _f1.text_input("اسم الحملة", key="cmp_name",
+                                      placeholder="عودة المدارس — عنقود الأدوات")
+            _channel = _f2.selectbox("القناة", list(_CHANNELS),
+                                     format_func=lambda k: _CHANNELS[k], key="cmp_ch")
+
+            _f3, _f4, _f5 = st.columns(3)
+            _stage  = _f3.selectbox("مرحلة الرحلة", list(_STAGES),
+                                    format_func=lambda k: _STAGES[k], key="cmp_stage")
+            _kpi    = _f4.selectbox("المؤشّر الوحيد", list(_KPI_EVENTS),
+                                    format_func=lambda k: _KPI_EVENTS[k], key="cmp_kpi")
+            _target = _f5.number_input("الهدف الرقمي", min_value=1, value=20, step=1, key="cmp_target")
+
+            _f6, _f7, _f8 = st.columns(3)
+            _start  = _f6.date_input("يبدأ", value=date.today(), key="cmp_start")
+            _end    = _f7.date_input("ينتهي", value=date.today() + timedelta(days=28), key="cmp_end")
+            _budget = _f8.number_input("الميزانية (ر.س)", min_value=0.0, value=0.0, step=50.0, key="cmp_budget")
+
+            _url  = st.text_input("الصفحة المقصودة", key="cmp_url",
+                                  placeholder="https://www.dealpulseksa.com/calendar")
+            _stop = st.text_area("حدّ الإيقاف — متى نوقف الحملة؟", key="cmp_stop", height=70,
+                                 placeholder="نوقف إذا تجاوزت كلفة النسخة ٨ ر.س بعد ٣ أسابيع، أو صفر طلب مؤكَّد بعد ١٠٠ نسخة.")
+            _kws  = st.text_area("الكلمات المستهدَفة (كلمة بكل سطر)", key="cmp_kws", height=110,
+                                 placeholder="[كوبون ادوات مدرسية]")
+
+            st.markdown("**وسوم UTM** — إلزامية لكل قناة غير-جوجل: بلا UTM لا يُنسب تحويل.")
+            _u1, _u2, _u3 = st.columns(3)
+            _utm_s = _u1.text_input("utm_source", key="cmp_us",
+                                    value=("" if _channel == "google_search" else _channel))
+            _utm_m = _u2.text_input("utm_medium", key="cmp_um",
+                                    value=("" if _channel == "google_search" else
+                                           ("paid_social" if _channel in _PAID_NON_GOOGLE else "owned")))
+            _utm_c = _u3.text_input("utm_campaign", key="cmp_uc")
+
+            _proxy_ack = False
+            if _kpi in _PROXY_KPIS:
+                _proxy_ack = st.checkbox(
+                    "أُقرّ أن هذا **مؤشّر وكيل** لا طلباً مؤكَّداً، وأن بناء OCI مستمرّ.",
+                    key="cmp_proxy")
+
+            if st.button("🧪 افحص واحفظ", type="primary", key="cmp_save"):
+                _checks = []
+
+                # ① الصفحة المقصودة تعمل وتحمل وسم GA4
+                try:
+                    _r = requests.get(_url, timeout=20,
+                                      headers={"User-Agent": "DealPulse-Preflight/1.0"})
+                    _has_tag = _GA4_ID in _r.text
+                    _checks.append({
+                        "الفحص": "الصفحة المقصودة تعمل وتحمل وسم GA4",
+                        "النتيجة": bool(_r.status_code == 200 and _has_tag),
+                        "التفصيل": "HTTP {} · الوسم {}".format(
+                            _r.status_code, "موجود" if _has_tag else "مفقود"),
+                    })
+                except Exception as _e:
+                    _checks.append({"الفحص": "الصفحة المقصودة تعمل وتحمل وسم GA4",
+                                    "النتيجة": False, "التفصيل": "تعذّر الوصول: {}".format(_e)})
+
+                # ② UTM للقنوات غير-جوجل
+                if _channel == "google_search":
+                    _checks.append({"الفحص": "وسوم UTM",
+                                    "النتيجة": True,
+                                    "التفصيل": "قناة جوجل — الوسم التلقائي (gclid) يكفي ولا يُوسم يدوياً"})
+                else:
+                    _utm_vals = (_utm_s or "", _utm_m or "", _utm_c or "")
+                    _utm_ok = all(v.strip() for v in _utm_vals) and all(" " not in v.strip() for v in _utm_vals)
+                    _checks.append({"الفحص": "وسوم UTM (source/medium/campaign)",
+                                    "النتيجة": bool(_utm_ok),
+                                    "التفصيل": "الثلاثة مطلوبة بلا مسافات — وإلا لا يُنسب تحويل"})
+
+                # ③ صفر اسم متجر شريك في الكلمات — التزام تعاقدي
+                _kw_list = [k.strip(" []\"'") for k in (_kws or "").splitlines() if k.strip()]
+                _stores = pd.read_sql(
+                    "SELECT DISTINCT store_id, COALESCE(name_en,'') AS en FROM master "
+                    "WHERE store_id IS NOT NULL", _cc)
+                _hits = []
+                for _kw in _kw_list:
+                    _kl = _kw.lower()
+                    for _, _row in _stores.iterrows():
+                        _ar = str(_row["store_id"]).strip()
+                        _en = str(_row["en"]).strip().lower()
+                        if _ar and _ar in _kw:
+                            _hits.append("{} ⊃ {}".format(_kw, _ar))
+                        elif _en and len(_en) > 2 and _en in _kl:
+                            _hits.append("{} ⊃ {}".format(_kw, _en))
+                _checks.append({
+                    "الفحص": "صفر اسم متجر شريك في الكلمات (عقد الأفلييت)",
+                    "النتيجة": len(_hits) == 0,
+                    "التفصيل": ("لا تقاطع" if not _hits
+                                else "تقاطع يُبطل العمولة: " + " · ".join(_hits[:4])),
+                })
+
+                # ④ خطّ الأساس معدود من بياناتنا
+                _win_days = max(int((_end - _start).days), 1)
+                _base = None
+                if _kpi == "order_confirmed":
+                    _checks.append({"الفحص": "خطّ الأساس معدود",
+                                    "النتيجة": False,
+                                    "التفصيل": "الطلب المؤكَّد لا يُعَدّ عندنا بعد — يحتاج OCI. اختر وكيلاً مؤقّتاً."})
+                else:
+                    _base = int(pd.read_sql(
+                        "SELECT COUNT(*) AS n FROM action_logs WHERE action_type = %(k)s "
+                        "AND action_time >= %(s)s::date - make_interval(days => %(d)s) "
+                        "AND action_time < %(s)s::date",
+                        _cc, params={"k": _kpi, "s": _start, "d": _win_days}).iloc[0]["n"])
+                    _checks.append({"الفحص": "خطّ الأساس معدود من action_logs",
+                                    "النتيجة": True,
+                                    "التفصيل": "{} حدثاً في الـ{} يوماً السابقة — الهدف {}".format(
+                                        _base, _win_days, int(_target))})
+
+                # ⑤ حدّ الإيقاف + ميزانية للقنوات المدفوعة
+                _paid = (_channel in _PAID_NON_GOOGLE) or (_channel == "google_search")
+                _checks.append({"الفحص": "حدّ الإيقاف مكتوب قبل الإنفاق",
+                                "النتيجة": len((_stop or "").strip()) >= 15,
+                                "التفصيل": "بلا حدٍّ مكتوب لا يوجد قرار إيقاف بل مزاج"})
+                if _paid:
+                    _checks.append({"الفحص": "ميزانية محدَّدة",
+                                    "النتيجة": float(_budget) > 0,
+                                    "التفصيل": "{:,.0f} ر.س · اليومي ≈ {:,.1f} ر.س".format(
+                                        float(_budget), float(_budget) / max(_win_days, 1))})
+
+                # ⑥ إقرار الوكيل
+                if _kpi in _PROXY_KPIS:
+                    _checks.append({"الفحص": "إقرار أن المؤشّر وكيل مؤقّت",
+                                    "النتيجة": bool(_proxy_ack),
+                                    "التفصيل": "الوكيل رخصة مؤقّتة شرطها بناء القياس الحقيقي"})
+
+                # ⑦ نافذة كافية للحكم
+                _checks.append({"الفحص": "نافذة ≥ {} يوماً".format(_MIN_DAYS),
+                                "النتيجة": _win_days >= _MIN_DAYS,
+                                "التفصيل": "{} يوماً — أول ~٧ إقلاع وآخر ٧ لا يُحكم عليها".format(_win_days)})
+
+                _df_checks = pd.DataFrame(_checks)
+                _passed = bool(_df_checks["النتيجة"].all()) and bool((_name or "").strip()) and bool((_url or "").strip())
+
+                st.markdown("#### نتيجة الفحص")
+                _show = _df_checks.copy()
+                _show["النتيجة"] = _show["النتيجة"].map(lambda b: "✅" if b else "❌")
+                st.dataframe(_show, width="stretch", hide_index=True)
+
+                try:
+                    with _cc.cursor() as _cur:
+                        _cur.execute("""
+                            INSERT INTO campaigns
+                                (name, channel, stage, kpi_event, kpi_target, is_proxy_kpi,
+                                 baseline_value, baseline_window_days, starts_on, ends_on,
+                                 budget_sar, stop_rule, landing_url,
+                                 utm_source, utm_medium, utm_campaign, keywords,
+                                 preflight, preflight_passed, status)
+                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s)
+                            RETURNING id
+                        """, (
+                            (_name or "").strip(), _channel, _stage, _kpi, float(_target),
+                            _kpi in _PROXY_KPIS, _base, _win_days, _start, _end,
+                            float(_budget) or None, (_stop or "").strip(), (_url or "").strip(),
+                            (_utm_s or "").strip() or None, (_utm_m or "").strip() or None,
+                            (_utm_c or "").strip() or None, (_kws or "").strip() or None,
+                            json.dumps(_checks, ensure_ascii=False), _passed,
+                            "ready" if _passed else "draft",
+                        ))
+                        _new_id = _cur.fetchone()[0]
+                    _cc.commit()
+                    if _passed:
+                        st.success("✅ اجتازت الفحوص — حُفظت **جاهزة للإطلاق** (#{}).".format(_new_id))
+                    else:
+                        st.error("❌ لم تجتز — حُفظت **مسوّدة** (#{}). أصلح الأحمر ثم أعد الفحص.".format(_new_id))
+                except Exception as _e:
+                    _cc.rollback()
+                    st.error("تعذّر الحفظ: {}".format(_e))
+
+        # ── التبويب ٢: القراءة والفعل ────────────────────────────────────
+        with _t_run:
+            _camps = pd.read_sql("""
+                SELECT id, name, channel, stage, kpi_event, kpi_target, is_proxy_kpi,
+                       baseline_value, starts_on, ends_on, budget_sar, status,
+                       preflight_passed, landing_url
+                FROM campaigns ORDER BY created_at DESC
+            """, _cc)
+
+            if _camps.empty:
+                st.info("لا حملات بعد — ابدأ من تبويب «حملة جديدة».")
+            else:
+                _c1, _c2, _c3, _c4 = st.columns(4)
+                with _c1: kpi_card("🎯", "الحملات", len(_camps))
+                with _c2: kpi_card("✅", "جاهزة/شغّالة",
+                                   int(_camps["status"].isin(["ready", "running"]).sum()))
+                with _c3: kpi_card("📝", "مسوّدات لم تجتز",
+                                   int((~_camps["preflight_passed"].astype(bool)).sum()), "warning")
+                with _c4: kpi_card("💰", "ميزانية مرصودة",
+                                   "{:,.0f}".format(float(_camps["budget_sar"].fillna(0).sum())))
+
+                _sel = st.selectbox(
+                    "اختر حملة", _camps["id"].tolist(),
+                    format_func=lambda i: "#{} — {}".format(
+                        i, _camps.loc[_camps["id"] == i, "name"].iloc[0]),
+                    key="cmp_sel")
+                _c = _camps[_camps["id"] == _sel].iloc[0]
+
+                _today     = date.today()
+                _win_end   = min(_today, _c["ends_on"])
+                _judge_end = _win_end - timedelta(days=_LAG_DAYS)
+
+                _actual_full = 0
+                _actual_judge = 0
+                if _c["kpi_event"] != "order_confirmed":
+                    _q = ("SELECT COUNT(*) AS n FROM action_logs WHERE action_type = %(k)s "
+                          "AND action_time >= %(s)s AND action_time < %(e)s")
+                    _actual_full = int(pd.read_sql(_q, _cc, params={
+                        "k": _c["kpi_event"], "s": _c["starts_on"],
+                        "e": _win_end + timedelta(days=1)}).iloc[0]["n"])
+                    if _judge_end > _c["starts_on"]:
+                        _actual_judge = int(pd.read_sql(_q, _cc, params={
+                            "k": _c["kpi_event"], "s": _c["starts_on"],
+                            "e": _judge_end + timedelta(days=1)}).iloc[0]["n"])
+
+                _m1, _m2, _m3, _m4 = st.columns(4)
+                with _m1: kpi_card("📈", "المعدود (كل النافذة)", _actual_full)
+                with _m2: kpi_card("⚖️", "القابل للحكم (−{}ي)".format(_LAG_DAYS), _actual_judge)
+                with _m3: kpi_card("🎯", "الهدف", int(_c["kpi_target"] or 0))
+                with _m4: kpi_card("📉", "خطّ الأساس", int(_c["baseline_value"] or 0), "warning")
+
+                if bool(_c["is_proxy_kpi"]):
+                    st.warning(
+                        "**المؤشّر وكيل** ({}) لا طلباً مؤكَّداً: يُقرأ ولا يقود المزايدة، "
+                        "ورخصته مشروطة ببناء OCI.".format(
+                            _KPI_EVENTS.get(_c["kpi_event"], _c["kpi_event"])))
+
+                st.markdown("**قبل أن تحكم — خمسة أسباب معروفة لانخفاضٍ وهميّ تُستبعَد أولاً:**")
+                st.markdown(
+                    "1. **تأخّر التحويل** — الإنفاق يُبلَّغ كاملاً والتحويل حتى ٩٠ يوماً بعد النقرة.\n"
+                    "2. **تغيير نموذج الإسناد** — يعيد توزيع الفضل للماضي ولا يغيّر العدد.\n"
+                    "3. **ربط GA4 بـAds** — يخفض التحويلات المنسوبة في Ads، وليس أداءً أقلّ.\n"
+                    "4. **مسارات لم تُغلق** — من نقر ولم يحوّل **بعدُ** قد يحوّل لاحقاً.\n"
+                    "5. **وقبل أي تشخيص:** اقرأ `Change History` في Google Ads."
+                )
+
+                st.markdown("#### 🔍 Search Console — نفس نافذة الحملة")
+                _gsc = pd.read_sql("""
+                    SELECT snapshot_date AS "اليوم", gsc_clicks AS "نقرات",
+                           gsc_impressions AS "ظهور", gsc_ctr AS "CTR", gsc_position AS "المركز"
+                    FROM seo_perf_snapshots
+                    WHERE snapshot_date BETWEEN %(s)s AND %(e)s
+                    ORDER BY snapshot_date
+                """, _cc, params={"s": _c["starts_on"], "e": _win_end})
+                if _gsc.empty:
+                    st.caption("لا لقطات GSC في هذه النافذة (الكرون اليومي يملؤها على Railway).")
+                else:
+                    # ⚠️ كل صفّ في seo_perf_snapshots إجمالي **آخر ٢٨ يوماً** لا يومٌ واحد
+                    # (perf_snapshot.py يسحب نافذة ٢٨ يوماً كل يوم). فجمع الصفوف يضخّم
+                    # الرقم بعدد اللقطات — تُقرأ **آخر لقطة** ويُعرض الباقي اتجاهاً.
+                    _last = _gsc.iloc[-1]
+                    _g1, _g2, _g3 = st.columns(3)
+                    with _g1: kpi_card("🖱️", "نقرات (آخر ٢٨ يوماً)", int(_last["نقرات"] or 0))
+                    with _g2: kpi_card("👁️", "ظهور (آخر ٢٨ يوماً)", int(_last["ظهور"] or 0))
+                    with _g3: kpi_card("📍", "المركز", "{:.1f}".format(float(_last["المركز"] or 0)))
+                    st.caption(
+                        "📌 كل صفّ **إجمالي نافذة ٢٨ يوماً منتهية بذلك التاريخ** — لا يُجمَع. "
+                        "الأرقام أعلاه من لقطة {}.".format(_last["اليوم"]))
+                    st.dataframe(_gsc, width="stretch", hide_index=True)
+                    st.caption("⚠️ آخر يومين في GSC ناقصان دائماً — سقوط كل الخطوط معاً تأخّرُ إبلاغ لا هبوط.")
+                if not os.getenv("GSC_SA_JSON"):
+                    st.info(
+                        "لتفصيل **الاستعلامات والصفحات**: أضف `GSC_SA_JSON` على خدمة الداشبورد. "
+                        "صفحة «📊 تقرير البحث» تفكّكها جاهزةً — لا نكرّرها هنا."
+                    )
+
+                st.markdown("#### 📝 قراءة جديدة — لا تُحفظ بلا فعل")
+                _r1, _r2 = st.columns(2)
+                _r_actual = _r1.number_input("المؤشّر المعدود", min_value=0,
+                                             value=int(_actual_judge), key="cmp_r_actual")
+                _r_spend  = _r2.number_input("المصروف حتى الآن (ر.س)", min_value=0.0,
+                                             value=0.0, step=25.0, key="cmp_r_spend")
+                _r_notes  = st.text_area("ملاحظات", key="cmp_r_notes", height=70)
+                _r_action = st.text_area(
+                    "الفعل المتّخذ (إلزامي)", key="cmp_r_action", height=70,
+                    placeholder="مثال: أضفتُ ٣ كلمات سلبية من تقرير مصطلحات البحث، وخفضتُ سقف CPC.")
+                if st.button("💾 احفظ القراءة", key="cmp_r_save"):
+                    if len((_r_action or "").strip()) < 10:
+                        st.error("القراءة لا تُغلق بلا فعل — قياسٌ لا يُلهم فعلاً يعني أن الهدف أو المقياس خطأ.")
+                    else:
+                        try:
+                            with _cc.cursor() as _cur:
+                                _cur.execute("""
+                                    INSERT INTO campaign_readings
+                                        (campaign_id, kpi_actual, spend_sar, gsc_clicks,
+                                         gsc_impressions, gsc_position, notes, action_taken)
+                                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                                """, (
+                                    int(_sel), float(_r_actual), float(_r_spend) or None,
+                                    int(_gsc.iloc[-1]["نقرات"] or 0) if not _gsc.empty else None,
+                                    int(_gsc.iloc[-1]["ظهور"] or 0) if not _gsc.empty else None,
+                                    float(_gsc.iloc[-1]["المركز"] or 0) if not _gsc.empty else None,
+                                    (_r_notes or "").strip() or None, (_r_action or "").strip(),
+                                ))
+                            _cc.commit()
+                            st.success("✅ حُفظت القراءة بفعلها.")
+                            st.rerun()
+                        except Exception as _e:
+                            _cc.rollback()
+                            st.error("تعذّر الحفظ: {}".format(_e))
+
+                _reads = pd.read_sql("""
+                    SELECT read_on AS "اليوم", kpi_actual AS "المؤشّر", spend_sar AS "المصروف",
+                           gsc_clicks AS "نقرات GSC", action_taken AS "الفعل", notes AS "ملاحظات"
+                    FROM campaign_readings WHERE campaign_id = %(c)s
+                    ORDER BY read_on DESC, id DESC
+                """, _cc, params={"c": int(_sel)})
+                if not _reads.empty:
+                    st.markdown("#### 📚 سجلّ القراءات")
+                    st.dataframe(_reads, width="stretch", hide_index=True)
+
+                with st.expander("🧪 فحوص ما قبل الإطلاق لهذه الحملة"):
+                    _pf = pd.read_sql("SELECT preflight FROM campaigns WHERE id = %(c)s",
+                                      _cc, params={"c": int(_sel)}).iloc[0]["preflight"]
+                    if _pf:
+                        _pf_rows = _pf if isinstance(_pf, list) else json.loads(_pf)
+                        _pf_df = pd.DataFrame(_pf_rows)
+                        _pf_df["النتيجة"] = _pf_df["النتيجة"].map(lambda b: "✅" if b else "❌")
+                        st.dataframe(_pf_df, width="stretch", hide_index=True)
+
+        # ── التبويب ٣: الكلمات من طلبٍ مرصود لا من تخمين ─────────────────
+        with _t_dem:
+            st.caption(
+                "مصدر كلماتنا **بياناتنا**: ما كتبه الزائر عندنا فعلاً. وما لم نجد له نتيجة "
+                "= **قائمة محتوى قبل أن تكون قائمة كلمات**."
+            )
+            _d1, _d2 = st.columns(2)
+
+            _found = pd.read_sql("""
+                SELECT search_keyword AS "الكلمة", COUNT(*) AS "مرات",
+                       BOOL_OR(user_found) AS "وجدنا لها"
+                FROM direct_search
+                GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 40
+            """, _cc)
+            with _d1:
+                st.markdown("**أكثر ما بُحث عنه عندنا**")
+                _found_show = _found.copy()
+                _found_show["وجدنا لها"] = _found_show["وجدنا لها"].map(lambda b: "✅" if b else "❌")
+                st.dataframe(_found_show, width="stretch", hide_index=True, height=330)
+
+            _gap = pd.read_sql("""
+                SELECT search_keyword AS "طلب بلا عرض", COUNT(*) AS "مرات",
+                       MAX(search_date)::date AS "آخر مرة"
+                FROM direct_search WHERE user_found = FALSE
+                GROUP BY 1 ORDER BY 2 DESC, 3 DESC LIMIT 40
+            """, _cc)
+            with _d2:
+                st.markdown("**طلب رصدناه ولم نخدمه** — يُخدَم أولاً ثم يُشترى")
+                st.dataframe(_gap, width="stretch", hide_index=True, height=330)
+                if not _gap.empty:
+                    st.download_button(
+                        "⬇️ تصدير الفجوات CSV",
+                        _gap.to_csv(index=False).encode("utf-8-sig"),
+                        file_name="demand_gaps.csv", mime="text/csv", key="cmp_gap_dl")
+
+            st.markdown("---")
+            st.markdown("#### 🔗 مولّد روابط UTM")
+            st.caption("القنوات غير-جوجل لا يُنسب إليها تحويل بلا UTM. وجوجل تُوسَم تلقائياً — لا تُوسم يدوياً.")
+            _b1, _b2 = st.columns([2, 1])
+            _b_url = _b1.text_input("الرابط", key="utm_url", value="https://www.dealpulseksa.com/")
+            _b_ch  = _b2.selectbox("القناة", [c for c in _CHANNELS if c != "google_search"],
+                                   format_func=lambda k: _CHANNELS[k], key="utm_ch")
+            _b3, _b4 = st.columns(2)
+            _b_camp = _b3.text_input("اسم الحملة (utm_campaign)", key="utm_camp",
+                                     placeholder="back_to_school_2026")
+            _b_med  = _b4.text_input("utm_medium", key="utm_med",
+                                     value=("paid_social" if _b_ch in _PAID_NON_GOOGLE else "owned"))
+            if _b_url and _b_camp:
+                _clean = lambda s: (s or "").strip().lower().replace(" ", "_")
+                _sep = "&" if "?" in _b_url else "?"
+                _built = "{}{}utm_source={}&utm_medium={}&utm_campaign={}".format(
+                    _b_url, _sep, _clean(_b_ch), _clean(_b_med), _clean(_b_camp))
+                st.code(_built, language="text")
+                if " " in (_b_camp or ""):
+                    st.caption("المسافات حُوّلت إلى `_` — المسافة في UTM تكسر التجميع.")
+
+    except Exception as _e:
+        _cc.rollback()
+        st.error("تعذّر تحميل إدارة الحملات: {}".format(_e))
+    finally:
+        _cc.close()

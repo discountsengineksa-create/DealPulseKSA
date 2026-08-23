@@ -102,7 +102,8 @@ def track_action(payload: TrackRequest, request: Request, conn=Depends(get_db)):
                 country_code, region_code, city, postal_code,
                 lat, lng, isp, asn,
                 is_datacenter, is_proxy, device_class,
-                cf_bot_score, quality_score, story_view_id, visitor_id
+                cf_bot_score, quality_score, story_view_id, visitor_id,
+                gclid, client_id
             )
             VALUES (
                 %s, %s, %s, %s, %s,
@@ -110,7 +111,8 @@ def track_action(payload: TrackRequest, request: Request, conn=Depends(get_db)):
                 %s, %s, %s, %s,
                 %s, %s, %s, %s,
                 %s, %s, %s,
-                %s, %s, %s::uuid, %s::uuid
+                %s, %s, %s::uuid, %s::uuid,
+                %s, %s
             )
             ON CONFLICT (event_id) DO NOTHING
             """,
@@ -121,6 +123,7 @@ def track_action(payload: TrackRequest, request: Request, conn=Depends(get_db)):
                 geo.lat, geo.lng, geo.isp, geo.asn,
                 is_dc, is_proxy, geo.device_class,
                 geo.cf_bot_score, quality, payload.story_view_id, payload.visitor_id,
+                payload.gclid, payload.client_id,
             ),
         )
 
