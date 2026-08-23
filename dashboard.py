@@ -16236,18 +16236,25 @@ elif page == "🎯 إدارة الحملات":
                 "المشروع — ينشئ `campaigns` و`campaign_readings` وعمودَي الإسناد "
                 "`gclid`/`client_id` في `action_logs`."
             )
-            if st.button("🛠️ إنشاء الجداول الآن (migration_070)", type="primary"):
-                try:
-                    with open("migration_070_campaigns.sql", encoding="utf-8") as _f:
-                        _sql_txt = _f.read()
-                    with _cc.cursor() as _cur:
-                        _cur.execute(_sql_txt)
-                    _cc.commit()
-                    st.success("✅ أُنشئت الجداول والأعمدة.")
+            if st.button("🛠️ إنشاء الجداول الآن (070 + 071)", type="primary"):
+                _done, _failed = [], []
+                for _mig in ("migration_070_campaigns.sql", "migration_071_gsc_detail.sql"):
+                    try:
+                        with open(_mig, encoding="utf-8") as _f:
+                            _sql_txt = _f.read()
+                        with _cc.cursor() as _cur:
+                            _cur.execute(_sql_txt)
+                        _cc.commit()
+                        _done.append(_mig)
+                    except Exception as _e:
+                        _cc.rollback()
+                        _failed.append("{} → {}".format(_mig, _e))
+                if _done:
+                    st.success("✅ طُبِّق: " + " · ".join(_done))
+                if _failed:
+                    st.error("❌ تعذّر: " + " · ".join(_failed))
+                if _done and not _failed:
                     st.rerun()
-                except Exception as _e:
-                    _cc.rollback()
-                    st.error(f"تعذّر الإنشاء: {_e}")
             st.stop()
 
         _t_new, _t_run, _t_dem = st.tabs(
