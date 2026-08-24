@@ -16760,12 +16760,181 @@ elif page == "🎯 إدارة الحملات":
 
                 st.markdown("---")
 
-                # ── رفع ملف الشبكة ────────────────────────────────────────
+                # ── مُدخَلات الطلبات: ملف أو نصّ ملصوق ─────────────────────
+                # ⚠️ سلة **لا تُصدِّر** طلبات المسوّق (فُحص ٢٠٢٦-٠٨-٢٤ — المالك)،
+                # فاللصق من شاشة الطلبات هو المسار الحيّ لا البديل. والمُستورِد
+                # واحد للاثنين: نفس الربط، نفس التنظيف، ونفس حارس
+                # (الشبكة + رقم الطلب) الذي يمنع مضاعفة الإيراد عند إعادة الإدخال.
+                import re as _re
+
+                _AR_DIG = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
+                _AR_MON = {"يناير": "01", "فبراير": "02", "مارس": "03", "ابريل": "04",
+                           "أبريل": "04", "مايو": "05", "يونيو": "06", "يوليو": "07",
+                           "اغسطس": "08", "أغسطس": "08", "سبتمبر": "09", "اكتوبر": "10",
+                           "أكتوبر": "10", "نوفمبر": "11", "ديسمبر": "12"}
+
+                def _o_num(_v):
+                    """رقم من «2,475.00 ر.س» أو «٤٤٥٫٥٠» — العملة والفواصل تُرمى."""
+                    # ⚠️ لا تُنظَّف بحذف غير-الأرقام: «ر.س» تترك نقطتها فيصير «2475.00.»
+                    # ويرجع nan. الصحيح: التقاط أول عدد صريح.
+                    _s = str(_v).translate(_AR_DIG).replace("٫", ".").replace("،", "").replace(",", "")
+                    _m = _re.search(r"-?\d+(?:\.\d+)?", _s)
+                    return pd.to_numeric(_m.group(0)) if _m else float("nan")
+
+                def _o_date(_v):
+                    """تاريخ من «2026-08-14» أو «14/08/2026» أو «١٤ أغسطس ٢٠٢٦»."""
+                    _s = str(_v).translate(_AR_DIG).strip()
+                    for _ar, _mm in _AR_MON.items():
+                        if _ar in _s:
+                            _dd = _re.search(r"(?<!\d)(\d{1,2})(?!\d)", _s)
+                            _yy = _re.search(r"(20\d{2})", _s)
+                            if _dd and _yy:
+                                return pd.to_datetime("{}-{}-{:02d}".format(
+                                    _yy.group(1), _mm, int(_dd.group(1))), errors="coerce")
+                    return pd.to_datetime(_s, errors="coerce", dayfirst=True)
+
+                def _o_parse_paste(_text, _per_rec=0):
+                    """نصّ الجدول الملصوق → DataFrame. يفهم: تبويب · | · مسافتين+ ·
+                    فاصلة · وكذلك «حقل في كل سطر» (شكل النسخ من صفحة سلة) وعندها
+                    يُجمَّع كل `_per_rec` سطراً في سجل واحد."""
+                    _lines = [_l.strip() for _l in _text.splitlines() if _l.strip()]
+                    if not _lines:
+                        return None
+                    _joined = "\n".join(_lines)
+                    if "\t" in _joined:
+                        _split = lambda _l: [_c.strip() for _c in _l.split("\t")]
+                    elif "|" in _joined:
+                        _split = lambda _l: [_c.strip() for _c in _l.strip("|").split("|")]
+                    elif _re.search(r"\S {2,}\S", _joined):
+                        _split = lambda _l: [_c.strip() for _c in _re.split(r" {2,}", _l)]
+                    elif "," in _joined:
+                        _split = lambda _l: [_c.strip() for _c in _l.split(",")]
+                    else:
+                        _split = lambda _l: [_l]
+                    _rows = [list(_split(_l)) for _l in _lines]
+                    _w = max(len(_r) for _r in _rows)
+                    if _w == 1 and int(_per_rec) >= 2:
+                        _flat = [_r[0] for _r in _rows]
+                        _n = int(_per_rec)
+                        _rows = [_flat[_i:_i + _n] for _i in range(0, len(_flat), _n)]
+                        _rows = [_r for _r in _rows if len(_r) == _n]
+                        _w = _n
+                    if not _rows:
+                        return None
+                    _rows = [_r + [""] * (_w - len(_r)) for _r in _rows]
+                    # سطر أول بلا أي رقم = رؤوس أعمدة، وإلا أعمدة مرقّمة
+                    _head_nums = sum(1 for _c in _rows[0] if not pd.isna(_o_num(_c)))
+                    if len(_rows) > 1 and _head_nums == 0:
+                        _cols = [_c or "عمود {}".format(_i + 1)
+                                 for _i, _c in enumerate(_rows[0])]
+                        _body = _rows[1:]
+                    else:
+                        _cols = ["عمود {}".format(_i + 1) for _i in range(_w)]
+                        _body = _rows
+                    if not _body:
+                        return None
+                    return pd.DataFrame(_body, columns=_cols)
+
+                def _o_import_ui(_raw, _kp):
+                    """ربط الأعمدة ثم الإدخال — مشترك بين الملف والنصّ الملصوق."""
+                    _cols_o = ["—"] + list(map(str, _raw.columns))
+                    _mc1, _mc2, _mc3 = st.columns(3)
+                    _m_ref  = _mc1.selectbox("عمود رقم الطلب *", _cols_o, key=_kp + "m_ref")
+                    _m_date = _mc2.selectbox("عمود التاريخ *", _cols_o, key=_kp + "m_date")
+                    _m_comm = _mc3.selectbox("عمود العمولة *", _cols_o, key=_kp + "m_comm")
+                    _mc4, _mc5, _mc6 = st.columns(3)
+                    _m_store = _mc4.selectbox("عمود المتجر", _cols_o, key=_kp + "m_store")
+                    _m_val   = _mc5.selectbox("عمود قيمة الطلب", _cols_o, key=_kp + "m_val")
+                    _m_code  = _mc6.selectbox("عمود الكود", _cols_o, key=_kp + "m_code")
+                    _mc7, _mc8 = st.columns(2)
+                    _m_net    = _mc7.selectbox("الشبكة", ["salla", "admitad", "boostiny",
+                                                          "codemap", "manual"], key=_kp + "m_net")
+                    _m_status = _mc8.selectbox("حالة هذه الطلبات",
+                                               ["confirmed", "pending", "cancelled", "refunded"],
+                                               key=_kp + "m_status")
+
+                    if st.button("💾 استورد الصفوف", type="primary", key=_kp + "import"):
+                        if "—" in (_m_ref, _m_date, _m_comm):
+                            st.error("رقم الطلب والتاريخ والعمولة إلزامية.")
+                            return
+                        _ins = _skip = _bad = 0
+                        for _, _r in _raw.iterrows():
+                            try:
+                                _ref = str(_r[_m_ref]).translate(_AR_DIG).strip()
+                                if not _ref or _ref.lower() == "nan":
+                                    _bad += 1
+                                    continue
+                                _dt = _o_date(_r[_m_date])
+                                _cm = _o_num(_r[_m_comm])
+                                if pd.isna(_dt) or pd.isna(_cm):
+                                    _bad += 1
+                                    continue
+                                _vl = _o_num(_r[_m_val]) if _m_val != "—" else float("nan")
+                                with _cc.cursor() as _cur:
+                                    _cur.execute("""
+                                        INSERT INTO affiliate_orders
+                                            (network, order_ref, store_id, order_date,
+                                             order_value_sar, commission_sar, status, coupon_code)
+                                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                                        ON CONFLICT (network, order_ref) DO NOTHING
+                                    """, (
+                                        _m_net, _ref,
+                                        (str(_r[_m_store]).strip() if _m_store != "—" else None),
+                                        _dt.date(),
+                                        (None if pd.isna(_vl) else float(_vl)),
+                                        float(_cm), _m_status,
+                                        (str(_r[_m_code]).strip() if _m_code != "—" else None),
+                                    ))
+                                    if _cur.rowcount == 1:
+                                        _ins += 1
+                                    else:
+                                        _skip += 1
+                            except Exception:
+                                _cc.rollback()
+                                _bad += 1
+                                continue
+                        _cc.commit()
+                        st.success(
+                            "✅ أُدخل **{}** · تُجوهل مكرّراً **{}** · صفوف غير صالحة **{}**".format(
+                                _ins, _skip, _bad))
+                        st.caption("«تُجوهل مكرّراً» هو الحارس يعمل — لا خطأ.")
+                        st.rerun()
+
+                # ── ١) لصق جدول الطلبات (لا يحتاج تصديراً) ─────────────────
+                st.markdown("#### 📋 الصق جدول الطلبات من لوحة الشبكة")
+                st.caption(
+                    "سلة لا تُصدِّر طلبات المسوّق — فحدّد صفوف الجدول في الشاشة وانسخها "
+                    "(Ctrl+C) والصقها هنا. **رقم الطلب إلزامي** لأنه المفتاح الذي يمنع "
+                    "احتساب الطلب مرتين؛ ملخّص «المتاجر» بلا أرقام طلبات لا يصلح."
+                )
+                _pt1, _pt2 = st.columns([3, 1])
+                _paste = _pt1.text_area("الصق هنا", height=140, key="ord_paste",
+                                        placeholder="رقم الطلب / التاريخ / المتجر / قيمة الطلب / العمولة")
+                _per_rec = _pt2.number_input(
+                    "حقول لكل سجل", min_value=0, max_value=12, value=0, step=1, key="ord_percol",
+                    help="اتركه صفراً عادةً. عيّنه فقط إذا نزل كل حقل في سطر مستقل عند اللصق "
+                         "(مثلاً ٥ إذا كان كل طلب: رقم · تاريخ · متجر · قيمة · عمولة).")
+                if _paste and _paste.strip():
+                    try:
+                        _pdf = _o_parse_paste(_paste, _per_rec)
+                        if _pdf is None or _pdf.empty:
+                            st.warning("ما قدرت أفكّك النصّ إلى صفوف. جرّب «حقول لكل سجل».")
+                        else:
+                            st.caption(
+                                "فكّكته إلى **{}** صفاً × **{}** عموداً — راجعه قبل الاستيراد:".format(
+                                    len(_pdf), len(_pdf.columns)))
+                            st.dataframe(_pdf.head(10), width="stretch")
+                            _o_import_ui(_pdf, "pst_")
+                    except Exception as _e:
+                        st.error("تعذّر تفكيك النصّ: {}".format(_e))
+
+                st.markdown("---")
+
+                # ── ٢) رفع ملف الشبكة (لمن يدعم التصدير) ───────────────────
                 st.markdown("#### ⬆️ رفع تقرير الشبكة (CSV)")
                 st.caption(
-                    "صدّر تقرير الطلبات من لوحة سلة/أدميتاد ثم ارفعه هنا. "
-                    "الصفوف المكرّرة **تُتجاهَل تلقائياً** بحارس (الشبكة + رقم الطلب) — "
-                    "فإعادة رفع نفس الملف لا تضاعف الإيراد."
+                    "للشبكات التي تدعم التصدير. الصفوف المكرّرة **تُتجاهَل تلقائياً** "
+                    "بحارس (الشبكة + رقم الطلب) — فإعادة رفع نفس الملف لا تضاعف الإيراد."
                 )
                 _up = st.file_uploader("ملف CSV", type=["csv"], key="ord_csv")
                 if _up is not None:
@@ -16773,69 +16942,7 @@ elif page == "🎯 إدارة الحملات":
                         _raw = pd.read_csv(_up)
                         st.caption("قرأتُ **{}** صفاً · الأعمدة: {}".format(
                             len(_raw), " · ".join(map(str, _raw.columns[:12]))))
-                        _cols = ["—"] + list(map(str, _raw.columns))
-                        _mc1, _mc2, _mc3 = st.columns(3)
-                        _m_ref  = _mc1.selectbox("عمود رقم الطلب *", _cols, key="m_ref")
-                        _m_date = _mc2.selectbox("عمود التاريخ *", _cols, key="m_date")
-                        _m_comm = _mc3.selectbox("عمود العمولة *", _cols, key="m_comm")
-                        _mc4, _mc5, _mc6 = st.columns(3)
-                        _m_store = _mc4.selectbox("عمود المتجر", _cols, key="m_store")
-                        _m_val   = _mc5.selectbox("عمود قيمة الطلب", _cols, key="m_val")
-                        _m_code  = _mc6.selectbox("عمود الكود", _cols, key="m_code")
-                        _mc7, _mc8 = st.columns(2)
-                        _m_net    = _mc7.selectbox("الشبكة", ["salla", "admitad", "boostiny",
-                                                              "codemap", "manual"], key="m_net")
-                        _m_status = _mc8.selectbox("حالة هذه الطلبات",
-                                                   ["confirmed", "pending", "cancelled", "refunded"],
-                                                   key="m_status")
-
-                        if st.button("💾 استورد الصفوف", type="primary", key="ord_import"):
-                            if "—" in (_m_ref, _m_date, _m_comm):
-                                st.error("رقم الطلب والتاريخ والعمولة إلزامية.")
-                            else:
-                                _ins = _skip = _bad = 0
-                                for _, _r in _raw.iterrows():
-                                    try:
-                                        _ref = str(_r[_m_ref]).strip()
-                                        if not _ref or _ref.lower() == "nan":
-                                            _bad += 1
-                                            continue
-                                        _dt = pd.to_datetime(_r[_m_date], errors="coerce")
-                                        _cm = pd.to_numeric(_r[_m_comm], errors="coerce")
-                                        if pd.isna(_dt) or pd.isna(_cm):
-                                            _bad += 1
-                                            continue
-                                        with _cc.cursor() as _cur:
-                                            _cur.execute("""
-                                                INSERT INTO affiliate_orders
-                                                    (network, order_ref, store_id, order_date,
-                                                     order_value_sar, commission_sar, status, coupon_code)
-                                                VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-                                                ON CONFLICT (network, order_ref) DO NOTHING
-                                            """, (
-                                                _m_net, _ref,
-                                                (str(_r[_m_store]).strip() if _m_store != "—" else None),
-                                                _dt.date(),
-                                                (float(pd.to_numeric(_r[_m_val], errors="coerce"))
-                                                 if _m_val != "—" and not pd.isna(
-                                                     pd.to_numeric(_r[_m_val], errors="coerce")) else None),
-                                                float(_cm), _m_status,
-                                                (str(_r[_m_code]).strip() if _m_code != "—" else None),
-                                            ))
-                                            if _cur.rowcount == 1:
-                                                _ins += 1
-                                            else:
-                                                _skip += 1
-                                    except Exception:
-                                        _cc.rollback()
-                                        _bad += 1
-                                        continue
-                                _cc.commit()
-                                st.success(
-                                    "✅ أُدخل **{}** · تُجوهل مكرّراً **{}** · صفوف غير صالحة **{}**".format(
-                                        _ins, _skip, _bad))
-                                st.caption("«تُجوهل مكرّراً» هو الحارس يعمل — لا خطأ.")
-                                st.rerun()
+                        _o_import_ui(_raw, "csv_")
                     except Exception as _e:
                         st.error("تعذّرت قراءة الملف: {}".format(_e))
 
