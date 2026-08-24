@@ -127,7 +127,7 @@
 
 ## ٧) قنوات الأفلييت والشراكات (١٢)
 
-- سلة: [القناة](salla_affiliate_channel.md) (خصم+عمولة بلا بوّابة ✅) · [الإسناد بالكود لا النقرة](salla_orders_attribution_reality.md) · [أول ١٣ طلب ~٥٢٥ ر.س](salla_proven_converters.md)
+- سلة: [القناة](salla_affiliate_channel.md) (خصم+عمولة بلا بوّابة ✅) · [الإسناد بالكود لا النقرة](salla_orders_attribution_reality.md) · [٦ متاجر محوِّلة · ٨٠٧٫٥٤ ر.س](salla_proven_converters.md) (لقطة ٠٨-٢٤؛ نِسب تحويل >١٠٠٪ = إسناد بالكود)
 - Admitad: [الإعداد](admitad_affiliate_setup.md) (مساحتان + بوّابتان) · [حجب ISP للنطاق](admitad_dns_block.md) (NXDOMAIN مزوّر → DNS مشفّر)
 - [CodeMap Affiliate Channel](codemap_affiliate_channel.md) — كوبونات فقط بلا تتبّع؛ براندات كبيرة؛ تكمّل سلة
 - [Boostiny Publisher Channel](boostiny_publisher_channel.md) — قُبل ٢٠٢٦-٠٨-٠٦ (#52131)؛ الملف قُدِّم ومقفول → مراجعة ثانية ثم اتفاقية
