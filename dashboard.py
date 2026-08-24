@@ -16257,8 +16257,9 @@ elif page == "🎯 إدارة الحملات":
                     st.rerun()
             st.stop()
 
-        _t_new, _t_run, _t_dem = st.tabs(
-            ["🧾 حملة جديدة (عقد القياس)", "📊 الحملات والقراءات", "🔍 الطلب المرصود + UTM"])
+        _t_new, _t_run, _t_dem, _t_ord = st.tabs(
+            ["🧾 حملة جديدة (عقد القياس)", "📊 الحملات والقراءات",
+             "🔍 الطلب المرصود + UTM", "💰 الطلبات وقيمة الكود"])
 
         # ── التبويب ١: سبعة فحوص تمنع إطلاق حملة لا تُقاس ────────────────
         with _t_new:
@@ -16712,6 +16713,275 @@ elif page == "🎯 إدارة الحملات":
                 st.code(_built, language="text")
                 if " " in (_b_camp or ""):
                     st.caption("المسافات حُوّلت إلى `_` — المسافة في UTM تكسر التجميع.")
+
+        # ══════════════════════════════════════════════════════════════════
+        # التبويب ٤ — الطلبات المؤكَّدة: من وكيل إلى إيراد، ومنه قيمة الكود
+        # ══════════════════════════════════════════════════════════════════
+        with _t_ord:
+            _ord_ready = int(pd.read_sql("""
+                SELECT COUNT(*) AS n FROM information_schema.tables
+                WHERE table_schema='public' AND table_name='affiliate_orders'
+            """, _cc).iloc[0]["n"]) == 1
+
+            if not _ord_ready:
+                st.warning(
+                    "**جدول الطلبات غير منشأ.** `migration_072_affiliate_orders.sql` في جذر "
+                    "المشروع — ينشئ `affiliate_orders` مع حارس **`UNIQUE (network, order_ref)`** "
+                    "الذي يمنع مضاعفة الإيراد عند إعادة رفع ملف."
+                )
+                if st.button("🛠️ إنشاء جدول الطلبات (072)", type="primary", key="ord_mig"):
+                    try:
+                        with open("migration_072_affiliate_orders.sql", encoding="utf-8") as _f:
+                            _sqlo = _f.read()
+                        with _cc.cursor() as _cur:
+                            _cur.execute(_sqlo)
+                        _cc.commit()
+                        st.success("✅ أُنشئ الجدول.")
+                        st.rerun()
+                    except Exception as _e:
+                        _cc.rollback()
+                        st.error("تعذّر الإنشاء: {}".format(_e))
+            else:
+                _o_tot = pd.read_sql("""
+                    SELECT COUNT(*) FILTER (WHERE status='confirmed')            AS confirmed,
+                           COALESCE(SUM(commission_sar) FILTER (WHERE status='confirmed'), 0) AS commission,
+                           COUNT(*) FILTER (WHERE status IN ('cancelled','refunded')) AS lost,
+                           COUNT(*) FILTER (WHERE gclid IS NOT NULL AND status='confirmed'
+                                              AND uploaded_to_ads = FALSE)       AS oci_ready
+                    FROM affiliate_orders
+                """, _cc).iloc[0]
+
+                _o1, _o2, _o3, _o4 = st.columns(4)
+                with _o1: kpi_card("📦", "طلبات مؤكَّدة", int(_o_tot["confirmed"] or 0))
+                with _o2: kpi_card("💰", "إجمالي العمولة (ر.س)",
+                                   "{:,.0f}".format(float(_o_tot["commission"] or 0)))
+                with _o3: kpi_card("↩️", "ملغى/مسترجع", int(_o_tot["lost"] or 0), "warning")
+                with _o4: kpi_card("📤", "جاهزة لرفع OCI", int(_o_tot["oci_ready"] or 0))
+
+                st.markdown("---")
+
+                # ── رفع ملف الشبكة ────────────────────────────────────────
+                st.markdown("#### ⬆️ رفع تقرير الشبكة (CSV)")
+                st.caption(
+                    "صدّر تقرير الطلبات من لوحة سلة/أدميتاد ثم ارفعه هنا. "
+                    "الصفوف المكرّرة **تُتجاهَل تلقائياً** بحارس (الشبكة + رقم الطلب) — "
+                    "فإعادة رفع نفس الملف لا تضاعف الإيراد."
+                )
+                _up = st.file_uploader("ملف CSV", type=["csv"], key="ord_csv")
+                if _up is not None:
+                    try:
+                        _raw = pd.read_csv(_up)
+                        st.caption("قرأتُ **{}** صفاً · الأعمدة: {}".format(
+                            len(_raw), " · ".join(map(str, _raw.columns[:12]))))
+                        _cols = ["—"] + list(map(str, _raw.columns))
+                        _mc1, _mc2, _mc3 = st.columns(3)
+                        _m_ref  = _mc1.selectbox("عمود رقم الطلب *", _cols, key="m_ref")
+                        _m_date = _mc2.selectbox("عمود التاريخ *", _cols, key="m_date")
+                        _m_comm = _mc3.selectbox("عمود العمولة *", _cols, key="m_comm")
+                        _mc4, _mc5, _mc6 = st.columns(3)
+                        _m_store = _mc4.selectbox("عمود المتجر", _cols, key="m_store")
+                        _m_val   = _mc5.selectbox("عمود قيمة الطلب", _cols, key="m_val")
+                        _m_code  = _mc6.selectbox("عمود الكود", _cols, key="m_code")
+                        _mc7, _mc8 = st.columns(2)
+                        _m_net    = _mc7.selectbox("الشبكة", ["salla", "admitad", "boostiny",
+                                                              "codemap", "manual"], key="m_net")
+                        _m_status = _mc8.selectbox("حالة هذه الطلبات",
+                                                   ["confirmed", "pending", "cancelled", "refunded"],
+                                                   key="m_status")
+
+                        if st.button("💾 استورد الصفوف", type="primary", key="ord_import"):
+                            if "—" in (_m_ref, _m_date, _m_comm):
+                                st.error("رقم الطلب والتاريخ والعمولة إلزامية.")
+                            else:
+                                _ins = _skip = _bad = 0
+                                for _, _r in _raw.iterrows():
+                                    try:
+                                        _ref = str(_r[_m_ref]).strip()
+                                        if not _ref or _ref.lower() == "nan":
+                                            _bad += 1
+                                            continue
+                                        _dt = pd.to_datetime(_r[_m_date], errors="coerce")
+                                        _cm = pd.to_numeric(_r[_m_comm], errors="coerce")
+                                        if pd.isna(_dt) or pd.isna(_cm):
+                                            _bad += 1
+                                            continue
+                                        with _cc.cursor() as _cur:
+                                            _cur.execute("""
+                                                INSERT INTO affiliate_orders
+                                                    (network, order_ref, store_id, order_date,
+                                                     order_value_sar, commission_sar, status, coupon_code)
+                                                VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                                                ON CONFLICT (network, order_ref) DO NOTHING
+                                            """, (
+                                                _m_net, _ref,
+                                                (str(_r[_m_store]).strip() if _m_store != "—" else None),
+                                                _dt.date(),
+                                                (float(pd.to_numeric(_r[_m_val], errors="coerce"))
+                                                 if _m_val != "—" and not pd.isna(
+                                                     pd.to_numeric(_r[_m_val], errors="coerce")) else None),
+                                                float(_cm), _m_status,
+                                                (str(_r[_m_code]).strip() if _m_code != "—" else None),
+                                            ))
+                                            if _cur.rowcount == 1:
+                                                _ins += 1
+                                            else:
+                                                _skip += 1
+                                    except Exception:
+                                        _cc.rollback()
+                                        _bad += 1
+                                        continue
+                                _cc.commit()
+                                st.success(
+                                    "✅ أُدخل **{}** · تُجوهل مكرّراً **{}** · صفوف غير صالحة **{}**".format(
+                                        _ins, _skip, _bad))
+                                st.caption("«تُجوهل مكرّراً» هو الحارس يعمل — لا خطأ.")
+                                st.rerun()
+                    except Exception as _e:
+                        st.error("تعذّرت قراءة الملف: {}".format(_e))
+
+                # ── إضافة طلب يدوياً ──────────────────────────────────────
+                with st.expander("➕ إضافة طلب واحد يدوياً"):
+                    _a1, _a2, _a3 = st.columns(3)
+                    _a_net  = _a1.selectbox("الشبكة", ["salla", "admitad", "boostiny",
+                                                       "codemap", "manual"], key="a_net")
+                    _a_ref  = _a2.text_input("رقم الطلب *", key="a_ref")
+                    _a_date = _a3.date_input("التاريخ", value=date.today(), key="a_date")
+                    _a4, _a5, _a6 = st.columns(3)
+                    _a_store = _a4.text_input("المتجر", key="a_store")
+                    _a_comm  = _a5.number_input("العمولة (ر.س) *", min_value=0.0, step=5.0, key="a_comm")
+                    _a_val   = _a6.number_input("قيمة الطلب (ر.س)", min_value=0.0, step=25.0, key="a_val")
+                    _a7, _a8 = st.columns(2)
+                    _a_code  = _a7.text_input("الكود", key="a_code")
+                    _a_gclid = _a8.text_input("gclid (إن عُرف)", key="a_gclid")
+                    if st.button("💾 احفظ الطلب", key="a_save"):
+                        if not _a_ref.strip() or float(_a_comm) <= 0:
+                            st.error("رقم الطلب والعمولة إلزاميان.")
+                        else:
+                            try:
+                                with _cc.cursor() as _cur:
+                                    _cur.execute("""
+                                        INSERT INTO affiliate_orders
+                                            (network, order_ref, store_id, order_date,
+                                             order_value_sar, commission_sar, coupon_code, gclid)
+                                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                                        ON CONFLICT (network, order_ref) DO NOTHING
+                                    """, (_a_net, _a_ref.strip(), _a_store.strip() or None, _a_date,
+                                          float(_a_val) or None, float(_a_comm),
+                                          _a_code.strip() or None, _a_gclid.strip() or None))
+                                    _added = _cur.rowcount
+                                _cc.commit()
+                                st.success("✅ أُضيف." if _added else "⚠️ موجود سلفاً — لم يُضَف (الحارس).")
+                                st.rerun()
+                            except Exception as _e:
+                                _cc.rollback()
+                                st.error("تعذّر الحفظ: {}".format(_e))
+
+                st.markdown("---")
+
+                # ── 🔑 قيمة الكود لكل متجر — الرقم الذي تقوم عليه tROAS ───
+                st.markdown("#### 🔑 قيمة نسخة الكود لكل متجر")
+                st.caption(
+                    "العمولة المؤكَّدة ÷ عدد النسخ المعدودة = **ما تساويه النسخة الواحدة فعلاً**. "
+                    "هذا الرقم — لا رقم مخترع — هو ما يُدخَل قيمةً للتحويل قبل أي مزايدة بالقيمة."
+                )
+                _val = pd.read_sql("""
+                    WITH comm AS (
+                        SELECT store_id, SUM(commission_sar) AS commission, COUNT(*) AS orders
+                        FROM affiliate_orders WHERE status='confirmed' AND store_id IS NOT NULL
+                        GROUP BY 1
+                    ), cps AS (
+                        SELECT store_id, COUNT(*) AS copies
+                        FROM action_logs WHERE action_type='copy_coupon' AND store_id IS NOT NULL
+                        GROUP BY 1
+                    )
+                    SELECT COALESCE(c.store_id, p.store_id)                       AS "المتجر",
+                           COALESCE(c.orders, 0)                                  AS "طلبات",
+                           ROUND(COALESCE(c.commission, 0)::numeric, 2)           AS "عمولة (ر.س)",
+                           COALESCE(p.copies, 0)                                  AS "نسخ",
+                           CASE WHEN COALESCE(p.copies,0) > 0
+                                THEN ROUND((COALESCE(c.commission,0) / p.copies)::numeric, 2)
+                                ELSE NULL END                                     AS "قيمة النسخة"
+                    FROM comm c FULL OUTER JOIN cps p ON c.store_id = p.store_id
+                    ORDER BY 3 DESC NULLS LAST, 4 DESC
+                    LIMIT 60
+                """, _cc)
+                if _val.empty:
+                    st.info("لا بيانات بعد — ارفع أول تقرير طلبات.")
+                else:
+                    st.dataframe(_val, width="stretch", hide_index=True)
+                    _priced = int((_val["قيمة النسخة"].notna() & (_val["قيمة النسخة"] > 0)).sum())
+                    st.caption(
+                        "**{}** متجراً له قيمة نسخة محسوبة. ⚠️ المتاجر بنسخٍ وبلا عمولة "
+                        "**ليست بلا قيمة بالضرورة** — قد يكون الطلب لم يُبلَّغ بعد (تأخّر التحويل)، "
+                        "أو الإسناد بالكود لم يصلنا. لا تُوقف متجراً بسببها وحدها.".format(_priced))
+                    st.download_button(
+                        "⬇️ تصدير جدول القيمة CSV",
+                        _val.to_csv(index=False).encode("utf-8-sig"),
+                        file_name="coupon_value_by_store.csv", mime="text/csv", key="val_dl")
+
+                st.markdown("---")
+
+                # ── 📤 ملف رفع OCI إلى Google Ads ─────────────────────────
+                st.markdown("#### 📤 ملف الرفع إلى Google Ads (OCI)")
+                _oci = pd.read_sql("""
+                    SELECT id, gclid, order_date, commission_sar, currency
+                    FROM affiliate_orders
+                    WHERE gclid IS NOT NULL AND status='confirmed' AND uploaded_to_ads = FALSE
+                    ORDER BY order_date
+                """, _cc)
+                if _oci.empty:
+                    st.info(
+                        "لا طلبات جاهزة للرفع. الطلب يصير جاهزاً حين يحمل **`gclid`** — "
+                        "أي حين يأتي الزائر من إعلان جوجل ويُربط طلبه بنقرته."
+                    )
+                else:
+                    _lines = ["Parameters:TimeZone=+0300",
+                              "Google Click ID,Conversion Name,Conversion Time,"
+                              "Conversion Value,Conversion Currency"]
+                    for _, _r in _oci.iterrows():
+                        _lines.append("{},{},{} 12:00:00+03:00,{},{}".format(
+                            _r["gclid"], "order_confirmed", _r["order_date"],
+                            float(_r["commission_sar"] or 0), _r["currency"] or "SAR"))
+                    _csv_txt = "\n".join(_lines)
+                    st.dataframe(_oci.rename(columns={
+                        "gclid": "مفتاح النقرة", "order_date": "التاريخ",
+                        "commission_sar": "العمولة", "currency": "العملة"}).drop(columns=["id"]),
+                        width="stretch", hide_index=True)
+                    st.download_button(
+                        "⬇️ نزّل ملف OCI",
+                        _csv_txt.encode("utf-8-sig"),
+                        file_name="google_ads_oci_upload.csv", mime="text/csv", key="oci_dl")
+                    st.caption(
+                        "ارفعه في `Google Ads ← Tools ← Conversions ← Uploads`. "
+                        "⚠️ **اسم التحويل في الملف (`order_confirmed`) يجب أن يطابق حرفياً** اسم "
+                        "إجراء التحويل عندك، و**انتظر ٤–٦ ساعات بعد إنشاء الإجراء قبل أول رفع**."
+                    )
+                    if st.button("✅ علّمها كمرفوعة", key="oci_mark"):
+                        try:
+                            with _cc.cursor() as _cur:
+                                _cur.execute("""
+                                    UPDATE affiliate_orders
+                                    SET uploaded_to_ads = TRUE, uploaded_at = NOW()
+                                    WHERE id = ANY(%s)
+                                """, (list(map(int, _oci["id"].tolist())),))
+                            _cc.commit()
+                            st.success("✅ عُلّمت {} طلباً كمرفوعة.".format(len(_oci)))
+                            st.rerun()
+                        except Exception as _e:
+                            _cc.rollback()
+                            st.error("تعذّر: {}".format(_e))
+
+                # ── آخر الطلبات ───────────────────────────────────────────
+                _recent = pd.read_sql("""
+                    SELECT order_date AS "التاريخ", network AS "الشبكة", order_ref AS "رقم الطلب",
+                           store_id AS "المتجر", commission_sar AS "العمولة", status AS "الحالة",
+                           coupon_code AS "الكود", (gclid IS NOT NULL) AS "له مفتاح نقرة"
+                    FROM affiliate_orders ORDER BY order_date DESC, id DESC LIMIT 50
+                """, _cc)
+                if not _recent.empty:
+                    st.markdown("#### 📚 آخر الطلبات")
+                    _recent["له مفتاح نقرة"] = _recent["له مفتاح نقرة"].map(lambda b: "✅" if b else "—")
+                    st.dataframe(_recent, width="stretch", hide_index=True)
 
     except Exception as _e:
         _cc.rollback()
