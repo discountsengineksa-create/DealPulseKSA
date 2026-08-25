@@ -41,3 +41,17 @@ revalidate 200 + Google 200) بعد إصلاح العناوين للهجاء ا�
 (العنق الحقيقي للكلمات الكبرى نون/نمشي). **قرار مبدئي:** لا توليد صفحات long-tail متعددة
 لكل متجر = doorway/thin يخالف White-Hat. راجع [[keyword_demand_ksa]] و[[seo_indexation_status]]
 و[[content_guardrails_playbook]].
+
+**فخّ ثانٍ من العائلة نفسها — الكلمة العربية بُنيت من `name_en` (٢٠٢٦-٠٨-٢٥):**
+`select_top_demand_stores` في `api/seo/auto_pipeline.py` كانت تأخذ
+`COALESCE(NULLIF(m.name_en,''), m.store_id)` ثم تحقنه في قالب عربي
+`كود خصم {store} 2026`. النتيجة **٣٦ صفحة عربية منشورة بكلمة لاتينية**
+(«كود خصم VPerfumes 2026»، «كود خصم Zid 2026») لا يكتبها سعودي — ونزيه كان
+سيصير الـ٣٧. أُصلح الموضعان اللذان يبنيان أنماطاً عربية (`auto_pipeline.py`
+و`seo_seed_custom` في `api/routers/admin.py`) بتفضيل `store_id` العربي —
+الالتزام `85da13d`. تحقّق ما قبل الدفع (§٤.٩): تشغيل الدالة حرفياً على
+الإنتاج أعطى `store_name='نزيه'` ⇒ «كود خصم نزيه 2026».
+**العبرة المتكرّرة: مولّد الصفحات يُخطئ صامتاً في البيانات لا في الكود** —
+نفس عائلة بق «ADMIT10 اسماً لـH&M» أعلاه. افحص عيّنة من `target_keyword`
+بعد أي دورة توليد. الاستعلام:
+`select target_keyword from seo_landing_pages where lang='ar' and target_keyword ~ '[A-Za-z]';`

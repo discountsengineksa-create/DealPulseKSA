@@ -124,6 +124,7 @@
 - [Blog Inline Code Chips](blog_inline_code_chips.md) — شارة كود/CTA بجانب كل ذكر متجر في ١٣٦٥ مقال؛ العلاج بالعارض
 - [Jolina Pre-Purchase Angle](jolina_prepurchase_angle.md) — الزاوية «الاسترجاع/الرسوم» لا الكود؛ مواقع JS لا تُقرأ بـcurl
 - عناقيد كبرى: [١٤ متجر/٢٨٠ مقال](blog_14clusters_july11.md) · [٧ عناقيد/١٠٥](blog_7clusters_july11.md) · [AliExpress ١٥٠ — نقّها+noindex](blog_aliexpress_cluster.md) · [ألعاب ١٠/٧٢](blog_toys_cluster_progress.md)
+- [💇 عنقود نزيه — ست ممرّات فارغة](blog_nazih_cluster.md) — ١٤ مقالاً على أقسام بلا متجر ولا مقال؛ لا تغزُ عنقود شريك؛ وعُدَّ الروابط الداخلة **لكل مقال** لا للعنقود
 - عناقيد متاجر (١٢–١٩ مقالاً لكلٍّ، ربط متبادل): [ذا ديل](blog_thedeal_cluster.md) · [فوغا كلوسيت](blog_vogacloset_cluster.md) · [ماماز](blog_mamaspapas_cluster.md) · [H&M](blog_hm_cluster.md) · [بيد إن روم](blog_bedinroom_cluster.md) · [لحظات القهوة](blog_lahazat_cluster.md) · [جنى العسل](blog_jana_honey_cluster.md) · [عبدالصمد القرشي](blog_asq_cluster.md) · [أثاث المنزل](blog_home_furniture_cluster.md)
 
 ## ٧) قنوات الأفلييت والشراكات (١٢)
