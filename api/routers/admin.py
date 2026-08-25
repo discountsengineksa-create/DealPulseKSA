@@ -1407,7 +1407,8 @@ def seo_seed_custom(
             cur.execute(
                 """
                 SELECT id, store_id,
-                       COALESCE(NULLIF(name_en, ''), store_id) AS display_name
+                       -- الأنماط أدناه عربية، فالاسم العربي هو الصحيح فيها.
+                       COALESCE(NULLIF(store_id, ''), name_en) AS display_name
                 FROM master
                 WHERE COALESCE(affiliate_link, '') <> ''
                   AND COALESCE(seo_enabled, TRUE) = TRUE

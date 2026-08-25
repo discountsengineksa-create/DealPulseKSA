@@ -42,7 +42,10 @@ def select_top_demand_stores(cur, n: int) -> list[dict]:
     cur.execute(
         """
         SELECT m.id,
-               COALESCE(NULLIF(m.name_en, ''), m.store_id) AS store_name,
+               -- الاسم العربي أولاً: الكلمة المستهدفة عربية («كود خصم نزيه 2026»)،
+               -- والسعودي لا يبحث باللاتيني. تفضيل name_en أنتج 36 صفحة عربية
+               -- بكلمة لاتينية («كود خصم VPerfumes 2026») لا أحد يبحث عنها.
+               COALESCE(NULLIF(m.store_id, ''), m.name_en) AS store_name,
                (COALESCE(m.total_link_clicks, 0)
                 + COALESCE(m.total_coupon_copies, 0) * 2) AS demand
         FROM master m
