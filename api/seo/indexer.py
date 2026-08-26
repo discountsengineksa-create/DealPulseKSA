@@ -148,10 +148,17 @@ def _submit_to_google(landing_page_id: int, full_url: str, out: dict) -> None:
             diagnosis = "ok"
         elif code == 403:
             if "Permission denied" in body or "permission" in body.lower():
+                # ⚠️ 403 هنا يعني «هذا الرابط ليس داخل property موثّقة» — والسبب
+                # الأشيع **ليس** سقوط الملكية بل **اختلاف الهوست**: الـproperty
+                # موثّقة على www والرابط أُرسل بالنطاق العاري (أو العكس).
+                # حدث فعلياً 2026-08-26: seo-google-check أعطى 200 بينما ٢٧ رابطاً
+                # بلا www أعطت 403، ثم نجحت كلها فور إضافة www.
                 diagnosis = (
-                    "FORBIDDEN — service account ليس owner على الـ property في "
-                    "Search Console. الحل: ضِف رابط DNS TXT verification "
-                    "(راجع diagnose_google_setup) أو استخدم HTML file."
+                    f"FORBIDDEN — الرابط خارج الـproperty الموثّقة. تحقّق أولاً أن "
+                    f"الهوست يطابق SITE_URL ({SITE_URL}) — www مقابل النطاق العاري "
+                    "propertyان مختلفان عند Google. إن تطابق الهوست فالمشكلة "
+                    "ownership (راجع diagnose_google_setup). "
+                    f"ردّ Google: {body[:120]}"
                 )
             else:
                 diagnosis = f"forbidden: {body[:120]}"
