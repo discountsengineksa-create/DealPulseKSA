@@ -44,3 +44,23 @@ originSessionId: bf501e24-1a22-42b8-8227-c51a7b2dd362
 - ميزانية أدوات (Ahrefs/SEMrush/Apollo) — قرار مالي
 
 يخدم: [[seo-ai-visibility-optin]] · [[seo-owned-channels-pivot]] · [[seo-indexation-status]] · [[seo-pr-blitz-kit]].
+
+---
+
+## ⚠️ ٢٠٢٦-٠٨-٢٦ — قناة قوقل ساقطة بـ403، والـIndexNow وحدها تعمل
+
+عند دفع ٨ روابط جديدة (عنقود الضيافة + صفحة قصر الاواني + هَب التقسيط) عبر
+`POST /api/v1/admin/reindex-urls`، رجع **كل رابط**:
+
+- `indexnow_bing: 200` ✅
+- `indexnow_yandex / naver / seznam: 422` (رفض، ليس 202)
+- `google: 403` مع تشخيص الخادم نفسه: **«service account ليس owner على الـproperty
+  في Search Console»**
+
+يعني ملكية `gsc-indexer@dealpulseksa-aab18.iam.gserviceaccount.com` **سقطت** بعد أن
+كانت موثّقة ٢٠٢٦-٠٧-٠٨. الحل المذكور في التشخيص: إعادة التوثيق بـDNS TXT أو ملف HTML
+ثم إعادة إضافة الحساب مالكاً.
+
+**الأثر العملي:** أي محتوى جديد يصل Bing فوراً ولا يصل قوقل إلا بالزحف الطبيعي.
+وهذا يرفع من قيمة [[ai_citation_channel]] مؤقّتاً (Copilot يقرأ من فهرس Bing)،
+لكنه يؤخّر النقر العضوي. **لا تفترض أن الدفع نجح — اقرأ `google.code` في الردّ.**
