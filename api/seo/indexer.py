@@ -61,7 +61,7 @@ def _page_path(slug: str) -> str:
     return SEO_PAGE_PATH.format(slug=slug)
 
 
-def _record(landing_page_id: int, provider: str, code: int | None,
+def _record(landing_page_id: int | None, provider: str, code: int | None,
             body: str | None) -> None:
     try:
         with get_db_context() as conn:
@@ -119,7 +119,7 @@ def _get_google_access_token() -> str | None:
         return None
 
 
-def _submit_to_google(landing_page_id: int, full_url: str, out: dict) -> None:
+def _submit_to_google(landing_page_id: int | None, full_url: str, out: dict) -> None:
     """
     يخطر Google. يفسّر أكواد الخطأ الشائعة بوضوح حتى يفهم الـ ops
     سبب الفشل (مفتاح خطأ vs ownership غير محقق vs quota مستنفد).
@@ -264,7 +264,7 @@ def diagnose_google_setup() -> dict:
 # ═══════════════════════════════════════════════════════════════════════════
 #  IndexNow (Bing + Yandex + Naver + Seznam)
 # ═══════════════════════════════════════════════════════════════════════════
-def _submit_indexnow_direct(landing_page_id: int, full_url: str, out: dict) -> None:
+def _submit_indexnow_direct(landing_page_id: int | None, full_url: str, out: dict) -> None:
     """
     يُرسل لكل محرك IndexNow مباشرة (يتجاوز الـ Next.js hook).
     البروتوكول مفتوح: نفس payload لكل المحركات.
@@ -341,9 +341,16 @@ def submit_page(*, landing_page_id: int, slug: str) -> dict:
 def resubmit_url(url: str, landing_page_id: int | None = None) -> dict:
     """
     إعادة إرسال URL محدّد (مفيد عند تحديث محتوى صفحة منشورة).
-    يستخدم landing_page_id = -1 للأمور غير المرتبطة بصفحة (homepage مثلاً).
+    الرابط غير المرتبط بصفحة هبوط يُسجَّل بـ landing_page_id = NULL.
+
+    ⚠️ كان السنتينل هنا -1، و`seo_index_submissions.landing_page_id` عليه **مفتاح
+    أجنبي** — فكل إدراج لرابط حرّ كان ينتهك الـFK، ويبتلعه `except` في `_record`
+    فيُكتب تحذيراً في اللوق ولا يُسجَّل صفّ. النتيجة المقيسة ٢٠٢٦-٠٨-٢٦:
+    **صفر صفّ بـ landing_page_id IS NULL في تاريخ الجدول كلّه** رغم مئات الدفعات
+    من `/admin/reindex-urls` — أي أن الدفع يقع فعلاً (جوجل يرجّع 200) لكن بلا أثر
+    يُراجَع لاحقاً. العمود nullable أصلاً، فتمرير None يُسجّل الصفّ ويحترم الـFK.
     """
-    lpid = landing_page_id if landing_page_id is not None else -1
+    lpid = landing_page_id
     out: dict[str, Any] = {"url": url, "resubmit": True}
     _submit_indexnow_direct(lpid, url, out)
     _submit_to_google(lpid, url, out)
