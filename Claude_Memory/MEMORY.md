@@ -85,7 +85,7 @@
 - [Occasion Page Relevance Filter](occasion_page_relevance_filter.md) — store_tags تصنيف لا موسم؛ + master.occasions (migration_067)
 - [💳 التقسيط: هَب /installments](web_installments_bnpl.md) — تابي/تمارا/مدفوع مزحوفة لا مُدخلة؛ **الرئيسية وحدها كذبت** (المنيع صفر بها و٣٢ بصفحة قسم)؛ والغياب ليس نفياً
 - [🔐 جلسة الويب في كوكي HttpOnly](web_session_httponly_cookie.md) — انتقلت ٢٠٢٦-٠٨-٢٧؛ **الميني-آب بأصل `null` فالترويسة تبقى للأبد**؛ الكوكي يسبقها؛ والباك-إند يُنشر أولاً وإلا جلسات ميتة
-- [🎯 صفّ «صفقات تهمّك»](web_home_interests_rail.md) — أول قارئ لإشارات `action_logs`؛ التسجيل في `trackAction` لا المكوّنات؛ **hook في `lib/` يصله `api.ts` يكسر البناء كلّه**
+- [🎯 صفّ «صفقات تهمّك» + التقاط النيّة](web_home_interests_rail.md) — قراءة المقال و`?interest=`/`?cat=` في روابط الحملات و`IntentPicker`؛ **hook في `lib/` يصله `api.ts` يكسر البناء كلّه**
 - [Web Login Gate Model](web_login_gate_model.md) — الموقع مفتوح؛ الستوري/المفضلة للمسجّلين؛ حركات المجهول بـvisitor_id
 - [Store Page Evergreen (404 Root Cause)](store_page_evergreen.md) — `last_time>=CURRENT_DATE` أخفى المتجر → 404؛ المتجر دائم والكوبون يُفرَّغ
 
