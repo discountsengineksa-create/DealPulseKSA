@@ -36,10 +36,28 @@ sys.path.insert(0, str(ROOT))
 # ─── Fixtures ─────────────────────────────────────────────────────────────────
 @pytest.fixture(scope="session")
 def db_available() -> bool:
-    """يتحقق من وجود قاعدة بيانات اختبار صالحة. لو غير موجودة، يُخطّى الاختبار."""
-    url = os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
+    """يتحقق من وجود قاعدة بيانات اختبار صالحة. لو غير موجودة، يُخطّى الاختبار.
+
+    🔴 **`TEST_DATABASE_URL` وحده — بلا سقوط على `DATABASE_URL`.**
+
+    كان السطر `os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL")`،
+    فمتى حُمّل `.env` (يكفي أن يستورد ملفُ اختبارٍ واحدٌ `api.db`) صارت الحزمة
+    تشتغل على **إنتاج Railway**: `clean_users` يحذف من `web_users` و
+    `sample_store` يكتب في `master`. المرشّحات ضيّقة (`pytest_%`) فلم يضع شيء —
+    لكن الحارس كان الحظّ لا الكود. وقع فعلاً ٢٠٢٦-٠٨-٢٧.
+
+    والتساوي مرفوض صراحةً: ضبط `TEST_DATABASE_URL` على نفس رابط الإنتاج يعيد
+    الفخّ من الباب الآخر.
+    """
+    url = os.getenv("TEST_DATABASE_URL")
     if not url:
         return False
+    prod = os.getenv("DATABASE_URL")
+    if prod and url.strip() == prod.strip():
+        raise RuntimeError(
+            "TEST_DATABASE_URL يساوي DATABASE_URL — الاختبارات تكتب وتحذف. "
+            "استخدم قاعدة اختبار منفصلة (tests/README.md)."
+        )
     try:
         import psycopg2  # type: ignore
         # postgres:// → postgresql://
