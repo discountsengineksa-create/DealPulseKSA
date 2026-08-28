@@ -1,8 +1,11 @@
 ---
 name: seo_c_store_cannibalization
 description: صفحات /c/ كانت تنافس صفحات المتاجر على نفس الاستعلام — حُلّت بـcanonical مشتقّ (١٩ صفحة) + قاعدة تضمن اسم المتجر العربي في كل عنوان (٢٠٢٦-٠٨-٠٨)
-metadata:
+metadata: 
+  node_type: memory
   type: project
+  originSessionId: 5610f63d-a5eb-4309-a85a-837e10a2c67c
+  modified: 2026-08-27T21:11:47.264Z
 ---
 
 **العَرَض الذي بلّغ عنه المالك:** بحث عن «جولينا» في جوجل فلم يجد الموقع في ٣٠ نتيجة،
@@ -109,4 +112,14 @@ metadata:
 **التحقّق المُطبَّق:** `tsc` على الملفات الأربعة المعدَّلة (tsconfig ضيّق — `next build`
 يـOOM محلياً، [[web_repo_verification_recipes]]) = صفر خطأ؛ ثم فحص canonical حيّاً
 على الصفحة بعد النشر.
+
+## ✅ تأكيد خارجي — Ahrefs Site Audit التقط الفيكس (٢٠٢٦-٠٨-٢٧)
+
+زحفة Ahrefs (`Compare with: Yesterday`) أظهرت **٥ صفوف "Canonical URL changed" + ٥ "Indexable
+page became non-indexable"** لنفس الخمسة أعلاه بالاسم (نون، نمشي، نزيه، المنيع، إل جي) —
+تطابق حرفي مع القائمة الموثَّقة هنا. **لا تُقرأ كخطأ جديد لو ظهرت في فحص خارجي لاحقاً** —
+هي الفيكس ذاته يُرصَد من زاوية أداة ثالثة. صفحة `/store/نمشي` أظهرت أيضاً "Organic traffic
+dropped" (١١٨←٦٥) في نفس الزحفة — على الأرجح إعادة توزيع تقدير Ahrefs بين `/c/` و`/store/`
+بعد التوحيد لا خسارة حقيقية (Ahrefs "Organic traffic" مُقدَّر لا مقيس، راجع
+[[seo_audit_tools_trust]])؛ يحتاج تأكيد من GSC مباشرة لا افتراضاً.
 
