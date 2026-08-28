@@ -1,11 +1,12 @@
 # Project Memory Index
 
-> ١٥١ ملفاً (عُدّت ٢٠٢٦-٠٨-٢٧ بعد ملفَّي كوكي الجلسة وصفّ الاهتمامات — `ls *.md | grep -v MEMORY.md | wc -l` = ١٤٩). **العدّ للمتون، بلا `MEMORY.md` نفسه**. **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
+> ١٥٢ ملفاً (عُدّت ٢٠٢٦-٠٨-٢٨ بعد ملف التحقّق من الكتالوج الحيّ — `ls *.md | grep -v MEMORY.md | wc -l` = ١٥٢، وفحص الاكتمال بالاتجاهين: صفر مفقود). **العدّ للمتون، بلا `MEMORY.md` نفسه**. **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
 > **الطبقة ٠ تُقرأ متونها قبل أي مهمة.** من الباقي: افتح ما يخصّ مهمتك وأعلن ما فتحته.
 > الحوائط الصلبة منسوخة نصّاً في `CLAUDE.md`. سطرٌ بعدّة روابط = ملفات مستقلة جُمعت للاختصار.
 
-## 🔴 الطبقة ٠ — اقرأ متونها قبل أي مهمة (١٢)
+## 🔴 الطبقة ٠ — اقرأ متونها قبل أي مهمة (١٣)
 
+- [🧱 تحقّق من كتالوج المتجر الحيّ قبل أي ادّعاء](feedback_verify_catalog_before_claim.md) — لا تشتقّ منتجاً من التاق؛ درس سيدار: ٨٩ ادّعاءً مفبركاً عبر ٥٥ مقالاً
 - [🤝 Partnership Protocol](protocol_partnership.md) — ٨ أنماط بالاسم + دورة انضباط + طقوس جلسة + سياسة المصادر
 - [No Philosophy — Just Execute](feedback_no_philosophy.md) — لا خيارات/تمهيد؛ ابدأ بالأوضح؛ سؤال نصّي واحد عند العجز
 - [Treat User as Senior Engineer](feedback_senior_engineer.md) — خبير ٢٠+؛ لا فلسفة/خيارات/أساسيات؛ اقرأ حدّد نفّذ
@@ -110,7 +111,7 @@
 - [Blog Inline Code Chips](blog_inline_code_chips.md) + [Jolina Pre-Purchase Angle](jolina_prepurchase_angle.md) — الزاوية «الاسترجاع» لا الكود
 - عناقيد كبرى: [١٤ متجر/٢٨٠ مقال](blog_14clusters_july11.md) · [٧ عناقيد/١٠٥](blog_7clusters_july11.md) · [AliExpress ١٥٠](blog_aliexpress_cluster.md) · [ألعاب ١٠/٧٢](blog_toys_cluster_progress.md)
 - [💇 عنقود نزيه — ست ممرّات فارغة](blog_nazih_cluster.md) — لا تغزُ عنقود شريك؛ عُدَّ الروابط **لكل مقال** لا للعنقود
-- عناقيد متاجر (١٢–١٩ مقالاً لكلٍّ): [ذا ديل](blog_thedeal_cluster.md) · [فوغا كلوسيت](blog_vogacloset_cluster.md) · [ماماز](blog_mamaspapas_cluster.md) · [H&M](blog_hm_cluster.md) · [بيد إن روم](blog_bedinroom_cluster.md) · [لحظات القهوة](blog_lahazat_cluster.md) · [جنى العسل](blog_jana_honey_cluster.md) · [عبدالصمد القرشي](blog_asq_cluster.md) · [أثاث المنزل](blog_home_furniture_cluster.md)
+- عناقيد متاجر (١٢–١٩ مقالاً لكلٍّ): [ذا ديل](blog_thedeal_cluster.md) · [فوغا كلوسيت](blog_vogacloset_cluster.md) · [ماماز](blog_mamaspapas_cluster.md) · [H&M](blog_hm_cluster.md) · [بيد إن روم](blog_bedinroom_cluster.md) · [لحظات القهوة](blog_lahazat_cluster.md) · [جنى العسل](blog_jana_honey_cluster.md) · [عبدالصمد القرشي](blog_asq_cluster.md) · [⚠️ أثاث المنزل — سيدار لا يبيع أثاثاً](blog_home_furniture_cluster.md)
 
 ## ٧) قنوات الأفلييت والشراكات (١٢)
 
