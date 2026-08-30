@@ -67,7 +67,7 @@
 
 ## ٤) ميزات المنتج (١١)
 
-- [🔎 طبقة البحث الذكي](search_intelligence_layer.md) — تطبيع عربي + `search_concepts` (مرادف→قسم) + `blog_bridge` (كلمة→مقال→متاجره)؛ migration_070 + سكربتان؛ **الجداول تنتظر تشغيل المالك**
+- [🔎 طبقة البحث الذكي](search_intelligence_layer.md) — تطبيع عربي + `search_concepts` (مرادف→قسم) + `blog_bridge` (كلمة→مقال→متاجره)؛ **حيّ ٢٠٢٦-٠٨-٣٠**؛ أعِد `build_blog_bridge --write` بعد أي تعديل مدوّنة
 - ترند: [البنية النهائية](trend_architecture_final.md) (١٤ قرار) · [source='all'](trend_source_all.md) (DB واحد، البوت بلا ستوري)
 - [Story System Design](story_system_design.md) — story_slides؛ نموذج متداخل؛ فيديو+صوت؛ Cloudinary
 - [Support System](support_system.md) · [Publish Channels](publish_channels_feature.md) · [Season Reminders](season_reminders_feature.md)
