@@ -16090,10 +16090,14 @@ elif page == "🎯 إدارة الحملات":
                                     "النتيجة": False, "التفصيل": "تعذّر الوصول: {}".format(_e)})
 
                 # ② UTM للقنوات غير-جوجل
-                if _channel == "google_search":
+                if _channel in ("google_search", "organic"):
                     _checks.append({"الفحص": "وسوم UTM",
                                     "النتيجة": True,
-                                    "التفصيل": "قناة جوجل — الوسم التلقائي (gclid) يكفي ولا يُوسم يدوياً"})
+                                    "التفصيل": (
+                                        "قناة جوجل — الوسم التلقائي (gclid) يكفي ولا يُوسم يدوياً"
+                                        if _channel == "google_search" else
+                                        "نتيجة بحث عضوي — الرابط المفهرَس هو رابط الصفحة نفسه، "
+                                        "لا نملك حقن UTM عليه")})
                 else:
                     _utm_vals = (_utm_s or "", _utm_m or "", _utm_c or "")
                     _utm_ok = all(v.strip() for v in _utm_vals) and all(" " not in v.strip() for v in _utm_vals)
