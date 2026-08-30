@@ -1888,7 +1888,6 @@ _ANALYSIS_PAGES = [
 "تحليل المتاجر", "تحليل الأقسام",
 "تحليل طلبات الأكواد", "تحليل المستخدمين",
 "👣 زوّار الموقع",
-"💰 إسناد الإيراد",
 "🎯 إدارة الحملات",
 ]
 _OTHER_PAGES = [
@@ -15945,240 +15944,6 @@ elif page == "🔔 تذكيرات المواسم":
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 💰 إسناد الإيراد — الجسر بين الظهور العضوي والفلوس الفعلية
-# ═══════════════════════════════════════════════════════════════════════════
-# السؤال الذي لم يكن للمنصّة جواب عليه: «هل السيو يجيب فلوس؟». تعذّر الجواب
-# ليس نقص أدوات — بل نموذج الإسناد: سلة وكودماب ينسبان **بالكود** لا بالنقرة،
-# فطلبٌ يقع بلا أن يمرّ الشاري بالموقع أصلاً (ثبت: هدف ولحظات القهوة وخيارات
-# أعطوا طلبات حقيقية و action_logs يسجّل لهم صفر نقر وصفر نسخ). ⇒ لا يمكن ربط
-# طلبٍ بجلسة، ومحاولة ذلك تُنتج صفراً كاذباً.
-#
-# ما يصحّ هو الربط **على مستوى المتجر**: كم ريالاً أعاد كل متجر مقابل ظهوره
-# العضوي. تجمع الصفحة المصادر الثلاثة على master_id وتشتقّ المؤشّر:
-#   • الظهور/النقر العضوي  ← GSC لكل صفحة /store/{name}
-#   • التفاعل داخل الموقع  ← action_logs
-#   • الإيراد               ← affiliate_conversions
-elif page == "💰 إسناد الإيراد":
-    page_title("💰", "إسناد الإيراد",
-               "ريال حقيقي مقابل ظهور عضوي — لكل متجر. الإسناد بالكود لا بالنقرة، "
-               "فالربط على مستوى المتجر لا الطلب.")
-
-    _rc = get_conn()
-    _rc.rollback()
-    try:
-        # ── ١) حالة خطوط التغذية ─────────────────────────────────────────
-        st.subheader("① حالة مصادر الإيراد")
-        _pb_armed = bool(os.getenv("POSTBACK_ADMITAD_TOKEN"))
-        _conv = pd.read_sql(
-            "SELECT network, COUNT(*) AS rows, COALESCE(SUM(order_sum),0) AS sales, "
-            "COALESCE(SUM(reward_ready),0) AS commission "
-            "FROM affiliate_conversions GROUP BY network ORDER BY 2 DESC", _rc)
-
-        _c1, _c2, _c3 = st.columns(3)
-        _c1.metric("تحويلات مسجّلة", int(_conv["rows"].sum()) if not _conv.empty else 0)
-        _c2.metric("مبيعات (ر.س)",
-                   f"{float(_conv['sales'].sum()):,.2f}" if not _conv.empty else "0.00")
-        _c3.metric("عمولة (ر.س)",
-                   f"{float(_conv['commission'].sum()):,.2f}" if not _conv.empty else "0.00")
-
-        if _pb_armed:
-            st.success("✅ Admitad postback مُفعّل — التحويلات تدخل تلقائياً.")
-        else:
-            st.warning(
-                "⚠️ **Admitad postback مبنيّ لكنه معطّل.** الإنتاج يرد "
-                "503 POSTBACK_ADMITAD_TOKEN not configured. خطوتان يدويتان "
-                "(~٥ دقائق) موثّقتان في seo/admitad_postback_setup.md: ضع "
-                "POSTBACK_ADMITAD_TOKEN في متغيّرات Railway، ثم الصق رابط "
-                "الـPostback في لوحة Admitad. بعدها يدخل كل بيع تلقائياً."
-            )
-        if not _conv.empty:
-            st.dataframe(_conv.rename(columns={
-                "network": "الشبكة", "rows": "تحويلات",
-                "sales": "مبيعات", "commission": "عمولة"}),
-                width="stretch", hide_index=True)
-
-        # ── ٢) استيراد يدوي (سلة/كودماب: لا API للمسوّق) ──────────────────
-        st.divider()
-        st.subheader("② استيراد تحويلات يدوياً")
-        st.caption(
-            "سلة وكودماب لا يوفّران API للمسوّق (محسوم بالتحقّق) — لكن لوحة سلة "
-            "تدعم تصدير الطلبات. صدّر CSV وارفعه هنا، وطابِق الأعمدة."
-        )
-        _up = st.file_uploader("ملف CSV من لوحة الشريك", type=["csv"], key="conv_csv")
-        if _up is not None:
-            try:
-                _raw = pd.read_csv(_up)
-                st.dataframe(_raw.head(5), width="stretch")
-                _cols = list(_raw.columns)
-                _m1, _m2, _m3 = st.columns(3)
-                _f_store = _m1.selectbox("عمود المتجر", _cols, key="cv_store")
-                _f_order = _m2.selectbox("عمود رقم الطلب", _cols, key="cv_order")
-                _f_sales = _m3.selectbox("عمود المبيعات", _cols, key="cv_sales")
-                _m4, _m5, _m6 = st.columns(3)
-                _f_comm = _m4.selectbox("عمود العمولة", _cols, key="cv_comm")
-                _f_date = _m5.selectbox("عمود التاريخ", _cols, key="cv_date")
-                _f_net = _m6.text_input("اسم الشبكة", value="salla", key="cv_net")
-
-                if st.button("📥 استورد إلى affiliate_conversions", type="primary"):
-                    _stores = pd.read_sql("SELECT id, store_id FROM master", _rc)
-                    _byname = {str(r.store_id).strip(): int(r.id)
-                               for r in _stores.itertuples()}
-
-                    def _num(_row, _col):
-                        _v = _row.get(_col)
-                        if _v is None or pd.isna(_v):
-                            return None
-                        try:
-                            return float(str(_v).replace(",", "").strip())
-                        except ValueError:
-                            return None
-
-                    _ok = _skip = 0
-                    with _rc.cursor() as _cu:
-                        for _rec in _raw.to_dict("records"):
-                            _oid = str(_rec.get(_f_order) or "").strip()
-                            if not _oid or _oid.lower() == "nan":
-                                _skip += 1
-                                continue
-                            _mid = _byname.get(str(_rec.get(_f_store) or "").strip())
-                            _when = pd.to_datetime(_rec.get(_f_date), errors="coerce")
-                            _cu.execute(
-                                """
-                                INSERT INTO affiliate_conversions
-                                    (network, action_id, master_id, order_id,
-                                     order_sum, reward_ready, conversion_time,
-                                     status, currency, received_at)
-                                VALUES (%s, %s, %s, %s, %s, %s, %s,
-                                        'imported', 'SAR', NOW())
-                                ON CONFLICT (network, action_id) DO UPDATE SET
-                                    order_sum    = EXCLUDED.order_sum,
-                                    reward_ready = EXCLUDED.reward_ready,
-                                    master_id    = COALESCE(EXCLUDED.master_id,
-                                                        affiliate_conversions.master_id)
-                                """,
-                                (_f_net.strip() or "manual", _oid, _mid, _oid,
-                                 _num(_rec, _f_sales), _num(_rec, _f_comm),
-                                 None if pd.isna(_when) else _when.to_pydatetime()),
-                            )
-                            _ok += 1
-                    _rc.commit()
-                    st.success(f"✅ استُورد {_ok} صفاً · تُخطّي {_skip} (بلا رقم طلب).")
-                    st.cache_data.clear()
-            except Exception as _e:
-                _rc.rollback()
-                st.error(f"تعذّرت قراءة/استيراد الملف: {_e}")
-
-        # ── ٣) الجسر: إيراد مقابل ظهور عضوي لكل متجر ──────────────────────
-        st.divider()
-        st.subheader("③ الجسر — ريال مقابل ظهور عضوي")
-
-        _days = st.slider("نافذة التحليل (أيام)", 7, 90, 28, key="attr_days")
-        _eng = pd.read_sql(f"""
-            SELECT m.id AS master_id, m.store_id AS store,
-                   COUNT(*) FILTER (WHERE a.action_type='view_store')  AS views,
-                   COUNT(*) FILTER (WHERE a.action_type='click_link')  AS clicks,
-                   COUNT(*) FILTER (WHERE a.action_type='copy_coupon') AS copies
-            FROM master m
-            LEFT JOIN action_logs a
-                   ON a.store_id = m.store_id
-                  AND a.action_time > NOW() - INTERVAL '{int(_days)} days'
-            GROUP BY m.id, m.store_id
-        """, _rc)
-        _rev = pd.read_sql(f"""
-            SELECT master_id,
-                   COUNT(*)                      AS orders,
-                   COALESCE(SUM(order_sum), 0)   AS sales,
-                   COALESCE(SUM(reward_ready),0) AS commission
-            FROM affiliate_conversions
-            WHERE master_id IS NOT NULL
-              AND COALESCE(conversion_time, received_at)
-                  > NOW() - INTERVAL '{int(_days)} days'
-            GROUP BY master_id
-        """, _rc)
-
-        _bridge = _eng.merge(_rev, on="master_id", how="left").fillna(
-            {"orders": 0, "sales": 0.0, "commission": 0.0})
-
-        # الظهور العضوي من GSC لكل صفحة /store/{name} — اختياري: الصفحة تعمل بدونه.
-        _gj = os.getenv("GSC_SA_JSON")
-        _gsite = os.getenv("GSC_SITE", "https://www.dealpulseksa.com/")
-        if _gj:
-            try:
-                from urllib.parse import unquote
-
-                from google.oauth2.service_account import Credentials as _Cr
-                from googleapiclient.discovery import build as _build
-
-                @st.cache_data(ttl=1800, show_spinner=False)
-                def _gsc_store_pages(site, days):
-                    _cr = _Cr.from_service_account_info(
-                        json.loads(os.getenv("GSC_SA_JSON")),
-                        scopes=["https://www.googleapis.com/auth/webmasters.readonly"])
-                    _sv = _build("searchconsole", "v1", credentials=_cr,
-                                 cache_discovery=False)
-                    # آخر يومين في GSC ناقصان دائماً — نُنهي النافذة قبلهما.
-                    _end = date.today() - timedelta(days=2)
-                    _res = _sv.searchanalytics().query(
-                        siteUrl=site,
-                        body={"startDate": str(_end - timedelta(days=days)),
-                              "endDate": str(_end),
-                              "dimensions": ["page"], "rowLimit": 1000}).execute()
-                    _out = []
-                    for _row in _res.get("rows", []):
-                        _u = _row["keys"][0]
-                        if "/store/" not in _u:
-                            continue
-                        _out.append({"store": unquote(_u.split("/store/")[1]).strip(),
-                                     "impressions": _row.get("impressions", 0),
-                                     "gsc_clicks": _row.get("clicks", 0)})
-                    return pd.DataFrame(_out)
-
-                _g = _gsc_store_pages(_gsite, int(_days))
-                if not _g.empty:
-                    _bridge = _bridge.merge(_g, on="store", how="left")
-            except Exception as _e:
-                st.caption(f"⚠️ تعذّر سحب GSC: {_e}")
-        else:
-            st.caption("ℹ️ GSC_SA_JSON غير مضبوط — الظهور العضوي غير معروض.")
-
-        if "impressions" not in _bridge.columns:
-            _bridge["impressions"] = 0
-            _bridge["gsc_clicks"] = 0
-        _bridge = _bridge.fillna({"impressions": 0, "gsc_clicks": 0})
-
-        # المؤشّر المشتقّ: ريال لكل ألف ظهور عضوي — يقارن متاجر مختلفة الحجم بعدل.
-        _bridge["ريال/ألف ظهور"] = _bridge.apply(
-            lambda r: round(float(r["commission"]) * 1000 / r["impressions"], 2)
-            if r["impressions"] else 0.0, axis=1)
-
-        _bridge = _bridge.sort_values(["commission", "impressions"], ascending=False)
-        st.dataframe(
-            _bridge.rename(columns={
-                "store": "المتجر", "views": "مشاهدات", "clicks": "نقرات",
-                "copies": "نسخ الكود", "orders": "طلبات", "sales": "مبيعات",
-                "commission": "عمولة", "impressions": "ظهور عضوي",
-                "gsc_clicks": "نقرات عضوية"}).drop(columns=["master_id"]),
-            width="stretch", hide_index=True)
-
-        _earning = int((_bridge["commission"] > 0).sum())
-        _exposed = int((_bridge["impressions"] > 0).sum())
-        st.caption(
-            f"**{_earning}** متجراً أعاد عمولة · **{_exposed}** متجراً له ظهور عضوي. "
-            "⚠️ العمود المشتقّ **ارتباط لا إسناد**: الشبكات تنسب بالكود، فالطلب قد "
-            "يقع بلا مرور الشاري بالموقع. اقرأه كترتيب أولويات لا كدليل سببية."
-        )
-        st.download_button(
-            "⬇️ تصدير الجسر CSV",
-            _bridge.to_csv(index=False).encode("utf-8-sig"),
-            file_name="revenue_attribution.csv", mime="text/csv")
-    except Exception as _e:
-        _rc.rollback()
-        st.error(f"تعذّر بناء الجسر: {_e}")
-    finally:
-        _rc.close()
-
-
-# ═══════════════════════════════════════════════════════════════════════════
 # 🎯 إدارة الحملات — عقد القياس قبل الإطلاق
 #
 # مبنية حرفياً على ما استُخلص من شهادات القياس والإسناد
@@ -16217,7 +15982,6 @@ elif page == "🎯 إدارة الحملات":
         "copy_coupon":     "نسخ كود (وكيل)",
         "click_link":      "نقر رابط المتجر",
         "view_store":      "مشاهدة متجر",
-        "order_confirmed": "طلب مؤكَّد (سلة/أدميتاد)",
     }
     _PROXY_KPIS = {"copy_coupon", "click_link", "view_store"}
 
@@ -16233,8 +15997,7 @@ elif page == "🎯 إدارة الحملات":
         if _tbl_n < 2:
             st.warning(
                 "**جداول الحملات غير منشأة بعد.** الملف `migration_070_campaigns.sql` في جذر "
-                "المشروع — ينشئ `campaigns` و`campaign_readings` وعمودَي الإسناد "
-                "`gclid`/`client_id` في `action_logs`."
+                "المشروع — ينشئ `campaigns` و`campaign_readings`."
             )
             if st.button("🛠️ إنشاء الجداول الآن (070 + 071)", type="primary"):
                 _done, _failed = [], []
@@ -16257,9 +16020,9 @@ elif page == "🎯 إدارة الحملات":
                     st.rerun()
             st.stop()
 
-        _t_new, _t_run, _t_dem, _t_ord = st.tabs(
+        _t_new, _t_run, _t_dem = st.tabs(
             ["🧾 حملة جديدة (عقد القياس)", "📊 الحملات والقراءات",
-             "🔍 الطلب المرصود + UTM", "💰 الطلبات وقيمة الكود"])
+             "🔍 الطلب المرصود + UTM"])
 
         # ── التبويب ١: سبعة فحوص تمنع إطلاق حملة لا تُقاس ────────────────
         with _t_new:
@@ -16362,21 +16125,15 @@ elif page == "🎯 إدارة الحملات":
 
                 # ④ خطّ الأساس معدود من بياناتنا
                 _win_days = max(int((_end - _start).days), 1)
-                _base = None
-                if _kpi == "order_confirmed":
-                    _checks.append({"الفحص": "خطّ الأساس معدود",
-                                    "النتيجة": False,
-                                    "التفصيل": "الطلب المؤكَّد لا يُعَدّ عندنا بعد — يحتاج OCI. اختر وكيلاً مؤقّتاً."})
-                else:
-                    _base = int(pd.read_sql(
-                        "SELECT COUNT(*) AS n FROM action_logs WHERE action_type = %(k)s "
-                        "AND action_time >= %(s)s::date - make_interval(days => %(d)s) "
-                        "AND action_time < %(s)s::date",
-                        _cc, params={"k": _kpi, "s": _start, "d": _win_days}).iloc[0]["n"])
-                    _checks.append({"الفحص": "خطّ الأساس معدود من action_logs",
-                                    "النتيجة": True,
-                                    "التفصيل": "{} حدثاً في الـ{} يوماً السابقة — الهدف {}".format(
-                                        _base, _win_days, int(_target))})
+                _base = int(pd.read_sql(
+                    "SELECT COUNT(*) AS n FROM action_logs WHERE action_type = %(k)s "
+                    "AND action_time >= %(s)s::date - make_interval(days => %(d)s) "
+                    "AND action_time < %(s)s::date",
+                    _cc, params={"k": _kpi, "s": _start, "d": _win_days}).iloc[0]["n"])
+                _checks.append({"الفحص": "خطّ الأساس معدود من action_logs",
+                                "النتيجة": True,
+                                "التفصيل": "{} حدثاً في الـ{} يوماً السابقة — الهدف {}".format(
+                                    _base, _win_days, int(_target))})
 
                 # ⑤ حدّ الإيقاف + ميزانية للقنوات المدفوعة
                 _paid = (_channel in _PAID_NON_GOOGLE) or (_channel == "google_search")
@@ -16470,18 +16227,16 @@ elif page == "🎯 إدارة الحملات":
                 _win_end   = min(_today, _c["ends_on"])
                 _judge_end = _win_end - timedelta(days=_LAG_DAYS)
 
-                _actual_full = 0
                 _actual_judge = 0
-                if _c["kpi_event"] != "order_confirmed":
-                    _q = ("SELECT COUNT(*) AS n FROM action_logs WHERE action_type = %(k)s "
-                          "AND action_time >= %(s)s AND action_time < %(e)s")
-                    _actual_full = int(pd.read_sql(_q, _cc, params={
+                _q = ("SELECT COUNT(*) AS n FROM action_logs WHERE action_type = %(k)s "
+                      "AND action_time >= %(s)s AND action_time < %(e)s")
+                _actual_full = int(pd.read_sql(_q, _cc, params={
+                    "k": _c["kpi_event"], "s": _c["starts_on"],
+                    "e": _win_end + timedelta(days=1)}).iloc[0]["n"])
+                if _judge_end > _c["starts_on"]:
+                    _actual_judge = int(pd.read_sql(_q, _cc, params={
                         "k": _c["kpi_event"], "s": _c["starts_on"],
-                        "e": _win_end + timedelta(days=1)}).iloc[0]["n"])
-                    if _judge_end > _c["starts_on"]:
-                        _actual_judge = int(pd.read_sql(_q, _cc, params={
-                            "k": _c["kpi_event"], "s": _c["starts_on"],
-                            "e": _judge_end + timedelta(days=1)}).iloc[0]["n"])
+                        "e": _judge_end + timedelta(days=1)}).iloc[0]["n"])
 
                 _m1, _m2, _m3, _m4 = st.columns(4)
                 with _m1: kpi_card("📈", "المعدود (كل النافذة)", _actual_full)
@@ -16713,382 +16468,6 @@ elif page == "🎯 إدارة الحملات":
                 st.code(_built, language="text")
                 if " " in (_b_camp or ""):
                     st.caption("المسافات حُوّلت إلى `_` — المسافة في UTM تكسر التجميع.")
-
-        # ══════════════════════════════════════════════════════════════════
-        # التبويب ٤ — الطلبات المؤكَّدة: من وكيل إلى إيراد، ومنه قيمة الكود
-        # ══════════════════════════════════════════════════════════════════
-        with _t_ord:
-            _ord_ready = int(pd.read_sql("""
-                SELECT COUNT(*) AS n FROM information_schema.tables
-                WHERE table_schema='public' AND table_name='affiliate_orders'
-            """, _cc).iloc[0]["n"]) == 1
-
-            if not _ord_ready:
-                st.warning(
-                    "**جدول الطلبات غير منشأ.** `migration_072_affiliate_orders.sql` في جذر "
-                    "المشروع — ينشئ `affiliate_orders` مع حارس **`UNIQUE (network, order_ref)`** "
-                    "الذي يمنع مضاعفة الإيراد عند إعادة رفع ملف."
-                )
-                if st.button("🛠️ إنشاء جدول الطلبات (072)", type="primary", key="ord_mig"):
-                    try:
-                        with open("migration_072_affiliate_orders.sql", encoding="utf-8") as _f:
-                            _sqlo = _f.read()
-                        with _cc.cursor() as _cur:
-                            _cur.execute(_sqlo)
-                        _cc.commit()
-                        st.success("✅ أُنشئ الجدول.")
-                        st.rerun()
-                    except Exception as _e:
-                        _cc.rollback()
-                        st.error("تعذّر الإنشاء: {}".format(_e))
-            else:
-                _o_tot = pd.read_sql("""
-                    SELECT COUNT(*) FILTER (WHERE status='confirmed')            AS confirmed,
-                           COALESCE(SUM(commission_sar) FILTER (WHERE status='confirmed'), 0) AS commission,
-                           COUNT(*) FILTER (WHERE status IN ('cancelled','refunded')) AS lost,
-                           COUNT(*) FILTER (WHERE gclid IS NOT NULL AND status='confirmed'
-                                              AND uploaded_to_ads = FALSE)       AS oci_ready
-                    FROM affiliate_orders
-                """, _cc).iloc[0]
-
-                _o1, _o2, _o3, _o4 = st.columns(4)
-                with _o1: kpi_card("📦", "طلبات مؤكَّدة", int(_o_tot["confirmed"] or 0))
-                with _o2: kpi_card("💰", "إجمالي العمولة (ر.س)",
-                                   "{:,.0f}".format(float(_o_tot["commission"] or 0)))
-                with _o3: kpi_card("↩️", "ملغى/مسترجع", int(_o_tot["lost"] or 0), "warning")
-                with _o4: kpi_card("📤", "جاهزة لرفع OCI", int(_o_tot["oci_ready"] or 0))
-
-                st.markdown("---")
-
-                # ── مُدخَلات الطلبات: ملف أو نصّ ملصوق ─────────────────────
-                # ⚠️ سلة **لا تُصدِّر** طلبات المسوّق (فُحص ٢٠٢٦-٠٨-٢٤ — المالك)،
-                # فاللصق من شاشة الطلبات هو المسار الحيّ لا البديل. والمُستورِد
-                # واحد للاثنين: نفس الربط، نفس التنظيف، ونفس حارس
-                # (الشبكة + رقم الطلب) الذي يمنع مضاعفة الإيراد عند إعادة الإدخال.
-                import re as _re
-
-                _AR_DIG = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
-                _AR_MON = {"يناير": "01", "فبراير": "02", "مارس": "03", "ابريل": "04",
-                           "أبريل": "04", "مايو": "05", "يونيو": "06", "يوليو": "07",
-                           "اغسطس": "08", "أغسطس": "08", "سبتمبر": "09", "اكتوبر": "10",
-                           "أكتوبر": "10", "نوفمبر": "11", "ديسمبر": "12"}
-
-                def _o_num(_v):
-                    """رقم من «2,475.00 ر.س» أو «٤٤٥٫٥٠» — العملة والفواصل تُرمى."""
-                    # ⚠️ لا تُنظَّف بحذف غير-الأرقام: «ر.س» تترك نقطتها فيصير «2475.00.»
-                    # ويرجع nan. الصحيح: التقاط أول عدد صريح.
-                    _s = str(_v).translate(_AR_DIG).replace("٫", ".").replace("،", "").replace(",", "")
-                    _m = _re.search(r"-?\d+(?:\.\d+)?", _s)
-                    return pd.to_numeric(_m.group(0)) if _m else float("nan")
-
-                def _o_date(_v):
-                    """تاريخ من «2026-08-14» أو «14/08/2026» أو «١٤ أغسطس ٢٠٢٦»."""
-                    _s = str(_v).translate(_AR_DIG).strip()
-                    for _ar, _mm in _AR_MON.items():
-                        if _ar in _s:
-                            _dd = _re.search(r"(?<!\d)(\d{1,2})(?!\d)", _s)
-                            _yy = _re.search(r"(20\d{2})", _s)
-                            if _dd and _yy:
-                                return pd.to_datetime("{}-{}-{:02d}".format(
-                                    _yy.group(1), _mm, int(_dd.group(1))), errors="coerce")
-                    return pd.to_datetime(_s, errors="coerce", dayfirst=True)
-
-                def _o_parse_paste(_text, _per_rec=0):
-                    """نصّ الجدول الملصوق → DataFrame. يفهم: تبويب · | · مسافتين+ ·
-                    فاصلة · وكذلك «حقل في كل سطر» (شكل النسخ من صفحة سلة) وعندها
-                    يُجمَّع كل `_per_rec` سطراً في سجل واحد."""
-                    _lines = [_l.strip() for _l in _text.splitlines() if _l.strip()]
-                    if not _lines:
-                        return None
-                    _joined = "\n".join(_lines)
-                    if "\t" in _joined:
-                        _split = lambda _l: [_c.strip() for _c in _l.split("\t")]
-                    elif "|" in _joined:
-                        _split = lambda _l: [_c.strip() for _c in _l.strip("|").split("|")]
-                    elif _re.search(r"\S {2,}\S", _joined):
-                        _split = lambda _l: [_c.strip() for _c in _re.split(r" {2,}", _l)]
-                    elif "," in _joined:
-                        _split = lambda _l: [_c.strip() for _c in _l.split(",")]
-                    else:
-                        _split = lambda _l: [_l]
-                    _rows = [list(_split(_l)) for _l in _lines]
-                    _w = max(len(_r) for _r in _rows)
-                    if _w == 1 and int(_per_rec) >= 2:
-                        _flat = [_r[0] for _r in _rows]
-                        _n = int(_per_rec)
-                        _rows = [_flat[_i:_i + _n] for _i in range(0, len(_flat), _n)]
-                        _rows = [_r for _r in _rows if len(_r) == _n]
-                        _w = _n
-                    if not _rows:
-                        return None
-                    _rows = [_r + [""] * (_w - len(_r)) for _r in _rows]
-                    # سطر أول بلا أي رقم = رؤوس أعمدة، وإلا أعمدة مرقّمة
-                    _head_nums = sum(1 for _c in _rows[0] if not pd.isna(_o_num(_c)))
-                    if len(_rows) > 1 and _head_nums == 0:
-                        _cols = [_c or "عمود {}".format(_i + 1)
-                                 for _i, _c in enumerate(_rows[0])]
-                        _body = _rows[1:]
-                    else:
-                        _cols = ["عمود {}".format(_i + 1) for _i in range(_w)]
-                        _body = _rows
-                    if not _body:
-                        return None
-                    return pd.DataFrame(_body, columns=_cols)
-
-                def _o_import_ui(_raw, _kp):
-                    """ربط الأعمدة ثم الإدخال — مشترك بين الملف والنصّ الملصوق."""
-                    _cols_o = ["—"] + list(map(str, _raw.columns))
-                    _mc1, _mc2, _mc3 = st.columns(3)
-                    _m_ref  = _mc1.selectbox("عمود رقم الطلب *", _cols_o, key=_kp + "m_ref")
-                    _m_date = _mc2.selectbox("عمود التاريخ *", _cols_o, key=_kp + "m_date")
-                    _m_comm = _mc3.selectbox("عمود العمولة *", _cols_o, key=_kp + "m_comm")
-                    _mc4, _mc5, _mc6 = st.columns(3)
-                    _m_store = _mc4.selectbox("عمود المتجر", _cols_o, key=_kp + "m_store")
-                    _m_val   = _mc5.selectbox("عمود قيمة الطلب", _cols_o, key=_kp + "m_val")
-                    _m_code  = _mc6.selectbox("عمود الكود", _cols_o, key=_kp + "m_code")
-                    _mc7, _mc8 = st.columns(2)
-                    _m_net    = _mc7.selectbox("الشبكة", ["salla", "admitad", "boostiny",
-                                                          "codemap", "manual"], key=_kp + "m_net")
-                    _m_status = _mc8.selectbox("حالة هذه الطلبات",
-                                               ["confirmed", "pending", "cancelled", "refunded"],
-                                               key=_kp + "m_status")
-
-                    if st.button("💾 استورد الصفوف", type="primary", key=_kp + "import"):
-                        if "—" in (_m_ref, _m_date, _m_comm):
-                            st.error("رقم الطلب والتاريخ والعمولة إلزامية.")
-                            return
-                        _ins = _skip = _bad = 0
-                        for _, _r in _raw.iterrows():
-                            try:
-                                _ref = str(_r[_m_ref]).translate(_AR_DIG).strip()
-                                if not _ref or _ref.lower() == "nan":
-                                    _bad += 1
-                                    continue
-                                _dt = _o_date(_r[_m_date])
-                                _cm = _o_num(_r[_m_comm])
-                                if pd.isna(_dt) or pd.isna(_cm):
-                                    _bad += 1
-                                    continue
-                                _vl = _o_num(_r[_m_val]) if _m_val != "—" else float("nan")
-                                with _cc.cursor() as _cur:
-                                    _cur.execute("""
-                                        INSERT INTO affiliate_orders
-                                            (network, order_ref, store_id, order_date,
-                                             order_value_sar, commission_sar, status, coupon_code)
-                                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-                                        ON CONFLICT (network, order_ref) DO NOTHING
-                                    """, (
-                                        _m_net, _ref,
-                                        (str(_r[_m_store]).strip() if _m_store != "—" else None),
-                                        _dt.date(),
-                                        (None if pd.isna(_vl) else float(_vl)),
-                                        float(_cm), _m_status,
-                                        (str(_r[_m_code]).strip() if _m_code != "—" else None),
-                                    ))
-                                    if _cur.rowcount == 1:
-                                        _ins += 1
-                                    else:
-                                        _skip += 1
-                            except Exception:
-                                _cc.rollback()
-                                _bad += 1
-                                continue
-                        _cc.commit()
-                        st.success(
-                            "✅ أُدخل **{}** · تُجوهل مكرّراً **{}** · صفوف غير صالحة **{}**".format(
-                                _ins, _skip, _bad))
-                        st.caption("«تُجوهل مكرّراً» هو الحارس يعمل — لا خطأ.")
-                        st.rerun()
-
-                # ── ١) لصق جدول الطلبات (لا يحتاج تصديراً) ─────────────────
-                st.markdown("#### 📋 الصق جدول الطلبات من لوحة الشبكة")
-                st.caption(
-                    "سلة لا تُصدِّر طلبات المسوّق — فحدّد صفوف الجدول في الشاشة وانسخها "
-                    "(Ctrl+C) والصقها هنا. **رقم الطلب إلزامي** لأنه المفتاح الذي يمنع "
-                    "احتساب الطلب مرتين؛ ملخّص «المتاجر» بلا أرقام طلبات لا يصلح."
-                )
-                _pt1, _pt2 = st.columns([3, 1])
-                _paste = _pt1.text_area("الصق هنا", height=140, key="ord_paste",
-                                        placeholder="رقم الطلب / التاريخ / المتجر / قيمة الطلب / العمولة")
-                _per_rec = _pt2.number_input(
-                    "حقول لكل سجل", min_value=0, max_value=12, value=0, step=1, key="ord_percol",
-                    help="اتركه صفراً عادةً. عيّنه فقط إذا نزل كل حقل في سطر مستقل عند اللصق "
-                         "(مثلاً ٥ إذا كان كل طلب: رقم · تاريخ · متجر · قيمة · عمولة).")
-                if _paste and _paste.strip():
-                    try:
-                        _pdf = _o_parse_paste(_paste, _per_rec)
-                        if _pdf is None or _pdf.empty:
-                            st.warning("ما قدرت أفكّك النصّ إلى صفوف. جرّب «حقول لكل سجل».")
-                        else:
-                            st.caption(
-                                "فكّكته إلى **{}** صفاً × **{}** عموداً — راجعه قبل الاستيراد:".format(
-                                    len(_pdf), len(_pdf.columns)))
-                            st.dataframe(_pdf.head(10), width="stretch")
-                            _o_import_ui(_pdf, "pst_")
-                    except Exception as _e:
-                        st.error("تعذّر تفكيك النصّ: {}".format(_e))
-
-                st.markdown("---")
-
-                # ── ٢) رفع ملف الشبكة (لمن يدعم التصدير) ───────────────────
-                st.markdown("#### ⬆️ رفع تقرير الشبكة (CSV)")
-                st.caption(
-                    "للشبكات التي تدعم التصدير. الصفوف المكرّرة **تُتجاهَل تلقائياً** "
-                    "بحارس (الشبكة + رقم الطلب) — فإعادة رفع نفس الملف لا تضاعف الإيراد."
-                )
-                _up = st.file_uploader("ملف CSV", type=["csv"], key="ord_csv")
-                if _up is not None:
-                    try:
-                        _raw = pd.read_csv(_up)
-                        st.caption("قرأتُ **{}** صفاً · الأعمدة: {}".format(
-                            len(_raw), " · ".join(map(str, _raw.columns[:12]))))
-                        _o_import_ui(_raw, "csv_")
-                    except Exception as _e:
-                        st.error("تعذّرت قراءة الملف: {}".format(_e))
-
-                # ── إضافة طلب يدوياً ──────────────────────────────────────
-                with st.expander("➕ إضافة طلب واحد يدوياً"):
-                    _a1, _a2, _a3 = st.columns(3)
-                    _a_net  = _a1.selectbox("الشبكة", ["salla", "admitad", "boostiny",
-                                                       "codemap", "manual"], key="a_net")
-                    _a_ref  = _a2.text_input("رقم الطلب *", key="a_ref")
-                    _a_date = _a3.date_input("التاريخ", value=date.today(), key="a_date")
-                    _a4, _a5, _a6 = st.columns(3)
-                    _a_store = _a4.text_input("المتجر", key="a_store")
-                    _a_comm  = _a5.number_input("العمولة (ر.س) *", min_value=0.0, step=5.0, key="a_comm")
-                    _a_val   = _a6.number_input("قيمة الطلب (ر.س)", min_value=0.0, step=25.0, key="a_val")
-                    _a7, _a8 = st.columns(2)
-                    _a_code  = _a7.text_input("الكود", key="a_code")
-                    _a_gclid = _a8.text_input("gclid (إن عُرف)", key="a_gclid")
-                    if st.button("💾 احفظ الطلب", key="a_save"):
-                        if not _a_ref.strip() or float(_a_comm) <= 0:
-                            st.error("رقم الطلب والعمولة إلزاميان.")
-                        else:
-                            try:
-                                with _cc.cursor() as _cur:
-                                    _cur.execute("""
-                                        INSERT INTO affiliate_orders
-                                            (network, order_ref, store_id, order_date,
-                                             order_value_sar, commission_sar, coupon_code, gclid)
-                                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-                                        ON CONFLICT (network, order_ref) DO NOTHING
-                                    """, (_a_net, _a_ref.strip(), _a_store.strip() or None, _a_date,
-                                          float(_a_val) or None, float(_a_comm),
-                                          _a_code.strip() or None, _a_gclid.strip() or None))
-                                    _added = _cur.rowcount
-                                _cc.commit()
-                                st.success("✅ أُضيف." if _added else "⚠️ موجود سلفاً — لم يُضَف (الحارس).")
-                                st.rerun()
-                            except Exception as _e:
-                                _cc.rollback()
-                                st.error("تعذّر الحفظ: {}".format(_e))
-
-                st.markdown("---")
-
-                # ── 🔑 قيمة الكود لكل متجر — الرقم الذي تقوم عليه tROAS ───
-                st.markdown("#### 🔑 قيمة نسخة الكود لكل متجر")
-                st.caption(
-                    "العمولة المؤكَّدة ÷ عدد النسخ المعدودة = **ما تساويه النسخة الواحدة فعلاً**. "
-                    "هذا الرقم — لا رقم مخترع — هو ما يُدخَل قيمةً للتحويل قبل أي مزايدة بالقيمة."
-                )
-                _val = pd.read_sql("""
-                    WITH comm AS (
-                        SELECT store_id, SUM(commission_sar) AS commission, COUNT(*) AS orders
-                        FROM affiliate_orders WHERE status='confirmed' AND store_id IS NOT NULL
-                        GROUP BY 1
-                    ), cps AS (
-                        SELECT store_id, COUNT(*) AS copies
-                        FROM action_logs WHERE action_type='copy_coupon' AND store_id IS NOT NULL
-                        GROUP BY 1
-                    )
-                    SELECT COALESCE(c.store_id, p.store_id)                       AS "المتجر",
-                           COALESCE(c.orders, 0)                                  AS "طلبات",
-                           ROUND(COALESCE(c.commission, 0)::numeric, 2)           AS "عمولة (ر.س)",
-                           COALESCE(p.copies, 0)                                  AS "نسخ",
-                           CASE WHEN COALESCE(p.copies,0) > 0
-                                THEN ROUND((COALESCE(c.commission,0) / p.copies)::numeric, 2)
-                                ELSE NULL END                                     AS "قيمة النسخة"
-                    FROM comm c FULL OUTER JOIN cps p ON c.store_id = p.store_id
-                    ORDER BY 3 DESC NULLS LAST, 4 DESC
-                    LIMIT 60
-                """, _cc)
-                if _val.empty:
-                    st.info("لا بيانات بعد — ارفع أول تقرير طلبات.")
-                else:
-                    st.dataframe(_val, width="stretch", hide_index=True)
-                    _priced = int((_val["قيمة النسخة"].notna() & (_val["قيمة النسخة"] > 0)).sum())
-                    st.caption(
-                        "**{}** متجراً له قيمة نسخة محسوبة. ⚠️ المتاجر بنسخٍ وبلا عمولة "
-                        "**ليست بلا قيمة بالضرورة** — قد يكون الطلب لم يُبلَّغ بعد (تأخّر التحويل)، "
-                        "أو الإسناد بالكود لم يصلنا. لا تُوقف متجراً بسببها وحدها.".format(_priced))
-                    st.download_button(
-                        "⬇️ تصدير جدول القيمة CSV",
-                        _val.to_csv(index=False).encode("utf-8-sig"),
-                        file_name="coupon_value_by_store.csv", mime="text/csv", key="val_dl")
-
-                st.markdown("---")
-
-                # ── 📤 ملف رفع OCI إلى Google Ads ─────────────────────────
-                st.markdown("#### 📤 ملف الرفع إلى Google Ads (OCI)")
-                _oci = pd.read_sql("""
-                    SELECT id, gclid, order_date, commission_sar, currency
-                    FROM affiliate_orders
-                    WHERE gclid IS NOT NULL AND status='confirmed' AND uploaded_to_ads = FALSE
-                    ORDER BY order_date
-                """, _cc)
-                if _oci.empty:
-                    st.info(
-                        "لا طلبات جاهزة للرفع. الطلب يصير جاهزاً حين يحمل **`gclid`** — "
-                        "أي حين يأتي الزائر من إعلان جوجل ويُربط طلبه بنقرته."
-                    )
-                else:
-                    _lines = ["Parameters:TimeZone=+0300",
-                              "Google Click ID,Conversion Name,Conversion Time,"
-                              "Conversion Value,Conversion Currency"]
-                    for _, _r in _oci.iterrows():
-                        _lines.append("{},{},{} 12:00:00+03:00,{},{}".format(
-                            _r["gclid"], "order_confirmed", _r["order_date"],
-                            float(_r["commission_sar"] or 0), _r["currency"] or "SAR"))
-                    _csv_txt = "\n".join(_lines)
-                    st.dataframe(_oci.rename(columns={
-                        "gclid": "مفتاح النقرة", "order_date": "التاريخ",
-                        "commission_sar": "العمولة", "currency": "العملة"}).drop(columns=["id"]),
-                        width="stretch", hide_index=True)
-                    st.download_button(
-                        "⬇️ نزّل ملف OCI",
-                        _csv_txt.encode("utf-8-sig"),
-                        file_name="google_ads_oci_upload.csv", mime="text/csv", key="oci_dl")
-                    st.caption(
-                        "ارفعه في `Google Ads ← Tools ← Conversions ← Uploads`. "
-                        "⚠️ **اسم التحويل في الملف (`order_confirmed`) يجب أن يطابق حرفياً** اسم "
-                        "إجراء التحويل عندك، و**انتظر ٤–٦ ساعات بعد إنشاء الإجراء قبل أول رفع**."
-                    )
-                    if st.button("✅ علّمها كمرفوعة", key="oci_mark"):
-                        try:
-                            with _cc.cursor() as _cur:
-                                _cur.execute("""
-                                    UPDATE affiliate_orders
-                                    SET uploaded_to_ads = TRUE, uploaded_at = NOW()
-                                    WHERE id = ANY(%s)
-                                """, (list(map(int, _oci["id"].tolist())),))
-                            _cc.commit()
-                            st.success("✅ عُلّمت {} طلباً كمرفوعة.".format(len(_oci)))
-                            st.rerun()
-                        except Exception as _e:
-                            _cc.rollback()
-                            st.error("تعذّر: {}".format(_e))
-
-                # ── آخر الطلبات ───────────────────────────────────────────
-                _recent = pd.read_sql("""
-                    SELECT order_date AS "التاريخ", network AS "الشبكة", order_ref AS "رقم الطلب",
-                           store_id AS "المتجر", commission_sar AS "العمولة", status AS "الحالة",
-                           coupon_code AS "الكود", (gclid IS NOT NULL) AS "له مفتاح نقرة"
-                    FROM affiliate_orders ORDER BY order_date DESC, id DESC LIMIT 50
-                """, _cc)
-                if not _recent.empty:
-                    st.markdown("#### 📚 آخر الطلبات")
-                    _recent["له مفتاح نقرة"] = _recent["له مفتاح نقرة"].map(lambda b: "✅" if b else "—")
-                    st.dataframe(_recent, width="stretch", hide_index=True)
 
     except Exception as _e:
         _cc.rollback()

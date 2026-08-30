@@ -1,10 +1,9 @@
 -- ═══════════════════════════════════════════════════════════════════════════
--- Migration 070 — منظومة إدارة الحملات + مفتاحا الإسناد
+-- Migration 070 — منظومة إدارة الحملات
 --
 -- تُنفِّذ ما استُخلص من شهادات القياس والإسناد (المرجع: seo/ads_measurement_doctrine.md):
 --   §16  هدف واحد لكل مرحلة، وإلا لا حكم على الحملة.
 --   §17  لا تقرير يُغلق بلا عمود «الفعل».
---   §18  gclid مفتاح OCI، و client_id مفتاح Measurement Protocol.
 --   §20  الوكيل (copy_coupon) يُقرأ ولا يقود المزايدة — يُعلَن أنه وكيل.
 --   §23  القنوات غير-جوجل لا تُنسب بلا UTM.
 --
@@ -17,7 +16,7 @@ CREATE TABLE IF NOT EXISTS campaigns (
     name                 TEXT        NOT NULL,
     channel              TEXT        NOT NULL,   -- google_search | snapchat | tiktok | instagram | telegram | email | organic
     stage                TEXT        NOT NULL,   -- awareness | consideration | purchase | loyalty
-    kpi_event            TEXT        NOT NULL,   -- copy_coupon | click_link | view_store | order_confirmed
+    kpi_event            TEXT        NOT NULL,   -- copy_coupon | click_link | view_store
     kpi_target           NUMERIC     NOT NULL,
     is_proxy_kpi         BOOLEAN     NOT NULL DEFAULT FALSE,  -- §16: الوكيل يُعلَن صراحةً
     baseline_value       NUMERIC,                -- معدود من action_logs قبل الإطلاق
@@ -57,11 +56,3 @@ CREATE TABLE IF NOT EXISTS campaign_readings (
 );
 
 CREATE INDEX IF NOT EXISTS idx_campaign_readings_campaign ON campaign_readings (campaign_id, read_on DESC);
-
--- 3) مفتاحا الإسناد — الواجهة ترسلهما منذ web bd208e3، والـAPI كان يُسقطهما
-ALTER TABLE action_logs ADD COLUMN IF NOT EXISTS gclid     TEXT;
-ALTER TABLE action_logs ADD COLUMN IF NOT EXISTS client_id TEXT;
-
--- فهرس جزئي: النقرات الإعلانية أقلية من الأحداث، فلا يُثقَل الجدول
-CREATE INDEX IF NOT EXISTS idx_action_logs_gclid
-    ON action_logs (gclid) WHERE gclid IS NOT NULL;
