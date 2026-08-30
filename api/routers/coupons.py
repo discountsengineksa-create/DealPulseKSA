@@ -393,6 +393,16 @@ def get_all_coupons(
     return SearchResponse(query="", total=len(results), capped=(len(results) == limit), results=results)
 
 
+# تطبيع عربي داخل SQL بلا الاعتماد على دالة DB — يبقى البحث سليماً حتى لو
+# نُشر الكود قبل تشغيل migration_070 (الذي يُنشئ normalize_ar و search_concepts).
+# نفس قواعد api/utils/arabic_search.normalize_ar: أإآٱ→ا، ى→ي، ة→ه، حذف التطويل/التشكيل.
+def _norm_sql(col: str) -> str:
+    return (
+        f"regexp_replace(translate(lower(coalesce({col}, '')), "
+        f"'أإآٱىة', 'اااايه'), '[ـً-ْ]', '', 'g')"
+    )
+
+
 @router.get("/search", response_model=SearchResponse)
 def search_coupons(
     q: str = Query(..., min_length=2, max_length=100, description="نص البحث"),
@@ -402,58 +412,161 @@ def search_coupons(
     conn=Depends(get_db),
 ):
     """
-    البحث الذكي بالـ Trigram Similarity.
-    - يبحث في الحقول العربيّة والإنجليزيّة معاً (المستخدم قد يكتب بأيّ لغة).
+    البحث الذكي — ثلاث طبقات مرتّبة بالتدرّج:
+
+    1. **اسم المتجر** — تطابق دقيق، ثم الأقرب عند الخطأ الإملائي (trigram).
+       التطبيع يوحّد صور الحرف («نمشى»→«نمشي») والمسافات («ترنديول»→«ترند يول»).
+    2. **مفهوم/قسم** — الاستعلام (أو أقرب صورة له) موجود في `search_concepts`
+       كمرادف/إملاء/كلمة-منتج → وسم قسم. النتيجة: **كل** متاجر ذلك القسم
+       مرتّبةً بالشعبية. («أحذية»→كل متاجر `أحذيه` ، «خواتم»→كل متاجر `مجوهرات`).
+    3. **نبذة المتجر** ثم **تطابق ضبابي بعيد** — آخر تدرّج.
+
+    كل صفّ يحمل `match_type` لتجمّعه الواجهة بعناوين.
     - ?lang=en يبدّل قيم الاستجابة للإنجليزيّة (Fallback للعربية إذا فارغة).
     - ?channel=bot يقصر النتائج على متاجر قناة البوت/الميني (افتراضي website).
     """
-    _like = f"%{q}%"
-    # نُطبّع المسافات: المستخدم قد يكتب «ترنديول» والمتجر «ترند يول».
-    # ILIKE العادي يفشل في هذه الحالة — نطبّق REPLACE على الجانبين.
-    _q_no_ws = "".join(q.split())            # "ترنديول"
-    _like_no_ws = f"%{_q_no_ws}%"
+    from api.utils.arabic_search import normalize_ar, strip_ws
+
+    q = q.strip()
+    q_norm = normalize_ar(q)
+    q_no_ws = strip_ws(q_norm)
+
+    # ── الطبقة ٢: حلّ المفاهيم (مرادف/إملاء/كلمة-منتج → وسوم canonical) ──────
+    # يُتخطّى بأمان قبل migration_070 (الجدول غير موجود).
+    concept_tags: list[str] = []
+    concept_weights: list[float] = []
+    with conn.cursor() as cur:
+        cur.execute("SELECT to_regclass('search_concepts')")
+        if cur.fetchone()[0] is not None and len(q_norm) >= 2:
+            cur.execute(
+                """
+                SELECT canonical_tag, MAX(weight) AS w
+                FROM search_concepts
+                WHERE term = %(q)s
+                   OR (length(%(q)s) >= 3 AND similarity(term, %(q)s) >= 0.55)
+                GROUP BY canonical_tag
+                ORDER BY w DESC, canonical_tag
+                LIMIT 6
+                """,
+                {"q": q_norm},
+            )
+            for tag, w in cur.fetchall():
+                concept_tags.append(normalize_ar(tag))
+                concept_weights.append(float(w))
+
+    # ── الطبقة ٣ (احتياط أخير): جسر المدوّنة — كلمة الاستعلام في نصّ مقال ضيّق
+    # الموضوع → متاجر ذلك المقال، مع عنوانه. FTS بترتيب ts_rank، أعلى ٣ مقالات.
+    # يُتخطّى بأمان قبل migration_070 / قبل ملء blog_bridge.
+    blog_ids: list[str] = []
+    blog_titles: list[str] = []
+    with conn.cursor() as cur:
+        cur.execute("SELECT to_regclass('blog_bridge')")
+        if cur.fetchone()[0] is not None and len(q_norm) >= 3:
+            cur.execute(
+                """
+                SELECT slug, title, store_ids,
+                       ts_rank(to_tsvector('simple', body_norm),
+                               plainto_tsquery('simple', %(q)s)) AS rank
+                FROM blog_bridge
+                WHERE to_tsvector('simple', body_norm)
+                      @@ plainto_tsquery('simple', %(q)s)
+                ORDER BY rank DESC
+                LIMIT 3
+                """,
+                {"q": q_norm},
+            )
+            seen: set[str] = set()
+            for _slug, title, store_ids, _rank in cur.fetchall():
+                for sid in _parse_tags(store_ids):
+                    if sid and sid not in seen:
+                        seen.add(sid)
+                        blog_ids.append(sid)
+                        blog_titles.append(title or "")
+
+    n_id, n_name, n_bio, n_tags = (
+        _norm_sql("store_id"), _norm_sql("name_en"),
+        _norm_sql("store_bio"), _norm_sql("store_tags"),
+    )
 
     sql = f"""
-        WITH filtered AS (
+        WITH concept(tag, w) AS (
+            SELECT * FROM unnest(%(c_tags)s::text[], %(c_weights)s::real[])
+        ),
+        scored AS (
             SELECT
                 {_select_lang_clause(lang)},
                 {_POPULARITY_SQL},
                 GREATEST(
-                    similarity(lower(store_id),                    lower(%(term)s)),
-                    similarity(lower(COALESCE(name_en,        '')), lower(%(term)s)),
-                    similarity(lower(COALESCE(store_tags,     '')), lower(%(term)s)),
-                    similarity(lower(COALESCE(store_tags_en,  '')), lower(%(term)s)),
-                    similarity(lower(COALESCE(store_bio_en,   '')), lower(%(term)s))
-                ) AS relevance_score
+                    similarity({n_id},   %(qn)s),
+                    similarity({n_name}, %(qn)s),
+                    similarity({n_bio},  %(qn)s) * 0.35,
+                    similarity(lower(coalesce(store_bio_en, '')), lower(%(q)s)) * 0.35
+                ) AS name_score,
+                (
+                    SELECT max(c.w) FROM concept c
+                    WHERE length(c.tag) >= 2
+                      AND position(c.tag in {n_tags}) > 0
+                ) AS concept_w,
+                (
+                    length(%(qn)s) >= 2 AND (
+                        position(%(qn)s in {n_id})   > 0
+                        OR position(%(qn)s in {n_name}) > 0
+                        OR (length(%(qnw)s) >= 3
+                            AND position(%(qnw)s in replace({n_id}, ' ', '')) > 0)
+                    )
+                ) AS name_hit,
+                (
+                    length(%(qn)s) >= 3 AND (
+                        position(%(qn)s in {n_bio}) > 0
+                        OR position(lower(%(q)s) in lower(coalesce(store_bio_en, ''))) > 0
+                    )
+                ) AS bio_hit,
+                (
+                    SELECT bt.title
+                    FROM unnest(%(b_ids)s::text[], %(b_titles)s::text[]) bt(sid, title)
+                    WHERE bt.sid = master.store_id
+                    LIMIT 1
+                ) AS via_article
             FROM master
-            WHERE
-                NOT COALESCE(is_suspended, FALSE)
+            WHERE NOT COALESCE(is_suspended, FALSE)
               {_expiry_where(channel)}
               AND (publish_channels IS NULL OR publish_channels ILIKE %(chpat)s)
-                AND (
-                    store_id                       ILIKE %(like)s
-                    OR COALESCE(name_en,       '') ILIKE %(like)s
-                    OR COALESCE(store_tags,    '') ILIKE %(like)s
-                    OR COALESCE(store_tags_en, '') ILIKE %(like)s
-                    OR COALESCE(store_bio_en,  '') ILIKE %(like)s
-                    -- مطابقة بدون مسافات: «ترنديول» يطابق «ترند يول»
-                    OR REPLACE(store_id,                       ' ', '') ILIKE %(like_no_ws)s
-                    OR REPLACE(COALESCE(name_en,       ''),    ' ', '') ILIKE %(like_no_ws)s
-                    OR REPLACE(COALESCE(store_tags,    ''),    ' ', '') ILIKE %(like_no_ws)s
-                    OR REPLACE(COALESCE(store_tags_en, ''),    ' ', '') ILIKE %(like_no_ws)s
-                )
         )
-        SELECT *, (relevance_score * 100)::int AS score_pct
-        FROM filtered
-        WHERE relevance_score > 0.05
-        ORDER BY relevance_score DESC
+        SELECT s.*,
+            CASE
+                WHEN name_hit OR name_score >= 0.40 THEN 'name'
+                WHEN concept_w IS NOT NULL          THEN 'concept'
+                WHEN via_article IS NOT NULL        THEN 'blog'
+                WHEN bio_hit                        THEN 'bio'
+                ELSE 'fuzzy'
+            END AS match_type,
+            (LEAST(GREATEST(name_score, COALESCE(concept_w, 0)), 1.0) * 100)::int AS score_pct
+        FROM scored s
+        WHERE name_hit OR bio_hit OR concept_w IS NOT NULL
+           OR via_article IS NOT NULL OR name_score > 0.25
+        ORDER BY
+            CASE
+                WHEN name_hit              THEN 1
+                WHEN name_score >= 0.40    THEN 2
+                WHEN concept_w >= 1.0      THEN 3
+                WHEN concept_w > 0         THEN 4
+                WHEN via_article IS NOT NULL THEN 5
+                WHEN bio_hit               THEN 6
+                ELSE 7
+            END,
+            popularity_score DESC,
+            name_score DESC,
+            store_id ASC
         LIMIT %(limit)s
     """
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(sql, {"term": q, "like": _like,
-                          "like_no_ws": _like_no_ws, "limit": limit,
-                          "chpat": _channel_like(channel)})
+        cur.execute(sql, {
+            "q": q, "qn": q_norm, "qnw": q_no_ws,
+            "c_tags": concept_tags, "c_weights": concept_weights,
+            "b_ids": blog_ids, "b_titles": blog_titles,
+            "limit": limit, "chpat": _channel_like(channel),
+        })
         rows = cur.fetchall()
 
     results = [

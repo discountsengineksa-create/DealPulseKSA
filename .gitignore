@@ -17,6 +17,8 @@ db_export.sql
 *-export.sql
 data-*.csv
 import_log.txt
+# معاينة جسر المدوّنة — مشتقّة من blog.ts، تُولَّد محلياً قبل الملء
+data/blog_bridge_preview.json
 
 # ملفات السياق العربية الكبيرة (ملاحظات تطوير قد تحتوي مفاتيح/أسرار)
 Full_Context_Memory.txt

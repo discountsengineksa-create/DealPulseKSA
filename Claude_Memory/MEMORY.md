@@ -1,6 +1,6 @@
 # Project Memory Index
 
-> ١٥٢ ملفاً (عُدّت ٢٠٢٦-٠٨-٢٨ بعد ملف التحقّق من الكتالوج الحيّ — `ls *.md | grep -v MEMORY.md | wc -l` = ١٥٢، وفحص الاكتمال بالاتجاهين: صفر مفقود). **العدّ للمتون، بلا `MEMORY.md` نفسه**. **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
+> ١٥٣ ملفاً (عُدّت ٢٠٢٦-٠٨-٣٠ بعد ملف طبقة البحث الذكي — `ls *.md | grep -v MEMORY.md | wc -l` = ١٥٣). **العدّ للمتون، بلا `MEMORY.md` نفسه**. **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
 > **الطبقة ٠ تُقرأ متونها قبل أي مهمة.** من الباقي: افتح ما يخصّ مهمتك وأعلن ما فتحته.
 > الحوائط الصلبة منسوخة نصّاً في `CLAUDE.md`. سطرٌ بعدّة روابط = ملفات مستقلة جُمعت للاختصار.
 
@@ -65,8 +65,9 @@
 - [Bot-vs-Promo 3-Signal Check](bot_vs_promo_heuristic.md) — قبل اتّهام قفزة بالبوت: visitor_id + timing + ASN
 - [Owned Audience Reality](owned_audience_reality.md) — ٥ مستخدمي بوت + ١٠ حسابات ويب + صفر بثّ؛ **لا تقرير أداء لشريك أبداً**
 
-## ٤) ميزات المنتج (١٠)
+## ٤) ميزات المنتج (١١)
 
+- [🔎 طبقة البحث الذكي](search_intelligence_layer.md) — تطبيع عربي + `search_concepts` (مرادف→قسم) + `blog_bridge` (كلمة→مقال→متاجره)؛ migration_070 + سكربتان؛ **الجداول تنتظر تشغيل المالك**
 - ترند: [البنية النهائية](trend_architecture_final.md) (١٤ قرار) · [source='all'](trend_source_all.md) (DB واحد، البوت بلا ستوري)
 - [Story System Design](story_system_design.md) — story_slides؛ نموذج متداخل؛ فيديو+صوت؛ Cloudinary
 - [Support System](support_system.md) · [Publish Channels](publish_channels_feature.md) · [Season Reminders](season_reminders_feature.md)
