@@ -1,6 +1,6 @@
 # Project Memory Index
 
-> ١٥٣ ملفاً (عُدّت ٢٠٢٦-٠٨-٣٠ بعد ملف طبقة البحث الذكي — `ls *.md | grep -v MEMORY.md | wc -l` = ١٥٣). **العدّ للمتون، بلا `MEMORY.md` نفسه**. **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
+> ١٥٤ ملفاً (عُدّت ٢٠٢٦-٠٨-٣٠ بعد ملف تعريب اسم البراند — `ls *.md | grep -v MEMORY.md | wc -l` = ١٥٤). **العدّ للمتون، بلا `MEMORY.md` نفسه**. **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
 > **الطبقة ٠ تُقرأ متونها قبل أي مهمة.** من الباقي: افتح ما يخصّ مهمتك وأعلن ما فتحته.
 > الحوائط الصلبة منسوخة نصّاً في `CLAUDE.md`. سطرٌ بعدّة روابط = ملفات مستقلة جُمعت للاختصار.
 
@@ -84,6 +84,7 @@
 - [🎯 منظومة إدارة الحملات](campaign_system.md) — ٧ فحوص تمنع إطلاق حملة لا تُقاس؛ **صفوف `seo_perf_snapshots` نوافذ ٢٨ يوماً لا أياماً**
 - [📈 GA4 رُكِّب — ومربوط بمفاتيح اللوحة](web_ga4_install.md) — `G-VRBHD0VK66`؛ **لا `page_view` يدويّ**؛ مرجع الحملات/الدورة/الدليل داخل الملف
 - سيو خارجي: [فلتر النصائح](seo_external_advice_filter.md) (٧ من ١٠٠ ضارّة) · [مصادر التعلّم](seo_learning_sources.md) (١٤ مصدراً مفحوصاً)
+- [🔤 تحقّق من تعريب اسم البراند قبل SEO](seo_verify_brand_transliteration.md) — Autocomplete السعودي يحكم؛ درس ناتشورال تاتش (أُدخل «ناشيونال تاتش» خطأً) + بيانات قناته
 - تحليل المتاجر: [الجناح](store_analytics_bi.md) · [استراتيجية إعادة البناء](analysis_rebuild_strategy.md) · [البنية النهائية](analytics_store_structure.md)
 - الكلمات المفتاحية: [⛔ Keyword Planner](google_ads_keyword_planner.md) (مرفوض نهائياً) · [طلب السوق](keyword_demand_ksa.md) · [⚠️ Windsor GSC](windsor_gsc_connector.md) (يرجع أصفاراً وهمية)
 - [SEO Indexation Status](seo_indexation_status.md) + [Deep Audit Fixes](seo_deep_audit_fixes.md) — فهرسة 4→150؛ بق light-AR 500 أفرغ الخريطة صامتاً
