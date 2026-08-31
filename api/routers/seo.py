@@ -32,6 +32,34 @@ router = APIRouter(prefix="/seo", tags=["seo"])
 _OFFER_ACTIVE_SQL = "(m.last_time IS NULL OR m.last_time > CURRENT_DATE)"
 
 
+def _tags_arr(alias: str) -> str:
+    """store_tags نصّ بصيغة '{a,b,c}' (ليس text[]) — نحوّله لـ text[] نظيف."""
+    return (
+        "ARRAY(SELECT trim(t) FROM unnest(string_to_array("
+        f"trim(both '{{}}' from COALESCE({alias}.store_tags, '')), ',')) AS t "
+        "WHERE trim(t) <> '')"
+    )
+
+
+# متاجر بنفس التصنيف (تقاطع store_tags) + كوبون فعّال — الأشهر أولاً
+_RELATED_STORES_SQL = f"""
+    WITH me AS (SELECT {_tags_arr('m0')} AS tags FROM master m0 WHERE m0.id = %s)
+    SELECT m.store_id,
+           COALESCE(NULLIF(m.name_en, ''), m.store_id) AS store_name,
+           m.logo_url, m.cloaked_slug, m.discount_value, m.public_coupon
+    FROM master m, me
+    WHERE m.id <> %s
+      AND COALESCE(m.seo_enabled, TRUE)
+      AND {_OFFER_ACTIVE_SQL}
+      AND m.public_coupon IS NOT NULL AND m.public_coupon <> ''
+      AND cardinality(me.tags) > 0
+      AND {_tags_arr('m')} && me.tags
+    ORDER BY (COALESCE(m.total_link_clicks, 0)
+              + COALESCE(m.total_coupon_copies, 0)) DESC, m.store_id
+    LIMIT 10
+"""
+
+
 def _strip_dead_code(body: str | None, code: str | None) -> str | None:
     """يُسقط كل سطر يذكر الكود المنتهي من متن الصفحة (بقيّة الدليل تبقى)."""
     if not body or not code:
@@ -58,6 +86,15 @@ class SeoPageSummary(BaseModel):
     published_at: str | None = None
 
 
+class RelatedStore(BaseModel):
+    store_id: str | None = None
+    store_name: str | None = None
+    logo_url: str | None = None
+    cloaked_slug: str | None = None
+    discount_value: str | None = None
+    public_coupon: str | None = None
+
+
 class SeoPageFull(SeoPageSummary):
     body_markdown: str
     # المتجر المرتبط — لبناء زر العرض (CTA) في صفحة الهبوط
@@ -67,6 +104,8 @@ class SeoPageFull(SeoPageSummary):
     discount_value: str | None = None
     public_coupon: str | None = None
     cloaked_slug: str | None = None
+    # متاجر بنفس التصنيف (store_tags) بأكوادها — تُعرض نهاية كل صفحة /c/
+    related_stores: list[RelatedStore] = []
     # JSON-LD structured data — يضعه Next.js في <script type="application/ld+json">
     jsonld: dict[str, Any] | None = None
 
@@ -157,6 +196,14 @@ def get_page(slug: str, conn=Depends(get_db)):
             page_dict.get("description_meta"), dead_code, page_dict["target_keyword"],
             page_dict.get("lang") or "ar",
         )
+    # متاجر بنفس التصنيف بأكوادها (فارغة لو المتجر بلا store_tags)
+    related_stores: list[RelatedStore] = []
+    if page_dict.get("master_id"):
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(_RELATED_STORES_SQL,
+                        (page_dict["master_id"], page_dict["master_id"]))
+            related_stores = [RelatedStore(**dict(r)) for r in cur.fetchall()]
+
     # نبني JSON-LD ونضمّنه في الرد (Next.js يلصقه في <head>)
     jsonld = build_jsonld(page_dict)
 
@@ -175,6 +222,7 @@ def get_page(slug: str, conn=Depends(get_db)):
         discount_value=page_dict.get("discount_value"),
         public_coupon=page_dict.get("public_coupon"),
         cloaked_slug=page_dict.get("cloaked_slug"),
+        related_stores=related_stores,
         jsonld=jsonld,
     )
 
