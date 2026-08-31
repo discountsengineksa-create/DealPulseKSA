@@ -601,6 +601,110 @@ def seo_drafts(
     return {"total": len(rows), "drafts": rows}
 
 
+# ─── Import pre-written SEO landing pages (no LLM generation) ───────────────
+# مسار توليد الـ SEO يكتب المحتوى عبر LLM؛ هذا يستورد محتوى مكتوب مسبقاً
+# (مسودات مُحرّرة يدوياً) بنفس منطق الإدخال في api/seo/generator.py — slug فريد
+# + body_html_hash + status='draft'. المراجعة والنشر عبر /seo-publish/{id} كالعادة.
+class SeoImportPage(BaseModel):
+    title: str
+    body_markdown: str
+    target_keyword: str
+    master_id: int
+    lang: str = "ar"
+    description: str | None = None
+    slug: str | None = None
+
+
+@router.post("/seo-import")
+def seo_import(
+    payload: SeoImportPage,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """يستورد صفحة هبوط مكتوبة مسبقاً كـ draft. لا يستدعي الـ LLM."""
+    _verify_admin(x_admin_secret)
+    import hashlib
+    import psycopg2
+    from api.db import get_db_context
+    from api.seo.generator import _make_slug
+
+    if not payload.body_markdown.strip() or not payload.title.strip():
+        raise HTTPException(status_code=422, detail="title and body_markdown required")
+    lang = (payload.lang or "ar")[:2]
+    body = payload.body_markdown
+    body_hash = hashlib.sha256(body.encode("utf-8")).digest()
+
+    with get_db_context() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT COALESCE(seo_enabled, TRUE) FROM master WHERE id=%s",
+                (payload.master_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="master_id not found")
+            if row[0] is False:
+                raise HTTPException(
+                    status_code=403,
+                    detail="هذا المتجر ممنوع من نشر صفحات SEO (seo_enabled=FALSE)",
+                )
+            base = (payload.slug or _make_slug(
+                payload.target_keyword, payload.master_id, lang=lang))[:190]
+            slug, n = base, 2
+            while True:
+                cur.execute("SELECT 1 FROM seo_landing_pages WHERE slug=%s", (slug,))
+                if cur.fetchone() is None:
+                    break
+                slug = f"{base}-{n}"[:200]
+                n += 1
+            cur.execute(
+                """
+                INSERT INTO seo_landing_pages
+                    (slug, target_keyword, master_id, lang, title_meta,
+                     description_meta, body_markdown, body_html_hash, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'draft')
+                RETURNING id
+                """,
+                (slug, payload.target_keyword[:500], payload.master_id, lang,
+                 payload.title[:180], (payload.description or "")[:280],
+                 body, psycopg2.Binary(body_hash)),
+            )
+            page_id = cur.fetchone()[0]
+
+    from api.utils.ops import audit_log
+    audit_log(action="seo_import", target=slug,
+              meta={"page_id": page_id, "master_id": payload.master_id})
+    return {"imported": True, "id": page_id, "slug": slug}
+
+
+@router.put("/seo-import/{page_id}/body")
+def seo_import_body(
+    page_id: int,
+    payload: SeoImportPage,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """يحدّث جسم مسودة مستوردة — لتمريرة الربط الداخلي بعد معرفة كل الـ slugs."""
+    _verify_admin(x_admin_secret)
+    import hashlib
+    import psycopg2
+    from api.db import get_db_context
+
+    body = payload.body_markdown
+    if not body.strip():
+        raise HTTPException(status_code=422, detail="body_markdown required")
+    body_hash = hashlib.sha256(body.encode("utf-8")).digest()
+    with get_db_context() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE seo_landing_pages SET body_markdown=%s, body_html_hash=%s "
+                "WHERE id=%s AND status='draft' RETURNING slug",
+                (body, psycopg2.Binary(body_hash), page_id),
+            )
+            row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="draft page not found")
+    return {"updated": True, "id": page_id, "slug": row[0]}
+
+
 # ─── Week 7-8: Social listener controls ────────────────────────────────────
 @router.post("/social-run")
 def social_run(
