@@ -126,7 +126,7 @@
 
 ## ٨) التسويق والسوشيال (٧)
 
-- [Marketing Baseline & Strategy](marketing_baseline_and_strategy.md) — ~121 سعودي/شهر (89% بوتات)؛ العنق الترافيك لا التحويل
+- [Marketing Baseline & Strategy](marketing_baseline_and_strategy.md) — **حُدّث 2026-09-01: 546 سعودي بشري/30ي (×4.5)، GSC 336 نقرة/28ي، محرّك واحد كاسب = المواسم**؛ ثغرات: opportunity_keywords فارغ، landing_pages perf NULL، GA4 غير موصول بـWindsor
 - انستقرام: [محرّك المحتوى](instagram_content_engine.md) (ريلز Dark Luxe) · [محرّك النمو](ig_growth_engine.md) (caption SEO) · [سياسة النشر](ig_publish_policy.md) (لا ستوري تلقائية)
 - [Brand Face for Flow Reels](brand_face_reels.md) — بنت خضراء سعودية؛ نطق «نبض الصفقات»
 - [Social Listening Deferred](social_listening_deferred.md) — الرصد الاجتماعي مؤجَّل (مصادر ميتة)
