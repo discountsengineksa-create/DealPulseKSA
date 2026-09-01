@@ -100,3 +100,5 @@
 - [🚧 Maqalat — Zero Reference to DealPulse](feedback_maqalat_isolation.md) — قاعدة صارمة (2026-08-29): مشروع Maqalat لا يذكر dealpulse/discountsengineksa/نبض الصفقات في أي كود أو ملف؛ GitHub org: maqalatorg فقط
 - [🔐 Maqalat Git Auth Trap](project_maqalat_git_auth.md) — Windows Credential Manager كاش حساب discountsengineksa-create؛ push لأي ريبو maqalatorg يفشل 403؛ الحل: PAT fine-grained inline في URL (لا تحفظه في origin)
 - [🖼️ Maqalat OG Image Pitfalls](project_maqalat_og_pitfalls.md) — satori يرفض variable fonts (Cairo VF)؛ outputFileTracingIncludes يكسر Next.js 16؛ edge fetch يرجع 0 bytes صامتاً؛ الحل النهائي: Tajawal static + nodejs runtime + fetch من public/fonts
+- [🌐 Maqalat i18n Architecture](project_maqalat_i18n.md) — next-intl v4، AR افتراضي على /، EN على /en، middleware بلا auto-detect، URLs مفهرَسة محفوظة، مقالات EN تُرجِع 404 حتى تُضاف (لمنع duplicate content)
+- [📧 Maqalat Newsletter (Resend)](project_maqalat_newsletter.md) — Resend مربوط live؛ default audience "General" auto-created؛ فخّ الصلاحيات (Sending vs Full access)؛ API endpoint idempotent؛ Audience ID عبر API فقط
