@@ -102,3 +102,8 @@
 - [🖼️ Maqalat OG Image Pitfalls](project_maqalat_og_pitfalls.md) — satori يرفض variable fonts (Cairo VF)؛ outputFileTracingIncludes يكسر Next.js 16؛ edge fetch يرجع 0 bytes صامتاً؛ الحل النهائي: Tajawal static + nodejs runtime + fetch من public/fonts
 - [🌐 Maqalat i18n Architecture](project_maqalat_i18n.md) — next-intl v4، AR افتراضي على /، EN على /en، middleware بلا auto-detect، URLs مفهرَسة محفوظة، مقالات EN تُرجِع 404 حتى تُضاف (لمنع duplicate content)
 - [📧 Maqalat Newsletter (Resend)](project_maqalat_newsletter.md) — Resend مربوط live؛ default audience "General" auto-created؛ فخّ الصلاحيات (Sending vs Full access)؛ API endpoint idempotent؛ Audience ID عبر API فقط
+- [📜 Maqalat Editorial Charter](project_maqalat_editorial_charter.md) — الميثاق التحريري 2026-09-01: صفر فبركة/حشو/لَفَت AI، YMYL صارم، مصادر رسمية، AdSense بلا حظر
+- [🧰 Maqalat SEO+Writing Toolkit](project_maqalat_toolkit.md) — سكلز المنصة + خريطة منافسين عربي (سطور/موضوع/الطبي/سبق) + نقاط ضعفهم = فرصنا
+- [📖 Maqalat Writing Playbook v1](project_maqalat_writing_playbook.md) — 2026-09-02 دليل الكتابة الكامل: E-E-A-T 2026 (Trust foundation + Authors section)، تجنّب AI-detection (المبني للمجهول ≤12%، إشارات بشرية)، AdSense-safe، YMYL-صارم، بنية إلزامية، قواعد المصادر، قائمة تدقيق ١٧ بنداً
+- [🔍 Maqalat Content Audit 2026-09-02](project_maqalat_audit_2026_09_02.md) — تدقيق أوّل: ٣ فجوات P0 (كاتب مجهول/Mayo المحجوبة/Person schema)، ٣ فجوات P1 (رقم متقاعدين قد يكون خطأ/افتتاحيات AI-typical/لا inline citations)، ٤ فجوات P2
+- [📊 Maqalat Admin Dashboard](project_maqalat_admin_dashboard.md) — /admin بـ 3 تبويبات (روابط+زيارات/زوّار ومدن/محرّر MDX)؛ Firestore+GitHub API+Vercel Blob؛ env: ADMIN_PASSWORD+JWT_SECRET+GITHUB_TOKEN+BLOB_TOKEN (2026-09-01)

@@ -1,10 +1,10 @@
 ---
 name: Maqalat i18n Architecture (next-intl v4)
-description: Bilingual (AR+EN) setup for maqalat.org — decisions, file layout, and pragmatic shortcuts.
+description: Bilingual (AR+EN) full parity setup for maqalat.org — decisions, file layout, and traps learned the hard way.
 type: reference
 originSessionId: 14a723a5-c3b8-4b2e-9b1e-b55d65dd193f
 ---
-Applied to `C:\Users\user\Desktop\maqalat` on 2026-08-31.
+Full AR/EN parity applied 2026-09-01. Initial scaffolding 2026-08-31.
 
 ## URL structure
 - `defaultLocale: 'ar'` + `localePrefix: 'as-needed'`
@@ -71,8 +71,34 @@ curl -sI https://maqalat.org/zakat-calculator-guide
 curl -sI https://maqalat.org/en/zakat-calculator-guide  # expect 404
 ```
 
+## Article system (bilingual via sibling files, applied 2026-09-01)
+File-naming convention:
+- `content/articles/{slug}.mdx` → Arabic (canonical)
+- `content/articles/{slug}.en.mdx` → English sibling (optional per article)
+
+`lib/blog.ts` API:
+- `getArticle(slug, locale?)` — reads the matching file, returns null if missing
+- `getAllArticles(locale?)` — filters by locale (AR ignores `.en.mdx`, EN only reads `.en.mdx`)
+- `hasArabicVersion(slug)` / `hasEnglishVersion(slug)` — filesystem existence checks
+- `getAllSlugs()` — union of all slugs across both languages (for sitemap/params)
+- `getSearchIndex(locale?)` — locale-scoped index (Header must pass `useLocale()`)
+- `getRelatedArticles(article)` — never crosses locale boundary
+
+`app/[locale]/[slug]/page.tsx`:
+- `generateStaticParams` emits only `(locale, slug)` pairs where the file exists — no ghost pages
+- `generateMetadata` builds hreflang alternates from actual language availability
+- No `notFound()` guard for EN — the page just uses `getArticle(slug, "en")` which returns null → 404 naturally
+
 ## Watch-outs learned
 - **Middleware matcher must exclude `og-default`, `sitemap.xml`, `robots.txt`, `ads.txt`, `fonts`.** Otherwise middleware rewrites break these system routes.
 - **Grep pattern for hreflang tags: use `hrefLang`** (camelCase) — Next.js renders JSX attribute as-is.
 - **`ENABLED_CLUSTERS` already had `titleEn`** in `lib/clusters.ts` — no cluster metadata change needed.
 - **Pages using `<Link>` from `next/link`** still work but don't auto-prefix locale in href. Progressive replace with `@/i18n/navigation` Link as content grows.
+
+## Additional traps found in 2026-09-01 full-parity pass
+- **`useTranslations` / `useLocale` in async server components → HTTP 500.** Split into async wrapper (calls `setRequestLocale` + returns `<Body />`) + sync `Body` function that uses the hooks. Same trap on Home page cost one deploy cycle. `About`/`Contact`/`Tools` already used this pattern; `HomePage` didn't.
+- **Rich text in translations:** use `t.rich("key", { b: (chunks) => <strong>{chunks}</strong>, link: (chunks) => <Link href="/...">{chunks}</Link> })`. Store as `"<b>bold</b>"` / `"<link>text</link>"` in messages.
+- **Long legal pages (privacy/terms/editorial):** don't force them through `messages/*.json`. Use `if (locale === "en") return <EnglishJSX /> else return <ArabicJSX />` in the same file — cleaner for HTML-heavy content that rarely changes.
+- **`not-found.tsx` sits inside `[locale]/`** and can use `useTranslations` (marked `"use client"`). Otherwise it'll show its hardcoded strings even on `/en/*` requests via React Server Components streaming.
+- **SearchBar / Header components:** the search index prop must be built with `getSearchIndex(useLocale())` in Header, otherwise AR article titles bleed onto EN pages.
+- **CWD drift in long sessions.** Bash tool preserves cwd across calls, but sub-operations can silently switch. When committing to maqalat, always verify with `pwd` before `git add/commit/push` — a wrong-directory commit went to the DealPulse repo unnoticed until fetch showed 246 unrelated commits ahead. Anchor with explicit `cd /c/Users/user/Desktop/maqalat && ...` for git operations.
