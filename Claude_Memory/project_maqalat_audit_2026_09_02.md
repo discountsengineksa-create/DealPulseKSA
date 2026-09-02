@@ -1,9 +1,26 @@
 ---
 name: Maqalat Content Audit 2026-09-02
-description: تدقيق أوّل شامل للمقالات العشر مقابل ميثاق مقالات + E-E-A-T 2026 + AdSense 2026 — الفجوات والأولويات
+description: تدقيق شامل للمقالات العشر + سجل الإصلاح المُنفَّذ في نفس اليوم (E-E-A-T + P0 salary + methodology page)
 type: project
 originSessionId: b5fb45a3-ddd1-4608-b0ca-0c93163e7e4e
 ---
+
+## ✅ حالة الإصلاح (2026-09-02 مساءً)
+
+**تم شحنه لـ Vercel (commits: `d5e07f5` + `140ad5d` على maqalatorg/maqalat)**:
+- [x] **P0 نظام الرواتب**: `lib/salaries.ts` + `lib/hijri.ts` + `SalaryCalendar.tsx` + المقال — راتب حكومي ٢٧ **ميلادي** (كان هجري خاطئ)، متقاعدون ١ ميلادي (كان ٢٧ هجري)، سبت→أحد بعده (كان خميس قبله). تحقّق إنتاجي: 3× "٢٧ ميلادي" + 0× "هجري" ✓
+- [x] **Publisher schema قوي**: `lib/seo.ts` — Organization بـ publishingPrinciples/correctionsPolicy/diversityPolicy/knowsAbout؛ helpers جديدة: `breadcrumbJsonLd()` + `howToJsonLd()`. تحقّق: زكاة يعرض `Article` + `BreadcrumbList` + `FAQPage` + `HowTo` ✓
+- [x] **صفحة /methodology**: AR + EN، ٧ أقسام (اختيار الموضوع، تسلسل المصادر، لا نشره، شفافية AI، YMYL، التصحيحات، الاستقلالية). فوتر + reserved slug + sitemap. تحقّق: `200` على AR و EN ✓
+- [x] **Mayo Clinic استُبدل** بـ Harvard Nutrition Source + ACOG + CDC عبر ٤ مقالات صحية (AR+EN). صفر ذكر `mayoclinic` في المحتوى.
+- [x] **الافتتاحيات الـAI-typical** أُعيد كتابتها (تقويم، BMI، حمل، دورة) بمفارقات/أرقام/توطين محلي بدل "يحتاج المستخدم"/"من أهم".
+- [x] **inline citations** استبدلت قوائم مصادر النهاية في المقالات الأربع.
+- [x] **cluster health** فُعّل ونُقلت ٤ مقالات صحية إليه (AR+EN).
+- [x] **الكاتب** وُحّد إلى "مقالات" (publisher-driven E-E-A-T بلا كاتب فردي مزيّف) — قرار المالك: لا كاتب حقيقي.
+- [x] **whoBody في About** أُعيد صياغته بشفافية: "منصّة نشر رقمية بلا كاتب فردي مزيّف" مع رابط للـmethodology.
+- [x] **descriptions قُصّرت** (qiyas + universities > 160 → ≤ 130).
+- [x] **BreadcrumbList + HowTo schema** وصلت `[slug]/page.tsx` — HowTo لـ٦ مقالات فيها أدوات.
+- [x] **بناء TypeScript نظيف** (`tsc --noEmit` exit 0).
+
 ## نطاق التدقيق
 
 قُرئت ٦ من ١٠ مقالات كاملةً (تقويم/رواتب/زكاة/حمل/BMI/دورة/قياس والتحصيلي) + هيكل blog.ts + seo.ts + editorial-policy. الاستنتاجات معمَّمة على العشرة.
