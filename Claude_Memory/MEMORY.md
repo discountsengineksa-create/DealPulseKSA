@@ -1,6 +1,6 @@
 # Project Memory Index
 
-> ١٥٤ ملفاً (عُدّت ٢٠٢٦-٠٨-٣٠ بعد ملف تعريب اسم البراند — `ls *.md | grep -v MEMORY.md | wc -l` = ١٥٤). **العدّ للمتون، بلا `MEMORY.md` نفسه**. **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
+> ١٥٥ ملفاً (عُدّت ٢٠٢٦-٠٩-٠٢ بعد ملف هَب عنقود الإدارة المدرسية — `ls *.md | grep -v MEMORY.md | wc -l` = ١٥٥). **العدّ للمتون، بلا `MEMORY.md` نفسه**. **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
 > **الطبقة ٠ تُقرأ متونها قبل أي مهمة.** من الباقي: افتح ما يخصّ مهمتك وأعلن ما فتحته.
 > الحوائط الصلبة منسوخة نصّاً في `CLAUDE.md`. سطرٌ بعدّة روابط = ملفات مستقلة جُمعت للاختصار.
 
@@ -91,6 +91,7 @@
 - [SEO Authority Building](seo_authority_building.md) — crawled-not-indexed سقف سلطة؛ **صفر رابط خارج لأي تاجر ⇒ مسار الشركاء ليس تبادلاً**
 - [SEO High-Demand Front](seo_high_demand_front_opened.md) — فخّ AR=draft+EN=noindex؛ نون/نمشي محجوبان بالسلطة
 - [🤖 AI Citation Channel](ai_citation_channel.md) — **٤١٣ استشهاد Copilot/٣٠يوم مقابل ١٣٢ نقرة جوجل**؛ **+ ٠٨-٢٧: GA4 أكّدها بنقرة حقيقية — قناة AI Assistant ٤٥ جلسة/٧أيام**
+- [🏫 عنقود الإدارة المدرسية = المحرّك الأول](school_admin_cluster_engine.md) — ٣٤ مقالاً، ~١١٠+ نقرة/٢٨ي بـCTR ١٠–٢٠٪؛ بُني له هَب `/school-templates` ٢٠٢٦-٠٩-٠٢؛ منافسو الكوبونات صفر محتوى هنا
 - [SEO Page Portfolio Verdict](seo_page_portfolio_verdict.md) — ٧١٠/٧٦٤ صفحة صفر نقرة — ⚠️ **عُدِّل بـ[[ai_citation_channel]]: صفر نقرة ≠ صفر قيمة**
 - [SEO Category Query Alignment](seo_category_query_alignment.md) — وزن المفردات: «كوبون» م49 و«متاجر» م19؛ ٨٧٪ من الظهور غارق
 - تكاذُب/تسريب: [/c/ ↔ /store](seo_c_store_cannibalization.md) (canonical مشتقّ لـ١٩) · [Meta Code Leak](seo_meta_code_leak.md) (الكود يُكشف بـllms.txt أيضاً)
