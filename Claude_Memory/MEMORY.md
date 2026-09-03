@@ -1,6 +1,6 @@
 # Project Memory Index
 
-> ١٥٥ ملفاً (عُدّت ٢٠٢٦-٠٩-٠٢ بعد ملف هَب عنقود الإدارة المدرسية — `ls *.md | grep -v MEMORY.md | wc -l` = ١٥٥). **العدّ للمتون، بلا `MEMORY.md` نفسه**. **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
+> ١٥٦ ملفاً (عُدّت ٢٠٢٦-٠٩-٠٣ بعد ملف عنقودَي ماكس فاشن وبوما — `ls *.md | grep -v MEMORY.md | wc -l` = ١٥٦). **العدّ للمتون، بلا `MEMORY.md` نفسه**. **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
 > **الطبقة ٠ تُقرأ متونها قبل أي مهمة.** من الباقي: افتح ما يخصّ مهمتك وأعلن ما فتحته.
 > الحوائط الصلبة منسوخة نصّاً في `CLAUDE.md`. سطرٌ بعدّة روابط = ملفات مستقلة جُمعت للاختصار.
 
@@ -105,10 +105,11 @@
 - [🔌 Claude SEO Plugin](claude_seo_plugin.md) — ١٨ agent+٢٥ skill بمستوى الريبو؛ **السحابة محجوبة عن dealpulseksa.com**
 - [🏺 قصر الاواني](qasr_alawani_source_of_truth.md) + [🚕 لائحة نقل الركاب](ride_hailing_regulation_sources.md) — مصادر أوّلية مفحوصة للاستشهاد
 
-## ٦) المحتوى والمدوّنة (٢٠)
+## ٦) المحتوى والمدوّنة (٢١)
 
 - [Voice Bible](voice_bible.md) — نموذج الصوت التحريري؛ قلّد العيّنة
-- [Blog Total = Count It Live](blog_massive_content_session.md) — **١٥٦٤ (عُدَّ ٢٠٢٦-٠٨-٠٨)**؛ عُدّ بـ`grep -cE "^\s*slug:" lib/blog.ts` لا تجمع تقديرياً
+- [Blog Total = Count It Live](blog_massive_content_session.md) — **١٦٧٣ (عُدَّ ٢٠٢٦-٠٩-٠٣)**؛ عُدّ بـ`grep -cE "^\s*slug:" lib/blog.ts` لا تجمع تقديرياً
+- [🛍️ عنقودا ماكس فاشن (١٦) وبوما (٢٠)](blog_maxfashion_puma_clusters.md) — متجران جديدان id 76/77؛ محجوبان Cloudflare؛ blog_bridge --write معلّق
 - الصحّة: [عنقود المكمّلات](health_content_cluster.md) · [مصادر الاستشهاد](health_citation_sourcing.md) (Mayo/NIH يحجبان الـcrawlers)
 - [Blog Internal-Link De-orphan](blog_internal_link_deorphan.md) — 65 مقال يتيم صُفِّرت؛ top-6 getRelatedPosts يجوّع الذيل
 - [Blog Inline Code Chips](blog_inline_code_chips.md) + [Jolina Pre-Purchase Angle](jolina_prepurchase_angle.md) — الزاوية «الاسترجاع» لا الكود
