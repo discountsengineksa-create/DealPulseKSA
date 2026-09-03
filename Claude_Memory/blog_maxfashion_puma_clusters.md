@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 0588199d-869b-4f76-86c0-1486d156a22a
-  modified: 2026-09-03T17:24:26.382Z
+  modified: 2026-09-03T17:34:00.523Z
 ---
 
 **2026-09-03** — المالك أضاف متجرين للكتالوج وطلب محتوى عنهما "بالصور" (= صوّر الموقع
@@ -52,11 +52,17 @@ metadata:
 الطلب ملاحي + كوبون). العنقودان **لقناة الاستشهاد الذكي + اكتمال الكتالوج + تمرير سلطة
 لصفحتي `/store`**، لا لنقرات جوجل قريبة (سقف DA 1). → [[ai_citation_channel]] · [[seo_page_portfolio_verdict]]
 
-## معلّق — تشغيل المالك
+## `blog_bridge` — أُعيد بناؤه ٢٠٢٦-٠٩-٠٣ (بإذن المالك)
 
-- **`python -m scripts.build_blog_bridge --write`** (كتابة DB: TRUNCATE+ملء `blog_bridge`) —
-  dry‑run يعطي 1452 صفّاً / 62 متجراً (كان 1407/59). بدونه بحث "بوما"/"ماكس فاشن" وكلمات
-  الجري/كرة القدم لا يُوسَّع لهذين المتجرين. → [[search_intelligence_layer]]
+`python -m scripts.build_blog_bridge --write` نُفِّذ: **١٤٥٢ صفّاً / ٦٢ متجراً** (كان
+1407/59). تحقّق DB: ٣٥ من ٣٦ مقالاً في الجسر (الهَب النسائي لماكس مُستثنى — ٨ متاجر > سقف
+٦، بالتصميم). **صفر خلط:** كل مقال `puma-` → `{بوما}` فقط؛ مقالات `maxfashion-` →
+`{ماكس فاشن}` + إحالات وجيهة (توب بيوتي/متجر تجميل للجمال، بيتي شوب/سيدار للمنزل، ديزل
+للدنيم). ⚠️ **مطبّ:** السكربت يـcrash على `print` الأخير بترميز cp1256 — شغّله بـ
+`PYTHONUTF8=1 PYTHONIOENCODING=utf-8` وإلا يفشل **قبل** كتابة DB. → [[search_intelligence_layer]]
+
+## معلّق
+
 - لا صفحات `/c/` مولّدة للمتجرين بعد (`seo_landing_pages` فارغ لـid 76 و77) — قرار توليد
   منفصل. → [[seo_verify_brand_transliteration]]
 - التحقّق النهائي عبر بناء Vercel (blog.ts يـOOM محلياً — [[web_blog_monolith_oom_and_client_prop_serialization]]).
