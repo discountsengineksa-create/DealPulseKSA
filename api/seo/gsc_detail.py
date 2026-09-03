@@ -29,7 +29,10 @@ _log = logging.getLogger("dp.seo.gsc_detail")
 
 SITE = os.getenv("GSC_SITE", "https://www.dealpulseksa.com/")
 WINDOW_DAYS = 28          # نفس نافذة perf_snapshot كي تتطابق القراءتان
-ROW_LIMIT = 500           # سقف صفوف كل بُعد — يكفي كتالوجنا ولا يُثقل الطلب
+# ٥٠٠٠ لا ٥٠٠: GSC يرتّب الصفوف بالنقرات تنازلياً، وأغلب استعلاماتنا بصفر نقرة،
+# فسقف ٥٠٠ كان يقتطع كل «مسافة الضربة» (مركز ٥–١٥ بظهور عالٍ وصفر نقرة) — وهي
+# بالضبط ما نحتاج رؤيته للتحسين. GSC يسمح حتى ٢٥٬٠٠٠ صفّ/طلب.
+ROW_LIMIT = 5000
 
 
 def _service():
@@ -120,8 +123,65 @@ def capture_gsc_detail() -> dict:
                 out["queries"] += 1
         conn.commit()
 
-    _log.info("gsc detail captured: %s pages, %s queries", out["pages"], out["queries"])
+    try:
+        out["landing_backfilled"] = backfill_landing_page_perf()
+    except Exception as exc:
+        _log.warning("landing-page perf backfill failed (non-fatal): %s", exc)
+
+    _log.info("gsc detail captured: %s pages, %s queries, %s landing backfilled",
+              out["pages"], out["queries"], out.get("landing_backfilled", 0))
     return out
+
+
+def backfill_landing_page_perf() -> int:
+    """
+    حلقة التغذية الراجعة المفقودة: `seo_landing_pages.current_position` كانت **NULL
+    للـ٢٠٠ صفحة** رغم أن الكرون يخزّن `seo_gsc_pages` يومياً — لأن لا شيء يربط
+    البُعدين. هذا يطابق `/c/{slug}` من آخر لقطة GSC بسلاگ الصفحة ويكتب المركز
+    والنقرات والظهور. بدونها المحرّك أعمى: لا يعرف أي صفحة `/c/` تُرتَّب وأيّها حِمل ميت.
+
+    يعيد عدد الصفوف المحدَّثة.
+    """
+    from urllib.parse import unquote
+
+    with get_db_context() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT max(snapshot_date) FROM seo_gsc_pages")
+            snap = cur.fetchone()[0]
+            if snap is None:
+                return 0
+            cur.execute(
+                "SELECT page, clicks, impressions, position FROM seo_gsc_pages "
+                "WHERE snapshot_date = %s AND page LIKE %s",
+                (snap, "%/c/%"),
+            )
+            by_slug: dict[str, tuple[int, int, float | None]] = {}
+            for page, clicks, impressions, position in cur.fetchall():
+                slug = unquote(page.rsplit("/c/", 1)[-1].split("?", 1)[0].split("#", 1)[0]).strip()
+                if slug:
+                    by_slug[slug] = (clicks or 0, impressions or 0, position)
+
+            # صفر لكل الصفحات المنشورة أولاً (الغائبة عن GSC = صفر فعليّ، لا NULL)،
+            # ثم اكتب الأرقام الحقيقية لمن ظهر. هكذا «صفر ظهور» يصبح إشارة صريحة.
+            cur.execute(
+                "UPDATE seo_landing_pages SET current_position = NULL, "
+                "organic_clicks_7d = 0, organic_impressions_7d = 0 "
+                "WHERE status = 'published'"
+            )
+            updated = 0
+            for slug, (clicks, impressions, position) in by_slug.items():
+                cur.execute(
+                    "UPDATE seo_landing_pages SET current_position = %s, "
+                    "organic_clicks_7d = %s, organic_impressions_7d = %s "
+                    "WHERE slug = %s AND status = 'published'",
+                    (round(position) if position is not None else None,
+                     clicks, impressions, slug),
+                )
+                updated += cur.rowcount
+        conn.commit()
+
+    _log.info("landing-page perf backfill: %d /c/ pages matched to GSC", updated)
+    return updated
 
 
 def queries_for_page(page_url: str, days: int = WINDOW_DAYS, limit: int = 25):
