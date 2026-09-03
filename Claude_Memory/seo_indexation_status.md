@@ -52,4 +52,20 @@ metadata:
 
 **«one dofollow incoming internal link (15)» ليست مشكلة مدوّنة:** محاكاة كاملة لغراف الروابط (related×6 + روابط المتن + قائمة /blog) أثبتت **صفر مقال بـinbound=1**؛ الأدنى 2، والتوزيع صحّي (أغلبها 3-10، القمم 50-146). الـ15 صفحات متجر/تصنيف أو أثر ميزانية زحف Ahrefs الصغيرة. **التحويلات (3XX/HTTP→HTTPS) سلوك صحيح**، و**titles≠SERP** إعادة كتابة قوقل (غير قابلة للضبط).
 
+**🔎 مطابقة تغطية Google مع قائمة «الفهرسة» (2026-09-04، main `2524805`):** كانت صفحة
+«🔎 الفهرسة» تشتقّ «المعلّقة» = (روابط sitemap) − (`seo_index_queue` اليدوي). **مقيس حيّاً:**
+sitemap **1937** رابطاً · `seo_index_queue` **97 صفّاً فقط** (96 indexed + 1 ignored) · صفحات لها
+≥1 انطباع في GSC خلال 16 شهراً (⇒ مفهرَسة قطعاً) = **1208** (1185 تطابق sitemap + 23 قديمة). ⇒
+**1092** رابط مفهرَس كان عالقاً في «المعلّقة» بلا داعٍ، وworklist حقيقي = **748** (693 blog · 41 /c/
+· 10 store · 3 category · 1 school-templates). **البناء:** `migration_073` جدول `seo_index_coverage`
+(coverageState الخام + verdict مُجمَّع: indexed/discovered/crawled_not_indexed/unknown/excluded_other)
++ عمود `seo_index_queue.source` ('manual' vs 'gsc'). `api/seo/index_coverage.py`:
+`reconcile_from_impressions()` (نداء GSC واحد، مربوط بكرون اللقطة اليومية في `scheduler.py`) +
+`inspect_urls()` (URL Inspection API، حصة 2000/يوم، يدوي من الداشبورد). صفحة «🔎 الفهرسة» صار فيها
+قسم «⚡ طابِق مع Google» (زرّان) + شارات verdict + فلتر + زر دفع بالدفعة يستدعي `/admin/reindex-urls`
+دفعات 6، **يستثني `crawled_not_indexed`/`excluded_other`** (الدفع لا يفيدها ويهدر حصة Google).
+⚠️ **يبقى:** المالك يطبّق migration 073 (زر «🛠️ إنشاء جدول التغطية» في الصفحة أو
+`python api/run_migration.py migration_073_seo_index_coverage.sql`) ثم يضغط زرّي «طابِق مع Google».
+**القاعدة:** انطباع ⇒ مفهرَس (قاطع)؛ غياب الانطباع ⇏ غير مفهرَس (لهذا زر URL Inspection).
+
 **تحديث (نفس اليوم، بعد سحب بيانات Ahrefs الفعلية):** الـ15 صفحات «رابط داخلي واحد» تأكّدت أنها صفحات `/c/` (متاجر) + `/categories` — والسبب الجذري **بق حقيقي** في `app/c/[slug]/page.tsx`: `relatedGuides` كانت `getSeoPages(500).slice(0,6)` = **نفس أول ٦ صفحات لكل صفحة /c/** → تلك الـ٦ تكنز مئات الروابط وبقية صفحات المال بلا أي رابط related وارد (رابط واحد فقط من صفحة /store). الإصلاح: **حلقة دائرية (circulant)** — ترتيب ثابت (master_id ثم slug) وكل صفحة تربط بالـ٦ التالية → كل صفحة /c/ تنال ٦ روابط واردة بالضبط (تحقّق: min==max==6). + `/categories` نال رابطاً سِتوايد من هَب FooterSeoLinks. (web a4d6a36). **Slow page (2):** ليست عيب كود — رأس PRERENDER/x-vercel-cache: أول زيارة بادرة كاش (origin bom1) 2.5s، الثانية HIT 0.6s؛ الصفحات ثابتة (prerender). **IndexNow:** صار 0 نتائج (انحلّ). **درس مؤكّد:** `.slice(0,N)` كـ«related» بلا مفتاح لكل عنصر = يُتم الذيل ويكنز الرأس — استخدم حلقة/تقارباً موضوعياً.
