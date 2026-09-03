@@ -108,8 +108,8 @@
 ## ٦) المحتوى والمدوّنة (٢١)
 
 - [Voice Bible](voice_bible.md) — نموذج الصوت التحريري؛ قلّد العيّنة
-- [Blog Total = Count It Live](blog_massive_content_session.md) — **١٦٩١ (عُدَّ ٢٠٢٦-٠٩-٠٤)**؛ عُدّ بـ`grep -cE "^\s*slug:" lib/blog.ts` لا تجمع تقديرياً
-- [🛍️ عناقيد المتاجر الجديدة سبتمبر ٢٠٢٦: ماكس فاشن (١٦) · بوما (٢٠) · مودانيسا (١٨)](blog_maxfashion_puma_clusters.md) — id 76/77/78؛ مواقعها محجوبة للبوتات؛ blog_bridge أُعيد بناؤه (١٤٧٠/٦٣)
+- [Blog Total = Count It Live](blog_massive_content_session.md) — **١٧٠٥ (عُدَّ ٢٠٢٦-٠٩-٠٥)**؛ عُدّ بـ`grep -cE "^\s*slug:" lib/blog.ts` لا تجمع تقديرياً
+- [🛍️ عناقيد المتاجر الجديدة سبتمبر ٢٠٢٦: ماكس فاشن (١٦) · بوما (٢٠) · مودانيسا (١٨) · روملس/eSIM (١٤)](blog_maxfashion_puma_clusters.md) — id 76-79؛ مواقعها محجوبة للبوتات؛ blog_bridge (١٤٨٤/٦٥)؛ روملس تعريبه يصطدم بمصعد إيراني
 - الصحّة: [عنقود المكمّلات](health_content_cluster.md) · [مصادر الاستشهاد](health_citation_sourcing.md) (Mayo/NIH يحجبان الـcrawlers)
 - [Blog Internal-Link De-orphan](blog_internal_link_deorphan.md) — 65 مقال يتيم صُفِّرت؛ top-6 getRelatedPosts يجوّع الذيل
 - [Blog Inline Code Chips](blog_inline_code_chips.md) + [Jolina Pre-Purchase Angle](jolina_prepurchase_angle.md) — الزاوية «الاسترجاع» لا الكود
