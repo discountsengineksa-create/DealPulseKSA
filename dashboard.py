@@ -13977,13 +13977,17 @@ elif page == "📊 تقرير البحث":
 # ─────────────────────────────────────────────────────────────────────────────
 elif page == "🔎 الفهرسة":
     st.header("🔎 الفهرسة")
-    st.caption("كل روابط الموقع من sitemap الحيّ — انسخ، أرسِل للفهرسة في Search Console، "
-               "ثم علّمها «تمّت» لتختفي. أي رابط جديد يدخل الموقع يظهر هنا تلقائياً.")
+    st.caption("روابط sitemap الحيّ مقابل حالة Google الحقيقية. المفهرَس يُشطب تلقائياً، "
+               "والباقي worklist مصنّفة بالسبب. أي رابط جديد يدخل الموقع يظهر هنا تلقائياً.")
 
     import os as _os
     import re as _re
     from urllib.parse import unquote as _unquote
     idx_site = _os.getenv("SITE_URL", "https://www.dealpulseksa.com").rstrip("/")
+
+    def _idx_norm(u):
+        u = _unquote((u or "").strip()).split("?", 1)[0].split("#", 1)[0]
+        return u.rstrip("/")
 
     # ─── جلب كل روابط sitemap (مع متابعة sitemap index إن وُجد) — يُخزَّن للجلسة ──
     def _fetch_sitemap_urls(base):
@@ -13997,7 +14001,8 @@ elif page == "🔎 الفهرسة":
                 continue
             done.add(sm)
             try:
-                txt = _rq.get(sm, timeout=25).text
+                txt = _rq.get(sm, timeout=25,
+                              headers={"User-Agent": "Mozilla/5.0 (DealPulse indexer)"}).text
             except Exception:
                 continue
             locs = [m.strip() for m in
@@ -14006,10 +14011,43 @@ elif page == "🔎 الفهرسة":
                 queue.extend(locs)                       # ملف فهرس → اتبع الأبناء
                 continue
             for u in locs:
-                if u not in seen:
-                    seen.add(u)
-                    order.append(u)
+                n = _idx_norm(u)
+                if n not in seen:
+                    seen.add(n)
+                    order.append(n)
         return order
+
+    # ─── حارس migration 073 ──────────────────────────────────────────────────
+    _cov_ready = False
+    try:
+        _c = get_conn()
+        try:
+            _c.rollback()
+            with _c.cursor() as _cur:
+                _cur.execute("SELECT to_regclass('public.seo_index_coverage')")
+                _cov_ready = _cur.fetchone()[0] is not None
+        finally:
+            _c.close()
+    except Exception:
+        pass
+
+    if not _cov_ready:
+        st.warning("جدول تغطية الفهرسة `seo_index_coverage` غير منشأ (migration 073). "
+                   "الصفحة تعمل بلا مطابقة Google حتى تُنشئه.")
+        if st.button("🛠️ إنشاء جدول التغطية (073)", type="primary"):
+            try:
+                with open("migration_073_seo_index_coverage.sql", encoding="utf-8") as _f:
+                    _sql_txt = _f.read()
+                _c = get_conn()
+                try:
+                    with _c.cursor() as _cur:
+                        _cur.execute(_sql_txt)
+                    _c.commit()
+                finally:
+                    _c.close()
+                st.success("✅ طُبِّق migration 073"); st.rerun()
+            except Exception as _e:
+                st.error(f"تعذّر: {_e}")
 
     top1, top2 = st.columns([1, 3])
     with top1:
@@ -14025,44 +14063,137 @@ elif page == "🔎 الفهرسة":
         st.error("⚠️ تعذّر جلب أي رابط من sitemap. تأكد أن الموقع يعمل: "
                  f"`{idx_site}/sitemap.xml`")
     else:
-        # ─── حالة المعالَجة من القاعدة ────────────────────────────────────────
-        idx_acted = {}   # url -> status
+        # ─── حالة المعالَجة اليدوية + تغطية Google ────────────────────────────
+        idx_acted = {}   # url -> (status, source)
         try:
             _c = get_conn()
             try:
                 _c.rollback()
                 with _c.cursor() as _cur:
-                    _cur.execute("SELECT url, status FROM seo_index_queue")
-                    idx_acted = {r[0]: r[1] for r in _cur.fetchall()}
+                    _cur.execute("SELECT url, status, "
+                                 "COALESCE(source, 'manual') FROM seo_index_queue")
+                    idx_acted = {r[0]: (r[1], r[2]) for r in _cur.fetchall()}
             finally:
                 _c.close()
         except Exception as e:
             st.error(f"تعذّر قراءة جدول الفهرسة (هل طُبّق migration 063؟): {e}")
 
-        idx_pending = [u for u in idx_all_urls if u not in idx_acted]
-        idx_done    = [u for u, s in idx_acted.items() if s == "indexed"]
-        idx_ignored = [u for u, s in idx_acted.items() if s == "ignored"]
+        idx_cov = {}     # url -> {verdict, coverage_state, is_indexed, last_source}
+        if _cov_ready:
+            try:
+                from api.seo.index_coverage import coverage_map as _coverage_map
+                idx_cov = _coverage_map()
+            except Exception as e:
+                st.warning(f"تعذّر قراءة تغطية Google: {e}")
+
+        _gsc_indexed = {u for u, c in idx_cov.items() if c.get("is_indexed")}
+        _hidden = set(idx_acted) | _gsc_indexed
+
+        idx_pending = [u for u in idx_all_urls if u not in _hidden]
+        idx_done    = [u for u, (s, _s) in idx_acted.items() if s == "indexed"]
+        idx_ignored = [u for u, (s, _s) in idx_acted.items() if s == "ignored"]
+
+        _VBADGE = {
+            "discovered":          "🔵 مكتشف — لم يُزحف",
+            "unknown":             "⚫ مجهول لجوجل",
+            "crawled_not_indexed": "🟠 زُحف ورُفض (جودة)",
+            "excluded_other":      "⚪ مستبعد (canonical/تحويل)",
+            "indexed":             "✅ مفهرَس",
+        }
+        _NOT_CHECKED = "◽ غير مفحوص"
+        # verdicts للدفع لا تفيدها (مشكلة جودة/canonical لا ميزانية زحف)
+        _PUSH_SKIP_VERDICTS = {"crawled_not_indexed", "excluded_other"}
 
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("📄 إجمالي الروابط", len(idx_all_urls))
         m2.metric("⏳ بانتظار الفهرسة", len(idx_pending))
-        m3.metric("✅ تمّت", len(idx_done))
+        m3.metric("✅ مفهرَس", len(idx_done) + len(_gsc_indexed - set(idx_acted)))
         m4.metric("🚫 متجاهَلة", len(idx_ignored))
 
-        if len(idx_all_urls):
-            _pct = round(len(idx_done) / len(idx_all_urls) * 100)
-            st.progress(min(_pct, 100) / 100,
-                        text=f"تقدّم الفهرسة اليدوية: {_pct}%")
+        # صف تصنيف verdict للمعلّقة
+        _pend_verdicts = {}
+        for u in idx_pending:
+            v = idx_cov.get(u, {}).get("verdict") or "_none"
+            _pend_verdicts[v] = _pend_verdicts.get(v, 0) + 1
+        if _pend_verdicts:
+            vc = st.columns(5)
+            vc[0].metric("🔵 مكتشف", _pend_verdicts.get("discovered", 0))
+            vc[1].metric("⚫ مجهول", _pend_verdicts.get("unknown", 0))
+            vc[2].metric("🟠 زُحف/رُفض", _pend_verdicts.get("crawled_not_indexed", 0))
+            vc[3].metric("⚪ مستبعد", _pend_verdicts.get("excluded_other", 0))
+            vc[4].metric("◽ غير مفحوص", _pend_verdicts.get("_none", 0))
 
-        with st.expander("ℹ️ طريقة العمل (مهم)"):
+        if len(idx_all_urls):
+            _idx_done_total = len(_hidden)
+            _pct = round(_idx_done_total / len(idx_all_urls) * 100)
+            st.progress(min(_pct, 100) / 100,
+                        text=f"مفهرَس / معالَج: {_idx_done_total} من {len(idx_all_urls)} ({_pct}%)")
+
+        # ─── مطابقة مع Google ────────────────────────────────────────────────
+        if _cov_ready:
+            with st.container(border=True):
+                st.markdown("#### ⚡ طابِق مع Google")
+                g1, g2 = st.columns(2)
+                with g1:
+                    if st.button("1️⃣ اسحب المفهرَس (انطباعات 16 شهر)",
+                                 width='stretch', type="primary"):
+                        try:
+                            from api.seo.index_coverage import reconcile_from_impressions
+                            with st.spinner("سحب أداء الصفحات من Search Console..."):
+                                _r = reconcile_from_impressions()
+                            if _r.get("skipped"):
+                                st.error("GSC_SA_JSON غير مضبوط على خدمة الداشبورد.")
+                            elif _r.get("error"):
+                                st.error(f"فشل السحب: {_r['error']}")
+                            else:
+                                st.success(
+                                    f"✅ مفهرَس مؤكَّد: {_r['matched_sitemap']} · "
+                                    f"شُطب من المعلّقة الآن: {_r['newly_marked']}")
+                                st.rerun()
+                        except Exception as e:
+                            st.error(f"تعذّر: {e}")
+                with g2:
+                    try:
+                        from api.seo.index_coverage import urls_needing_inspection
+                        _todo = urls_needing_inspection(idx_all_urls)
+                    except Exception:
+                        _todo = []
+                    if st.button(f"2️⃣ افحص الباقي عبر URL Inspection ({len(_todo)})",
+                                 width='stretch', disabled=not _todo):
+                        try:
+                            from api.seo.index_coverage import inspect_urls
+                            _prog = st.progress(0.0, text="فحص URL Inspection...")
+                            _agg = {}
+                            _errs = 0
+                            _CHUNK = 50
+                            for _i in range(0, len(_todo), _CHUNK):
+                                _res = inspect_urls(_todo[_i:_i + _CHUNK])
+                                if _res.get("skipped"):
+                                    st.error("GSC_SA_JSON غير مضبوط."); break
+                                for _k, _n in _res.get("by_verdict", {}).items():
+                                    _agg[_k] = _agg.get(_k, 0) + _n
+                                _errs += _res.get("errors", 0)
+                                _prog.progress(min(1.0, (_i + _CHUNK) / len(_todo)),
+                                               text=f"فُحص {min(_i + _CHUNK, len(_todo))} من {len(_todo)}")
+                            _prog.empty()
+                            st.success("انتهى الفحص: " + " · ".join(
+                                f"{_VBADGE.get(k, k)}={v}" for k, v in sorted(_agg.items()))
+                                + (f" · أخطاء={_errs}" if _errs else ""))
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"تعذّر: {e}")
+                st.caption("١ = نداء واحد رخيص (يُشغَّل يومياً بالكرون تلقائياً). "
+                           "٢ = حصة 2000/يوم، يدوي — يعطي سبب عدم الفهرسة لكل رابط.")
+
+        with st.expander("ℹ️ طريقة العمل"):
             st.markdown(
-                "1. انسخ الرابط (زر النسخ في ركن الصندوق).\n"
-                "2. افتح [Google Search Console](https://search.google.com/search-console) "
-                "→ الصق الرابط في شريط **URL Inspection** أعلى الصفحة.\n"
-                "3. اضغط **Request Indexing** (طلب الفهرسة).\n"
-                "4. ارجع هنا واضغط **✓ فُهرست** فيختفي الرابط.\n\n"
-                "⚠️ Google يحدّ الطلبات اليدوية بنحو **10–15 رابط/يوم**. اشتغل على دفعات. "
-                "الصفحات اللي ما تبي تفهرسها (خصوصية/شروط) علّمها **🚫 تجاهل**."
+                "**الترتيب:** شغّل «طابِق مع Google» أولاً — يشيل المفهرَس ويصنّف الباقي.\n\n"
+                "- 🔵 **مكتشف** / ⚫ **مجهول** → الدفع يفيد (ميزانية زحف). استخدم زر «📤 أرسِل».\n"
+                "- 🟠 **زُحف ورُفض** → مشكلة جودة، الدفع **لا** يفيد ويهدر الحصة — يُستثنى من الدفع.\n"
+                "- ⚪ **مستبعد** → canonical/تحويل، عادةً مقصود.\n\n"
+                "للفهرسة اليدوية: انسخ الرابط → [Search Console](https://search.google.com/search-console) "
+                "→ **URL Inspection** → **Request Indexing**، ثم اضغط **✓ فُهرست** هنا. "
+                "الصفحات اللي ما تبيها (خصوصية/شروط) علّمها **🚫 تجاهل**."
             )
 
         idx_tab_pending, idx_tab_done = st.tabs(
@@ -14072,13 +14203,50 @@ elif page == "🔎 الفهرسة":
         # ─── تبويب المعلّقة ───────────────────────────────────────────────────
         with idx_tab_pending:
             if not idx_pending:
-                st.success("🎉 ما في روابط معلّقة — كل شي في sitemap تمّت معالجته.")
+                st.success("🎉 ما في روابط معلّقة — كل شي في sitemap مفهرَس أو معالَج.")
             else:
-                idx_q = st.text_input("🔍 فلترة بالرابط", key="idx_filter",
-                                      placeholder="مثال: /store/  أو  /c/  أو اسم متجر")
+                fq1, fq2 = st.columns([3, 2])
+                idx_q = fq1.text_input("🔍 فلترة بالرابط", key="idx_filter",
+                                       placeholder="مثال: /store/  أو  /c/  أو اسم متجر")
+                _vopts = ["الكل", "🔵 مكتشف", "⚫ مجهول", "🟠 زُحف/رُفض",
+                          "⚪ مستبعد", "◽ غير مفحوص"]
+                _vmap = {"🔵 مكتشف": "discovered", "⚫ مجهول": "unknown",
+                         "🟠 زُحف/رُفض": "crawled_not_indexed",
+                         "⚪ مستبعد": "excluded_other", "◽ غير مفحوص": "_none"}
+                _vsel = fq2.selectbox("السبب", _vopts, key="idx_vfilter")
+
+                def _vof(u):
+                    return idx_cov.get(u, {}).get("verdict") or "_none"
+
                 _view = [u for u in idx_pending
-                         if not idx_q or idx_q.lower() in _unquote(u).lower()]
+                         if (not idx_q or idx_q.lower() in _unquote(u).lower())
+                         and (_vsel == "الكل" or _vof(u) == _vmap.get(_vsel))]
                 st.caption(f"معروض: {len(_view)} من {len(idx_pending)} رابط معلّق")
+
+                # ── دفع بالدفعة ──
+                _pushable = [u for u in _view if _vof(u) not in _PUSH_SKIP_VERDICTS][:25]
+                if _pushable and st.button(
+                        f"📤 أرسِل هذه الدفعة ({len(_pushable)}) للفهرسة",
+                        type="primary", key="idx_bulk_push"):
+                    _ok, _fail = 0, 0
+                    _pp = st.progress(0.0, text="إرسال...")
+                    for _j in range(0, len(_pushable), 6):     # حدّ Cloudflare 100s
+                        _batch = _pushable[_j:_j + 6]
+                        _data, _err = _admin_post("/admin/reindex-urls",
+                                                  json_body={"urls": _batch}, timeout=110)
+                        if _err:
+                            _fail += len(_batch)
+                        else:
+                            for _rr in (_data or {}).get("results", []):
+                                _gc = (_rr.get("google") or {}).get("code")
+                                if _gc == 200:
+                                    _ok += 1
+                                else:
+                                    _fail += 1
+                        _pp.progress(min(1.0, (_j + 6) / len(_pushable)))
+                    _pp.empty()
+                    st.success(f"دُفع لجوجل: {_ok} · متعثّر: {_fail} "
+                               f"(IndexNow يُدفع لكل الروابط بلا حصة)")
 
                 _per = 25
                 _npages = max(1, (len(_view) + _per - 1) // _per)
@@ -14088,8 +14256,12 @@ elif page == "🔎 الفهرسة":
 
                 for u in _slice:
                     _label = _unquote(u).replace(idx_site, "") or "/"
+                    _v = idx_cov.get(u, {})
+                    _vbadge = _VBADGE.get(_v.get("verdict"), _NOT_CHECKED)
                     with st.container(border=True):
-                        st.caption(f"🔗 {_label}")
+                        st.caption(f"🔗 {_label}  ·  {_vbadge}"
+                                   + (f"  ·  _{_v.get('coverage_state')}_"
+                                      if _v.get("coverage_state") else ""))
                         st.code(u, language=None)        # زر نسخ أصلي من Streamlit
                         b1, b2, _ = st.columns([1, 1, 3])
                         with b1:
@@ -14100,10 +14272,11 @@ elif page == "🔎 الفهرسة":
                                     try:
                                         with _c.cursor() as _cur:
                                             _cur.execute(
-                                                "INSERT INTO seo_index_queue (url, status) "
-                                                "VALUES (%s, 'indexed') "
+                                                "INSERT INTO seo_index_queue (url, status, source) "
+                                                "VALUES (%s, 'indexed', 'manual') "
                                                 "ON CONFLICT (url) DO UPDATE SET "
-                                                "status='indexed', marked_at=NOW()", (u,))
+                                                "status='indexed', source='manual', "
+                                                "marked_at=NOW()", (u,))
                                         _c.commit()
                                     finally:
                                         _c.close()
@@ -14118,10 +14291,11 @@ elif page == "🔎 الفهرسة":
                                     try:
                                         with _c.cursor() as _cur:
                                             _cur.execute(
-                                                "INSERT INTO seo_index_queue (url, status) "
-                                                "VALUES (%s, 'ignored') "
+                                                "INSERT INTO seo_index_queue (url, status, source) "
+                                                "VALUES (%s, 'ignored', 'manual') "
                                                 "ON CONFLICT (url) DO UPDATE SET "
-                                                "status='ignored', marked_at=NOW()", (u,))
+                                                "status='ignored', source='manual', "
+                                                "marked_at=NOW()", (u,))
                                         _c.commit()
                                     finally:
                                         _c.close()
@@ -14134,15 +14308,19 @@ elif page == "🔎 الفهرسة":
             if not idx_acted:
                 st.info("لا توجد روابط معالَجة بعد.")
             else:
+                st.caption("صفوف Google (تلقائية) بلا زر تراجع — Google مصدر الحقيقة. "
+                           "شغّل «طابِق مع Google» ثانيةً لتحديثها.")
                 for u in sorted(idx_acted, key=lambda x: idx_acted[x]):
-                    _st = idx_acted[u]
+                    _st, _src = idx_acted[u]
                     _badge = "✅ فُهرست" if _st == "indexed" else "🚫 متجاهَل"
+                    _tag = " (Google)" if _src == "gsc" else ""
                     c1, c2 = st.columns([5, 1])
                     with c1:
-                        st.caption(f"{_badge} · {_unquote(u).replace(idx_site, '') or '/'}")
+                        st.caption(f"{_badge}{_tag} · "
+                                   f"{_unquote(u).replace(idx_site, '') or '/'}")
                     with c2:
-                        if st.button("↩️ تراجع", key=f"idx_undo_{u}",
-                                     width='stretch'):
+                        if _src != "gsc" and st.button("↩️ تراجع", key=f"idx_undo_{u}",
+                                                       width='stretch'):
                             try:
                                 _c = get_conn()
                                 try:

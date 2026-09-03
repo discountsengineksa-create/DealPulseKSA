@@ -360,7 +360,13 @@
       "Bash(cd \"C:\\\\Users\\\\PC\\\\Desktop\\\\dealpulseksa-web\" && grep -rln \"AggregateRating\\\\|aggregateRating\" --include=\"*.ts\" --include=\"*.tsx\" . 2>/dev/null | grep -v node_modules)",
       "Bash(curl -s \"https://www.dealpulseksa.com/blog/chanel-perfumes-guide-saudi-arabia\" -o \"C:\\\\Users\\\\PC\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-PC-Desktop-Discounts-Engine\\\\5bc489bc-7ab4-4a82-b485-2feb3b68f962\\\\scratchpad\\\\blog_chanel.html\" -w \"HTTP %{http_code}\\\\n\")",
       "Bash(python C:/Users/PC/.claude/plugins/cache/agricidaniel-claude-seo/claude-seo/2.2.4/scripts/runtime.py run render_page.py https://www.dealpulseksa.com/blog/abaya-buying-guide-saudi-arabia --mode never --output C:/Users/PC/AppData/Local/Temp/claude/c--Users-PC-Desktop-Discounts-Engine/5bc489bc-7ab4-4a82-b485-2feb3b68f962/scratchpad/blog_sample.html)",
-      "WebSearch"
+      "WebSearch",
+      "Read(//c/Users/PC/.claude/projects/c--Users-PC-Desktop-Discounts-Engine/memory/**)",
+      "Read(//c/Users/PC/Desktop/Discounts_Engine/Claude_Memory/**)",
+      "Bash(PYTHONUTF8=1 python \"C:\\\\Users\\\\PC\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-PC-Desktop-Discounts-Engine\\\\88b68e59-a529-4925-9b10-ab326520985b\\\\scratchpad\\\\q.py\")",
+      "Bash(PYTHONUTF8=1 python -c ' *)",
+      "mcp__claude_ai_Windsor_ai__get_fields",
+      "mcp__claude_ai_Windsor_ai__get_data"
     ],
     "additionalDirectories": [
       "C:\\Users\\PC\\Desktop\\dealpulseksa-web\\lib",

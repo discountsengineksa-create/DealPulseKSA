@@ -109,6 +109,14 @@ def _seo_snapshot_cycle() -> None:
         capture_gsc_detail()
     except Exception as exc:
         _log.warning("gsc detail cycle failed (non-fatal): %s", exc)
+    # مطابقة الفهرسة (migration 073): أي صفحة لها انطباع في GSC ⇒ مفهرَسة، تُشطب
+    # من «المعلّقة» في صفحة «🔎 الفهرسة» تلقائياً. نداء API واحد رخيص. فحص
+    # URL Inspection الأثقل يبقى يدوياً من الداشبورد (محدود بحصة 2000/يوم).
+    try:
+        from api.seo.index_coverage import reconcile_from_impressions
+        reconcile_from_impressions()
+    except Exception as exc:
+        _log.warning("index-coverage cycle failed (non-fatal): %s", exc)
 
 
 def _llm_cache_cleanup_cycle() -> None:
