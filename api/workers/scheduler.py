@@ -38,11 +38,11 @@ MATVIEW_REFRESH_MINUTES = int(os.getenv("WORKER_MATVIEW_REFRESH_MIN", "1"))
 SPIKE_DETECT_MINUTES    = int(os.getenv("WORKER_SPIKE_DETECT_MIN", "5"))
 ALERT_DISPATCH_SECONDS  = int(os.getenv("WORKER_ALERT_DISPATCH_SEC", "30"))
 DIRECTIVE_HOURS         = int(os.getenv("WORKER_DIRECTIVE_HOURS", "3"))
-# Week 5-6 — SEO generator
-SEO_DISCOVERY_HOURS     = int(os.getenv("WORKER_SEO_DISCOVERY_HOURS", "12"))
-SEO_GENERATE_HOURS      = int(os.getenv("WORKER_SEO_GENERATE_HOURS", "6"))
-SEO_GENERATE_BATCH      = int(os.getenv("SEO_GENERATE_BATCH", "3"))
-SEO_AUTOGEN_ENABLED     = os.getenv("SEO_AUTOGEN_ENABLED") == "1"
+# ⛔ محرّك توليد صفحات /c/ التلقائي **أُوقف نهائياً ٢٠٢٦-٠٩-٠٥** (قرار المالك):
+# ٢٠٠ صفحة LLM أنتجت نقرة واحدة في ٣٠ يوماً — ماكينة حجم. أُزيلت كرونات
+# seo_discovery / seo_generate / seo_auto_daily. `run_daily_seo_cycle` يبقى
+# قابلاً للاستدعاء يدوياً بـ force=True من الداشبورد لو لزم، ولقطة GSC اليومية
+# (seo_snapshot_daily) تبقى — هي حلقة التغذية الراجعة لا التوليد.
 # Week 7-8 — social listener (scoring/matching/response prep — مجاني، بلا LLM)
 SOCIAL_PROCESS_MINUTES  = int(os.getenv("WORKER_SOCIAL_PROCESS_MIN", "10"))
 SOCIAL_PROCESS_BATCH    = int(os.getenv("SOCIAL_PROCESS_BATCH", "20"))
@@ -52,20 +52,6 @@ TRENDS_REFRESH_HOURS    = int(os.getenv("WORKER_TRENDS_REFRESH_HOURS", "24"))
 _scheduler: BackgroundScheduler | None = None
 _consumer_thread: threading.Thread | None = None
 _stop_event: threading.Event | None = None
-
-
-def _seo_discovery_cycle() -> None:
-    """Week 5-6 — مرحلة مجانية: تجميع الترند الداخلي + مطابقة وإنشاء وظائف."""
-    from api.seo.matcher import match_and_enqueue
-    from api.seo.trends import aggregate_internal_search
-    aggregate_internal_search()
-    match_and_enqueue()
-
-
-def _seo_generation_cycle() -> None:
-    """Week 5-6 — مرحلة LLM (تستهلك الميزانية): توليد صفحات من الوظائف المنتظرة."""
-    from api.seo.generator import process_pending_jobs
-    process_pending_jobs(batch=SEO_GENERATE_BATCH)
 
 
 def _social_listener_cycle() -> None:
@@ -96,16 +82,6 @@ def _trends_refresh_cycle() -> None:
         refresh_all_active_keywords()
     except Exception as exc:
         _log.warning("trends refresh cycle failed (non-fatal): %s", exc)
-
-
-def _seo_auto_cycle() -> None:
-    """محرّك SEO الأوتوماتيكي اليومي (3 صباحاً Riyadh): أكثر المتاجر طلباً +
-    ربط مناسبة + توليد + نشر مُبوّب. يتحكّم فيه SEO_AUTO_PUBLISH_ENABLED داخلياً."""
-    from api.seo.auto_pipeline import run_daily_seo_cycle
-    try:
-        run_daily_seo_cycle()
-    except Exception as exc:
-        _log.warning("seo auto cycle failed (non-fatal): %s", exc)
 
 
 def _season_reminder_cycle() -> None:
@@ -237,38 +213,10 @@ def start_workers() -> None:
         replace_existing=True,
     )
 
-    # Week 5-6 — SEO discovery (مجاني: trends + match) كل 12 ساعة
-    _scheduler.add_job(
-        _seo_discovery_cycle,
-        trigger="interval",
-        hours=SEO_DISCOVERY_HOURS,
-        id="seo_discovery",
-        name="SEO trend discovery + store match",
-        replace_existing=True,
-    )
+    # ⛔ seo_discovery / seo_generate / seo_auto_daily أُزيلت نهائياً ٢٠٢٦-٠٩-٠٥
+    # (قرار المالك — راجع التعليق أعلى الملف). لا توليد /c/ تلقائي بعد الآن.
 
-    # Week 5-6 — SEO generation (يستهلك ميزانية LLM) — محكوم بـ SEO_AUTOGEN_ENABLED
-    if SEO_AUTOGEN_ENABLED:
-        _scheduler.add_job(
-            _seo_generation_cycle,
-            trigger="interval",
-            hours=SEO_GENERATE_HOURS,
-            id="seo_generate",
-            name="SEO LLM page generation",
-            replace_existing=True,
-        )
-
-    # محرّك SEO الأوتوماتيكي — يومياً 3 صباحاً بتوقيت الرياض (نشر تلقائي مُبوّب).
-    # يُسجَّل دائماً؛ يتوقّف ذاتياً إذا SEO_AUTO_PUBLISH_ENABLED != true.
-    _scheduler.add_job(
-        _seo_auto_cycle,
-        trigger="cron", hour=3, minute=0, timezone="Asia/Riyadh",
-        id="seo_auto_daily",
-        name="Daily autonomous SEO generate+publish (3AM Riyadh)",
-        replace_existing=True,
-    )
-
-    # لقطة أداء SEO اليومية — 4 صباحاً Riyadh (بعد دورة التوليد)
+    # لقطة أداء SEO اليومية — 4 صباحاً Riyadh (حلقة التغذية الراجعة من GSC)
     _scheduler.add_job(
         _seo_snapshot_cycle,
         trigger="cron", hour=4, minute=0, timezone="Asia/Riyadh",
@@ -326,10 +274,9 @@ def start_workers() -> None:
     _scheduler.start()
     _log.info(
         "✅ APScheduler started — matview/%dm, spike/%dm, dispatch/%ds, directive/%dh, "
-        "seo_discovery/%dh, seo_generate=%s, social/%dm, trends/%dh",
+        "social/%dm, trends/%dh, seo_snapshot=daily (auto /c/ generation REMOVED)",
         MATVIEW_REFRESH_MINUTES, SPIKE_DETECT_MINUTES,
         ALERT_DISPATCH_SECONDS, DIRECTIVE_HOURS,
-        SEO_DISCOVERY_HOURS, "on/%dh" % SEO_GENERATE_HOURS if SEO_AUTOGEN_ENABLED else "off",
         SOCIAL_PROCESS_MINUTES, TRENDS_REFRESH_HOURS,
     )
 
