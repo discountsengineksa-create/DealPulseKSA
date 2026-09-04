@@ -14063,8 +14063,8 @@ elif page == "🔎 الفهرسة":
         st.error("⚠️ تعذّر جلب أي رابط من sitemap. تأكد أن الموقع يعمل: "
                  f"`{idx_site}/sitemap.xml`")
     else:
-        # ─── حالة المعالَجة اليدوية + تغطية Google ────────────────────────────
-        idx_acted = {}   # url -> (status, source)
+        # ─── حالة المعالَجة اليدوية + تغطية Google (مفاتيح مطبَّعة) ────────────
+        idx_acted = {}   # url مطبَّع -> (status, source)
         try:
             _c = get_conn()
             try:
@@ -14072,17 +14072,19 @@ elif page == "🔎 الفهرسة":
                 with _c.cursor() as _cur:
                     _cur.execute("SELECT url, status, "
                                  "COALESCE(source, 'manual') FROM seo_index_queue")
-                    idx_acted = {r[0]: (r[1], r[2]) for r in _cur.fetchall()}
+                    for _u, _s, _src in _cur.fetchall():
+                        idx_acted[_idx_norm(_u)] = (_s, _src)
             finally:
                 _c.close()
         except Exception as e:
             st.error(f"تعذّر قراءة جدول الفهرسة (هل طُبّق migration 063؟): {e}")
 
-        idx_cov = {}     # url -> {verdict, coverage_state, is_indexed, last_source}
+        idx_cov = {}     # url مطبَّع -> {verdict, coverage_state, is_indexed, last_source}
         if _cov_ready:
             try:
                 from api.seo.index_coverage import coverage_map as _coverage_map
-                idx_cov = _coverage_map()
+                for _u, _meta in _coverage_map().items():
+                    idx_cov[_idx_norm(_u)] = _meta
             except Exception as e:
                 st.warning(f"تعذّر قراءة تغطية Google: {e}")
 
@@ -14129,61 +14131,60 @@ elif page == "🔎 الفهرسة":
             st.progress(min(_pct, 100) / 100,
                         text=f"مفهرَس / معالَج: {_idx_done_total} من {len(idx_all_urls)} ({_pct}%)")
 
+        # ─── قائمة «ما تفهرست» للتنزيل ───────────────────────────────────────
+        _not_indexed = [
+            (u, idx_cov.get(u, {}).get("verdict") or "not_checked",
+             idx_cov.get(u, {}).get("coverage_state") or "")
+            for u in idx_pending
+            if idx_acted.get(u, ("", ""))[0] != "ignored"
+        ]
+        if _not_indexed:
+            _csv = "url,verdict,coverage_state\n" + "\n".join(
+                f'"{u}","{v}","{s}"' for u, v, s in _not_indexed)
+            st.download_button(
+                f"⬇️ نزّل قائمة «ما تفهرست» ({len(_not_indexed)} رابط) CSV",
+                _csv, file_name="not_indexed.csv", mime="text/csv",
+                width='stretch')
+
         # ─── مطابقة مع Google ────────────────────────────────────────────────
         if _cov_ready:
             with st.container(border=True):
                 st.markdown("#### ⚡ طابِق مع Google")
-                g1, g2 = st.columns(2)
-                with g1:
-                    if st.button("1️⃣ اسحب المفهرَس (انطباعات 16 شهر)",
-                                 width='stretch', type="primary"):
-                        try:
-                            from api.seo.index_coverage import reconcile_from_impressions
-                            with st.spinner("سحب أداء الصفحات من Search Console..."):
-                                _r = reconcile_from_impressions()
-                            if _r.get("skipped"):
-                                st.error("GSC_SA_JSON غير مضبوط على خدمة الداشبورد.")
-                            elif _r.get("error"):
-                                st.error(f"فشل السحب: {_r['error']}")
-                            else:
-                                st.success(
-                                    f"✅ مفهرَس مؤكَّد: {_r['matched_sitemap']} · "
-                                    f"شُطب من المعلّقة الآن: {_r['newly_marked']}")
-                                st.rerun()
-                        except Exception as e:
-                            st.error(f"تعذّر: {e}")
-                with g2:
-                    try:
-                        from api.seo.index_coverage import urls_needing_inspection
-                        _todo = urls_needing_inspection(idx_all_urls)
-                    except Exception:
-                        _todo = []
-                    if st.button(f"2️⃣ افحص الباقي عبر URL Inspection ({len(_todo)})",
-                                 width='stretch', disabled=not _todo):
-                        try:
-                            from api.seo.index_coverage import inspect_urls
-                            _prog = st.progress(0.0, text="فحص URL Inspection...")
-                            _agg = {}
-                            _errs = 0
-                            _CHUNK = 50
-                            for _i in range(0, len(_todo), _CHUNK):
-                                _res = inspect_urls(_todo[_i:_i + _CHUNK])
-                                if _res.get("skipped"):
-                                    st.error("GSC_SA_JSON غير مضبوط."); break
-                                for _k, _n in _res.get("by_verdict", {}).items():
-                                    _agg[_k] = _agg.get(_k, 0) + _n
-                                _errs += _res.get("errors", 0)
-                                _prog.progress(min(1.0, (_i + _CHUNK) / len(_todo)),
-                                               text=f"فُحص {min(_i + _CHUNK, len(_todo))} من {len(_todo)}")
-                            _prog.empty()
-                            st.success("انتهى الفحص: " + " · ".join(
-                                f"{_VBADGE.get(k, k)}={v}" for k, v in sorted(_agg.items()))
-                                + (f" · أخطاء={_errs}" if _errs else ""))
+
+                _stat, _serr = _admin_get("/admin/index-coverage-status")
+                _audit = (_stat or {}).get("audit", {})
+                _running = bool(_audit.get("running"))
+
+                a1, a2 = st.columns([2, 1])
+                with a1:
+                    if st.button("🔍 افحص كل الروابط عبر URL Inspection",
+                                 width='stretch', type="primary", disabled=_running):
+                        _d, _e = _admin_post("/admin/audit-index-coverage", timeout=30)
+                        if _e:
+                            st.error(f"تعذّر: {_e}")
+                        else:
+                            st.success("بدأ الفحص في الخلفية. حدّث بعد دقائق.")
                             st.rerun()
-                        except Exception as e:
-                            st.error(f"تعذّر: {e}")
-                st.caption("١ = نداء واحد رخيص (يُشغَّل يومياً بالكرون تلقائياً). "
-                           "٢ = حصة 2000/يوم، يدوي — يعطي سبب عدم الفهرسة لكل رابط.")
+                with a2:
+                    if st.button("🔄 حدّث الحالة", width='stretch'):
+                        st.rerun()
+
+                if _serr:
+                    st.caption(f"⚠️ تعذّر قراءة حالة الفحص: {_serr}")
+                elif _running:
+                    _dn, _tt = _audit.get("done", 0), _audit.get("total", 0) or 1
+                    st.progress(min(1.0, _dn / _tt),
+                                text=f"جارٍ الفحص في الخلفية: {_dn} من {_tt}")
+                elif _audit.get("last_result"):
+                    _lr = _audit["last_result"]
+                    st.success("آخر فحص: " + " · ".join(
+                        f"{_VBADGE.get(k, k)}={v}"
+                        for k, v in sorted(_lr.get("by_verdict", {}).items()))
+                        + (f" · أخطاء={_lr.get('errors', 0)}" if _lr.get("errors") else ""))
+
+                st.caption("الفحص الكامل 15-25 دقيقة (خيط خلفي، حصة Google 2000/يوم). "
+                           "يبدأ بمكسب سريع (انطباعات 16 شهر) ثم URL Inspection لكل رابط "
+                           "متبقٍّ. آمن للإعادة — يكمل من حيث وقف.")
 
         with st.expander("ℹ️ طريقة العمل"):
             st.markdown(

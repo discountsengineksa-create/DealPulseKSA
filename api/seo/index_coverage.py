@@ -57,8 +57,14 @@ def fetch_sitemap_urls(base: str | None = None) -> list[str]:
             continue
         done.add(sm)
         try:
-            txt = requests.get(sm, timeout=25,
-                               headers={"User-Agent": "Mozilla/5.0 (DealPulse indexer)"}).text
+            # UA متصفّح كامل — جدار Cloudflare يردّ 403 (error 1010) على بصمة غير متصفّح
+            txt = requests.get(sm, timeout=25, headers={
+                "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                               "AppleWebKit/537.36 (KHTML, like Gecko) "
+                               "Chrome/124.0 Safari/537.36"),
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "ar,en;q=0.8",
+            }).text
         except Exception as exc:
             _log.warning("sitemap fetch failed %s: %s", sm, exc)
             continue
@@ -131,11 +137,15 @@ def _mark_queue_indexed(cur, urls: list[str]) -> int:
 # ═══════════════════════════════════════════════════════════════════════════
 #  المصدر ١ — الانطباعات (رخيص، للكرون + زر «اسحب المفهرَس»)
 # ═══════════════════════════════════════════════════════════════════════════
-def reconcile_from_impressions() -> dict:
+def reconcile_from_impressions(sitemap: list[str] | None = None) -> dict:
     """
     كل صفحة لها ≥1 انطباع في GSC خلال 16 شهراً وموجودة في sitemap ⇒ مفهرَسة قطعاً.
     تُكتب في seo_index_coverage (verdict='indexed') وتُشطب من «المعلّقة» عبر seo_index_queue.
 
+    ⚠️ هذا حدّ أدنى فقط — صفحة مفهرَسة بلا انطباع لا تظهر هنا. المصدر القاطع هو
+    inspect_urls(). هذه الدالة رخيصة (نداء واحد) للكرون اليومي وكمكسب سريع.
+
+    `sitemap` اختياري — مرّره لتفادي جلب sitemap ثانيةً وتفادي حجب Cloudflare.
     يعيد dict بالإحصاء، أو {"skipped": ...} بلا اعتمادات.
     """
     svc = _service()
@@ -169,9 +179,9 @@ def reconcile_from_impressions() -> dict:
         _log.warning("index-coverage impressions pull failed (non-fatal): %s", exc)
         return {"error": str(exc)[:200]}
 
-    sitemap = set(fetch_sitemap_urls())
+    sitemap_set = {_norm(u) for u in (sitemap or fetch_sitemap_urls())}
     seen_pages = {_norm(r["keys"][0]) for r in rows}
-    indexed = sorted(seen_pages & sitemap)
+    indexed = sorted(seen_pages & sitemap_set)
 
     with get_db_context() as conn:
         with conn.cursor() as cur:
@@ -185,7 +195,7 @@ def reconcile_from_impressions() -> dict:
         "gsc_pages": len(seen_pages),
         "matched_sitemap": len(indexed),
         "newly_marked": newly_marked,
-        "stale_not_in_sitemap": len(seen_pages - sitemap),
+        "stale_not_in_sitemap": len(seen_pages - sitemap_set),
     }
     _log.info("index-coverage impressions: %s", out)
     return out
@@ -273,6 +283,54 @@ def inspect_urls(urls: list[str]) -> dict:
     out = {"checked": checked, "errors": errors, "by_verdict": by_verdict}
     _log.info("index-coverage inspection: %s", out)
     return out
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  تدقيق كامل في الخلفية (endpoint + كرون أسبوعي اختياري)
+# ═══════════════════════════════════════════════════════════════════════════
+_AUDIT_STATE: dict = {"running": False, "done": 0, "total": 0,
+                      "started_at": None, "finished_at": None, "last_result": None}
+
+
+def audit_state() -> dict:
+    return dict(_AUDIT_STATE)
+
+
+def run_full_audit() -> dict:
+    """
+    تدقيق كامل: (١) reconcile_from_impressions مكسب سريع، ثم (٢) URL Inspection على
+    كل رابط متبقٍّ. يُشغَّل في خيط خلفي عبر /admin/audit-index-coverage — الفحص قد
+    يستغرق 15-25 دقيقة (حصة Google 2000/يوم). آمن للإعادة (يكمل من حيث وقف).
+    """
+    if _AUDIT_STATE["running"]:
+        return {"skipped": "already_running"}
+    _AUDIT_STATE.update(running=True, done=0, total=0,
+                        started_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                        finished_at=None, last_result=None)
+    try:
+        sitemap = fetch_sitemap_urls()
+        imp = reconcile_from_impressions(sitemap)
+        todo = urls_needing_inspection(sitemap)
+        _AUDIT_STATE["total"] = len(todo)
+        agg: dict[str, int] = {}
+        errors = 0
+        for i in range(0, len(todo), 100):
+            res = inspect_urls(todo[i:i + 100])
+            if res.get("skipped"):
+                break
+            for k, n in res.get("by_verdict", {}).items():
+                agg[k] = agg.get(k, 0) + n
+            errors += res.get("errors", 0)
+            _AUDIT_STATE["done"] = min(i + 100, len(todo))
+        result = {"impressions": imp, "inspected": _AUDIT_STATE["done"],
+                  "by_verdict": agg, "errors": errors}
+        _AUDIT_STATE["last_result"] = result
+        _log.info("index-coverage full audit done: %s", result)
+        return result
+    finally:
+        _AUDIT_STATE.update(
+            running=False,
+            finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat())
 
 
 # ═══════════════════════════════════════════════════════════════════════════

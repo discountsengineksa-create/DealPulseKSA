@@ -55,6 +55,42 @@ def reindex_urls(
     return {"count": len(results), "results": results}
 
 
+# ─── Index-coverage audit (URL Inspection over the whole sitemap) ─────────
+# يقارن كل رابط في sitemap بحالته الحقيقية في Google (مفهرَس / مكتشف / زُحف-ورُفض /
+# مجهول) عبر URL Inspection API، فتُشطب المفهرَسة من قائمة «🔎 الفهرسة» ويظهر
+# الباقي مصنّفاً بالسبب. خيط خلفي — الفحص الكامل 15-25 دقيقة (حصة Google 2000/يوم).
+@router.post("/audit-index-coverage")
+def audit_index_coverage(x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
+    """يطلق تدقيق فهرسة كامل في الخلفية. تابع التقدّم عبر GET /admin/index-coverage-status."""
+    _verify_admin(x_admin_secret)
+    from api.seo.index_coverage import audit_state, run_full_audit
+    if audit_state().get("running"):
+        return {"status": "already_running", **audit_state()}
+    threading.Thread(target=run_full_audit, daemon=True).start()
+    return {"status": "started"}
+
+
+@router.get("/index-coverage-status")
+def index_coverage_status(x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
+    """حالة تدقيق الفهرسة + إحصاء verdicts الحالي من seo_index_coverage."""
+    _verify_admin(x_admin_secret)
+    from api.db import get_db_context
+    from api.seo.index_coverage import audit_state
+    counts: dict[str, int] = {}
+    try:
+        with get_db_context() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT verdict, count(*), "
+                            "count(*) FILTER (WHERE is_indexed) "
+                            "FROM seo_index_coverage GROUP BY verdict")
+                rows = cur.fetchall()
+        counts = {r[0]: r[1] for r in rows}
+        counts["_indexed_total"] = sum(r[2] for r in rows)
+    except Exception as exc:
+        counts = {"error": str(exc)[:200]}
+    return {"audit": audit_state(), "coverage_counts": counts}
+
+
 # ─── Email Diagnostics ────────────────────────────────────────────────────
 # يكشف لماذا "نسيت كلمة المرور" لا يصل: غالباً RESEND_API_KEY مفقود في Railway،
 # أو الدومين غير موثّق على Resend. كلا المسارين الفرعيين يطبع رسائل واضحة.
