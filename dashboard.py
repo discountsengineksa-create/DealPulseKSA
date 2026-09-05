@@ -9258,11 +9258,11 @@ elif page == "👣 زوّار الموقع":
             st.rerun()
 
     # فلتر البوتات (تبديل) + استثناء الإدمن (دائم). كلاهما نصوص ثابتة — لا مدخل مستخدم.
-    # زواحف كبرى تتسرّب من فلتر is_datacenter (cf_bot_score فارغ تماماً، والـIP غير
-    # مُعلَّم datacenter): Meta/Facebook 32934 (معاينة روابط) + Apple 714 (Applebot/
-    # prefetch). تظهر من Ashburn/Leesburg/Seattle وتُضخّم العدّاد بلا أي نقر/نسخ —
-    # مصدر وهم «الترافيك أمريكي». نستثنيها مع البوتات. [[bot_vs_promo_heuristic]]
-    _CRAWLER_ASNS = (32934, 714)
+    # زواحف/استضافات تتسرّب من فلتر is_datacenter (cf_bot_score فارغ تماماً، والـIP غير
+    # مُعلَّم datacenter): Meta 32934 · Apple 714 (Applebot/prefetch) · M247 9009 (VPN) ·
+    # Huawei Cloud HK 136907 · HostRoyale 203020 · Datacamp/CDN77 212238. كلها تضخّم
+    # العدّاد بلا نقر/نسخ. نستثنيها مع البوتات. [[bot_vs_promo_heuristic]]
+    _CRAWLER_ASNS = (32934, 714, 9009, 136907, 203020, 212238)
     _asn_in      = ", ".join(str(a) for a in _CRAWLER_ASNS)   # أعداد ثابتة — لا حقن
     _q_crawler   = f"AND (asn IS NULL OR asn NOT IN ({_asn_in}))"
     _q_crawler_v = f"AND (v.asn IS NULL OR v.asn NOT IN ({_asn_in}))"
@@ -9366,6 +9366,41 @@ elif page == "👣 زوّار الموقع":
         63023: "Aruba إيطاليا (VPN)", 3356: "Level 3/Lumen",
     }
 
+    # ── مساعدات الذكاء الاصطناعي: نعرض الاسم الصريح (ChatGPT/Perplexity/Gemini…) ──
+    # المطلوب: «من أين دخل — صريحاً» لا تصنيف عام. المفتاح = referrer_host كما يخزّنه
+    # /track/visit. gemini.google.com كان يظهر «Google» (لاحقة google.com) — مصحَّح هنا.
+    _AI_REF = {
+        "chatgpt.com": "🤖 ChatGPT", "chat.openai.com": "🤖 ChatGPT",
+        "openai.com": "🤖 ChatGPT", "com.openai.chatgpt": "🤖 ChatGPT (تطبيق)",
+        "perplexity.ai": "🤖 Perplexity",
+        "copilot.microsoft.com": "🤖 Copilot",
+        "gemini.google.com": "🤖 Gemini", "bard.google.com": "🤖 Gemini",
+        "claude.ai": "🤖 Claude",
+        "you.com": "🤖 You.com", "poe.com": "🤖 Poe",
+    }
+
+    def _ai_name(host):
+        """اسم المساعد الصريح من referrer_host، أو None لو ليس مساعد ذكاء اصطناعي."""
+        if not host:
+            return None
+        h = str(host).lower()
+        h = h[4:] if h.startswith("www.") else h
+        if h in _AI_REF:
+            return _AI_REF[h]
+        for dom, name in _AI_REF.items():
+            if h.endswith("." + dom):
+                return name
+        return None
+
+    # قائمة hosts نصّية ثابتة لاستخدام SQL — تصحيح التصنيف التاريخي بلا migration.
+    # (ثوابت من قاموسنا لا مدخل مستخدم — لا حقن.)
+    _ai_in = ", ".join("'%s'" % d for d in _AI_REF)
+
+    def _ai_kind_sql(fallback="'unknown'"):
+        """تعبير SQL يُرجع 'ai' لأي referrer_host معروف، وإلا referrer_kind."""
+        return (f"CASE WHEN referrer_host IN ({_ai_in}) THEN 'ai' "
+                f"ELSE COALESCE(referrer_kind, {fallback}) END")
+
     # ── الصفحة: رابط يُفتح + اسم مقروء + نوع ────────────────────────────────
     # landing_path يُخزَّن مُرمَّزاً (%D8%…) لأن أسماء المتاجر/الأقسام عربية، فالخام
     # غير قابل للقراءة. نفتح الرابط بالصيغة المُرمَّزة (هي الصالحة للمتصفح)
@@ -9421,6 +9456,11 @@ elif page == "👣 زوّار الموقع":
             AND v.quality_score >= 50
             AND v.is_datacenter IS NOT TRUE
             {_q_crawler_v}
+            -- جمهورنا سعودي: نستبعد الأجنبي (Shijiazhuang/Rawalpindi على /national-day
+            -- = زواحف تمرّ من فلتر is_datacenter) — لكن نُبقي أي إحالة من مساعد ذكاء
+            -- اصطناعي مهما كانت الدولة (نقرة استشهاد حقيقية).
+            AND (v.country_code = 'SA' OR v.country_code IS NULL
+                 OR v.referrer_host IN ({_ai_in}))
             AND (v.user_id IS NULL
                  OR v.user_id NOT IN (SELECT id FROM web_users WHERE is_admin))
         ),
@@ -9467,7 +9507,9 @@ elif page == "👣 زوّار الموقع":
 
     if not _visitors_today.empty:
         st.markdown("#### 👤 مَن زار اليوم؟")
-        st.caption("قائمة الزوّار الحقيقيين خلال النطاق أعلاه، بعد استثناء البوتات وأنت (الإدمن).")
+        st.caption("قائمة الزوّار الحقيقيين خلال النطاق أعلاه، بعد استثناء البوتات وأنت (الإدمن) "
+                   "والزيارات الأجنبية (جمهورنا سعودي) — عدا إحالات مساعدات الذكاء الاصطناعي "
+                   "فتبقى مهما كانت الدولة.")
 
         def _identity(row):
             # ١) مسجّل في الموقع → الإيميل هو الهوية (بحسب طلب المالك)
@@ -9519,15 +9561,22 @@ elif page == "👣 زوّار الموقع":
         }
 
         def _entry_source(row):
-            """يعرض اسم المنصّة الفعلي (TikTok/Instagram/Google) بدل التصنيف العام."""
+            """يعرض اسم المنصّة الفعلي (ChatGPT/TikTok/Google) بدل التصنيف العام."""
             kind = row.get("ref_kind")
             host = row.get("ref_host") or ""
+            # مساعد ذكاء اصطناعي أولاً — بالاسم الصريح، حتى لو خُزّن kind='search'
+            # سابقاً (gemini.google.com) قبل إضافة نوع 'ai'.
+            _ai = _ai_name(host)
+            if _ai:
+                return _ai
             if not kind:
                 return "↗️ مباشر"
             if kind == "internal":
                 return "🔁 داخلي"
             if kind == "direct":
                 return "↗️ مباشر"
+            if kind == "ai":
+                return "🤖 مساعد ذكاء اصطناعي"
             # سوشال/بحث/referral: حاول ترجمة الدومين لاسم منصّة
             if host and host in _PLATFORM_NAMES:
                 return _PLATFORM_NAMES[host]
@@ -9594,13 +9643,14 @@ elif page == "👣 زوّار الموقع":
     with g1:
         st.markdown("#### 🌐 مصدر الزيارة")
         _src = pd.read_sql(f"""
-            SELECT COALESCE(referrer_kind, 'unknown') AS kind, COUNT(*) AS cnt
+            SELECT {_ai_kind_sql("'unknown'")} AS kind, COUNT(*) AS cnt
             FROM web_visits
             WHERE created_at::date BETWEEN %(f)s AND %(t)s {_q}
             GROUP BY 1 ORDER BY cnt DESC
         """, conn, params=_p)
-        _SRC_AR = {"search": "🔍 بحث", "social": "📱 سوشال", "direct": "↗️ مباشر",
-                   "internal": "🔁 داخلي", "referral": "🔗 موقع آخر", "unknown": "غير معروف"}
+        _SRC_AR = {"ai": "🤖 ذكاء اصطناعي", "search": "🔍 بحث", "social": "📱 سوشال",
+                   "direct": "↗️ مباشر", "internal": "🔁 داخلي",
+                   "referral": "🔗 موقع آخر", "unknown": "غير معروف"}
         if not _src.empty:
             _src["kind"] = _src["kind"].map(lambda x: _SRC_AR.get(x, x))
             _src.columns = ["المصدر", "عدد"]
@@ -9638,7 +9688,7 @@ elif page == "👣 زوّار الموقع":
         st.markdown("#### 🔗 من أحالهم (المصدر بالاسم)")
         _ref = pd.read_sql(f"""
             SELECT COALESCE(NULLIF(referrer_host, ''), '—') AS host,
-                   COALESCE(referrer_kind, 'direct')        AS kind,
+                   {_ai_kind_sql("'direct'")}              AS kind,
                    COUNT(*) AS visits
             FROM web_visits
             WHERE created_at::date BETWEEN %(f)s AND %(t)s {_q}
@@ -9649,10 +9699,48 @@ elif page == "👣 زوّار الموقع":
         else:
             _ref["kind"] = _ref["kind"].map(lambda x: _SRC_AR.get(x, x))
             _ref["host"] = _ref.apply(
-                lambda r: "↗️ دخول مباشر (بلا إحالة)" if r["host"] == "—" else r["host"],
+                lambda r: "↗️ دخول مباشر (بلا إحالة)" if r["host"] == "—"
+                else (_ai_name(r["host"]) or r["host"]),
                 axis=1)
             _ref.columns = ["المصدر", "النوع", "زيارات"]
             st.dataframe(_ref, width='stretch', hide_index=True)
+
+    # ── 🤖 دخلوا من مساعد ذكاء اصطناعي — بالاسم الصريح (ChatGPT/Perplexity/…) ──
+    st.markdown("#### 🤖 دخلوا من مساعد ذكاء اصطناعي")
+    st.caption("كل صف = زيارة إحالتها من مساعد ذكاء اصطناعي، باسمه الصريح — "
+               "وأي صفحة استشهد بها لجلب الزائر.")
+    _aiv = pd.read_sql(f"""
+        SELECT referrer_host AS host,
+               COALESCE(NULLIF(city, ''), 'غير معروف')          AS city,
+               asn,
+               COALESCE(NULLIF(landing_path, ''), '/')          AS landing,
+               to_char(created_at AT TIME ZONE 'Asia/Riyadh', 'MM-DD HH24:MI') AS t
+        FROM web_visits
+        WHERE created_at::date BETWEEN %(f)s AND %(t)s {_q}
+          AND referrer_host IN ({_ai_in})
+        ORDER BY created_at DESC LIMIT 100
+    """, conn, params=_p)
+    if _aiv.empty:
+        st.caption("لا زيارات من مساعدات ذكاء اصطناعي في هذا النطاق.")
+    else:
+        _aiv_view = pd.DataFrame({
+            "المساعد":     _aiv["host"].apply(lambda h: _ai_name(h) or h),
+            "المدينة":     _aiv["city"],
+            "المشغّل":     _aiv["asn"].apply(
+                lambda a: _ASN_NAMES.get(int(a), f"ASN {int(a)}")
+                if pd.notna(a) and a else "غير معروف"),
+            "صفحة الدخول": _aiv["landing"].apply(_page_label),
+            "فتح":         _aiv["landing"].apply(_page_url),
+            "الوقت":       _aiv["t"],
+        })
+        st.dataframe(
+            _aiv_view, width='stretch', hide_index=True,
+            column_config={"فتح": st.column_config.LinkColumn(
+                width="small", display_text="🔗 افتح")},
+        )
+        _by = _aiv["host"].apply(lambda h: _ai_name(h) or h).value_counts()
+        st.caption("حسب المساعد: "
+                   + " · ".join(f"{k}: {int(v)}" for k, v in _by.items()))
 
     # ── 🚪 صفحات الدخول: وش الصفحة، من وين جاءوا، وهل تفاعلوا ───────────────
     st.divider()
@@ -9944,7 +10032,8 @@ elif page == "👣 زوّار الموقع":
                    {_label} AS visitor,
                    COALESCE(NULLIF(city, ''), '؟') AS city,
                    COALESCE(device_class, '؟') AS device,
-                   COALESCE(referrer_kind, '؟') AS src,
+                   CASE WHEN referrer_host IN ({_ai_in}) THEN referrer_host
+                        ELSE COALESCE(referrer_kind, '؟') END AS src,
                    COALESCE(NULLIF(landing_path, ''), '/') AS landing,
                    quality_score AS q
             FROM web_visits

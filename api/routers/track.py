@@ -537,6 +537,15 @@ _SOCIAL_LABELS = {
 }
 # نطاقات قصيرة (وسمها الأول ليس اسم البراند) — تُطابق كنطاق كامل.
 _SOCIAL_FULL = {"x.com", "t.co", "t.me", "fb.com", "youtu.be", "lnkd.in"}
+# مساعدات الذكاء الاصطناعي — تُصنّف 'ai' لا 'search'/'referral'. تُفحص قبلهما لأن
+# gemini.google.com كان يقع في 'search' (وسم google)، و chatgpt.com/perplexity.ai
+# في 'referral'. المطابقة: نطاق كامل أو لاحقة نقطة. com.openai.chatgpt = تطبيق أندرويد
+# (android-app://com.openai.chatgpt → hostname = اسم الحزمة).
+_AI_FULL = {
+    "chatgpt.com", "chat.openai.com", "openai.com", "com.openai.chatgpt",
+    "perplexity.ai", "copilot.microsoft.com", "gemini.google.com",
+    "bard.google.com", "claude.ai", "you.com", "poe.com",
+}
 
 
 def _strip_www(host: str) -> str:
@@ -547,7 +556,8 @@ def _classify_referrer(referrer: str | None, site_host: str | None) -> tuple[str
     """يُرجع (kind, host) من الإحالة الخام.
 
     kind: 'direct' (بلا إحالة) · 'internal' (تنقّل داخل الموقع) ·
-          'search' (محرّك بحث) · 'social' (منصة تواصل) · 'referral' (موقع آخر).
+          'ai' (مساعد ذكاء اصطناعي) · 'search' (محرّك بحث) ·
+          'social' (منصة تواصل) · 'referral' (موقع آخر).
     """
     if not referrer:
         return "direct", None
@@ -559,6 +569,8 @@ def _classify_referrer(referrer: str | None, site_host: str | None) -> tuple[str
         return "direct", None
     if site_host and (host == site_host or host.endswith("." + site_host)):
         return "internal", host
+    if host in _AI_FULL or any(host.endswith("." + d) for d in _AI_FULL):
+        return "ai", host
     # وسوم النطاق (l.instagram.com → {l, instagram, com}) للمطابقة على حدّ نقطة
     labels = set(host.split("."))
     if host in _SOCIAL_FULL or labels & _SOCIAL_LABELS:
