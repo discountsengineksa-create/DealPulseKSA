@@ -105,11 +105,12 @@
 - [🔌 Claude SEO Plugin](claude_seo_plugin.md) — ١٨ agent+٢٥ skill بمستوى الريبو؛ **السحابة محجوبة عن dealpulseksa.com**
 - [🏺 قصر الاواني](qasr_alawani_source_of_truth.md) + [🚕 لائحة نقل الركاب](ride_hailing_regulation_sources.md) — مصادر أوّلية مفحوصة للاستشهاد
 
-## ٦) المحتوى والمدوّنة (٢١)
+## ٦) المحتوى والمدوّنة (٢٢)
 
 - [Voice Bible](voice_bible.md) — نموذج الصوت التحريري؛ قلّد العيّنة
-- [Blog Total = Count It Live](blog_massive_content_session.md) — **١٧٠٥ (عُدَّ ٢٠٢٦-٠٩-٠٥)**؛ عُدّ بـ`grep -cE "^\s*slug:" lib/blog.ts` لا تجمع تقديرياً
+- [Blog Total = Count It Live](blog_massive_content_session.md) — **١٧٢٣ (عُدَّ ٢٠٢٦-٠٩-٠٥ بعد عنقود الماجد)**؛ عُدّ بـ`grep -cE "^\s*slug:" lib/blog.ts` لا تجمع تقديرياً
 - [🛍️ عناقيد المتاجر الجديدة سبتمبر ٢٠٢٦: ماكس فاشن (١٦) · بوما (٢٠) · مودانيسا (١٨) · روملس/eSIM (١٤)](blog_maxfashion_puma_clusters.md) — id 76-79؛ مواقعها محجوبة للبوتات؛ blog_bridge (١٤٨٤/٦٥)؛ روملس تعريبه يصطدم بمصعد إيراني
+- [🪔 عنقود الماجد للعود: المبسوس والمعمول](blog_almajed_cluster.md) — ١٥ مقالاً `almajed-*` + محايد؛ web `c58c55d`؛ كود AR196؛ عود رويال/القرشي شريكان فلم تُلمس عناقيدهما؛ `blog_bridge --write` معلّق على إذن المالك
 - الصحّة: [عنقود المكمّلات](health_content_cluster.md) · [مصادر الاستشهاد](health_citation_sourcing.md) (Mayo/NIH يحجبان الـcrawlers)
 - [Blog Internal-Link De-orphan](blog_internal_link_deorphan.md) — 65 مقال يتيم صُفِّرت؛ top-6 getRelatedPosts يجوّع الذيل
 - [Blog Inline Code Chips](blog_inline_code_chips.md) + [Jolina Pre-Purchase Angle](jolina_prepurchase_angle.md) — الزاوية «الاسترجاع» لا الكود
