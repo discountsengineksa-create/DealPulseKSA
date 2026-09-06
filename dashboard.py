@@ -13779,16 +13779,30 @@ elif page == "📈 أداء SEO":
                     _ico = "🟢" if (_sc or 0) >= 90 else ("🟠" if (_sc or 0) >= 50 else "🔴")
                     _col.metric(_lbl, f"{_ico} {_sc}" if _sc is not None else "—")
                 _audits = _lr.get("audits", {})
-                _opps = [a for a in _audits.values()
-                         if a.get("details", {}).get("type") == "opportunity"
-                         and (a.get("score") if a.get("score") is not None else 1) < 0.9]
+                # Lighthouse 12+ (يشغّله PageSpeed الآن) نقل معظم «الفرص» إلى فحوص
+                # `*-insight` بنوع details مختلف — الفلتر القديم (type=="opportunity")
+                # كان يُسقطها فيظهر بند واحد بينما الحقيقة ٦+. نقبل الاثنين.
+                def _is_opp(_id, _a):
+                    if (_a.get("score") if _a.get("score") is not None else 1) >= 0.9:
+                        return False
+                    return (_a.get("details", {}).get("type") == "opportunity"
+                            or _id.endswith("-insight")
+                            or _a.get("displayValue", "").startswith("Est"))
+                _opps = [a for _id, a in _audits.items() if _is_opp(_id, a)]
                 _opps.sort(key=lambda a: a.get("score") if a.get("score") is not None else 1)
                 st.divider()
                 if _opps:
                     st.subheader("🛠️ أهم فرص التحسين")
-                    for _a in _opps[:8]:
+                    _seen = set()
+                    for _a in _opps:
+                        _ti = _a.get("title", "")
+                        if _ti in _seen:
+                            continue
+                        _seen.add(_ti)
                         _dv = _a.get("displayValue", "")
-                        st.markdown(f"- **{_a.get('title', '')}** {('— ' + _dv) if _dv else ''}")
+                        st.markdown(f"- **{_ti}** {('— ' + _dv) if _dv else ''}")
+                        if len(_seen) >= 10:
+                            break
                 else:
                     st.success("✅ لا فرص تحسين كبيرة — الأداء جيد.")
         if not os.getenv("PAGESPEED_API_KEY"):
