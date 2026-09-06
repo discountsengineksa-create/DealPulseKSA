@@ -155,3 +155,19 @@ Attribution in GA4 · Conversion Tracking وغيرها. الحفظ الصحيح:
 **العلاج (web `4c5f27a`):** كل أحداثنا تُرسَل بـ**`transport_type: 'beacon'`** في `lib/ga.ts`.
 ⇒ **قاعدة: أي حدث يسبق تنقّلاً يحتاج beacon صراحةً — وإلا ضاع بصمت ولا يظهر في أي تقرير.**
 
+### 🔴 وعلّة CSP كانت تحجب الـbeacon نفسه — منذ `4c5f27a` (كُشف ٢٠٢٦-٠٩-٠٦، web `8ab0a87`)
+
+الفقرة أعلى («CSP كانت ستحجبه بصمت») قالت إن `connect-src` يحمل `google-analytics.com` +
+`*.analytics.google.com` واعتبرت المسألة مغلقة. **الناقص:** GA4 مع «إشارات Google» يرسل
+ضربات `/g/collect` عبر `sendBeacon` إلى **`analytics.google.com` (بلا نطاق فرعي)** وإلى
+**`stats.g.doubleclick.net`**. و`https://*.analytics.google.com` **لا يطابق المضيف المجرَّد**،
+وdoubleclick لم يُدرَج أصلاً ⇒ **كل beacon حُجب بـCSP violation** منذ يوم إصلاح الـbeacon.
+
+الأثر: (أ) أخطاء Console أسقطت فحص «الممارسات» في Lighthouse من ١٠٠ إلى **٩٢** (ثابت من
+٢٠٢٦-٠٨-٢٠). (ب) بيانات GA4 تُفقد — و`click_link` «المنتظر منذ إصلاح beacon» جزء من سببه هنا.
+
+**الإصلاح:** أُضيف `https://analytics.google.com` و`https://stats.g.doubleclick.net` إلى
+`connect-src` **و**`img-src` في `next.config.mjs`. ⇒ **قاعدة: `*.host` في CSP لا يطابق `host`
+المجرَّد — أدرِج الاثنين. وبعد أي تغيير GA/إعلانات، افحص Console حيّاً على `/g/collect`.**
+راجع [[security_hardening]] و[[web_repo_verification_recipes]] (فحص Console بعد النشر).
+

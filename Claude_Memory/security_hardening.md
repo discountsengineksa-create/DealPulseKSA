@@ -9,6 +9,10 @@ metadata:
 
 **تحصينات منشورة — لا تكسرها:**
 1. **CSP مفروض** في `dealpulseksa-web/next.config.mjs` (دالة `headers()`، متغيّر `csp`). **مُختبَر حيّاً: تسجيل الدخول/OTP + الصور + البيانات تشتغل.** لو أضفت مصدراً خارجياً جديداً (سكربت/صورة/API/iframe) **لازم تضيف نطاقه للـCSP** وإلا يُحجَب في المتصفّح. المسموح حالياً: `api.dealpulseksa.com` + `dealpulseksa-production.up.railway.app` (connect)، `res.cloudinary.com` (img/media)، Firebase/Google (`*.firebaseapp.com`/`*.googleapis.com`/`google.com`/`gstatic.com`)، Vercel (`*.vercel-scripts.com`/`vitals.vercel-insights.com`). `'unsafe-inline'/'unsafe-eval'` مُبقاة لسكربتات Next الداخلية (بلا nonce حفاظاً على ISR).
+GA4: `connect-src`+`img-src` يحملان `www.google-analytics.com` + `*.google-analytics.com` +
+**`analytics.google.com` (مجرَّد)** + **`stats.g.doubleclick.net`** — الأخيران أُضيفا ٢٠٢٦-٠٩-٠٦
+(web `8ab0a87`) لأن `sendBeacon` من GA4 مع إشارات Google يقصدهما و`*.analytics.google.com`
+لا يطابق المضيف المجرَّد ⇒ كان يُحجب بصمت. تفاصيل: [[web_ga4_install]].
 2. **`/docs` + `/openapi.json` مقفولان بالإنتاج** في `bot_app.py` (كانا يسرّبان مخطّط الـAPI). يُفتحان محلياً بـ`EXPOSE_DOCS=1` فقط. **لا تُعِد `docs_url="/docs"` ثابتاً.**
 3. **COOP** (`same-origin-allow-popups`) ضمن رؤوس الأمان مع HSTS/XFO/nosniff/Referrer/Permissions.
 
