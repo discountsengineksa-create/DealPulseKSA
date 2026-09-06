@@ -47,7 +47,7 @@
 - أساسيات: [نظرة عامة](project_overview.md) · [الإعداد المحلي](setup_guide.md) · [سجلّ الإصلاحات](bug_fixes.md)
 - Railway: [النشر](railway_deployment.md) (الخدمة الموحّدة، tag الرجوع) · [عامل الجدولة](railway_scheduler_worker.md) (config منفصل، cron ≥5د)
 - [Single Source of Truth](single_source_of_truth.md) — DB واحد + داشبورد واحد؛ .env على Railway فقط
-- [Platform Monitoring](platform_monitoring.md) — «متابعة المنصة»: صفحة + ضوابط + تقرير صحة + أداء API
+- [Platform Monitoring](platform_monitoring.md) — «متابعة المنصة»: نشرة يومية ٧ص + أسبوعية اثنين + تقرير صحة (فيه GSC) + أداء API؛ لقطة الـLLM ٧ أيام
 - [🔒 Security Hardening](security_hardening.md) — فحص أمني (صفر ثغرة حرجة)؛ CSP بـnext.config؛ /docs مقفول بالإنتاج
 - متفرقات تشغيلية: [سعة البوت](bot_capacity_scaling.md) (سقف ~30/ث) · [ميزات مُنجَزة](project_completed_features.md) · [البريد](project_email_infrastructure.md) (Resend) · [خطة الأسابيع](weeks_roadmap.md) · [معسكر ريادة](entrepreneur_bootcamp.md)
 - الموقع: [المشروع](website_project.md) (Next.js+Firebase) · [التصميم](website_design_preferences.md) · [محرّك السيو](website_seo_engine.md)
