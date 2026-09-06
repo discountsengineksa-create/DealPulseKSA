@@ -37,7 +37,6 @@ _started_lock = threading.Lock()
 MATVIEW_REFRESH_MINUTES = int(os.getenv("WORKER_MATVIEW_REFRESH_MIN", "1"))
 SPIKE_DETECT_MINUTES    = int(os.getenv("WORKER_SPIKE_DETECT_MIN", "5"))
 ALERT_DISPATCH_SECONDS  = int(os.getenv("WORKER_ALERT_DISPATCH_SEC", "30"))
-DIRECTIVE_HOURS         = int(os.getenv("WORKER_DIRECTIVE_HOURS", "3"))
 # ⛔ محرّك توليد صفحات /c/ التلقائي **أُوقف نهائياً ٢٠٢٦-٠٩-٠٥** (قرار المالك):
 # ٢٠٠ صفحة LLM أنتجت نقرة واحدة في ٣٠ يوماً — ماكينة حجم. أُزيلت كرونات
 # seo_discovery / seo_generate / seo_auto_daily. `run_daily_seo_cycle` يبقى
@@ -211,13 +210,23 @@ def start_workers() -> None:
     # then return now + interval). This used to be the bug that kept
     # social_listener / directive_generator / seo_* jobs silent for days.
 
-    # Week 3 — LLM directive generator (every 3 hours by default)
+    # نشرة المنصّة — يومية 07:00 الرياض (بيانات فقط، بلا LLM، heartbeat دائم)
+    # + أسبوعية 07:30 الاثنين (بيانات + اتجاه ٤ أسابيع + توجيهات LLM).
+    # كانت interval كل ٣ ساعات → إيميلات شبه مكرّرة وجسم توجيهات فارغ غالباً.
     _scheduler.add_job(
         run_directive_cycle,
-        trigger="interval",
-        hours=DIRECTIVE_HOURS,
-        id="directive_generator",
-        name="Generate LLM operational directives",
+        trigger="cron", hour=7, minute=0, timezone="Asia/Riyadh",
+        args=["daily"],
+        id="directive_daily",
+        name="Daily platform digest (health + GSC, no LLM)",
+        replace_existing=True,
+    )
+    _scheduler.add_job(
+        run_directive_cycle,
+        trigger="cron", day_of_week="mon", hour=7, minute=30, timezone="Asia/Riyadh",
+        args=["weekly"],
+        id="directive_weekly",
+        name="Weekly deep digest (4-week trend + LLM directives)",
         replace_existing=True,
     )
 
@@ -281,10 +290,11 @@ def start_workers() -> None:
 
     _scheduler.start()
     _log.info(
-        "✅ APScheduler started — matview/%dm, spike/%dm, dispatch/%ds, directive/%dh, "
-        "social/%dm, trends/%dh, seo_snapshot=daily (auto /c/ generation REMOVED)",
+        "✅ APScheduler started — matview/%dm, spike/%dm, dispatch/%ds, "
+        "digest=daily-07:00+weekly-mon-07:30, social/%dm, trends/%dh, "
+        "seo_snapshot=daily (auto /c/ generation REMOVED)",
         MATVIEW_REFRESH_MINUTES, SPIKE_DETECT_MINUTES,
-        ALERT_DISPATCH_SECONDS, DIRECTIVE_HOURS,
+        ALERT_DISPATCH_SECONDS,
         SOCIAL_PROCESS_MINUTES, TRENDS_REFRESH_HOURS,
     )
 

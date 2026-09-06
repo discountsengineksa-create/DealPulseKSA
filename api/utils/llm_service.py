@@ -11,7 +11,7 @@ LLM Directive Service — orchestrates the full directive lifecycle:
   6. Return a dict the caller can email / surface in the dashboard.
 
 This module is callable from:
-  • api/workers/directive_generator.py     (every 3h scheduled)
+  • api/workers/directive_generator.py     (weekly digest — Mondays)
   • api/routers/admin.py                   (manual /admin/trigger-directive)
 """
 from __future__ import annotations
@@ -44,6 +44,9 @@ SYSTEM_PROMPT_AR = """أنت محلل أعمال محترف لمنصة DealPulse
 3. ركّز على فرص الإيرادات: تجديد كوبونات، توسيع متاجر صاعدة، إيقاف خاسرة.
 4. اكتب بنبرة استشارية مهنية — لا تستخدم emojis كثيرة.
 5. ابدأ كل توجيه بفعل أمر واضح (مثل: "جدّد"، "وسّع"، "علّق"، "افحص").
+6. لديك بيانات Search Console (نقرات/ظهور/مراكز الصفحات والاستعلامات آخر ٢٨ يوماً).
+   استخدمها: صفحة بظهور عالٍ ومركز ٥–١٥ وصفر نقرة = فرصة عنوان/وصف. استعلام متكرّر
+   بلا صفحة مطابقة = فجوة محتوى. لا تقصر التوجيهات على الكوبونات.
 
 أعد ردك كـ JSON صالح بهذا الشكل بالضبط:
 {
@@ -69,7 +72,7 @@ def build_input_snapshot() -> dict[str, Any]:
     snapshot: dict[str, Any] = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="minutes"),
         "horizon_hours": DEFAULT_HORIZON_HOURS,
-        "window_hours": 48,
+        "window_hours": 168,
     }
 
     with get_db_context() as conn:
@@ -159,6 +162,66 @@ def build_input_snapshot() -> dict[str, Any]:
                 for r in cur.fetchall()
             ]
 
+        # 4) حركة المتاجر آخر ٧ أيام (المصفوفة المادّية ٤٨س فقط — نقرأ action_logs مباشرة)
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT al.store_id, m.name_en,
+                           COUNT(*) FILTER (WHERE al.action_type = 'click_link')  AS clicks_7d,
+                           COUNT(*) FILTER (WHERE al.action_type = 'copy_coupon') AS copies_7d,
+                           COUNT(*)                                               AS events_7d
+                    FROM action_logs al
+                    LEFT JOIN LATERAL (
+                        SELECT name_en FROM master WHERE store_id = al.store_id LIMIT 1
+                    ) m ON TRUE
+                    WHERE al.action_time > NOW() - INTERVAL '7 days'
+                      AND al.store_id IS NOT NULL AND al.store_id <> ''
+                    GROUP BY al.store_id, m.name_en
+                    ORDER BY events_7d DESC
+                    LIMIT 15
+                """)
+                snapshot["store_activity_7d"] = [
+                    {"store": r["store_id"], "name_en": r["name_en"],
+                     "clicks_7d": int(r["clicks_7d"]), "copies_7d": int(r["copies_7d"]),
+                     "events_7d": int(r["events_7d"])}
+                    for r in cur.fetchall()
+                ]
+        except Exception as exc:
+            _log.warning("snapshot store_activity_7d failed: %s", exc)
+            conn.rollback()
+
+        # 5) أداء البحث (Search Console) — إجمالي ٢٨ يوم + أعلى الاستعلامات ظهوراً
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT gsc_clicks, gsc_impressions, gsc_position
+                    FROM seo_perf_snapshots WHERE gsc_clicks IS NOT NULL
+                    ORDER BY snapshot_date DESC LIMIT 1
+                """)
+                row = cur.fetchone()
+                if row:
+                    snapshot["search_28d"] = {
+                        "clicks": int(row["gsc_clicks"] or 0),
+                        "impressions": int(row["gsc_impressions"] or 0),
+                        "avg_position": round(float(row["gsc_position"] or 0), 1),
+                    }
+                cur.execute("""
+                    SELECT query, clicks, impressions, position
+                    FROM seo_gsc_queries
+                    WHERE snapshot_date = (SELECT max(snapshot_date) FROM seo_gsc_queries)
+                      AND query ~ '[ء-ي]'
+                    ORDER BY impressions DESC LIMIT 15
+                """)
+                snapshot["top_search_queries_28d"] = [
+                    {"query": r["query"], "clicks": int(r["clicks"] or 0),
+                     "impressions": int(r["impressions"] or 0),
+                     "position": round(float(r["position"] or 0), 1)}
+                    for r in cur.fetchall()
+                ]
+        except Exception as exc:
+            _log.warning("snapshot search section failed: %s", exc)
+            conn.rollback()
+
     return snapshot
 
 
@@ -173,7 +236,7 @@ def render_prompt(snapshot: dict[str, Any]) -> str:
     """
     canonical = json.dumps(snapshot, ensure_ascii=False, sort_keys=True, indent=2)
     return (
-        "هذي لقطة منصة DealPulse KSA لآخر 48 ساعة. "
+        "هذي لقطة منصة DealPulse KSA لآخر 7 أيام (مع بيانات Search Console لآخر 28 يوماً). "
         f"التوقّع المطلوب لـ {snapshot['horizon_hours']} ساعة قادمة.\n\n"
         f"البيانات:\n```json\n{canonical}\n```\n\n"
         "أعطني توجيهات تشغيلية حسب القواعد في الـ system prompt. "

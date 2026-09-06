@@ -43,9 +43,12 @@ def _scalar(cur, sql: str, params: tuple = ()) -> Any:
     return row[0] if row and row[0] is not None else 0
 
 
-def build_health_report(window_days: int = 7) -> dict[str, Any]:
-    """يبني تقرير الصحّة. كل قسم best-effort؛ الأخطاء تُسجَّل ولا تُرفع."""
-    rep: dict[str, Any] = {"window_days": window_days}
+def build_health_report(window_days: int = 7, weekly: bool = False) -> dict[str, Any]:
+    """يبني تقرير الصحّة. كل قسم best-effort؛ الأخطاء تُسجَّل ولا تُرفع.
+
+    weekly=True يضيف اتجاه البحث لأربعة أسابيع (للتقرير الأسبوعي العميق).
+    """
+    rep: dict[str, Any] = {"window_days": window_days, "weekly": weekly}
 
     with get_db_context() as conn:
         # ── 1) إجمالي المستخدمين لكل قناة ──
@@ -264,14 +267,94 @@ def build_health_report(window_days: int = 7) -> dict[str, Any]:
                     FROM direct_search
                     WHERE user_found = FALSE
                       AND search_keyword IS NOT NULL AND trim(search_keyword) <> ''
+                      AND search_keyword ~ '[ء-ي]'
                       AND search_date > NOW() - make_interval(days => %s)
-                    GROUP BY search_keyword ORDER BY n DESC LIMIT 5
+                    GROUP BY search_keyword
+                    HAVING COUNT(*) >= 2
+                    ORDER BY n DESC LIMIT 5
                     """,
                     (window_days,),
                 )
                 rep["search_gaps"] = [{"kw": r[0], "n": int(r[1])} for r in cur.fetchall()]
         except Exception as exc:
             _log.warning("search_gaps section failed: %s", exc)
+            conn.rollback()
+
+        # ── 9) أداء البحث (GSC) — كل صفّ نافذة ٢٨ يوماً متحرّكة، الأحدث مقابل ما قبله بأسبوع ──
+        #     المصدر seo_perf_snapshots (يملؤه كرون seo_snapshot_daily 4ص من service account).
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT snapshot_date, gsc_clicks, gsc_impressions, gsc_ctr, gsc_position "
+                    "FROM seo_perf_snapshots WHERE gsc_clicks IS NOT NULL "
+                    "ORDER BY snapshot_date DESC LIMIT 40"
+                )
+                snaps = cur.fetchall()
+            if snaps:
+                ld = snaps[0][0]
+                g: dict[str, Any] = {
+                    "date": ld.isoformat(),
+                    "clicks": int(snaps[0][1] or 0),
+                    "impressions": int(snaps[0][2] or 0),
+                    "ctr": float(snaps[0][3] or 0),
+                    "position": float(snaps[0][4] or 0),
+                }
+                prior = next((s for s in snaps[1:] if (ld - s[0]).days >= 7), None)
+                if prior:
+                    g["prev"] = {
+                        "clicks": int(prior[1] or 0),
+                        "impressions": int(prior[2] or 0),
+                        "position": float(prior[4] or 0),
+                        "days": (ld - prior[0]).days,
+                    }
+                rep["gsc"] = g
+                if weekly:
+                    picks: list[dict[str, Any]] = []
+                    last_d = None
+                    for s in snaps:
+                        if last_d is None or (last_d - s[0]).days >= 7:
+                            picks.append({"date": s[0].isoformat(), "clicks": int(s[1] or 0),
+                                          "impressions": int(s[2] or 0), "position": float(s[4] or 0)})
+                            last_d = s[0]
+                        if len(picks) >= 5:
+                            break
+                    rep["gsc_trend"] = list(reversed(picks))
+        except Exception as exc:
+            _log.warning("gsc section failed: %s", exc)
+            conn.rollback()
+
+        # ── 10) صفحات صعدت/هبطت في البحث مقابل نافذة تنتهي قبل ~أسبوع ──
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT l.page, l.clicks,
+                           l.clicks - COALESCE(pr.clicks, 0) AS delta,
+                           l.position
+                    FROM seo_gsc_pages l
+                    LEFT JOIN seo_gsc_pages pr
+                           ON pr.page = l.page
+                          AND pr.snapshot_date = (
+                              SELECT max(snapshot_date) FROM seo_gsc_pages
+                              WHERE snapshot_date <= (SELECT max(snapshot_date) FROM seo_gsc_pages) - 7)
+                    WHERE l.snapshot_date = (SELECT max(snapshot_date) FROM seo_gsc_pages)
+                      AND (l.clicks > 0 OR COALESCE(pr.clicks, 0) > 0)
+                    ORDER BY delta DESC
+                    """
+                )
+                rows = cur.fetchall()
+            if rows:
+                def _clean(u: str) -> str:
+                    return (u or "").replace("https://www.dealpulseksa.com", "") or "/"
+                gain = [{"page": _clean(r[0]), "now": int(r[1]), "delta": int(r[2]),
+                         "pos": round(float(r[3] or 0), 1)} for r in rows if r[2] > 0][:3]
+                lose = [{"page": _clean(r[0]), "now": int(r[1]), "delta": int(r[2]),
+                         "pos": round(float(r[3] or 0), 1)} for r in rows if r[2] < 0]
+                lose = list(reversed(lose))[:3]
+                if gain or lose:
+                    rep["gsc_movers"] = {"gain": gain, "lose": lose}
+        except Exception as exc:
+            _log.warning("gsc movers section failed: %s", exc)
             conn.rollback()
 
     return rep
@@ -303,6 +386,83 @@ def render_health_html(rep: dict[str, Any]) -> str:
             f"<div style='color:#6B7280;font-size:13px;margin-top:4px;'>"
             f"بوت {u['bot']:,} · ميني-ويب {u['mini']:,} · موقع {u['web']:,}</div></div>"
         )
+
+    # 1.5) أداء البحث في جوجل (GSC) — نافذة ٢٨ يوماً متحرّكة + دلتا أسبوعية
+    g = rep.get("gsc")
+    if g:
+        prev = g.get("prev") or {}
+
+        def _delta(now: int, was) -> str:
+            if not was:
+                return ""
+            d = now - was
+            if d == 0:
+                return " <span style='color:#6B7280;'>(=)</span>"
+            col = "#059669" if d > 0 else "#DC2626"
+            arrow = "▲" if d > 0 else "▼"
+            pct = f" ({d / was * 100:+.0f}%)" if was else ""
+            return f" <span style='color:{col};'>{arrow} {d:+,}{pct}</span>"
+
+        pos_note = ""
+        if prev.get("position"):
+            pd_ = g["position"] - prev["position"]          # مركز أقل = أفضل
+            pcol = "#059669" if pd_ < 0 else ("#DC2626" if pd_ > 0 else "#6B7280")
+            pos_note = f" <span style='color:{pcol};'>({pd_:+.1f})</span>"
+        cmp_note = (f"<div style='color:#9CA3AF;font-size:11px;margin-top:5px;'>"
+                    f"المقارنة مقابل نافذة ٢٨ يوماً تنتهي قبل {prev.get('days', 7)} أيام</div>"
+                    if prev else "")
+        parts.append(
+            f"<div style='background:#EFF6FF;border-radius:8px;padding:12px 14px;margin:8px 0;'>"
+            f"<b>🔍 أداء البحث في جوجل — آخر ٢٨ يوم (حتى {g['date']})</b>"
+            f"<div style='color:#374151;font-size:13px;margin-top:6px;line-height:1.95;'>"
+            f"النقرات: <b>{g['clicks']:,}</b>{_delta(g['clicks'], prev.get('clicks'))}<br>"
+            f"الظهور: <b>{g['impressions']:,}</b>{_delta(g['impressions'], prev.get('impressions'))}<br>"
+            f"متوسط المركز: <b>{g['position']:.1f}</b>{pos_note}"
+            f" &nbsp;·&nbsp; CTR {g['ctr'] * 100:.2f}%"
+            f"</div>{cmp_note}</div>"
+        )
+
+    # اتجاه البحث لأربعة أسابيع (التقرير الأسبوعي فقط)
+    tr = rep.get("gsc_trend") or []
+    if len(tr) >= 2:
+        body_rows = "".join(
+            f"<tr><td style='padding:3px 10px;'>{t['date']}</td>"
+            f"<td style='padding:3px 10px;text-align:center;'>{t['clicks']:,}</td>"
+            f"<td style='padding:3px 10px;text-align:center;'>{t['impressions']:,}</td>"
+            f"<td style='padding:3px 10px;text-align:center;'>{t['position']:.1f}</td></tr>"
+            for t in tr
+        )
+        parts.append(
+            "<div style='margin:10px 0;'><div style='font-weight:700;'>📊 اتجاه البحث — ٤ أسابيع</div>"
+            "<table style='border-collapse:collapse;font-size:12px;margin-top:6px;'>"
+            "<tr style='color:#6B7280;'><td style='padding:3px 10px;'>نافذة تنتهي</td>"
+            "<td style='padding:3px 10px;text-align:center;'>نقرات</td>"
+            "<td style='padding:3px 10px;text-align:center;'>ظهور</td>"
+            "<td style='padding:3px 10px;text-align:center;'>المركز</td></tr>"
+            f"{body_rows}</table></div>"
+        )
+
+    # صفحات تحرّكت في البحث
+    mv = rep.get("gsc_movers") or {}
+    if mv.get("gain") or mv.get("lose"):
+        def _mv_items(items: list, color: str, arrow: str) -> str:
+            return "".join(
+                f"<li style='margin:3px 0;'><b>{m['page']}</b> — "
+                f"<span style='color:{color};'>{arrow} {m['delta']:+} نقرة</span>"
+                f" <span style='color:#6B7280;'>(الآن {m['now']} · مركز {m['pos']})</span></li>"
+                for m in items
+            )
+        block = ("<div style='margin:8px 0;'><div style='font-weight:700;'>"
+                 "📈 صفحات تحرّكت في البحث (مقابل أسبوع)</div>")
+        if mv.get("gain"):
+            block += ("<div style='font-size:12px;color:#6B7280;margin-top:4px;'>صعود:</div>"
+                      f"<ul style='margin:2px 0;padding-inline-start:22px;'>"
+                      f"{_mv_items(mv['gain'], '#059669', '▲')}</ul>")
+        if mv.get("lose"):
+            block += ("<div style='font-size:12px;color:#6B7280;'>هبوط:</div>"
+                      f"<ul style='margin:2px 0;padding-inline-start:22px;'>"
+                      f"{_mv_items(mv['lose'], '#DC2626', '▼')}</ul>")
+        parts.append(block + "</div>")
 
     # 2+3) أعلى المتاجر
     def _top_block(title: str, rows: list, color: str) -> str:
