@@ -1,6 +1,6 @@
 # Project Memory Index
 
-> ١٥٦ ملفاً (عُدّت ٢٠٢٦-٠٩-٠٣ بعد ملف عنقودَي ماكس فاشن وبوما — `ls *.md | grep -v MEMORY.md | wc -l` = ١٥٦). **العدّ للمتون، بلا `MEMORY.md` نفسه**. **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
+> ١٥٨ ملفاً (عُدّت ٢٠٢٦-٠٩-٠٧ بعد جولة أداء الرئيسية — `ls *.md | grep -v MEMORY.md | wc -l` = ١٥٨). **العدّ للمتون، بلا `MEMORY.md` نفسه**. **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
 > **الطبقة ٠ تُقرأ متونها قبل أي مهمة.** من الباقي: افتح ما يخصّ مهمتك وأعلن ما فتحته.
 > الحوائط الصلبة منسوخة نصّاً في `CLAUDE.md`. سطرٌ بعدّة روابط = ملفات مستقلة جُمعت للاختصار.
 
@@ -52,6 +52,7 @@
 - متفرقات تشغيلية: [سعة البوت](bot_capacity_scaling.md) (سقف ~30/ث) · [ميزات مُنجَزة](project_completed_features.md) · [البريد](project_email_infrastructure.md) (Resend) · [خطة الأسابيع](weeks_roadmap.md) · [معسكر ريادة](entrepreneur_bootcamp.md)
 - الموقع: [المشروع](website_project.md) (Next.js+Firebase) · [التصميم](website_design_preferences.md) · [محرّك السيو](website_seo_engine.md)
 - [Web Repo Verification Recipes](web_repo_verification_recipes.md) + [Blog OOM/Client-Prop](web_blog_monolith_oom_and_client_prop_serialization.md) — tsconfig ضيّق يتجاوز OOM؛ قصّ related لصفحة >2MB
+- [⚡ جولة أداء الرئيسية](web_home_perf_pass.md) — TBT ٢٩٠٠→٢٠ms بـgtag lazyOnload + تقليم النبذة + `.cv-section`؛ السقف LCP وهو ليس رافعة ترتيب (لا CrUX)
 - [🎟️ Coupon Visual Identity](web_coupon_visual_identity.md) — نُشرت ٢٠٢٦-٠٨-١١؛ **`view=light` يرجّع الكود/الرابط `null`**؛ الترند وُصل بالكتالوج
 - [🎫 Logo: Ticket + DP](brand_logo_ticket_2026_08.md) — اعتُمد ٢٠٢٦-٠٨-١٢؛ **الفافيكون الحالي ١٦×٨ بكسل**
 - [🎨 الهوية طُبِّقت على الأسطح الأربعة](brand_identity_applied.md) — `brand.py`+`style.css` مصدر الحقيقة؛ **ملفّات الخط `-ar` مجزّأة فطبعت مربّعات**
