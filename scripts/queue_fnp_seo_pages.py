@@ -17,6 +17,12 @@ from __future__ import annotations
 
 import sys
 
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8")  # ويندوز cp1252 يـcrash على العربية
+    except (AttributeError, ValueError):
+        pass
+
 from api.db import get_db_context
 from api.seo.generator import process_pending_jobs
 
