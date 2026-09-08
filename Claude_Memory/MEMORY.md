@@ -1,6 +1,6 @@
 # Project Memory Index
 
-> ١٥٨ ملفاً (عُدّت ٢٠٢٦-٠٩-٠٧ بعد جولة أداء الرئيسية — `ls *.md | grep -v MEMORY.md | wc -l` = ١٥٨). **العدّ للمتون، بلا `MEMORY.md` نفسه**. **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
+> ١٥٩ ملفاً (عُدّت ٢٠٢٦-٠٩-٠٨ بعد عنقود الدخيل للعود — `ls *.md | grep -v MEMORY.md | wc -l` = ١٥٩). **العدّ للمتون، بلا `MEMORY.md` نفسه**. **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
 > **الطبقة ٠ تُقرأ متونها قبل أي مهمة.** من الباقي: افتح ما يخصّ مهمتك وأعلن ما فتحته.
 > الحوائط الصلبة منسوخة نصّاً في `CLAUDE.md`. سطرٌ بعدّة روابط = ملفات مستقلة جُمعت للاختصار.
 
@@ -109,10 +109,11 @@
 ## ٦) المحتوى والمدوّنة (٢٣)
 
 - [Voice Bible](voice_bible.md) — نموذج الصوت التحريري؛ قلّد العيّنة
-- [Blog Total = Count It Live](blog_massive_content_session.md) — **١٧٢٣ (عُدَّ ٢٠٢٦-٠٩-٠٥ بعد عنقود الماجد)**؛ عُدّ بـ`grep -cE "^\s*slug:" lib/blog.ts` لا تجمع تقديرياً
+- [Blog Total = Count It Live](blog_massive_content_session.md) — **١٧٥٥ (عُدَّ ٢٠٢٦-٠٩-٠٨ بعد عنقود الدخيل للعود)**؛ عُدّ بـ`grep -cE "^\s*slug:" lib/blog.ts` لا تجمع تقديرياً
 - [🛍️ عناقيد المتاجر الجديدة سبتمبر ٢٠٢٦: ماكس فاشن (١٦) · بوما (٢٠) · مودانيسا (١٨) · روملس/eSIM (١٤)](blog_maxfashion_puma_clusters.md) — id 76-79؛ مواقعها محجوبة للبوتات؛ blog_bridge (١٤٨٤/٦٥)؛ روملس تعريبه يصطدم بمصعد إيراني
 - [🪔 عنقود الماجد للعود: المبسوس والمعمول](blog_almajed_cluster.md) — ١٥ مقالاً `almajed-*` + محايد؛ web `c58c55d`؛ كود AR196؛ عود رويال/القرشي شريكان فلم تُلمس عناقيدهما؛ `blog_bridge --write` معلّق على إذن المالك
 - [🌹 عنقود فيرنز اند بيتل (FNP)](blog_fnp_cluster.md) — ١٦ مقالاً `fnp-` (زاوية ورد+توصيل فوري)؛ `store_id` صُحّح `بيتلز`→`بيتل` (`migration_074`)؛ كود FN68 خصم ١٢٪؛ blog_bridge ١٥١٥/٦٧؛ ٤ صفحات `/c/` مكتوبة يدوياً في `migration_075` **معلّقة على تطبيق المالك** (مصنّف الهارنس حجبني طول الجلسة)
+- [🪵 عنقود الدخيل للعود](blog_aldakheel_cluster.md) — ١٦ مقالاً `aldakheel-` (web `15a3d29`)؛ `master.id=83` كود HH14 خصم ٥٪ إضافي بوستيني؛ زاوية بيت عطور تجاري+معطّرات منزل+توزيعات (متمايز عن الماجد/عود رويال/القرشي)؛ طلب كوبون سعودي حقيقي؛ `migration_077` أربع `/c/` + `blog_bridge` ١٥٣٠/٦٨ **معلّقان على المالك**
 - الصحّة: [عنقود المكمّلات](health_content_cluster.md) · [مصادر الاستشهاد](health_citation_sourcing.md) (Mayo/NIH يحجبان الـcrawlers)
 - [Blog Internal-Link De-orphan](blog_internal_link_deorphan.md) — 65 مقال يتيم صُفِّرت؛ top-6 getRelatedPosts يجوّع الذيل
 - [Blog Inline Code Chips](blog_inline_code_chips.md) + [Jolina Pre-Purchase Angle](jolina_prepurchase_angle.md) — الزاوية «الاسترجاع» لا الكود
