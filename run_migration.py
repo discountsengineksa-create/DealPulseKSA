@@ -18,6 +18,14 @@ import sys
 import psycopg2
 from dotenv import load_dotenv
 
+# على ويندوز الكونسول cp1252 فيـcrash طبع ✅/❌ داخل try ويُبلَّغ خطأً كاذباً
+# رغم أن الـSQL طُبِّق (autocommit). أجبر UTF-8 على المخرجات.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
 
 def _connect():
     load_dotenv()
