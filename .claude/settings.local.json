@@ -366,7 +366,8 @@
       "Bash(PYTHONUTF8=1 python \"C:\\\\Users\\\\PC\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-PC-Desktop-Discounts-Engine\\\\88b68e59-a529-4925-9b10-ab326520985b\\\\scratchpad\\\\q.py\")",
       "Bash(PYTHONUTF8=1 python -c ' *)",
       "mcp__claude_ai_Windsor_ai__get_fields",
-      "mcp__claude_ai_Windsor_ai__get_data"
+      "mcp__claude_ai_Windsor_ai__get_data",
+      "Bash(cd /c/Users/PC/Desktop/dealpulseksa-web && grep -n \"R1IMJ\" lib/blog.ts | grep -v \"جي كارد\\\\|بكود R1IMJ\" | head)"
     ],
     "additionalDirectories": [
       "C:\\Users\\PC\\Desktop\\dealpulseksa-web\\lib",
