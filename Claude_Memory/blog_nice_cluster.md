@@ -96,10 +96,13 @@ taibah/yaqut · علامة `alberto` (قدور/أجهزة). صفر سعر مخت
 
 ## الحالة
 
-- **`blog_bridge --write`** — نُفِّذ أوّلاً ٢٠٢٦-٠٩-٠٩ (1545 صفّاً). **بعد الدفعة الثانية
-  يحتاج إعادة تشغيل** — التجربة الجافّة: **1552 صفّاً** (+7). الأمر بـPowerShell:
-  `$env:PYTHONUTF8=1; $env:PYTHONIOENCODING="utf-8"; python -m scripts.build_blog_bridge --write`
-  (الهارنس يحجبه، يشغّله المالك).
+- **`blog_bridge --write`** — **مكتمل** ٢٠٢٦-٠٩-٠٩ (المالك، دفعتان) → مؤكّد حيّاً **1552 صفّاً**،
+  `nice-` 23 صفّاً، `aldakheel-` 16 صفّاً.
+- **إعادة الفهرسة** — نُفِّذت ٢٠٢٦-٠٩-٠٩: 44 رابطاً (39 عنقود + 5 هُبات + متجران) إلى
+  `/admin/reindex-urls`. **IndexNow/Bing: 200 للكل**. Google Indexing API: **403 «URL ownership»**
+  — الـproperty الموثّقة `https://www.dealpulseksa.com` (www) والروابط بالنطاق العاري
+  `dealpulseksa.com` → propertyان مختلفان عند Google (مشكلة config قديمة لا علاقة لها بالعنقود؛
+  Google يلتقطها من sitemap عادةً). Yandex/Naver/Seznam 422 (مفاتيح غير مضبوطة، معروف).
 - **معلّق — إعادة الفهرسة:** بعد نزول Vercel، ادفع الـ١٦ رابطاً + الهُبات الثلاث + `/store/نايس`
   إلى `api.dealpulseksa.com/api/v1/admin/reindex-urls` **بعد ٢٠٠** ([[seo_bulk_reindex_ops]]).
 - **صفحات `/c/`:** لا تُصنع — الأنبوب أُزيل ٢٠٢٦-٠٩-٠٩ ([[seo_page_portfolio_verdict]]).
