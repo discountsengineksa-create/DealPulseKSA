@@ -93,7 +93,7 @@
 - [SEO High-Demand Front](seo_high_demand_front_opened.md) — فخّ AR=draft+EN=noindex؛ نون/نمشي محجوبان بالسلطة
 - [🤖 AI Citation Channel](ai_citation_channel.md) — **٤١٣ استشهاد Copilot/٣٠يوم مقابل ١٣٢ نقرة جوجل**؛ **+ ٠٨-٢٧: GA4 أكّدها بنقرة حقيقية — قناة AI Assistant ٤٥ جلسة/٧أيام**
 - [🏫 عنقود الإدارة المدرسية = المحرّك الأول](school_admin_cluster_engine.md) — ٣٤ مقالاً، ~١١٠+ نقرة/٢٨ي بـCTR ١٠–٢٠٪؛ بُني له هَب `/school-templates` ٢٠٢٦-٠٩-٠٢؛ منافسو الكوبونات صفر محتوى هنا
-- [SEO Page Portfolio Verdict](seo_page_portfolio_verdict.md) — ٧١٠/٧٦٤ صفحة صفر نقرة — ⚠️ **عُدِّل بـ[[ai_citation_channel]]: صفر نقرة ≠ صفر قيمة**
+- [SEO Page Portfolio Verdict](seo_page_portfolio_verdict.md) — ٧١٠/٧٦٤ صفحة صفر نقرة؛ **٢٠٢٦-٠٩-٠٩: أنبوب توليد `/c/` التلقائي أُزيل بالكامل (قرار المالك) — يدوي فقط عبر `seo-seed-custom`**؛ صفر نقرة ≠ صفر قيمة ([[ai_citation_channel]])
 - [SEO Category Query Alignment](seo_category_query_alignment.md) — وزن المفردات: «كوبون» م49 و«متاجر» م19؛ ٨٧٪ من الظهور غارق
 - تكاذُب/تسريب: [/c/ ↔ /store](seo_c_store_cannibalization.md) (canonical مشتقّ لـ١٩) · [Meta Code Leak](seo_meta_code_leak.md) (الكود يُكشف بـllms.txt أيضاً)
 - [⚖️ ثقة أدوات الفحص](seo_audit_tools_trust.md) — آخر يومين GSC ناقصان (تأخّر لا هبوط)؛ «هبوط الترافيك» في Ahrefs تقدير لا قياس
@@ -112,7 +112,7 @@
 - [Blog Total = Count It Live](blog_massive_content_session.md) — **١٧٥٥ (عُدَّ ٢٠٢٦-٠٩-٠٨ بعد عنقود الدخيل للعود)**؛ عُدّ بـ`grep -cE "^\s*slug:" lib/blog.ts` لا تجمع تقديرياً
 - [🛍️ عناقيد المتاجر الجديدة سبتمبر ٢٠٢٦: ماكس فاشن (١٦) · بوما (٢٠) · مودانيسا (١٨) · روملس/eSIM (١٤)](blog_maxfashion_puma_clusters.md) — id 76-79؛ مواقعها محجوبة للبوتات؛ blog_bridge (١٤٨٤/٦٥)؛ روملس تعريبه يصطدم بمصعد إيراني
 - [🪔 عنقود الماجد للعود: المبسوس والمعمول](blog_almajed_cluster.md) — ١٥ مقالاً `almajed-*` + محايد؛ web `c58c55d`؛ كود AR196؛ عود رويال/القرشي شريكان فلم تُلمس عناقيدهما؛ `blog_bridge --write` معلّق على إذن المالك
-- [🌹 عنقود فيرنز اند بيتل (FNP)](blog_fnp_cluster.md) — ١٦ مقالاً `fnp-` (زاوية ورد+توصيل فوري)؛ `store_id` صُحّح `بيتلز`→`بيتل` (`migration_074`)؛ كود FN68 خصم ١٢٪؛ blog_bridge ١٥١٥/٦٧؛ ٤ صفحات `/c/` مكتوبة يدوياً في `migration_075` **معلّقة على تطبيق المالك** (مصنّف الهارنس حجبني طول الجلسة)
+- [🌹 عنقود فيرنز اند بيتل (FNP)](blog_fnp_cluster.md) — ١٦ مقالاً `fnp-` (زاوية ورد+توصيل فوري)؛ `store_id` صُحّح `بيتلز`→`بيتل` (`migration_074`)؛ كود FN68 خصم ١٢٪؛ blog_bridge ١٥١٥/٦٧؛ **صفحات `/c/` + `migration_075/076` أُلغيت ٢٠٢٦-٠٩-٠٩** (المالك رفض النمط)
 - [🪵 عنقود الدخيل للعود](blog_aldakheel_cluster.md) — ١٦ مقالاً `aldakheel-` (web `15a3d29`)؛ `master.id=83` كود HH14 خصم ٥٪ إضافي بوستيني؛ زاوية بيت عطور تجاري+معطّرات منزل+توزيعات؛ طلب كوبون سعودي حقيقي؛ **صفحات `/c/` عبر داشبورد «محرّك صفحات SEO» لا بمايقريشن** (التوليد التلقائي أُزيل ٢٠٢٦-٠٩-٠٥)؛ `blog_bridge` ١٥٣٠/٦٨ معلّق
 - الصحّة: [عنقود المكمّلات](health_content_cluster.md) · [مصادر الاستشهاد](health_citation_sourcing.md) (Mayo/NIH يحجبان الـcrawlers)
 - [Blog Internal-Link De-orphan](blog_internal_link_deorphan.md) — 65 مقال يتيم صُفِّرت؛ top-6 getRelatedPosts يجوّع الذيل

@@ -13356,8 +13356,8 @@ elif page == "محرّك SEO":
     st.header("🔍 محرّك صفحات SEO")
     st.caption("توليد ومراجعة وتعديل وحذف ونشر صفحات الـ landing من واجهة واحدة.")
 
-    # ═══ مدير المناسبات — يغذّي النشر التلقائي 3 صباحاً (ربط خلال أسبوعين) ═══
-    with st.expander("🗓️ مدير المناسبات (يستخدمها النشر التلقائي)", expanded=False):
+    # ═══ مدير المناسبات — تقويم مناسبات يُستخدم في توليد صفحات حول موضوع + تذكيرات المواسم ═══
+    with st.expander("🗓️ مدير المناسبات", expanded=False):
         _oc = get_conn(); _oc.rollback()
         try:
             _ocur = _oc.cursor()
@@ -13398,25 +13398,9 @@ elif page == "محرّك SEO":
         finally:
             _oc.close()
 
-    # ═══ تشغيل المحرّك الأوتوماتيكي يدوياً (نفس دورة 3 صباحاً — تجربة حقيقية) ═══
-    st.subheader("🚀 تشغيل دورة المحرّك الآن")
-    st.caption("نفس ما يحدث 3 صباحاً: أكثر المتاجر طلباً → ربط مناسبة → توليد → "
-               "**نشر تلقائي حقيقي** للموقع. استخدمه لاختبار دورة كاملة بأمان.")
-    if st.button("🚀 شغّل دورة SEO الآن", type="primary", key="seo_auto_run_btn"):
-        with st.spinner("جارٍ تشغيل الدورة الكاملة عبر الـ LLM... (قد تأخذ دقيقة)"):
-            _ar_data, _ar_err = _admin_post("/admin/seo-auto-run", timeout=280)
-        if _ar_err:
-            st.error(f"تعذّر التشغيل: {_ar_err}")
-        elif _ar_data and not _ar_data.get("enabled", True):
-            st.warning("المحرّك معطّل (SEO_AUTO_PUBLISH_ENABLED ليست true على خدمة الـ API).")
-        else:
-            d = _ar_data or {}
-            st.success(
-                f"✅ تمّت الدورة — متاجر: {d.get('top_stores', 0)} · "
-                f"مناسبة: {d.get('occasion') or '—'} · وظائف: {d.get('enqueued', 0)} · "
-                f"مُولَّد: {d.get('generated', 0)} · **منشور: {d.get('published', 0)}**"
-            )
-            st.balloons()
+    # التوليد التلقائي (دورة 3 صباحاً + زرّ التشغيل الفوري) أُزيل بطلب المالك
+    # ٢٠٢٦-٠٩-٠٩. صفحات /c/ تُصنع الآن يدوياً فقط: «توليد صفحات حول موضوع»
+    # أدناه ← مراجعة المسودّات ← نشر.
 
     # ═══ مسح كامل: كل صفحات SEO (مسودّات+منشورة+أرشيف) + الفهرسة + الوظائف ═══
     with st.expander("🧨 مسح كل صفحات SEO نهائياً (تصفير قبل الإطلاق)", expanded=False):

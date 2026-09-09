@@ -1,16 +1,18 @@
 """
-SEO Page Generator (Week 5-6) — خط أنابيب توليد صفحات هبوط تلقائية:
+SEO landing-page tools — **manual only** (auto-generation removed 2026-09-09
+at owner's request; the 3am auto cycle was already removed 2026-09-05).
 
-  1. trends.aggregate_internal_search()  — يجمّع سجلّ البحث (direct_search)
-     في trend_signals (مصدر مجاني، بلا مفاتيح خارجية).
-  2. matcher.match_and_enqueue()         — يطابق الكلمة بمتجر في master،
-     يطبّق seo_keyword_blocklist، ويُنشئ seo_generation_jobs.
-  3. generator.process_pending_jobs()    — يعالج الوظائف عبر الـ LLM
-     (purpose='seo_copy' — نفس طبقة Gemini→OpenRouter + الحارس المالي)
-     ويكتب seo_landing_pages كـ draft.
-  4. indexer.submit_page()               — عند النشر: revalidate + IndexNow
-     (يُتخطّى بهدوء إن لم تُضبط متغيرات البيئة).
+Flow now:
+  1. /admin/seo-seed-custom — owner types a topic → queues seo_generation_jobs
+     for the top stores (explicit human trigger).
+  2. generator.process_pending_jobs() — processes queued jobs via the LLM
+     (purpose='seo_copy' — Gemini→OpenRouter + financial guardian), writes
+     seo_landing_pages as draft. Triggered by /admin/seo-run or the
+     per-keyword button in the opportunities page.
+  3. Owner reviews drafts and publishes them from the dashboard.
+  4. indexer.submit_page() — on publish: revalidate + IndexNow.
 
-المراحل 1-2 مجانية (بلا LLM) وتعمل بالـ scheduler. المرحلة 3 تستهلك
-ميزانية LLM فمحكومة بـ SEO_AUTOGEN_ENABLED (افتراضي مُعطّل) + trigger يدوي.
+matcher._is_blocked() is still used by the generator as a White-Hat gate.
+There is no keyword discovery, no match_and_enqueue, no long-tail seeder,
+and no scheduled generation.
 """

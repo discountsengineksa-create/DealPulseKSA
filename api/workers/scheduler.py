@@ -37,11 +37,11 @@ _started_lock = threading.Lock()
 MATVIEW_REFRESH_MINUTES = int(os.getenv("WORKER_MATVIEW_REFRESH_MIN", "1"))
 SPIKE_DETECT_MINUTES    = int(os.getenv("WORKER_SPIKE_DETECT_MIN", "5"))
 ALERT_DISPATCH_SECONDS  = int(os.getenv("WORKER_ALERT_DISPATCH_SEC", "30"))
-# ⛔ محرّك توليد صفحات /c/ التلقائي **أُوقف نهائياً ٢٠٢٦-٠٩-٠٥** (قرار المالك):
-# ٢٠٠ صفحة LLM أنتجت نقرة واحدة في ٣٠ يوماً — ماكينة حجم. أُزيلت كرونات
-# seo_discovery / seo_generate / seo_auto_daily. `run_daily_seo_cycle` يبقى
-# قابلاً للاستدعاء يدوياً بـ force=True من الداشبورد لو لزم، ولقطة GSC اليومية
-# (seo_snapshot_daily) تبقى — هي حلقة التغذية الراجعة لا التوليد.
+# ⛔ محرّك توليد صفحات /c/ التلقائي **أُزيل نهائياً**: الكرونات ٢٠٢٦-٠٩-٠٥، ثم
+# `run_daily_seo_cycle` / `auto_pipeline.py` / `seed_long_tail.py` / زرّ الداشبورد
+# / `match_and_enqueue` كلها ٢٠٢٦-٠٩-٠٩ (قرار المالك — ٢٠٠ صفحة LLM = نقرة واحدة/
+# ٣٠ يوماً). صفحات /c/ تُصنع يدوياً فقط عبر /admin/seo-seed-custom ثم مراجعة ونشر.
+# لقطة GSC اليومية (seo_snapshot_daily) تبقى — هي حلقة التغذية الراجعة لا التوليد.
 # Week 7-8 — social listener (scoring/matching/response prep — مجاني، بلا LLM)
 SOCIAL_PROCESS_MINUTES  = int(os.getenv("WORKER_SOCIAL_PROCESS_MIN", "10"))
 SOCIAL_PROCESS_BATCH    = int(os.getenv("SOCIAL_PROCESS_BATCH", "20"))
@@ -230,8 +230,7 @@ def start_workers() -> None:
         replace_existing=True,
     )
 
-    # ⛔ seo_discovery / seo_generate / seo_auto_daily أُزيلت نهائياً ٢٠٢٦-٠٩-٠٥
-    # (قرار المالك — راجع التعليق أعلى الملف). لا توليد /c/ تلقائي بعد الآن.
+    # ⛔ لا توليد /c/ تلقائي — راجع التعليق أعلى الملف (أُزيل على مرحلتين، آخرها ٢٠٢٦-٠٩-٠٩).
 
     # لقطة أداء SEO اليومية — 4 صباحاً Riyadh (حلقة التغذية الراجعة من GSC)
     _scheduler.add_job(

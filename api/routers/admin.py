@@ -510,27 +510,22 @@ def trigger_directive(
     }
 
 
-# ─── Week 5-6: SEO generator triggers ──────────────────────────────────────
+# ─── SEO generator trigger — manual only ───────────────────────────────────
 @router.post("/seo-run")
 def seo_run(
-    batch: int = Query(default=3, ge=0, le=20),
+    batch: int = Query(default=3, ge=1, le=20),
     x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
 ):
     """
-    تشغيل يدوي لخط أنابيب الـ SEO:
-      1. تجميع الترند الداخلي (مجاني)
-      2. مطابقة الكلمات بالمتاجر وإنشاء وظائف (مجاني)
-      3. توليد batch صفحات عبر الـ LLM (يستهلك الميزانية — batch=0 يتخطّاه)
+    يولّد صفحات SEO للوظائف الموجودة **صراحةً** في قائمة الانتظار (التي صُفّت
+    عبر /admin/seo-seed-custom). لا يكتشف كلمات ولا يصفّ وظائف من نفسه —
+    التوليد التلقائي أُزيل بطلب المالك (٢٠٢٦-٠٩-٠٩).
     """
     _verify_admin(x_admin_secret)
-    from api.seo.trends import aggregate_internal_search
-    from api.seo.matcher import match_and_enqueue
     from api.seo.generator import process_pending_jobs
 
-    trends = aggregate_internal_search()
-    enqueued = match_and_enqueue()
-    gen = process_pending_jobs(batch=batch) if batch else {"processed": 0, "generated": 0, "failed": 0}
-    return {"trends_upserted": trends, "jobs_enqueued": enqueued, "generation": gen}
+    gen = process_pending_jobs(batch=batch)
+    return {"generation": gen}
 
 
 @router.post("/seo-snapshot")
@@ -551,16 +546,6 @@ def seo_gsc_detail(x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
     _verify_admin(x_admin_secret)
     from api.seo.gsc_detail import capture_gsc_detail
     return capture_gsc_detail()
-
-
-@router.post("/seo-auto-run")
-def seo_auto_run(x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
-    """تشغيل يدوي لدورة محرّك SEO الأوتوماتيكية الكاملة (نفس دورة 3 صباحاً):
-    أكثر المتاجر طلباً → ربط مناسبة → توليد → نشر مُبوّب. force=True يتجاوز
-    مفتاح SEO_AUTO_PUBLISH_ENABLED (التشغيل هنا قرار صريح من المالك)."""
-    _verify_admin(x_admin_secret)
-    from api.seo.auto_pipeline import run_daily_seo_cycle
-    return run_daily_seo_cycle(force=True)
 
 
 @router.post("/seo-publish/{page_id}")
@@ -1671,27 +1656,6 @@ def seo_retry_failed(
             )
             requeued = len(cur.fetchall())
     return {"requeued": requeued}
-
-
-@router.post("/seo-seed-long-tail")
-def seo_seed_long_tail(
-    max_stores: int = Query(default=30, ge=1, le=100,
-                             description="عدد المتاجر التي ننتقي منها"),
-    sort_by: str = Query(default="trending",
-                          description="trending | engagement | recent"),
-    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
-):
-    """
-    يولّد وظائف SEO بكلمات long-tail (منخفضة المنافسة) لأهمّ المتاجر.
-
-    مثال: 30 متجر × 10-12 نمط = 300-360 صفحة محتملة. الـ dedup يمنع التكرار،
-    فلو شغّلته مرّتين ما يضاعف العدد.
-
-    بعد التشغيل، استخدم /admin/seo-run?batch=50 لتوليد الصفحات فعلياً عبر LLM.
-    """
-    _verify_admin(x_admin_secret)
-    from api.seo.seed_long_tail import seed_long_tail_jobs
-    return seed_long_tail_jobs(max_stores=max_stores, sort_by=sort_by)
 
 
 @router.post("/seo-resubmit-url")

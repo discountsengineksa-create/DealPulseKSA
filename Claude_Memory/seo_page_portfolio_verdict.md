@@ -38,6 +38,28 @@ metadata:
 الرافعة الأعلى عائداً: رفع `/calendar` من م 6.3 إلى 2–3 ⇒ نقراته 34 → ~90 = **مضاعفة ترافيك الموقع
 من صفحة واحدة**. نُفِّذ أول جزء منها في [[calendar_conversion_hub]].
 
+## ٢٠٢٦-٠٩-٠٩ — التوليد التلقائي لصفحات `/c/` أُزيل بالكامل (قرار المالك)
+
+الاستنتاج التشغيلي لهذا الملف طُبِّق: **لا مصنع صفحات `/c/` بعد الآن.**
+- ٢٠٢٦-٠٩-٠٥: أُزيلت كرونات `seo_discovery/seo_generate/seo_auto_daily` من `scheduler.py`.
+- ٢٠٢٦-٠٩-٠٩: أُزيل الباقي — `api/seo/auto_pipeline.py` + `api/seo/seed_long_tail.py` +
+  `api/seo/trends.py` + `matcher.match_and_enqueue` + endpoint `/admin/seo-auto-run` +
+  `/admin/seo-seed-long-tail` + زرّ «تشغيل دورة المحرّك» بالداشبورد. `/admin/seo-run` قُلِّم
+  ليعالج قائمة الانتظار الصريحة فقط (لا اكتشاف كلمات، لا `match_and_enqueue`).
+- **الباقي (يدوي فقط):** `/admin/seo-seed-custom` (المالك يكتب موضوعاً) ← «توليد المسودّات»
+  ← مراجعة ← نشر. + زرّ توليد صفحة لكلمة واحدة في «محرك الفرص». + لقطة GSC اليومية.
+- **حُذفت من الريبو:** `migration_075/076/077` (صفحات هبوط FNP + الدخيل المكتوبة يدوياً) +
+  `scripts/queue_fnp_seo_pages.py`. **درس المالك:** «مستحيل أسوّي مايقريشن على كل مقال» —
+  صفحات `/c/` لا تُصنع بمايقريشن ولا بأنبوب تلقائي؛ المدوّنة (`blog.ts`) هي وعاء المحتوى.
+- **DB:** صفحات FNP الأربع (`seo_landing_pages` id 211-214، `master_id=82`) تُحذف من الإنتاج —
+  الهارنس يحجب كتابة DB فينفّذها المالك:
+  `psql "$DATABASE_URL" -c "DELETE FROM seo_index_submissions WHERE landing_page_id IN (SELECT id FROM seo_landing_pages WHERE master_id=82); DELETE FROM seo_landing_pages WHERE master_id=82;"`
+- بقية ~٢٠٠ صفحة `/c/` من جلسات سابقة **تُترك** (المالك: «صفر نقرة ≠ صفر قيمة» —
+  [[ai_citation_channel]]؛ وحائط ٩ لا حذف بلا طلب صريح).
+- الدخيل للعود (`id=83`): **بلا صفحات `/c/`** — إن أرادها المالك فمن `seo-seed-custom`.
+
+→ [[blog_fnp_cluster]] · [[blog_aldakheel_cluster]] · [[seo_white_hat_only]]
+
 **⚠️ عُدِّلت ٢٠٢٦-٠٨-١٥ — الرافعة أعلاه استُنفدت وهي لم تعد العنق.** فحص SERP حيّ من الرياض
 (المالك، متصفّح خفي) وضع `/calendar` **الأول عضوياً** على «متى تبدأ تخفيضات نهاية العام في
 السعودية» و**الثاني** على «مواعيد التخفيضات ٢٠٢٦» خلف وزارة التجارة. **م 6.3 و«م 9.7» متوسّطات
