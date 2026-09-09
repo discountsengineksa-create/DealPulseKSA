@@ -1,11 +1,11 @@
 ---
 name: blog_aldakheel_cluster
-description: عنقود الدخيل للعود ٢٠٢٦-٠٩-٠٨ — ١٦ مقالاً بادئة aldakheel- (web 15a3d29)؛ master.id=83 كود HH14 خصم ٥٪ إضافي بوستيني؛ migration_077 أربع صفحات /c/ معلّقة على تطبيق المالك؛ blog_bridge معلّق
+description: عنقود الدخيل للعود ٢٠٢٦-٠٩-٠٨ — ١٦ مقالاً بادئة aldakheel- (web 15a3d29)؛ master.id=83 كود HH14 خصم ٥٪ إضافي بوستيني؛ صفحات /c/ تُولَّد من داشبورد «محرّك صفحات SEO» لا بمايقريشن؛ blog_bridge معلّق
 metadata:
   node_type: memory
   type: project
   originSessionId: 301bf35c-b513-43cd-9fe8-fd10f9839577
-  modified: 2026-09-08
+  modified: 2026-09-09
 ---
 
 **٢٠٢٦-٠٩-٠٨** — المالك أرسل لقطات sa.aldakheeloud.com (صفحة إعلانات جوجل + الميغا-مينيو
@@ -66,14 +66,22 @@ hub `aldakheel-guide-saudi` · `aldakheel-coupon-hh14-saudi` · `aldakheel-mens-
 صفر رابط `/blog/` مكسور · كل مقال: إفصاح أفلييت + جدول + FAQ (`**سؤال**`) + ١٤–١٩ رابطاً داخلياً.
 عدّاد slug 1739→1755 (+16).
 
-## معلّق (يحتاج تطبيق/إذن المالك)
+## صفحات /c/ — عبر الداشبورد لا بمايقريشن ⚠️ درس
 
-- **`migration_077_aldakheel_landing_pages.sql`** (دُفع web؟ لا — في ريبو Discounts_Engine):
-  ٤ صفحات `/c/` عربية مكتوبة يدوياً لـ id=83 — `كود خصم الدخيل للعود` · `الدخيل للعود عطور` ·
-  `عطر كراون الدخيل للعود` · `الدخيل للعود`. status=`published` مباشرةً، body_html_hash يُضبط
-  بـ`sha256(convert_to(body_markdown,'UTF8'))` بعد الإدراج. صفحتا «كود خصم» و«الدخيل للعود»
-  يوحّدهما `canonical.ts` تلقائياً إلى `/store/` (مقصود، تجميع إشارات). المالك يطبّقه بأمر واحد.
-  البديل الآلي: الكرون يولّد `/c/` ما دام `seo_enabled=true` ([[blog_almajed_cluster]]).
+**التوليد التلقائي لـ/c/ أُزيل نهائياً ٢٠٢٦-٠٩-٠٥** (قرار المالك — `api/workers/scheduler.py:233`
+«auto /c/ generation REMOVED»). لذا **الماجد (id=80) عنده صفر صفحة /c/** رغم `seo_enabled=true`
+منذ ٤ أيام — ادّعاء [[blog_almajed_cluster]] «يولّدها كرون ٣ص» **بايت**.
+
+**الطريق الصحيح الآن:** داشبورد → «🔍 محرّك صفحات SEO» → «✨ توليد صفحات حول موضوع»
+(`/admin/seo-seed-custom`) → يولّد مسودّات عبر LLM → مراجعة (`/admin/seo-drafts`) → نشر
+(`/admin/seo-publish/{id}`) → إعادة فهرسة (`/admin/reindex-urls`). **صفر SQL، صفر مايقريشن.**
+CLI بديل: `python -m api.seo.seed_long_tail` ثم `process_pending_jobs`.
+
+**درس:** `migration_075/076` (FNP) و*`migration_077`* (الدخيل — **حُذف ٢٠٢٦-٠٩-٠٩**) كانا
+نمطاً مضادّاً — كتابة SQL يدوية للالتفاف على حجب الهارنس لـ`process_pending_jobs`. المالك
+رصده: «مستحيل أسوّي مايقريشن على كل مقال؟». **لا تكرّره** — وجّه المالك للداشبورد.
+صفحات id=83 لم تُولَّد بعد — تُترك للمالك عبر الفورم متى شاء.
+
 - **`blog_bridge --write`** (كتابة DB، حائط ١) — التجربة الجافّة: `1515→1530` صفّاً،
   `67→68` متجراً (الدخيل أُضيف). الأمر:
   `PYTHONUTF8=1 PYTHONIOENCODING=utf-8 python -m scripts.build_blog_bridge --write`.

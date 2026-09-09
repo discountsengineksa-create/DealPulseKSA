@@ -53,7 +53,9 @@ hub `almajed-guide-saudi` · `almajed-mabsous-guide-saudi` · `almajed-maamoul-g
 - **إعادة الفهرسة:** بعد نزول Vercel، ادفع الـ١٥ رابطاً + الهَبَّين المحدَّثين +
   `/store/الماجد للعود` إلى `api.dealpulseksa.com/api/v1/admin/reindex-urls` **بعد التأكّد أنها ٢٠٠**
   ([[seo_bulk_reindex_ops]] · قاعدة نزيه: لا تدفع رابطاً قبل ٢٠٠).
-- صفحات `/c/` للماجد: يولّدها كرون ٣ص ما دام `seo_enabled=true` (فُعّل في الفورم).
+- صفحات `/c/` للماجد: **صفر صفحة حتى ٢٠٢٦-٠٩-٠٩** — التوليد التلقائي أُزيل نهائياً
+  ٢٠٢٦-٠٩-٠٥ (`scheduler.py:233`). تُولَّد الآن من داشبورد «محرّك صفحات SEO → توليد
+  صفحات حول موضوع»، لا بكرون ولا بمايقريشن. → [[blog_aldakheel_cluster]]
 
 يكمّل [[blog_maxfashion_puma_clusters]] · [[voice_bible]] · [[content_guardrails_playbook]] ·
 [[feedback_verify_catalog_before_claim]] · [[boostiny_publisher_channel]] · [[search_intelligence_layer]].
