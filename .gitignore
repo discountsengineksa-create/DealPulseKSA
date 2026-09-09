@@ -52,3 +52,6 @@ BOOTEX.LOG
 
 # dashboard boot-test log (§4.9)
 dash_test.log
+
+# Local Claude Code settings — contains machine paths + a dead DB password; never track
+.claude/settings.local.json
