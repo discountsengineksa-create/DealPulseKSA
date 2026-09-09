@@ -76,11 +76,12 @@ hub `nice-home-guide-saudi` · `nice-coupon-e13-saudi` · `nice-dallaty-arabic-c
 صفر رابط `/blog/` مكسور · كل مقال: إفصاح أفلييت + جدول + FAQ (`**سؤال**`) + ١٣–١٧ رابطاً داخلياً.
 عدّاد slug 1755→1771 (+16).
 
-## معلّق (المالك — الهارنس يحجب كتابة DB)
+## الحالة
 
-- **`blog_bridge --write`** — التجربة الجافّة: `1530→1545` صفّاً، `68→69` متجراً (نايس أُضيف).
-  الأمر: `PYTHONUTF8=1 PYTHONIOENCODING=utf-8 python -m scripts.build_blog_bridge --write`.
-- **إعادة الفهرسة:** بعد نزول Vercel، ادفع الـ١٦ رابطاً + الهُبات الثلاث + `/store/نايس`
+- **`blog_bridge --write`** — **نُفِّذ ٢٠٢٦-٠٩-٠٩ (المالك بـPowerShell: `$env:PYTHONUTF8=1;
+  $env:PYTHONIOENCODING="utf-8"; python -m scripts.build_blog_bridge --write`)**. مؤكّد
+  حيّاً: `blog_bridge` = **1545 صفّاً**، `nice-` 16 صفّاً، `aldakheel-` 16 صفّاً.
+- **معلّق — إعادة الفهرسة:** بعد نزول Vercel، ادفع الـ١٦ رابطاً + الهُبات الثلاث + `/store/نايس`
   إلى `api.dealpulseksa.com/api/v1/admin/reindex-urls` **بعد ٢٠٠** ([[seo_bulk_reindex_ops]]).
 - **صفحات `/c/`:** لا تُصنع — الأنبوب أُزيل ٢٠٢٦-٠٩-٠٩ ([[seo_page_portfolio_verdict]]).
 

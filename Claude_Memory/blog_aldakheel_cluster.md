@@ -1,6 +1,6 @@
 ---
 name: blog_aldakheel_cluster
-description: عنقود الدخيل للعود ٢٠٢٦-٠٩-٠٨ — ١٦ مقالاً بادئة aldakheel- (web 15a3d29)؛ master.id=83 كود HH14 خصم ٥٪ إضافي بوستيني؛ صفحات /c/ تُولَّد من داشبورد «محرّك صفحات SEO» لا بمايقريشن؛ blog_bridge معلّق
+description: عنقود الدخيل للعود ٢٠٢٦-٠٩-٠٨ — ١٦ مقالاً بادئة aldakheel- (web 15a3d29)؛ master.id=83 كود HH14 خصم ٥٪ إضافي بوستيني؛ صفحات /c/ لا تُصنع؛ blog_bridge نُفِّذ ٢٠٢٦-٠٩-٠٩ (1545 صفّاً)
 metadata:
   node_type: memory
   type: project
@@ -76,10 +76,8 @@ hub `aldakheel-guide-saudi` · `aldakheel-coupon-hh14-saudi` · `aldakheel-mens-
 موضوع» (`/admin/seo-seed-custom`، المالك يكتب موضوعاً) → «توليد المسودّات» → مراجعة → نشر.
 **صفر SQL، صفر مايقريشن، صفر كرون.** صفحات id=83 **لم تُصنع** — تُترك للمالك متى شاء.
 
-- **`blog_bridge --write`** (كتابة DB، حائط ١) — التجربة الجافّة: `1515→1530` صفّاً،
-  `67→68` متجراً (الدخيل أُضيف). الأمر:
-  `PYTHONUTF8=1 PYTHONIOENCODING=utf-8 python -m scripts.build_blog_bridge --write`.
-  **لم يُنفَّذ — مصنّف الهارنس يحجبه، شغّله المالك.** → [[search_intelligence_layer]]
+- **`blog_bridge --write`** — **نُفِّذ ٢٠٢٦-٠٩-٠٩ (المالك)** ضمن إعادة بناء واحدة مع نايس:
+  `blog_bridge` = **1545 صفّاً / 69 متجراً**، `aldakheel-` 16 صفّاً. → [[search_intelligence_layer]]
 - **إعادة الفهرسة:** بعد نزول Vercel، ادفع الـ١٦ رابطاً + الهَبَّين المحدَّثين +
   `/store/الدخيل للعود` إلى `api.dealpulseksa.com/api/v1/admin/reindex-urls` **بعد ٢٠٠**
   ([[seo_bulk_reindex_ops]] · قاعدة نزيه).
