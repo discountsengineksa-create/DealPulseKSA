@@ -1,6 +1,6 @@
 ---
 name: blog_nice_cluster
-description: عنقود نايس (NICE هوم-وير) ٢٠٢٦-٠٩-٠٩ — ١٦ مقالاً بادئة nice- (web 8003e79)؛ master.id=84 كود E13 خصم ١٠٪ يشمل المخفّض بوستيني؛ ⚠️ «نايس» ≠ «نايس ون» (تلوّث SERP)؛ صفحات /c/ لا تُصنع (الأنبوب أُزيل)
+description: عنقود نايس (NICE هوم-وير) ٢٠٢٦-٠٩-٠٩ — ٢٣ مقالاً بادئة nice- (web 8003e79 + 6f21842)؛ master.id=84 كود E13 خصم ١٠٪ يشمل المخفّض بوستيني؛ ⚠️ «نايس» ≠ «نايس ون» (تلوّث SERP)؛ صفحات /c/ لا تُصنع (الأنبوب أُزيل)
 metadata:
   node_type: memory
   type: project
@@ -45,16 +45,28 @@ juicers-blenders/kettles/sandwich-maker/specialty-appliances · `travel/` (صغ�
 مجموعات تصميم بأسماء عربية: najd/qurtuba/marjan/pearl/luster/kairoun/naseej/ramas/roshn/
 taibah/yaqut · علامة `alberto` (قدور/أجهزة). صفر سعر مخترع، صفر منتج مخترع.
 
-## العنقود — ١٦ مقالاً `nice-` (web `8003e79`، فئة «المنزل» = slug `home`)
+## العنقود — ٢٣ مقالاً `nice-` (فئة «المنزل» = slug `home`)
 
-hub `nice-home-guide-saudi` · `nice-coupon-e13-saudi` · `nice-dallaty-arabic-coffee-guide-saudi` ·
-`nice-arabic-tea-coffee-sets-guide-saudi` · `nice-vacuum-flasks-thermos-guide-saudi` ·
-`nice-serving-hospitality-guide-saudi` · `nice-tableware-dinner-sets-guide-saudi` ·
-`nice-cookware-guide-saudi` · `nice-kitchen-tools-storage-guide-saudi` ·
-`nice-small-appliances-guide-saudi` · `nice-bedding-comforters-guide-saudi` ·
-`nice-bathroom-essentials-guide-saudi` · `nice-decor-furniture-guide-saudi` ·
-`nice-rugs-carpets-guide-saudi` · `nice-design-collections-guide-saudi` ·
-`nice-national-day-offers-saudi`.
+**١٦ الأولى (web `8003e79`):** hub `nice-home-guide-saudi` · `nice-coupon-e13-saudi` ·
+`nice-dallaty-arabic-coffee-guide-saudi` · `nice-arabic-tea-coffee-sets-guide-saudi` ·
+`nice-vacuum-flasks-thermos-guide-saudi` · `nice-serving-hospitality-guide-saudi` ·
+`nice-tableware-dinner-sets-guide-saudi` · `nice-cookware-guide-saudi` ·
+`nice-kitchen-tools-storage-guide-saudi` · `nice-small-appliances-guide-saudi` ·
+`nice-bedding-comforters-guide-saudi` · `nice-bathroom-essentials-guide-saudi` ·
+`nice-decor-furniture-guide-saudi` · `nice-rugs-carpets-guide-saudi` ·
+`nice-design-collections-guide-saudi` · `nice-national-day-offers-saudi`.
+
+**٧ إضافية (web `6f21842`، طلب المالك «زيد» + «كل شي مكتوب موجود بالموقع»):**
+`nice-ramadan-hospitality-guide-saudi` (فوانيس/مباخر/عربات تقديم/طاولات إفطار — verified
+`ramadan-home-refresh-2026/*` + `decorate-your-iftaar-table-with-love/*`) ·
+`nice-air-fryer-guide-saudi` (`fryers-grills/` + ألبرتو) · `nice-bakeware-guide-saudi`
+(`kitchen/bakeware` + `alberto-bakeware`) · `nice-outdoor-grilling-guide-saudi`
+(`outdoor-furniture/` + `decor-furniture/outdoor-furniture-accessories/bbq-grills/` + gazebos) ·
+`nice-gift-sets-occasions-guide-saudi` (**لا قسم «مجموعات هدايا» في نايس** — أُعيد التأطير
+كنصائح إهداء بمنتجات محقَّقة + خطّ `dallaty-host-occasions`) · `nice-drinkware-tablescape-guide-saudi`
+(`create-tablescape/flatware` + `set-the-festival-vibes/dispensers` + مفروشات الطاولة) ·
+`nice-candles-lanterns-oud-burners-guide-saudi` (`candle-holders`/`lanterns`/`oud-burners`
++ نافبار «الشموع و حوامل الشموع» في لقطة المالك).
 
 **الزاوية:** خاصّ بالمتجر (ماذا يبيع نايس، دلتي، مجموعات التصميم، كود E13) **لا تعليم
 فئات عام** — لأن `tools-home-*` (كوكوير/سكاكين/منظّمات/أجهزة صغيرة/سجاد) و`home-furniture-*`
@@ -74,13 +86,20 @@ hub `nice-home-guide-saudi` · `nice-coupon-e13-saudi` · `nice-dallaty-arabic-c
 `npx esbuild lib/blog.ts --bundle` **EXIT=0** · `tsc --noEmit` على blog.ts **EXIT=0** ·
 صفر ```` ``` ````/`${` في كتلة nice · **٦٥ رابط `/store/` كلها `نايس` (`%D9%86%D8%A7%D9%8A%D8%B3`)** ·
 صفر رابط `/blog/` مكسور · كل مقال: إفصاح أفلييت + جدول + FAQ (`**سؤال**`) + ١٣–١٧ رابطاً داخلياً.
-عدّاد slug 1755→1771 (+16).
+عدّاد slug 1755→1771 (+16) ثم →1778 (+7).
+
+**الدفعة الثانية (طلب المالك «كل شي مكتوب موجود بالموقع»):** كل ادّعاء قسم محقَّق ضد
+`nice_cat.xml` (٨٨٢ فئة). ما لم يُحقَّق حُذف أو خُفِّف: «قسم مجموعات الهدايا» (غير موجود
+→ أُعيد التأطير)، «خطّ ألبرتو للقلايات» (→ «أجهزة بعلامة ألبرتو»)، تعداد أنواع الشوايات/
+المباخر/الفوانيس (→ وصف عام). النصائح (مواد الطهي، اختيار المقاس) مؤطَّرة كإرشاد شراء
+عام لا كمخزون نايس.
 
 ## الحالة
 
-- **`blog_bridge --write`** — **نُفِّذ ٢٠٢٦-٠٩-٠٩ (المالك بـPowerShell: `$env:PYTHONUTF8=1;
-  $env:PYTHONIOENCODING="utf-8"; python -m scripts.build_blog_bridge --write`)**. مؤكّد
-  حيّاً: `blog_bridge` = **1545 صفّاً**، `nice-` 16 صفّاً، `aldakheel-` 16 صفّاً.
+- **`blog_bridge --write`** — نُفِّذ أوّلاً ٢٠٢٦-٠٩-٠٩ (1545 صفّاً). **بعد الدفعة الثانية
+  يحتاج إعادة تشغيل** — التجربة الجافّة: **1552 صفّاً** (+7). الأمر بـPowerShell:
+  `$env:PYTHONUTF8=1; $env:PYTHONIOENCODING="utf-8"; python -m scripts.build_blog_bridge --write`
+  (الهارنس يحجبه، يشغّله المالك).
 - **معلّق — إعادة الفهرسة:** بعد نزول Vercel، ادفع الـ١٦ رابطاً + الهُبات الثلاث + `/store/نايس`
   إلى `api.dealpulseksa.com/api/v1/admin/reindex-urls` **بعد ٢٠٠** ([[seo_bulk_reindex_ops]]).
 - **صفحات `/c/`:** لا تُصنع — الأنبوب أُزيل ٢٠٢٦-٠٩-٠٩ ([[seo_page_portfolio_verdict]]).
