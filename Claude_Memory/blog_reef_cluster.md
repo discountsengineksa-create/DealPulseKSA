@@ -10,7 +10,7 @@ metadata:
 
 ## المتجر — ريف (Reef)
 
-- `master.id=90` · `store_id='ريف'` · `name_en='Reef'` · `public_coupon='B71'` · **خصم 5%** (`discount_value='5%'`) · `my_coupon='5%'` (خانة كود التتبّع — صدفةً تساوي الخصم) · `affiliate_link=reefperfumes.com` · `store_tags={عطور, معطرات جو, شعر, هدايا}` · `source_platform='بوستيني'` · `cloaked_slug='be36d4cfe1'` · `seo_enabled=true`.
+- `master.id=90` · `store_id='ريف'` · `name_en='Reef'` · `public_coupon='B71'` · **خصم 5%** (`discount_value='5%'`) · `my_coupon='5%'` (نسبة العمولة — عُرف بوستيني، صدفةً تساوي الخصم؛ حقل داشبورد فقط، ليس بايتاً) · `affiliate_link=reefperfumes.com` · `store_tags={عطور, معطرات جو, شعر, هدايا}` · `source_platform='بوستيني'` · `cloaked_slug='be36d4cfe1'` · `seo_enabled=true`.
 - **`store_bio` مكتوب مسبقاً** (علامة عطور سعودية، عود نادر + زهور + توابل؛ عطور + جسم/شعر + ريف بيوتي + عطور منزل + بطاقات إهداء؛ شحن مجاني فوق 299 ريال، توصيل 3 ساعات). `extra_offer='شحن مجاني للطلبات فوق 299 ريال'`.
 - `/store/ريف` → 200 («كود خصم ريف»). كان مربوطاً من صفر مقال.
 - التحقّق من الكتالوج: `reefperfumes.com` (بوستيcrib) — العنقود بُني قبل هذه الجلسة، لم يُعَد فحص الكتالوج الحيّ.
