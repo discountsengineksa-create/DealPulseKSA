@@ -160,8 +160,8 @@
 
 > [عزل تام إلزامي](feedback_maqalat_isolation.md): ريبو وحساب Cloudflare منفصلان؛ لا ذكر dealpulse/نبض الصفقات بريبو مقالات، ولا العكس.
 
-- [🆕 نظرة عامة](project_maqalat.md) — مدوّنة مرجعية عربي/إنجليزي على Cloudflare؛ هدف Google AdSense
-- [الميثاق التحريري](project_maqalat_editorial_charter.md) + [دليل الكتابة](project_maqalat_writing_playbook.md) — مصادر موثوقة، صفر فبركة/حشو/لَفَت AI، E-E-A-T ٢٠٢٦، AdSense-safe، YMYL صارم
+- [🆕 نظرة عامة](project_maqalat.md) — مدوّنة مرجعية عربي/إنجليزي على Cloudflare؛ هدف Google AdSense؛ ⚠️ فيه قسم إلزامي يحيل لضبط التوكنز
+- [الميثاق التحريري](project_maqalat_editorial_charter.md) + [دليل الكتابة](project_maqalat_writing_playbook.md) — صفر فبركة/حشو؛ ق١٠ جديد: تقنية العيّنة المشروحة من voice_bible
 - [سياسات AdSense الرسمية ٢٠٢٦](project_maqalat_adsense_policies.md) — ضوابط كتابة إلزامية إضافية؛ خرقها = حظر الحساب
 - [عدّة السكلز](project_maqalat_toolkit.md) — سيو عربي/إنجليزي + بحث كلمات + تحليل منافسين
 - [مسح ١٣٠ منافساً](project_maqalat_competitor_landscape.md) — سعودية+خليج+مصر+شام+عالم+شرق آسيا
