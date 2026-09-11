@@ -1,9 +1,23 @@
 ---
 name: Minimize Token Usage — Hard Constraint
-description: User demands aggressive token frugality without dropping quality; compare unfavorably to another Claude they use that does more with far fewer tokens
+description: User demands aggressive token frugality without dropping quality; the Maqalat-session Claude is the named negative benchmark — bad design/code/article quality AND heavy token burn even in normal mode
 type: feedback
 originSessionId: 333dbc2f-09bb-412a-acbc-6ee2c8631bb2
 ---
+
+**٢٠٢٦-٠٩-١١ — تحديد الطرف الآخر:** المالك سمّى المصدر صراحةً — الجلسة التي تعمل على مشروع
+مقالات (Maqalat.org، ريبو مستقل معزول — [[feedback_maqalat_isolation]]) هي «الكلود الآخر»
+المشتكى منه. الحكم لم يعد توكنز فقط: **تصميم ضعيف + برمجة ضعيفة + كتابة مقالات ضعيفة، مع
+استهلاك توكن خيالي حتى في الوضع العادي (مليان مشاكل).** أي هذه الجلسة (Discounts_Engine) هي
+المرجع المقارَن به إيجاباً — لا تكرّر نفس الأنماط الأربعة هناك.
+
+**Why:** بما إن الذاكرة مشتركة عبر junction ([[memory_sync_junction]])، فارق الجودة بين
+الجلستين على نفس الحساب مقيس ومباشر عند المالك — لا افتراض، بل مقارنة يومية حقيقية.
+**How to apply:** حافظ على نفس الانضباط (تحقّق حيّ بالأوامر، صفر فبركة، سؤال واحد عند العجز)
+في كل مهمة كتابة/تصميم/برمجة هنا، لا التوكنز فقط — الشكوى الآن أوسع من العدّاد.
+
+---
+
 المستخدم يشتكي أن استهلاكي للتوكن مرتفع مقارنةً بـ Claude آخر يستخدمه (يعمل بدقة متناهية بربع الاستهلاك). القاعدة الصارمة:
 
 **قلّل التوكن بشدّة دون أي تنازل عن الجودة.**

@@ -154,7 +154,7 @@
 - [Brand Face for Flow Reels](brand_face_reels.md) — بنت خضراء سعودية؛ نطق «نبض الصفقات»
 - [Social Listening Deferred](social_listening_deferred.md) — الرصد الاجتماعي مؤجَّل (مصادر ميتة)
 - [Local TTS — XTTS v2 (REMOVED)](tts_engine_xtts_v2.md) — بُني وحُذف؛ عربي محلي ضعيف
-- [Minimize Token Usage](feedback_minimize_token_usage.md) — المالك يطلب اقتصاداً صارماً بالتوكنز بلا نزول بالجودة؛ يقارن بكلود آخر أقلّ استهلاكاً
+- [Minimize Token Usage](feedback_minimize_token_usage.md) — اقتصاد صارم بالتوكنز؛ المرجع السلبي = جلسة Maqalat (تصميم/كود/كتابة ضعاف + توكن خيالي)
 
 ## ٩) مشروع مقالات (Maqalat.org) — مستقل تماماً عن نبض الصفقات
 
