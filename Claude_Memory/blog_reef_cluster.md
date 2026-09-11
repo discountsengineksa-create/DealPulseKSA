@@ -27,7 +27,7 @@ de-orphan: بنود ريف مُدرجة داخل ~9 هَبّات عطور/عود
 
 ## معلّق
 
-- **`blog_bridge`** — لم يُعَد بناؤه (كتابة DB). ريف + 18 مقالاً غير مربوطين في البحث الذكي بعد.
+- **`blog_bridge`** — تمّ فعلياً ٢٠٢٦-٠٩-١١ (بعد إصلاح خلل ترميز في السكربت — [[feedback_harness_blocks_self_permission]]). العدّ الحيّ: ريف ١٨ مؤكّدة ضمن ١٧٢٤ صفّاً إجمالاً.
 - لا ملف ذاكرة كان موجوداً قبل هذه الجلسة — أُنشئ الآن.
 
 يكمّل [[blog_beluar_cluster]] · [[blog_rasees_cluster]] · [[blog_beautysecrets_cluster]] · [[content_guardrails_playbook]] · [[voice_bible]] · [[feedback_always_push]].

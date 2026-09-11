@@ -40,7 +40,10 @@ pillar `mumzworld-guide-saudi` · `mumzworld-pregnancy-essentials-guide-saudi` �
 
 ## معلّق
 
-- **`blog_bridge --write`** — لم يُشغَّل بعد لهذا العنقود (كتابة DB — الآن مسموحة عبر `permissions.allow` في `.claude/settings.json` بعد [[feedback_harness_blocks_self_permission]]، يمكن تشغيلها التالي).
 - تحقّق `/store/ممزورلد` 200 لم يُنفَّذ صراحة (نمط راسخ بلا فشل سابق).
+
+## تمّ لاحقاً (نفس الجلسة)
+
+`blog_bridge` أُعيد بناؤه فعلياً — **١٧٢٤ صفّاً / ٧٦ متجراً** (ممزورلد ٢٠ + النهدي ٢٠ + ريف ١٨ كلها مؤكّدة بالعدّ الحيّ). كشف هذا خللاً حقيقياً في السكربت أُصلح — انظر [[feedback_harness_blocks_self_permission]] (قسم «تصحيح ٢٠٢٦-٠٩-١١»).
 
 يكمّل [[blog_nahdi_cluster]] (نفس نمط YMYL بالضبط) · [[blog_reef_cluster]] · [[blog_nazih_cluster]] (حدود عناقيد الشركاء) · [[content_guardrails_playbook]] · [[voice_bible]] · [[blog_internal_link_deorphan]].
