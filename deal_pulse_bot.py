@@ -1054,7 +1054,7 @@ def _load_and_show_codes(user_id, lang):
         cur  = conn.cursor(cursor_factory=extras.DictCursor)
         cur.execute("""
             SELECT * FROM master
-            WHERE (last_time IS NULL OR last_time >= CURRENT_DATE)
+            WHERE (last_time IS NULL OR last_time > CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
               AND (publish_channels IS NULL OR publish_channels ILIKE '%bot%')
             ORDER BY
@@ -1093,7 +1093,7 @@ def _load_and_show_featured(user_id, lang):
             SELECT m.*, fc.fav_count
             FROM master m
             JOIN fav_counts fc ON fc.store_id = m.store_id
-            WHERE (m.last_time IS NULL OR m.last_time >= CURRENT_DATE)
+            WHERE (m.last_time IS NULL OR m.last_time > CURRENT_DATE)
               AND NOT COALESCE(m.is_suspended, FALSE)
               AND (m.publish_channels IS NULL OR m.publish_channels ILIKE '%bot%')
             ORDER BY fc.fav_count DESC, m.store_id ASC
@@ -1125,7 +1125,7 @@ def _fetch_cats_from_db(lang: str) -> list:
                          trim(both '{{}}' from COALESCE({tags_expr}, '')), ','
                      )) AS tg
                 WHERE trim(tg) <> ''
-                  AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+                  AND (last_time IS NULL OR last_time > CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
             )
             SELECT t.tag
@@ -1179,7 +1179,7 @@ def _load_tag_stores(user_id, lang, tag):
                 SELECT lower(trim(tg))
                 FROM unnest(string_to_array(trim(both '{{}}' from COALESCE({tags_expr}, '')), ',')) AS tg
             )
-            AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+            AND (last_time IS NULL OR last_time > CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
               AND (publish_channels IS NULL OR publish_channels ILIKE '%%bot%%')
             ORDER BY
@@ -1255,7 +1255,7 @@ def _db_search(search_term: str) -> list:
         like_no_ws = f"%{''.join(search_term.split())}%"
         cur.execute("""
             SELECT * FROM master
-            WHERE (last_time IS NULL OR last_time >= CURRENT_DATE)
+            WHERE (last_time IS NULL OR last_time > CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
               -- قناة البوت فقط (NULL = كل القنوات). يطابق فلتر الـ API channel=bot.
               AND (publish_channels IS NULL OR publish_channels ILIKE '%%bot%%')
@@ -1289,7 +1289,7 @@ def _db_search_website_exclusive(search_term: str) -> dict | None:
         like_no_ws = f"%{''.join(search_term.split())}%"
         cur.execute("""
             SELECT store_id, name_en FROM master
-            WHERE (last_time IS NULL OR last_time >= CURRENT_DATE)
+            WHERE (last_time IS NULL OR last_time > CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
               -- منشور على الموقع، وغير منشور على البوت (حصري للموقع)
               AND publish_channels IS NOT NULL
@@ -1441,37 +1441,45 @@ def _process_request(message):
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-def _load_arabic_font(size: int) -> ImageFont.FreeTypeFont:
-    candidates = [
-        # خط Cairo المرفق في المستودع — الأولوية
-        os.path.join(_BASE_DIR, "Cairo-Bold.ttf"),
-        os.path.join(_BASE_DIR, "Cairo-Bold.ttf.ttf"),  # توافق مع الاسم القديم لو لم يُعَد التسمية
-        os.path.join(_BASE_DIR, "Cairo-Regular.ttf"),
-        # احتياطي على Railway / Linux (Nixpacks يثبّت dejavu افتراضياً)
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
-        # احتياطي على Windows (التطوير المحلي فقط)
-        r"C:\Windows\Fonts\arial.ttf",
-    ]
-    for path in candidates:
-        if os.path.exists(path):
-            return ImageFont.truetype(path, size)
-    return ImageFont.load_default()
+def _load_arabic_font(size: int, weight: int = 700) -> ImageFont.FreeTypeFont:
+    """خطّ الهوية — IBM Plex Sans Arabic عبر `brand.py` (مصدر واحد للحقيقة).
+
+    ⚠️ **Cairo أُسقط من القائمة نهائياً، لا أُخِّر.** نسخة `Cairo-Bold.ttf` في
+    هذا المستودع لاتينية فقط: قِيس ٢٠٢٦-٠٨-١٧ أنها ترسم **صفر بكسل** لجملة
+    «أهلاً بك في نبض الصفقات» بينما تُرجع عرضاً غير صفري (311px) — أي تفشل
+    صامتة بلا مربّعات مكسورة تنبّهك. إبقاؤها بديلاً يعني أن العطب قد يعود
+    بلا إنذار لو غاب ملف قبله. القياس نفسه: Plex-700 = 12,127 بكسلاً داكناً.
+    """
+    try:
+        import brand
+        return brand.font(size, weight)
+    except Exception:
+        # شبكة أمان: لو تعذّر استيراد brand لأي سبب، لا نسقط على خطّ يفشل صامتاً.
+        for path in (
+            os.path.join(_BASE_DIR, "assets", "fonts", "IBMPlexSansArabic-700.ttf"),
+            os.path.join(_BASE_DIR, "NotoSansArabic-Bold.ttf"),
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+        ):
+            if os.path.exists(path):
+                return ImageFont.truetype(path, size)
+        return ImageFont.load_default()
 
 
 def generate_welcome_image(user_name: str) -> BytesIO:
-    """يبني صورة ترحيب: لوقو نبض الصفقات الجديد + اسم المستخدم تحته.
-    اللوقو 1424×752 (logo.png) — نضيف 220px أسفل للترحيب بخلفية كريم متناسقة
-    مع هوية اللوقو، فلا قطع ولا تشوّه."""
+    """يبني صورة ترحيب: لوقو نبض الصفقات + اسم المستخدم تحته.
+    المقاس يُقرأ من الملف نفسه (لا يُفترض) — لوقو التذكرة 1344×866 بخلفية بيضاء
+    منذ ٢٠٢٦-٠٨-١٢، وقبله كان 1456×720 بخلفية كريم. نضيف شريطاً أسفله بنفس لون
+    خلفية اللوقو فلا يظهر خطّ فاصل."""
     img_path = os.path.join(_BASE_DIR, "logo.png")
     logo = Image.open(img_path).convert("RGBA")
     W, H_logo = logo.size
     BAND_H = 240
     H = H_logo + BAND_H
 
-    # خلفية كريم تطابق خلفية اللوقو الأصلية (FAF9F6 تقريباً).
-    canvas = Image.new("RGB", (W, H), (250, 249, 246))
+    # لون الشريط يُلتقط من ركن اللوقو نفسه، فيتغيّر معه بدل أن يُثبَّت يدوياً.
+    band_rgb = logo.convert("RGB").getpixel((2, 2))
+    canvas = Image.new("RGB", (W, H), band_rgb)
     canvas.paste(logo, (0, 0), logo)
 
     draw = ImageDraw.Draw(canvas)
@@ -1484,6 +1492,15 @@ def generate_welcome_image(user_name: str) -> BytesIO:
     greet_rshp = get_display(arabic_reshaper.reshape(greeting))
     name_rshp  = get_display(arabic_reshaper.reshape(user_name))
 
+    # ألوان الهوية: كانت #475569 و#0F172A — كلاهما من تدرّج Tailwind الافتراضي
+    # لا من اللوحة المغلقة. الآن حبر العلامة #141C31 للاسم (16.93:1 على أبيض)
+    # وink-500 ‏#55637E لسطر الترحيب (6.05:1). المصدر: brand.py.
+    try:
+        import brand
+        _c_greet, _c_name = brand.hex_of(brand.INK_500), brand.hex_of(brand.INK_900)
+    except Exception:
+        _c_greet, _c_name = "#55637E", "#141C31"
+
     g_bbox = draw.textbbox((0, 0), greet_rshp, font=f_greet)
     g_w = g_bbox[2] - g_bbox[0]
     n_bbox = draw.textbbox((0, 0), name_rshp, font=f_name)
@@ -1491,13 +1508,13 @@ def generate_welcome_image(user_name: str) -> BytesIO:
 
     gx = (W - g_w) // 2
     gy = H_logo + 35
-    draw.text((gx, gy), greet_rshp, font=f_greet, fill="#475569")
+    draw.text((gx, gy), greet_rshp, font=f_greet, fill=_c_greet)
 
     nx = (W - n_w) // 2
     ny = H_logo + 105
-    # لون داكن (Slate-900) يطابق نص اللوقو + stroke خفيف للوضوح على الكريم.
+    # حبر العلامة + stroke خفيف للوضوح على أرضية اللوقو.
     draw.text((nx, ny), name_rshp, font=f_name,
-              fill="#0F172A", stroke_width=1, stroke_fill="#0F172A")
+              fill=_c_name, stroke_width=1, stroke_fill=_c_name)
 
     buf = BytesIO()
     canvas.save(buf, format="JPEG", quality=95)
@@ -1841,7 +1858,7 @@ def handle_link_click(call):
         cur.execute("""
             SELECT affiliate_link, cloaked_slug FROM master
             WHERE store_id = %s
-              AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+              AND (last_time IS NULL OR last_time > CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
             LIMIT 1
         """, (store_id,))
@@ -1904,7 +1921,7 @@ def handle_coupon_copy(call):
             SELECT public_coupon, discount_value, extra_offer, extra_offer_en
             FROM master
             WHERE store_id = %s
-              AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+              AND (last_time IS NULL OR last_time > CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
             LIMIT 1
         """, (store_id,))
@@ -2196,7 +2213,7 @@ def _load_favorites(user_id, lang):
             WHERE m.store_id IN (
                 SELECT store_id FROM user_favorites WHERE telegram_id = %s
             )
-              AND (m.last_time IS NULL OR m.last_time >= CURRENT_DATE)
+              AND (m.last_time IS NULL OR m.last_time > CURRENT_DATE)
               AND NOT COALESCE(m.is_suspended, FALSE)
               AND (m.publish_channels IS NULL OR m.publish_channels ILIKE '%%bot%%')
             ORDER BY (

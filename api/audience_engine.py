@@ -573,8 +573,8 @@ def _action_filter_clauses(rule: dict, channel: str) -> tuple[list[str], list]:
             raise ValueError(f"store_status غير مدعوم: {store_status!r}")
         status_sql = {
             "active":   "m_ss.last_time > CURRENT_DATE + 3",
-            "expiring": "m_ss.last_time BETWEEN CURRENT_DATE AND CURRENT_DATE + 3",
-            "expired":  "m_ss.last_time < CURRENT_DATE",
+            "expiring": "m_ss.last_time BETWEEN CURRENT_DATE + 1 AND CURRENT_DATE + 3",
+            "expired":  "m_ss.last_time <= CURRENT_DATE",
         }[store_status]
         clauses.append(
             f"EXISTS (SELECT 1 FROM master m_ss WHERE m_ss.store_id = al.store_id "

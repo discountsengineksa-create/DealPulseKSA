@@ -1323,7 +1323,7 @@ def _sa_trend_store_ids() -> set:
         cur.execute("""
             SELECT DISTINCT store_id FROM master
              WHERE store_id IS NOT NULL AND TRIM(store_id) <> ''
-               AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+               AND (last_time IS NULL OR last_time > CURRENT_DATE)
         """)
         active = {r[0] for r in cur.fetchall()}
 
@@ -1878,7 +1878,7 @@ st.sidebar.radio(
 _MAIN_PAGES = [
 "إدخال بيانات الماستر", "الاستعلام والتعديل", "🎟️ أكواد إضافية", "جدول الكوبونات",
 "📦 أرشيف المنتهية",
-"جدول الأقسام", "البحث عن كود", "طلبات الأكواد", "بيانات المستخدمين",
+"جدول الأقسام", "🗓️ مواسم المتاجر", "البحث عن كود", "طلبات الأكواد", "بيانات المستخدمين",
 "مستخدمو الموقع",
 "🌐 إدارة الموقع",
 ]
@@ -1888,10 +1888,13 @@ _ANALYSIS_PAGES = [
 "تحليل المتاجر", "تحليل الأقسام",
 "تحليل طلبات الأكواد", "تحليل المستخدمين",
 "👣 زوّار الموقع",
+"💰 إسناد الإيراد",
+"🎯 إدارة الحملات",
 ]
 _OTHER_PAGES = [
 "📣 بلاغات الأكواد",  # ← Migration 029: بلاغات لا يعمل + إدارة المتاجر المسحوبة
 "🎯 بناء الشرائح", "مركز الإشعارات", "لوحة القيادة", "مركز الدعم",
+"🔔 تذكيرات المواسم",
 "استوديو المحتوى", "🎨 الثيمات",
 "محرّك SEO", "📈 أداء SEO", "📊 تقرير البحث", "🔎 الفهرسة", "📤 الصفحات المنشورة", "🎯 محرك الفرص", "سجل التدقيق",
 "🛰️ متابعة المنصة",
@@ -2129,6 +2132,17 @@ if page == "إدخال بيانات الماستر":
             key="m_source_platform",
         )
 
+        # الصف 5.6: حساب إنستقرام للبراند — اختياري تماماً (migration_068).
+        # فارغ = ينشر بلا منشن. لا نخمّن الحساب أبداً: منشن خاطئ يسم شخصاً
+        # لا علاقة له بالبراند.
+        ig_handle = st.text_input(
+            "📸 حساب إنستقرام للبراند (اختياري)",
+            placeholder="aigner  —  بلا @، انسخه من بروفايل البراند",
+            help="لو عبّيته، منشور المتجر على إنستقرام يذكر البراند (@حساب) "
+                 "فيصله إشعار بأننا أعلنّا له. اتركه فارغاً ولا شيء يتغيّر.",
+            key="m_instagram_handle",
+        )
+
         # الصف 5.6: قنوات النشر — استهداف انتقائي يحترم شروط الأفلييت.
         # المتجر يظهر فقط في القنوات المُعلَّمة. (البوت = البوت + الميني-ويب).
         st.divider()
@@ -2276,8 +2290,8 @@ if page == "إدخال بيانات الماستر":
                                 my_coupon, first_time, last_time,
                                 total_coupon_copies, total_link_clicks, is_trending_bool,
                                 logo_url, is_promoted, source_platform, social_poster_url,
-                                publish_channels, seo_enabled)
-                        VALUES (%s,%s,%s,%s, %s,%s,%s,%s, %s, %s,%s,%s,%s, %s,%s,%s, 0,0,FALSE, %s, %s, %s, %s, %s, %s)
+                                publish_channels, seo_enabled, instagram_handle)
+                        VALUES (%s,%s,%s,%s, %s,%s,%s,%s, %s, %s,%s,%s,%s, %s,%s,%s, 0,0,FALSE, %s, %s, %s, %s, %s, %s, %s)
                         RETURNING id
                     """, (
                         store_id, name_en, aff_link, pub_coupon,
@@ -2291,6 +2305,7 @@ if page == "إدخال بيانات الماستر":
                         final_poster_url or None,
                         _channels_val,
                         bool(_seo_enabled),
+                        (ig_handle or '').strip().lstrip('@') or None,
                     ))
                     new_master_id = cur.fetchone()[0]
                     # Week 4 — توليد cloaked_slug للمتجر الجديد (نفس تعبير backfill في migration_012)
@@ -2373,13 +2388,18 @@ if page == "الاستعلام والتعديل":
                     st.divider()
 
                     # الصف 5: الأهمية + التواريخ + عمولتي
-                    # priority_score = SMALLINT بعد migration_065: 0/3/6/10.
-                    # نعرض التسميات بالعربي ونحفظ الرقم في القاعدة.
+                    # priority_score_int = SMALLINT بعد migration_065: 0/3/6/10.
+                    # ⚠️ res جاي من SELECT * فيحوي العمود القديم النصّي priority_score
+                    # ('عادي'/'مهم') المحفوظ حتى migration_066 — نقرأ الرقمي فقط.
                     _PRIO_INT_TO_STR = {0: "عادي", 3: "مهم", 6: "عاجل", 10: "عاجل جداً"}
                     _PRIO_STR_TO_INT = {v: k for k, v in _PRIO_INT_TO_STR.items()}
                     r5c1, r5c2, r5c3, r5c4 = st.columns(4)
                     p_list = list(_PRIO_INT_TO_STR.values())
-                    _cur_prio_str = _PRIO_INT_TO_STR.get(int(res.get('priority_score') or 0), "عادي")
+                    try:
+                        _cur_prio_int = int(res.get('priority_score_int') or 0)
+                    except (TypeError, ValueError):
+                        _cur_prio_int = 0
+                    _cur_prio_str = _PRIO_INT_TO_STR.get(_cur_prio_int, "عادي")
                     _u_prio_str  = r5c1.selectbox("🚀 الأهمية", p_list, index=p_list.index(_cur_prio_str))
                     u_prio = _PRIO_STR_TO_INT[_u_prio_str]
                     u_start = r5c2.date_input("📅 تاريخ البداية", res['first_time'])
@@ -2392,6 +2412,14 @@ if page == "الاستعلام والتعديل":
                         value=(res.get('source_platform') or ''),
                         placeholder="مثال: ArabClicks, CJ Affiliate, تواصل مباشر...",
                         help="يساعدك تعرف من أي منصة تابعة جاء كود هذا المتجر — مفيد عند تجديد الكود.",
+                    )
+
+                    # حساب إنستقرام للبراند — اختياري (migration_068)
+                    u_ig_handle = st.text_input(
+                        "📸 حساب إنستقرام للبراند (اختياري)",
+                        value=(res.get('instagram_handle') or ''),
+                        placeholder="aigner  —  بلا @، انسخه من بروفايل البراند",
+                        help="لو عبّيته، منشور المتجر على إنستقرام يذكر البراند (@حساب).",
                     )
 
                     # الصف 5.6: قنوات النشر — استهداف انتقائي يحترم شروط الأفلييت.
@@ -2523,7 +2551,8 @@ if page == "الاستعلام والتعديل":
                                     is_promoted=%s,
                                     source_platform=%s,
                                     publish_channels=%s,
-                                    seo_enabled=%s
+                                    seo_enabled=%s,
+                                    instagram_handle=%s
                                 WHERE id=%s
                             """, (
                                 u_store, u_name_en,
@@ -2539,6 +2568,7 @@ if page == "الاستعلام والتعديل":
                                 _u_src_val,
                                 _u_channels_val,
                                 bool(u_seo_enabled),
+                                (u_ig_handle or '').strip().lstrip('@') or None,
                                 search_id,
                             ))
                             conn.commit()
@@ -2666,14 +2696,16 @@ if page == "الاستعلام والتعديل":
 
 
 # ══════════════════════════════════════════════════════════════════════
-# 📦 أرشيف المنتهية — المتاجر اللي last_time < CURRENT_DATE
-#    الموقع والبوت يخفونها تلقائياً (فلتر last_time >= CURRENT_DATE)،
+# 📦 أرشيف المنتهية — المتاجر اللي last_time <= CURRENT_DATE
+#    الكود يختفي تلقائياً من الموقع والبوت والميني (فلتر last_time > CURRENT_DATE)،
 #    وهنا نقدر نراجعها، نمدّد تاريخها، أو نحذفها نهائياً.
 # ══════════════════════════════════════════════════════════════════════
 if page == "📦 أرشيف المنتهية":
     st.header("📦 أرشيف الأكواد المنتهية")
     st.caption(
-        "هذه المتاجر **مخفية تلقائياً** من الموقع والبوت لأن تاريخ انتهائها مرّ. "
+        "**كودها مخفيّ تلقائياً** من الموقع والبوت والميني لأن تاريخ انتهائها مرّ "
+        "(يوم الانتهاء نفسه يُحتسب منتهياً). المتجر يختفي كلياً من البوت والميني، "
+        "وصفحته على الموقع تبقى بلا كود حفاظاً على روابط المقالات الداخلية. "
         "تقدر تمدّد التاريخ لإعادة تفعيلها، أو تحذفها نهائياً."
     )
 
@@ -2687,7 +2719,7 @@ if page == "📦 أرشيف المنتهية":
                    total_coupon_copies, total_link_clicks,
                    (CURRENT_DATE - last_time) AS days_expired
             FROM master
-            WHERE last_time IS NOT NULL AND last_time < CURRENT_DATE
+            WHERE last_time IS NOT NULL AND last_time <= CURRENT_DATE
             ORDER BY last_time DESC, id DESC
         """
         df_arch = pd.read_sql(archive_q, conn)
@@ -2922,7 +2954,7 @@ if page == "جدول الكوبونات":
                 total_coupon_copies,
                 total_link_clicks
             FROM master
-            WHERE last_time IS NULL OR last_time >= CURRENT_DATE
+            WHERE last_time IS NULL OR last_time > CURRENT_DATE
             ORDER BY
                 is_trending_bool DESC,
                 priority_score_int DESC
@@ -3977,7 +4009,7 @@ elif page == "تحليل المتاجر":
         # "all" / "none" → لا تفلتر
 
         # ─── حساب ترند IDs (live algorithm، نوافذ ثابتة) ────────
-        _now_r = (pd.Timestamp.utcnow().tz_localize(None)
+        _now_r = (pd.Timestamp.now('UTC').tz_localize(None)
                   + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
         _today_start = _now_r.normalize()
         _week_start  = _now_r - pd.Timedelta(days=7)
@@ -4944,7 +4976,7 @@ elif page == "تحليل المتاجر":
                 return df
 
             # ── نافذة اليومي: منذ منتصف الليل بتوقيت الرياض إلى الآن ──
-            _now_r       = datetime.datetime.utcnow() + timedelta(hours=3)
+            _now_r       = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) + timedelta(hours=3)
             _daily_start = _now_r.replace(hour=0, minute=0, second=0, microsecond=0)
             _e_daily = [e for e in _events if _daily_start <= e["time"] <= _now_r]
             _f_daily = [f for f in _favs   if _daily_start <= f["created_at"] <= _now_r]
@@ -5132,11 +5164,16 @@ elif page == "🎬 إضافة استوري":
         # ── حالة الإشهار (عضوية صف الستوري) + لون حلقة الستوري العادي ──
         # ألوان الحلقة للستوري العادي (اليدوي). البرتقالي/الأزرق محجوزان للترند
         # اليومي/الأسبوعي فلا نضعهما هنا. None = حلقة افتراضية تلقائية.
-        _RING_COLORS = {
-            "⚙️ تلقائي/عادي": None, "🟡 ذهبي": "gold", "⚪ فضي": "silver",
-            "🟤 برونزي": "bronze", "🔴 أحمر": "red", "🟢 أخضر": "green",
-            "🟣 بنفسجي": "purple", "🌸 وردي": "pink",
-        }
+        # الخيارات من `brand.py` — اللوحة المغلقة. كانت سبعة ألوان مخترعة
+        # (ذهبي/فضّي/برونزي/أحمر/بنفسجي/وردي)، ستّة خارج اللوحة وأحدها أحمر
+        # وهو محجوز للخطر لا للترويج. صارت ثلاثة: هذا ما تحتمله لوحة مغلقة
+        # من تدرّجات مميَّزة بعد حجز اثنين للترند وواحد للافتراضي.
+        # لم تُرحَّل أي بيانات لأن العمود **فارغ بالكامل** (قِيس حيّاً
+        # ٢٠٢٦-٠٨-١٧: ٥٣ صفاً كلها NULL، وصفر متجر مُشهَر). والواجهات تحرس
+        # بـ`&& RING_GRAD[key]` فأي قيمة قديمة تسقط للحلقة الافتراضية بأمان.
+        import brand as _b_ring
+        _RING_COLORS = {"⚙️ تلقائي/عادي": None}
+        _RING_COLORS.update({v["label"]: k for k, v in _b_ring.STORY_RING_TIERS.items()})
         _cur_ring = (_srow.get("story_ring_color")
                      if hasattr(_srow, "get") else _srow["story_ring_color"])
         _cur_ring = None if pd.isna(_cur_ring) else _cur_ring
@@ -5213,7 +5250,7 @@ elif page == "🎬 إضافة استوري":
                         else:
                             _e = (pd.to_datetime(_exp_v, utc=True)
                                   + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS)).tz_localize(None)
-                            _nw = (pd.Timestamp.utcnow().tz_localize(None)
+                            _nw = (pd.Timestamp.now('UTC').tz_localize(None)
                                    + pd.Timedelta(hours=RIYADH_TZ_OFFSET_HOURS))
                             if _e <= _nw:
                                 st.caption(f"⌛ **منتهية** ({_e:%Y-%m-%d %H:%M}) — مخفيّة عن العملاء")
@@ -6423,7 +6460,7 @@ elif page == "📣 بلاغات الأكواد":
             active = pd.read_sql("""
                 SELECT store_id FROM master
                 WHERE NOT COALESCE(is_suspended, FALSE)
-                  AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+                  AND (last_time IS NULL OR last_time > CURRENT_DATE)
                 ORDER BY store_id
             """, conn)
             if active.empty:
@@ -7293,8 +7330,8 @@ elif page == "تحليل المستخدمين":
         # ── متاجر مختارة (قائمتها تتفلتر حسب حالة المتاجر المختارة) ───────
         _store_cond = {
             "active":   "AND last_time > CURRENT_DATE + 3",
-            "expired":  "AND last_time < CURRENT_DATE",
-            "expiring": "AND last_time BETWEEN CURRENT_DATE AND CURRENT_DATE + 3",
+            "expired":  "AND last_time <= CURRENT_DATE",
+            "expiring": "AND last_time BETWEEN CURRENT_DATE + 1 AND CURRENT_DATE + 3",
         }.get(gen_store_status, "")
         _store_opts = ["لا شيء", "الكل"] + _gen_distinct(f"""
             SELECT DISTINCT store_id FROM master
@@ -7457,8 +7494,8 @@ elif page == "تحليل المستخدمين":
                        else "('web')")
                 cond = {
                     "active":   "m.last_time > CURRENT_DATE + 3",
-                    "expiring": "m.last_time BETWEEN CURRENT_DATE AND CURRENT_DATE + 3",
-                    "expired":  "m.last_time < CURRENT_DATE",
+                    "expiring": "m.last_time BETWEEN CURRENT_DATE + 1 AND CURRENT_DATE + 3",
+                    "expired":  "m.last_time <= CURRENT_DATE",
                 }[store_status]
                 return (" AND EXISTS (SELECT 1 FROM action_logs al2 "
                         "JOIN master m ON m.store_id = al2.store_id "
@@ -8056,8 +8093,8 @@ elif page == "تحليل المستخدمين":
         if gen_store_status in ("active", "expired", "expiring"):
             _ms_cond = {
                 "active":   "m.last_time > CURRENT_DATE + 3",
-                "expired":  "m.last_time < CURRENT_DATE",
-                "expiring": "m.last_time BETWEEN CURRENT_DATE AND CURRENT_DATE + 3",
+                "expired":  "m.last_time <= CURRENT_DATE",
+                "expiring": "m.last_time BETWEEN CURRENT_DATE + 1 AND CURRENT_DATE + 3",
             }[gen_store_status]
             _tl_storestat_where = (f" AND EXISTS (SELECT 1 FROM master m "
                                    f"WHERE m.store_id = al.store_id AND {_ms_cond})")
@@ -8740,8 +8777,8 @@ elif page == "تحليل المستخدمين":
 - ⚠️ «متى ينتهي الكوبون» = master.last_time (تاريخ آخر صلاحية للكوبون الحالي).
 - ⚠️ لتصنيف الكوبون (فعّال/منتهي/قريب الانتهاء):
     'فعّال'         إذا last_time > CURRENT_DATE + 3
-    'قريب الانتهاء' إذا last_time BETWEEN CURRENT_DATE AND CURRENT_DATE + 3
-    'منتهي'         إذا last_time < CURRENT_DATE
+    'قريب الانتهاء' إذا last_time BETWEEN CURRENT_DATE + 1 AND CURRENT_DATE + 3
+    'منتهي'         إذا last_time <= CURRENT_DATE
 """
 
         # عرض سجل المحادثة
@@ -9221,7 +9258,15 @@ elif page == "👣 زوّار الموقع":
             st.rerun()
 
     # فلتر البوتات (تبديل) + استثناء الإدمن (دائم). كلاهما نصوص ثابتة — لا مدخل مستخدم.
-    _q_bot   = "" if wv_bots else "AND quality_score >= 50 AND is_datacenter IS NOT TRUE"
+    # زواحف/استضافات تتسرّب من فلتر is_datacenter (cf_bot_score فارغ تماماً، والـIP غير
+    # مُعلَّم datacenter): Meta 32934 · Apple 714 (Applebot/prefetch) · M247 9009 (VPN) ·
+    # Huawei Cloud HK 136907 · HostRoyale 203020 · Datacamp/CDN77 212238. كلها تضخّم
+    # العدّاد بلا نقر/نسخ. نستثنيها مع البوتات. [[bot_vs_promo_heuristic]]
+    _CRAWLER_ASNS = (32934, 714, 9009, 136907, 203020, 212238)
+    _asn_in      = ", ".join(str(a) for a in _CRAWLER_ASNS)   # أعداد ثابتة — لا حقن
+    _q_crawler   = f"AND (asn IS NULL OR asn NOT IN ({_asn_in}))"
+    _q_crawler_v = f"AND (v.asn IS NULL OR v.asn NOT IN ({_asn_in}))"
+    _q_bot   = "" if wv_bots else f"AND quality_score >= 50 AND is_datacenter IS NOT TRUE {_q_crawler}"
     _q_admin = "AND (user_id IS NULL OR user_id NOT IN (SELECT id FROM web_users WHERE is_admin))"
     _q = f"{_q_bot} {_q_admin}"
     _p = {"f": wv_from, "t": wv_to}
@@ -9290,7 +9335,7 @@ elif page == "👣 زوّار الموقع":
         _figd = px.area(_daily, x="اليوم", y="زيارات", markers=True)
         _figd.update_traces(line_color=BRAND["emerald"])
         _figd.update_layout(height=300, margin=dict(t=10, b=10, l=10, r=10))
-        st.plotly_chart(_figd, use_container_width=True)
+        st.plotly_chart(_figd, width='stretch')
 
     # ── 🔬 تشخيص القفزات (٣ إشارات: تنوّع الزوّار + نسبة datacenter + تركيز ASN) ──
     # يعمل على البيانات الخام (بلا فلتر البوتات) عمداً — الهدف تصنيف كل قفزة
@@ -9316,11 +9361,91 @@ elif page == "👣 زوّار الموقع":
         15169: "Google Cloud (bot)", 396982: "Google Cloud (bot)",
         14618: "AWS (bot)", 16509: "AWS (bot)",
         24940: "Hetzner (bot)", 16276: "OVH (bot)",
+        32934: "Meta/Facebook (crawler)", 714: "Apple (Applebot/prefetch)",
         # VPN شائع
         63023: "Aruba إيطاليا (VPN)", 3356: "Level 3/Lumen",
     }
 
-    _visitors_today = pd.read_sql("""
+    # ── مساعدات الذكاء الاصطناعي: نعرض الاسم الصريح (ChatGPT/Perplexity/Gemini…) ──
+    # المطلوب: «من أين دخل — صريحاً» لا تصنيف عام. المفتاح = referrer_host كما يخزّنه
+    # /track/visit. gemini.google.com كان يظهر «Google» (لاحقة google.com) — مصحَّح هنا.
+    _AI_REF = {
+        "chatgpt.com": "🤖 ChatGPT", "chat.openai.com": "🤖 ChatGPT",
+        "openai.com": "🤖 ChatGPT", "com.openai.chatgpt": "🤖 ChatGPT (تطبيق)",
+        "perplexity.ai": "🤖 Perplexity",
+        "copilot.microsoft.com": "🤖 Copilot",
+        "gemini.google.com": "🤖 Gemini", "bard.google.com": "🤖 Gemini",
+        "claude.ai": "🤖 Claude",
+        "you.com": "🤖 You.com", "poe.com": "🤖 Poe",
+    }
+
+    def _ai_name(host):
+        """اسم المساعد الصريح من referrer_host، أو None لو ليس مساعد ذكاء اصطناعي."""
+        if not host:
+            return None
+        h = str(host).lower()
+        h = h[4:] if h.startswith("www.") else h
+        if h in _AI_REF:
+            return _AI_REF[h]
+        for dom, name in _AI_REF.items():
+            if h.endswith("." + dom):
+                return name
+        return None
+
+    # قائمة hosts نصّية ثابتة لاستخدام SQL — تصحيح التصنيف التاريخي بلا migration.
+    # (ثوابت من قاموسنا لا مدخل مستخدم — لا حقن.)
+    _ai_in = ", ".join("'%s'" % d for d in _AI_REF)
+
+    def _ai_kind_sql(fallback="'unknown'"):
+        """تعبير SQL يُرجع 'ai' لأي referrer_host معروف، وإلا referrer_kind."""
+        return (f"CASE WHEN referrer_host IN ({_ai_in}) THEN 'ai' "
+                f"ELSE COALESCE(referrer_kind, {fallback}) END")
+
+    # ── الصفحة: رابط يُفتح + اسم مقروء + نوع ────────────────────────────────
+    # landing_path يُخزَّن مُرمَّزاً (%D8%…) لأن أسماء المتاجر/الأقسام عربية، فالخام
+    # غير قابل للقراءة. نفتح الرابط بالصيغة المُرمَّزة (هي الصالحة للمتصفح)
+    # ونعرض النص مفكوك الترميز. www هو القانوني (يطابق GSC ويتجنّب التحويل).
+    from urllib.parse import unquote as _unquote  # محلي بالصفحة — لا يستخدمه غيرها
+    _SITE = os.getenv("SITE_URL", "https://www.dealpulseksa.com").rstrip("/")
+
+    def _page_url(path):
+        p = (path or "/").strip() or "/"
+        if not p.startswith("/"):
+            p = "/" + p
+        return _SITE + p
+
+    def _page_label(path):
+        try:
+            return _unquote(path or "/")
+        except Exception:
+            return path or "/"
+
+    _PAGE_KINDS = {
+        "blog": "📝 مقال", "store": "🏪 متجر", "category": "📂 قسم",
+        "c": "🎯 صفحة كود", "calendar": "🗓️ التقويم", "deals": "🔥 عروض",
+        "stores": "🏬 دليل المتاجر", "categories": "📂 دليل الأقسام",
+        "trending": "🔥 الرائج", "search": "🔎 بحث",
+        "account": "👤 حساب", "login": "🔐 دخول", "register": "🔐 تسجيل",
+        "favorites": "❤️ المفضلة", "about": "📄 ثابتة", "faq": "📄 ثابتة",
+        "terms": "📄 ثابتة", "privacy": "📄 ثابتة", "contact": "📄 ثابتة",
+        "how-it-works": "📄 ثابتة",
+    }
+
+    def _page_kind(path):
+        """تصنيف الصفحة من أول مقطع في المسار (blog/store/category/…)."""
+        p = (path or "/").strip().strip("/")
+        if not p:
+            return "🏠 الرئيسية"
+        low = p.lower()
+        if low.startswith("blog/category/"):
+            return "📚 قسم مدونة"
+        seg = low.split("/")[0]
+        if seg in _PAGE_KINDS:
+            return _PAGE_KINDS[seg]
+        # مقطع جذري واحد بشرطة = صفحة موسم/هبوط (national-day, back-to-school…)
+        return "🗓️ موسم/هبوط" if ("/" not in low and "-" in seg) else "📄 صفحة"
+
+    _visitors_today = pd.read_sql(f"""
         WITH todays_visits AS (
           SELECT v.visitor_id, v.user_id, v.city, v.asn, v.source,
                  v.referrer_kind, v.referrer_host,
@@ -9330,6 +9455,12 @@ elif page == "👣 زوّار الموقع":
                 BETWEEN %(f)s AND %(t)s
             AND v.quality_score >= 50
             AND v.is_datacenter IS NOT TRUE
+            {_q_crawler_v}
+            -- جمهورنا سعودي: نستبعد الأجنبي (Shijiazhuang/Rawalpindi على /national-day
+            -- = زواحف تمرّ من فلتر is_datacenter) — لكن نُبقي أي إحالة من مساعد ذكاء
+            -- اصطناعي مهما كانت الدولة (نقرة استشهاد حقيقية).
+            AND (v.country_code = 'SA' OR v.country_code IS NULL
+                 OR v.referrer_host IN ({_ai_in}))
             AND (v.user_id IS NULL
                  OR v.user_id NOT IN (SELECT id FROM web_users WHERE is_admin))
         ),
@@ -9376,7 +9507,9 @@ elif page == "👣 زوّار الموقع":
 
     if not _visitors_today.empty:
         st.markdown("#### 👤 مَن زار اليوم؟")
-        st.caption("قائمة الزوّار الحقيقيين خلال النطاق أعلاه، بعد استثناء البوتات وأنت (الإدمن).")
+        st.caption("قائمة الزوّار الحقيقيين خلال النطاق أعلاه، بعد استثناء البوتات وأنت (الإدمن) "
+                   "والزيارات الأجنبية (جمهورنا سعودي) — عدا إحالات مساعدات الذكاء الاصطناعي "
+                   "فتبقى مهما كانت الدولة.")
 
         def _identity(row):
             # ١) مسجّل في الموقع → الإيميل هو الهوية (بحسب طلب المالك)
@@ -9428,15 +9561,22 @@ elif page == "👣 زوّار الموقع":
         }
 
         def _entry_source(row):
-            """يعرض اسم المنصّة الفعلي (TikTok/Instagram/Google) بدل التصنيف العام."""
+            """يعرض اسم المنصّة الفعلي (ChatGPT/TikTok/Google) بدل التصنيف العام."""
             kind = row.get("ref_kind")
             host = row.get("ref_host") or ""
+            # مساعد ذكاء اصطناعي أولاً — بالاسم الصريح، حتى لو خُزّن kind='search'
+            # سابقاً (gemini.google.com) قبل إضافة نوع 'ai'.
+            _ai = _ai_name(host)
+            if _ai:
+                return _ai
             if not kind:
                 return "↗️ مباشر"
             if kind == "internal":
                 return "🔁 داخلي"
             if kind == "direct":
                 return "↗️ مباشر"
+            if kind == "ai":
+                return "🤖 مساعد ذكاء اصطناعي"
             # سوشال/بحث/referral: حاول ترجمة الدومين لاسم منصّة
             if host and host in _PLATFORM_NAMES:
                 return _PLATFORM_NAMES[host]
@@ -9453,28 +9593,40 @@ elif page == "👣 زوّار الموقع":
                 return f"🔗 {host}" if host else "🔗 موقع آخر"
             return "—"
 
+        _paths = _visitors_today["first_landing"].fillna("/")
         _view = pd.DataFrame({
             "الهوية": _visitors_today.apply(_identity, axis=1),
             "المدينة": _visitors_today["city"].fillna("غير معروف"),
             "المشغّل": _visitors_today["asn"].apply(_operator),
             "دخل من": _visitors_today.apply(_entry_source, axis=1),
-            "أول صفحة": _visitors_today["first_landing"].fillna("/"),
+            "نوع الصفحة": _paths.apply(_page_kind),
+            "أول صفحة": _paths.apply(_page_label),
+            "فتح": _paths.apply(_page_url),
             "صفحات تصفّحها": _visitors_today["actions"].astype(int),
             "آخر نشاط": pd.to_datetime(_visitors_today["ksa_time"]).dt.strftime("%m-%d %H:%M"),
         })
 
         st.dataframe(
-            _view, use_container_width=True, hide_index=True,
+            _view, width='stretch', hide_index=True,
             column_config={
                 "الهوية":     st.column_config.TextColumn(width="medium"),
                 "المدينة":    st.column_config.TextColumn(width="small"),
                 "المشغّل":    st.column_config.TextColumn(width="small"),
                 "دخل من":    st.column_config.TextColumn(width="small"),
-                "أول صفحة":   st.column_config.TextColumn(width="medium"),
+                "نوع الصفحة": st.column_config.TextColumn(width="small"),
+                # النص مفكوك الترميز للقراءة، والفتح من عمود الرابط المجاور
+                # (LinkColumn لا يعرض نصاً مخصّصاً لكل صف — فصلناهما عمداً).
+                "أول صفحة":   st.column_config.TextColumn(width="large"),
+                "فتح":        st.column_config.LinkColumn(
+                    width="small", display_text="🔗 افتح",
+                    help="يفتح نفس الصفحة على الموقع في تبويب جديد"),
                 "صفحات تصفّحها": st.column_config.NumberColumn(width="small"),
                 "آخر نشاط":  st.column_config.TextColumn(width="small"),
             },
         )
+        st.caption("🔗 اضغط «افتح» لترى نفس الصفحة التي دخل منها الزائر. "
+                   "«صفحات تصفّحها» = أحداث مسجّلة (فتح متجر/نقر/نسخ/بحث)، "
+                   "وليس عدد الصفحات — الموقع يسجّل زيارة واحدة لكل جلسة.")
 
         _n_reg  = int(_visitors_today["reg_email"].notna().sum())
         _n_bot  = int(_visitors_today["bot_username"].notna().sum())
@@ -9491,19 +9643,20 @@ elif page == "👣 زوّار الموقع":
     with g1:
         st.markdown("#### 🌐 مصدر الزيارة")
         _src = pd.read_sql(f"""
-            SELECT COALESCE(referrer_kind, 'unknown') AS kind, COUNT(*) AS cnt
+            SELECT {_ai_kind_sql("'unknown'")} AS kind, COUNT(*) AS cnt
             FROM web_visits
             WHERE created_at::date BETWEEN %(f)s AND %(t)s {_q}
             GROUP BY 1 ORDER BY cnt DESC
         """, conn, params=_p)
-        _SRC_AR = {"search": "🔍 بحث", "social": "📱 سوشال", "direct": "↗️ مباشر",
-                   "internal": "🔁 داخلي", "referral": "🔗 موقع آخر", "unknown": "غير معروف"}
+        _SRC_AR = {"ai": "🤖 ذكاء اصطناعي", "search": "🔍 بحث", "social": "📱 سوشال",
+                   "direct": "↗️ مباشر", "internal": "🔁 داخلي",
+                   "referral": "🔗 موقع آخر", "unknown": "غير معروف"}
         if not _src.empty:
             _src["kind"] = _src["kind"].map(lambda x: _SRC_AR.get(x, x))
             _src.columns = ["المصدر", "عدد"]
             _figs = px.pie(_src, names="المصدر", values="عدد", hole=0.45)
             _figs.update_layout(height=300, margin=dict(t=10, b=10, l=10, r=10))
-            st.plotly_chart(_figs, use_container_width=True)
+            st.plotly_chart(_figs, width='stretch')
     with g2:
         st.markdown("#### 📱 الجهاز")
         _dev = pd.read_sql(f"""
@@ -9516,9 +9669,9 @@ elif page == "👣 زوّار الموقع":
             _dev.columns = ["الجهاز", "عدد"]
             _figv = px.pie(_dev, names="الجهاز", values="عدد", hole=0.45)
             _figv.update_layout(height=300, margin=dict(t=10, b=10, l=10, r=10))
-            st.plotly_chart(_figv, use_container_width=True)
+            st.plotly_chart(_figv, width='stretch')
 
-    # ── المدن + صفحات الدخول ────────────────────────────────────────────────
+    # ── المدن + من أحالهم ───────────────────────────────────────────────────
     t1, t2 = st.columns(2)
     with t1:
         st.markdown("#### 📍 أهم المدن")
@@ -9529,17 +9682,276 @@ elif page == "👣 زوّار الموقع":
             GROUP BY 1 ORDER BY visits DESC LIMIT 12
         """, conn, params=_p)
         _cit.columns = ["المدينة", "زيارات"]
-        st.dataframe(_cit, use_container_width=True, hide_index=True)
+        st.dataframe(_cit, width='stretch', hide_index=True)
     with t2:
-        st.markdown("#### 🚪 صفحات الدخول الأكثر")
-        _land = pd.read_sql(f"""
-            SELECT COALESCE(NULLIF(landing_path, ''), '/') AS path, COUNT(*) AS visits
+        # الدائرة أعلاه تُظهر «النوع» (بحث/سوشال) — هذا يُظهر الموقع نفسه بالاسم
+        st.markdown("#### 🔗 من أحالهم (المصدر بالاسم)")
+        _ref = pd.read_sql(f"""
+            SELECT COALESCE(NULLIF(referrer_host, ''), '—') AS host,
+                   {_ai_kind_sql("'direct'")}              AS kind,
+                   COUNT(*) AS visits
             FROM web_visits
             WHERE created_at::date BETWEEN %(f)s AND %(t)s {_q}
-            GROUP BY 1 ORDER BY visits DESC LIMIT 12
+            GROUP BY 1, 2 ORDER BY visits DESC LIMIT 12
         """, conn, params=_p)
-        _land.columns = ["الصفحة", "زيارات"]
-        st.dataframe(_land, use_container_width=True, hide_index=True)
+        if _ref.empty:
+            st.caption("لا بيانات إحالة في هذا النطاق.")
+        else:
+            _ref["kind"] = _ref["kind"].map(lambda x: _SRC_AR.get(x, x))
+            _ref["host"] = _ref.apply(
+                lambda r: "↗️ دخول مباشر (بلا إحالة)" if r["host"] == "—"
+                else (_ai_name(r["host"]) or r["host"]),
+                axis=1)
+            _ref.columns = ["المصدر", "النوع", "زيارات"]
+            st.dataframe(_ref, width='stretch', hide_index=True)
+
+    # ── 🤖 دخلوا من مساعد ذكاء اصطناعي — بالاسم الصريح (ChatGPT/Perplexity/…) ──
+    st.markdown("#### 🤖 دخلوا من مساعد ذكاء اصطناعي")
+    st.caption("كل صف = زيارة إحالتها من مساعد ذكاء اصطناعي، باسمه الصريح — "
+               "وأي صفحة استشهد بها لجلب الزائر.")
+    _aiv = pd.read_sql(f"""
+        SELECT referrer_host AS host,
+               COALESCE(NULLIF(city, ''), 'غير معروف')          AS city,
+               asn,
+               COALESCE(NULLIF(landing_path, ''), '/')          AS landing,
+               to_char(created_at AT TIME ZONE 'Asia/Riyadh', 'MM-DD HH24:MI') AS t
+        FROM web_visits
+        WHERE created_at::date BETWEEN %(f)s AND %(t)s {_q}
+          AND referrer_host IN ({_ai_in})
+        ORDER BY created_at DESC LIMIT 100
+    """, conn, params=_p)
+    if _aiv.empty:
+        st.caption("لا زيارات من مساعدات ذكاء اصطناعي في هذا النطاق.")
+    else:
+        _aiv_view = pd.DataFrame({
+            "المساعد":     _aiv["host"].apply(lambda h: _ai_name(h) or h),
+            "المدينة":     _aiv["city"],
+            "المشغّل":     _aiv["asn"].apply(
+                lambda a: _ASN_NAMES.get(int(a), f"ASN {int(a)}")
+                if pd.notna(a) and a else "غير معروف"),
+            "صفحة الدخول": _aiv["landing"].apply(_page_label),
+            "فتح":         _aiv["landing"].apply(_page_url),
+            "الوقت":       _aiv["t"],
+        })
+        st.dataframe(
+            _aiv_view, width='stretch', hide_index=True,
+            column_config={"فتح": st.column_config.LinkColumn(
+                width="small", display_text="🔗 افتح")},
+        )
+        _by = _aiv["host"].apply(lambda h: _ai_name(h) or h).value_counts()
+        st.caption("حسب المساعد: "
+                   + " · ".join(f"{k}: {int(v)}" for k, v in _by.items()))
+
+    # ── 🚪 صفحات الدخول: وش الصفحة، من وين جاءوا، وهل تفاعلوا ───────────────
+    st.divider()
+    st.markdown("### 🚪 صفحات الدخول — وش الصفحة ومن وين دخلوا")
+    st.caption(
+        "كل صف = الصفحة التي بدأ منها الزائر جلسته. اضغط «افتح» لترى الصفحة نفسها، "
+        "واقرأ من أين جاء الزوّار إليها وهل تفاعلوا بعدها — هذا يقول لك أي صفحة "
+        "تستحق التطوير وأيها تجذب بلا نتيجة."
+    )
+
+    # التفاعل يُنسب لآخر صفحة دخول سبقت الحدث لنفس الزائر (لا تكرار عبر الصفحات).
+    _lp = pd.read_sql(f"""
+        WITH lp AS (
+          SELECT COALESCE(NULLIF(landing_path, ''), '/') AS path,
+                 COALESCE(visitor_id::text, encode(ip_hash, 'hex')) AS who,
+                 referrer_kind, created_at
+          FROM web_visits
+          WHERE created_at::date BETWEEN %(f)s AND %(t)s {_q}
+        ),
+        agg AS (
+          SELECT path,
+                 COUNT(*)                  AS visits,
+                 COUNT(DISTINCT who)       AS visitors,
+                 COUNT(*) FILTER (WHERE referrer_kind = 'search')   AS s_search,
+                 COUNT(*) FILTER (WHERE referrer_kind = 'social')   AS s_social,
+                 COUNT(*) FILTER (WHERE referrer_kind = 'referral') AS s_ref,
+                 COUNT(*) FILTER (WHERE referrer_kind IS NULL
+                                     OR referrer_kind IN ('direct', 'internal')) AS s_direct,
+                 MAX(created_at) AS last_seen
+          FROM lp GROUP BY path
+        ),
+        acts AS (
+          SELECT a.action_type,
+                 (SELECT COALESCE(NULLIF(v.landing_path, ''), '/')
+                    FROM web_visits v
+                   WHERE v.visitor_id = a.visitor_id
+                     AND v.created_at <= a.action_time
+                   ORDER BY v.created_at DESC LIMIT 1) AS path
+          FROM action_logs a
+          WHERE a.visitor_id IS NOT NULL
+            AND a.action_time::date BETWEEN %(f)s AND %(t)s
+        ),
+        eng AS (
+          SELECT path,
+                 COUNT(*) FILTER (WHERE action_type = 'view_store')  AS views,
+                 COUNT(*) FILTER (WHERE action_type = 'click_link')  AS clicks,
+                 COUNT(*) FILTER (WHERE action_type = 'copy_coupon') AS copies
+          FROM acts WHERE path IS NOT NULL GROUP BY path
+        )
+        SELECT g.path, g.visits, g.visitors,
+               g.s_search, g.s_social, g.s_ref, g.s_direct,
+               COALESCE(e.views, 0)  AS views,
+               COALESCE(e.clicks, 0) AS clicks,
+               COALESCE(e.copies, 0) AS copies,
+               to_char(g.last_seen, 'MM-DD HH24:MI') AS last_seen
+        FROM agg g LEFT JOIN eng e ON e.path = g.path
+        ORDER BY g.visits DESC
+        LIMIT 60
+    """, conn, params=_p)
+
+    if _lp.empty:
+        st.info("لا صفحات دخول في هذا النطاق.")
+    else:
+        _lp_view = pd.DataFrame({
+            "النوع":    _lp["path"].apply(_page_kind),
+            "الصفحة":   _lp["path"].apply(_page_label),
+            "فتح":      _lp["path"].apply(_page_url),
+            "زيارات":   _lp["visits"].astype(int),
+            "زوّار":     _lp["visitors"].astype(int),
+            "🔍 بحث":   _lp["s_search"].astype(int),
+            "📱 سوشال": _lp["s_social"].astype(int),
+            "🔗 إحالة": _lp["s_ref"].astype(int),
+            "↗️ مباشر": _lp["s_direct"].astype(int),
+            "🏪 فتح متجر": _lp["views"].astype(int),
+            "👆 نقر":   _lp["clicks"].astype(int),
+            "📋 نسخ":   _lp["copies"].astype(int),
+            "آخر زيارة": _lp["last_seen"],
+        })
+        st.dataframe(
+            _lp_view, width='stretch', hide_index=True,
+            column_config={
+                "النوع":  st.column_config.TextColumn(width="small"),
+                "الصفحة": st.column_config.TextColumn(width="large"),
+                "فتح":    st.column_config.LinkColumn(
+                    width="small", display_text="🔗 افتح",
+                    help="يفتح الصفحة على الموقع في تبويب جديد"),
+            },
+        )
+        st.caption(
+            "🏪/👆/📋 = ما فعله زوّار هذه الصفحة بعد دخولهم (منسوب لآخر صفحة دخول "
+            "سبقت الحدث). صفحة بزيارات عالية وأصفار في التفاعل = محتوى يجذب "
+            "لكن لا يحوّل → أضف روابط/أكواد أوضح داخلها."
+        )
+
+        # ── فحص صفحة واحدة: من وين جاءوا، وش سوّوا، وأي كلمة جابتهم ─────────
+        st.markdown("#### 🔬 افحص صفحة بعينها")
+        _opts = list(_lp["path"])
+        _pick = st.selectbox(
+            "اختر الصفحة", _opts, key="wv_page_pick",
+            format_func=lambda p: f"{_page_kind(p)} · {_page_label(p)}")
+        _pp = dict(_p, path=_pick)
+
+        _d1, _d2, _d3 = st.columns([2, 1, 1])
+        with _d1:
+            st.link_button("🔗 افتح الصفحة على الموقع", _page_url(_pick),
+                           width='stretch')
+        _row = _lp[_lp["path"] == _pick].iloc[0]
+        _d2.metric("زيارات", int(_row["visits"]))
+        _d3.metric("زوّار فريدون", int(_row["visitors"]))
+
+        _c1, _c2, _c3 = st.columns(3)
+        with _c1:
+            st.markdown("**من وين دخلوا**")
+            _pref = pd.read_sql(f"""
+                SELECT COALESCE(NULLIF(referrer_host, ''), '↗️ مباشر') AS host,
+                       COUNT(*) AS visits
+                FROM web_visits
+                WHERE COALESCE(NULLIF(landing_path, ''), '/') = %(path)s
+                  AND created_at::date BETWEEN %(f)s AND %(t)s {_q}
+                GROUP BY 1 ORDER BY visits DESC LIMIT 8
+            """, conn, params=_pp)
+            _pref.columns = ["المصدر", "زيارات"]
+            st.dataframe(_pref, width='stretch', hide_index=True)
+        with _c2:
+            st.markdown("**من أي مدينة**")
+            _pcit = pd.read_sql(f"""
+                SELECT COALESCE(NULLIF(city, ''), 'غير معروف') AS city,
+                       COUNT(*) AS visits
+                FROM web_visits
+                WHERE COALESCE(NULLIF(landing_path, ''), '/') = %(path)s
+                  AND created_at::date BETWEEN %(f)s AND %(t)s {_q}
+                GROUP BY 1 ORDER BY visits DESC LIMIT 8
+            """, conn, params=_pp)
+            _pcit.columns = ["المدينة", "زيارات"]
+            st.dataframe(_pcit, width='stretch', hide_index=True)
+        with _c3:
+            st.markdown("**وش سوّوا بعدها**")
+            # نفس منطق الإسناد أعلاه: الحدث يتبع آخر صفحة دخول سبقته.
+            _pact = pd.read_sql(f"""
+                WITH acts AS (
+                  SELECT a.action_type, a.store_id, a.details,
+                         (SELECT COALESCE(NULLIF(v.landing_path, ''), '/')
+                            FROM web_visits v
+                           WHERE v.visitor_id = a.visitor_id
+                             AND v.created_at <= a.action_time
+                           ORDER BY v.created_at DESC LIMIT 1) AS path
+                  FROM action_logs a
+                  WHERE a.visitor_id IS NOT NULL
+                    AND a.action_time::date BETWEEN %(f)s AND %(t)s
+                )
+                SELECT action_type,
+                       COALESCE(NULLIF(store_id, ''), NULLIF(details, ''), '—') AS target,
+                       COUNT(*) AS cnt
+                FROM acts WHERE path = %(path)s
+                GROUP BY 1, 2 ORDER BY cnt DESC LIMIT 10
+            """, conn, params=_pp)
+            if _pact.empty:
+                st.caption("لا تفاعل مسجّل — دخلوا وخرجوا.")
+            else:
+                _ACT_AR = {"view_store": "🏪 فتح متجر", "click_link": "👆 نقر رابط",
+                           "copy_coupon": "📋 نسخ كود", "search": "🔎 بحث",
+                           "view_tag": "📂 فتح قسم", "favorite_add": "❤️ مفضلة"}
+                _pact["action_type"] = _pact["action_type"].map(
+                    lambda a: _ACT_AR.get(a, a))
+                _pact.columns = ["الحركة", "المتجر/التفصيل", "عدد"]
+                st.dataframe(_pact, width='stretch', hide_index=True)
+
+        # كلمات Google التي جلبت هذه الصفحة — «ليش دخلوا» بالضبط.
+        # الإحالة من قوقل لا تحمل الكلمة (تُجرَّد)، فمصدرها الوحيد Search Console.
+        with st.expander("🔑 أي كلمة بحث جابتهم لهذه الصفحة؟ (من Google Search Console)"):
+            _gj = os.getenv("GSC_SA_JSON")
+            if not _gj:
+                st.info("GSC غير مربوط على الداشبورد — أضف `GSC_SA_JSON` و`GSC_SITE` "
+                        "لترى الكلمات التي جلبت كل صفحة.")
+            elif st.button("📊 اجلب كلمات هذه الصفحة (آخر 28 يوم)", key="wv_gsc_q"):
+                _gsite = os.getenv("GSC_SITE", "https://www.dealpulseksa.com/")
+                _rows, _gerr = None, None
+                with st.spinner("جارٍ الجلب من Search Console..."):
+                    try:
+                        from google.oauth2 import service_account
+                        from googleapiclient.discovery import build
+                        _cr = service_account.Credentials.from_service_account_info(
+                            json.loads(_gj),
+                            scopes=["https://www.googleapis.com/auth/webmasters.readonly"])
+                        _sv = build("searchconsole", "v1", credentials=_cr,
+                                    cache_discovery=False)
+                        _end = datetime.datetime.now(datetime.timezone.utc).date()
+                        _rows = _sv.searchanalytics().query(
+                            siteUrl=_gsite,
+                            body={"startDate": str(_end - timedelta(days=28)),
+                                  "endDate": str(_end),
+                                  "dimensions": ["query"],
+                                  "dimensionFilterGroups": [{"filters": [{
+                                      "dimension": "page", "operator": "equals",
+                                      "expression": _page_url(_pick)}]}],
+                                  "rowLimit": 25}).execute().get("rows") or []
+                    except Exception as _ge:
+                        _gerr = str(_ge)
+                if _gerr:
+                    st.error(f"تعذّر الجلب: {_gerr[:300]}")
+                elif not _rows:
+                    st.warning("لا كلمات لهذه الصفحة في آخر 28 يوم — إمّا غير مفهرسة "
+                               "بعد، أو ترافيكها ليس من بحث Google.")
+                else:
+                    st.dataframe(pd.DataFrame([{
+                        "الكلمة": r["keys"][0],
+                        "نقرات": int(r.get("clicks", 0)),
+                        "ظهور": int(r.get("impressions", 0)),
+                        "CTR": f"{r.get('ctr', 0) * 100:.1f}%",
+                        "الترتيب": f"{r.get('position', 0):.1f}",
+                    } for r in _rows]), width='stretch', hide_index=True)
 
     # ── 🔁 الزوّار والعائدون (هوية ثابتة عبر visitor_id) ────────────────────
     st.divider()
@@ -9611,7 +10023,7 @@ elif page == "👣 زوّار الموقع":
     """, conn, params=_p)
     if not _top.empty:
         _top.columns = ["الزائر", "زيارات", "أول زيارة", "آخر زيارة", "المدينة", "الجهاز"]
-        st.dataframe(_top, use_container_width=True, hide_index=True)
+        st.dataframe(_top, width='stretch', hide_index=True)
 
     # سجل الزيارات الخام — كل زيارة على حدة (للتدقيق)
     with st.expander("🧾 سجل الزيارات الخام (آخر 50)"):
@@ -9620,7 +10032,8 @@ elif page == "👣 زوّار الموقع":
                    {_label} AS visitor,
                    COALESCE(NULLIF(city, ''), '؟') AS city,
                    COALESCE(device_class, '؟') AS device,
-                   COALESCE(referrer_kind, '؟') AS src,
+                   CASE WHEN referrer_host IN ({_ai_in}) THEN referrer_host
+                        ELSE COALESCE(referrer_kind, '؟') END AS src,
                    COALESCE(NULLIF(landing_path, ''), '/') AS landing,
                    quality_score AS q
             FROM web_visits
@@ -9628,8 +10041,16 @@ elif page == "👣 زوّار الموقع":
             ORDER BY created_at DESC
             LIMIT 50
         """, conn, params=_p)
-        _log.columns = ["الوقت", "الزائر", "المدينة", "الجهاز", "المصدر", "صفحة الدخول", "الجودة"]
-        st.dataframe(_log, use_container_width=True, hide_index=True)
+        _log["url"] = _log["landing"].apply(_page_url)
+        _log["landing"] = _log["landing"].apply(_page_label)
+        _log = _log[["t", "visitor", "city", "device", "src", "landing", "url", "q"]]
+        _log.columns = ["الوقت", "الزائر", "المدينة", "الجهاز", "المصدر",
+                        "صفحة الدخول", "فتح", "الجودة"]
+        st.dataframe(
+            _log, width='stretch', hide_index=True,
+            column_config={"فتح": st.column_config.LinkColumn(
+                width="small", display_text="🔗 افتح")},
+        )
 
     conn.close()
 
@@ -11985,7 +12406,7 @@ elif page == "لوحة القيادة":
                         f"📥 تحميل كامل الفترة ({len(showw)} حدث) — Excel", _xlw.getvalue(),
                         f"LiveFeed_Web_{d_from}_to_{d_to}.xlsx", key="dl_web_live")
 
-            _stamp = (datetime.datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d %H:%M:%S")
+            _stamp = (datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) + timedelta(hours=3)).strftime("%Y-%m-%d %H:%M:%S")
             st.caption(f"⏱️ آخر تحديث: {_stamp} (توقيت السعودية)"
                        + ("  ·  🔴 بث مباشر" if live else "  ·  ⏸️ متوقف"))
         except Exception as e:
@@ -12064,7 +12485,7 @@ elif page == "مركز الدعم":
                 d = pd.read_sql(_OPEN_SQL, c)
             finally:
                 c.close()
-            _stamp = (datetime.datetime.utcnow() + timedelta(hours=3)).strftime("%H:%M:%S")
+            _stamp = (datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) + timedelta(hours=3)).strftime("%H:%M:%S")
             st.subheader(f"📬 طلبات مفتوحة ({len(d)})")
             if d.empty:
                 st.success("🎉 لا توجد طلبات دعم معلقة.")
@@ -12129,7 +12550,7 @@ elif page == "مركز الدعم":
                         delivered, dmsg = (False, "—")
                         if can_tg:
                             delivered, dmsg = _tg_send(_tgid, _rt)
-                        _ts = (datetime.datetime.utcnow() + timedelta(hours=3)).strftime("%m-%d %H:%M")
+                        _ts = (datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) + timedelta(hours=3)).strftime("%m-%d %H:%M")
                         _cur = _rconn.cursor()
                         _cur.execute("""
                             UPDATE support_tickets
@@ -12225,27 +12646,43 @@ elif page == "استوديو المحتوى":
     from bidi.algorithm import get_display
 
     # ─── ثوابت الهوية (مقفولة — لا يلمسها المستخدم) ─────────────────────────────
+    # المصدر الوحيد: `brand.py` — النظير البرمجي لدليل الهوية. كانت هذه الصفحة
+    # تحمل لوحتها الخاصّة (كريمي/نعناعي + حبر (31,41,55)) وهي واحدة من **خمس**
+    # لوحات متباينة في المستودع، لا واحدة منها تطابق حبر العلامة #141C31.
+    import brand as _brand
     _CANVAS = 1080
     _STUDIO_DIR = os.path.dirname(os.path.abspath(__file__))
-    _FONT_AR = os.path.join(_STUDIO_DIR, "NotoSansArabic-Bold.ttf")
+    _FONT_AR = _brand.font_path(700) or os.path.join(_STUDIO_DIR, "NotoSansArabic-Bold.ttf")
     # الأرشيف للقراءة فقط (تصاميم قديمة). الجديد يُحمَّل عبر زر التحميل
     # بحيث المالك يختار مكان الحفظ (طلب صريح).
     _ARCHIVE_DIR = os.path.join(_STUDIO_DIR, "posters_archive")
     if not os.path.isdir(_ARCHIVE_DIR):
         try: os.makedirs(_ARCHIVE_DIR, exist_ok=True)
         except Exception: pass
-    if not os.path.exists(_FONT_AR):
-        st.warning("⚠️ الخط `NotoSansArabic-Bold.ttf` مفقود — البوسترات ستظهر بخط افتراضي لا يدعم العربي. ارفع الخط للمجلد ثم أعد التشغيل.")
+    if not _FONT_AR or not os.path.exists(_FONT_AR):
+        st.warning("⚠️ خط الهوية `IBMPlexSansArabic-*.ttf` مفقود من `assets/fonts/` — البوسترات ستظهر بخط افتراضي لا يدعم العربي.")
 
-    # لوحة الألوان: نسخة Apple/Keynote — كريمي فاخر + زمردي عميق
-    _STUDIO_BG_TOP     = (250, 250, 248)   # cream
-    _STUDIO_BG_BOTTOM  = (232, 240, 234)   # mint-cream
-    _STUDIO_EMERALD    = (16, 185, 129)
-    _STUDIO_EMERALD_DK = (5, 122, 85)
-    _STUDIO_INK        = (31, 41, 55)
-    _STUDIO_INK_SOFT   = (107, 114, 128)
-    _STUDIO_PILL_BG    = (15, 23, 35)
-    _STUDIO_PILL_FG    = (255, 255, 255)
+    # ─── لوحة الهوية المغلقة (دليل الهوية §اللون · §التباين) ────────────────
+    # كانت «كريمي فاخر + زمردي» بحبر (31,41,55): الكريمي دافئ (hue 36°) ضدّ
+    # حرارة العلامة الباردة، والحبر ليس حبر العلامة. الآن كلها من `brand.py`.
+    #
+    # ⚠️ **الأدوار تنقلب على الداكن** — والبوستر صار له وضعان، فاللوحة تتبع
+    # مبدّل «المظهر». القيم مقيسة، وكلّها كانت تسقط قبل القلب:
+    #   الأخضر الحامل: g-700 على الأرضية الداكنة = **3.09:1** (يسقط للنصّ
+    #     الصغير) ⇐ ينقلب إلى g-500 = **6.68:1**.
+    #   شريحة الكود: حبر على حبر = **1.00:1** أي **غير مرئية إطلاقاً**
+    #     (أُثبت بالرندر) ⇐ تنقلب إلى ورق بحبر = **16.93:1**.
+    _STUDIO_DARK       = bool(_ui_dark)
+    _STUDIO_BG_TOP     = _brand.DARK_RAISED if _STUDIO_DARK else _brand.PAPER
+    _STUDIO_BG_BOTTOM  = _brand.DARK_GROUND if _STUDIO_DARK else _brand.SURFACE
+    _STUDIO_EMERALD    = _brand.G_500        # زخرفي/وهج — لا يحمل نصّاً
+    # الأخضر الحامل: g-700 على الفاتح (5.48:1) · g-500 على الداكن (6.68:1)
+    _STUDIO_EMERALD_DK = _brand.G_500 if _STUDIO_DARK else _brand.G_700
+    _STUDIO_INK        = _brand.INK_900      # يُرسم على الكارت الأبيض — 16.93:1
+    _STUDIO_INK_SOFT   = _brand.INK_500      # #55637E — 6.05:1 على أبيض
+    # الشريحة تنقلب كاملةً كي تبقى مرئية على أرضيتها
+    _STUDIO_PILL_BG    = _brand.PAPER   if _STUDIO_DARK else _brand.INK_900
+    _STUDIO_PILL_FG    = _brand.INK_900 if _STUDIO_DARK else _brand.PAPER
 
     _AR_RESHAPER = arabic_reshaper.ArabicReshaper(configuration={
         'delete_harakat': False, 'support_ligatures': True,
@@ -12267,17 +12704,20 @@ elif page == "استوديو المحتوى":
         return s
 
     def _font(size: int, weight: int = 700) -> ImageFont.FreeTypeFont:
-        """خط نوتو السعودي العربي — متغيّر الوزن. 700=Bold، 900=Black."""
-        try:
-            f = ImageFont.truetype(_FONT_AR, size)
-            try:
-                # axis order: [Weight, Width]
-                f.set_variation_by_axes([weight, 100])
-            except Exception:
-                pass
-            return f
-        except Exception:
-            return ImageFont.load_default()
+        """خط الهوية IBM Plex Sans Arabic — **أوزان ثابتة، لا محاور متغيّرة**.
+
+        ⚠️ كان هنا `set_variation_by_axes([weight, 100])` داخل `except: pass`.
+        ذلك يعمل مع `NotoSansArabic-Bold.ttf` لأنه **خطّ متغيّر** (محورا
+        `wght 100–900` و`wdth`)، بينما وجوه Plex **ثابتة** — فالنداء يرمي،
+        والـ`except` يبتلعه، ويُرسم كل شيء بوزن واحد **بلا أي إنذار**.
+        هذا بالضبط نمط العطب الصامت الذي تفادته بقيّة هذا الملف.
+
+        والأهم: الاستوديو كان يطلب **٩٠٠ و٨٠٠**، وهما خارج أوزان الدليل
+        أصلاً («الأوزان المستخدمة: 400 · 500 · 600 · 700 لا غير»)، وIBM Plex
+        Sans Arabic لا تملك أثقل من 700. فالقصّ إلى 700 هنا **مقصود ومعلن**
+        لا فقدُ ميزة: `brand.font` يختار أقرب ملفٍّ ثابت متاح.
+        """
+        return _brand.font(size, weight)
 
     def _vgradient(w: int, h: int, top, bottom) -> Image.Image:
         base = Image.new("RGB", (w, h), top)
@@ -12352,35 +12792,6 @@ elif page == "استوديو المحتوى":
             scale = min(box_w / max(w, 1), box_h / max(h, 1))
             nw, nh = max(1, int(w * scale)), max(1, int(h * scale))
             return lg.resize((nw, nh), Image.LANCZOS)
-        except Exception:
-            return None
-
-    def _cover_logo(logo_bytes: bytes, box_w: int, box_h: int) -> Image.Image | None:
-        """يكبّر/يصغّر الصورة لتملأ الكارت بالكامل (cover) مع قص مركزي —
-        أي صورة تملأ المقاس 540×400 بدون تشويه نسبتها."""
-        try:
-            lg = Image.open(io.BytesIO(logo_bytes)).convert("RGBA")
-            w, h = lg.size
-            scale = max(box_w / w, box_h / h)
-            nw, nh = max(int(w * scale + 0.5), box_w), max(int(h * scale + 0.5), box_h)
-            lg = lg.resize((nw, nh), Image.LANCZOS)
-            left, top = (nw - box_w) // 2, (nh - box_h) // 2
-            return lg.crop((left, top, left + box_w, top + box_h))
-        except Exception:
-            return None
-
-    def _cover_top(logo_bytes: bytes, box_w: int, box_h: int) -> Image.Image | None:
-        """مثل _cover_logo لكن يقصّ من الأعلى (يحفظ الجزء العلوي بدل المركز).
-        ضروري لخلفية logo5 (768×1376): الـheader 'نبض الصفقات DEAL PULSE KSA'
-        موجود في النصف العلوي — لو قطعنا من المركز يضيع، فنقطع من الأعلى."""
-        try:
-            lg = Image.open(io.BytesIO(logo_bytes)).convert("RGBA")
-            w, h = lg.size
-            scale = max(box_w / w, box_h / h)
-            nw, nh = max(int(w * scale + 0.5), box_w), max(int(h * scale + 0.5), box_h)
-            lg = lg.resize((nw, nh), Image.LANCZOS)
-            left = (nw - box_w) // 2
-            return lg.crop((left, 0, left + box_w, box_h))
         except Exception:
             return None
 
@@ -12470,6 +12881,92 @@ elif page == "استوديو المحتوى":
         return out.getvalue()
 
 
+    def _brand_backdrop(W: int, H: int) -> Image.Image:
+        """خلفية البوستر مبنيّة من اللوحة المغلقة — لا صورة مخبوزة.
+
+        ثلاث طبقات: أرضية اللوحة · نقش التقطيع (موتيف التذكرة، لغة العلامة
+        نفسها) · هيدر = أيقونة DP + الاسم نصّاً. الوسط يُترك خالصاً للكارت.
+
+        الوضع يتبع مبدّل «المظهر» في الشريط الجانبي، فالمادة تخرج بنفس الوضع
+        الذي يراه المالك. الأصول: `mark.png` (DP بحبر، للأرضية الفاتحة) و
+        `mark_white.png` (DP أبيض، للداكنة) — كلاهما شفّاف ومن لوقو التذكرة
+        المعتمد ٢٠٢٦-٠٨-١٢، لا من أصول يونيو.
+        """
+        dark = bool(_ui_dark)
+        ground_top = _brand.DARK_RAISED if dark else _brand.PAPER
+        ground_bot = _brand.DARK_GROUND if dark else _brand.SURFACE
+        img = _vgradient(W, H, ground_top, ground_bot).convert("RGBA")
+
+        # ── نقش الخلفية: **نفس لغة `watermark-bg` في ريبو الويب** ───────────
+        # تذاكر مائلة + نِسب + كلمات السوق مبعثرة. الشدّة تحت العتبة التي تجعل
+        # العين تقرأها أرضيةً لا شكلاً (الويب: حدود ٪١٠ ونصّ ٪٨٫٥) — أي حاضرة
+        # لا مزاحِمة، فالكارت والنسبة يجلسان فوقها بلا إجهاد.
+        #
+        # ⚠️ النِسب بأرقام لاتينية بقصد: القيم التجارية لاتينية في هذا المنتج،
+        # والعربية-الهندية تُترك للإحصاءات — خلطهما على سطح واحد يُقرأ عطباً.
+        base = _brand.DARK_BODY if dark else _brand.INK_900
+        a_line = 30 if dark else 22          # حدّ التذكرة
+        a_text = 26 if dark else 20          # النصّ والنِسب
+
+        def _rot(w: int, h: int, painter, angle: float, cx: int, cy: int) -> None:
+            """يرسم عنصراً على لوح شفّاف ثم يميله ويلصقه موسَّطاً على (cx, cy).
+            PIL لا يميل النصّ مباشرة — نفس حيلة `transform=rotate` في SVG الويب."""
+            tile = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+            painter(ImageDraw.Draw(tile))
+            tile = tile.rotate(angle, resample=Image.BICUBIC, expand=True)
+            img.alpha_composite(tile, (int(cx - tile.width / 2), int(cy - tile.height / 2)))
+
+        def _ticket(d, w, h):
+            col = (*base, a_line)
+            d.rounded_rectangle([2, 2, w - 3, h - 3], radius=20, outline=col, width=3)
+            for sx in range(14, w - 12, 15):          # خطّ التقطيع المنقّط
+                d.line([(sx, h // 2), (sx + 7, h // 2)], fill=col, width=3)
+
+        # تذاكر مائلة — تملأ الأطراف وتترك عمود المحتوى أهدأ
+        for cx, cy, ang, tw, th in (
+            (118, 168, 8, 210, 128), (W - 128, 246, -7, 196, 120),
+            (150, H - 214, -5, 200, 124), (W - 118, H - 132, 6, 188, 116),
+            (W - 96, 620, -9, 170, 106), (96, 604, 7, 164, 102),
+        ):
+            _rot(tw, th, lambda d, w=tw, h=th: _ticket(d, w, h), ang, cx, cy)
+
+        # نِسب + كلمات السوق — نفس مفردات خلفية الموقع، ومعها «كاش باك»
+        scatter = [
+            ("50%", 66, -6, 250, 96),   ("30%", 54, -4, 92, 470),
+            ("20%", 46, 5, W - 92, 442), ("15%", 44, 5, W - 128, 812),
+            ("10%", 40, 6, 300, 962),   ("5%", 34, -3, 336, 206),
+            ("عروض", 40, -6, W - 150, 990),  ("كاش باك", 36, 4, 168, 330),
+            ("خصم", 36, 5, W - 210, 128),    ("كود خصم", 32, -5, 236, 742),
+            ("خصومات", 30, 4, 108, 862),     ("تنزيلات", 28, 3, W - 250, 690),
+        ]
+        for txt, size, ang, cx, cy in scatter:
+            shaped = _ar_smart(txt)
+            f = _font(size, 700)
+            probe = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+            bb = probe.textbbox((0, 0), shaped, font=f)
+            tw_, th_ = bb[2] - bb[0] + 12, bb[3] - bb[1] + 12
+            _rot(tw_, th_,
+                 lambda d, s=shaped, ff=f, o=bb: d.text((6 - o[0], 6 - o[1]), s,
+                                                        font=ff, fill=(*base, a_text)),
+                 ang, cx, cy)
+
+        # ── الهيدر: أيقونة + اسم نصّي (الدليل: لا علامة كاملة حيث يُكتب الاسم) ──
+        mark_file = "mark_white.png" if dark else "mark.png"
+        mark_path = os.path.join(_STUDIO_DIR, mark_file)
+        y_cursor = 74
+        if os.path.exists(mark_path):
+            mk = Image.open(mark_path).convert("RGBA")
+            target_w = 190
+            mk = mk.resize((target_w, max(1, int(mk.height * target_w / mk.width))),
+                           Image.LANCZOS)
+            img.alpha_composite(mk, ((W - mk.width) // 2, y_cursor))
+            y_cursor += mk.height + 16
+
+        name_col = _brand.DARK_BODY if dark else _brand.INK_900
+        _center_text(ImageDraw.Draw(img), _ar("نبض الصفقات"),
+                     y_cursor, _font(46, 700), name_col)
+        return img
+
     def _render_poster(
         store_name: str,
         store_logo_bytes: bytes | None,
@@ -12477,30 +12974,37 @@ elif page == "استوديو المحتوى":
         discount_value: str,
         code: str,
         tagline: str,
-        deal_pulse_logo_bytes: bytes | None,
         card_w: int = 620,
         card_h: int = 320,
         logo_scale: int = 80,
         discount_font_size: int = 140,
     ) -> bytes:
-        """البوستر النهائي 1080×1080 — تصميم نبض الصفقات الفاخر.
-        الخلفية logo6.png مصمَّمة جاهزة (DP + 'نبض الصفقات DEAL PULSE KSA' header
-        + ✦ ديكور + مساحة وسطى فارغة). نضع فوقها الكارت + الخصم + الكود."""
-        W = H = _CANVAS  # 1080×1080 = نفس مقاس logo6
+        """البوستر النهائي 1080×1080 — الخلفية **تُبنى من اللوحة، لا من صورة**.
 
-        # خلفية كريم احتياطية (لو ما تحمّلت)
-        img = _vgradient(W, H, _STUDIO_BG_TOP, _STUDIO_BG_BOTTOM).convert("RGBA")
+        🔴 كانت الخلفية `logo6.png`: صورة مخبوزة بكل شيء داخلها. وهذا يعني أن
+        الهوية كانت **مجمَّدة عند تاريخ تصدير الملف** لا مشتقّة من اللوحة —
+        فتغيير الألوان في الكود لم يكن يلمسها إطلاقاً، وكان التدرّج أدناه
+        مجرّد احتياطي «لو ما تحمّلت» لا يعمل أبداً.
 
-        # ─── الخلفية الرسمية (logo6) — جاهزة بدون أي شفافية ──────────────
-        if deal_pulse_logo_bytes:
-            bg = _cover_logo(deal_pulse_logo_bytes, W, H)
-            if bg is not None:
-                img.paste(bg, (0, 0), bg)
+        وما كان مخبوزاً فيها (قِيس ٢٠٢٦-٠٨-١٧):
+          · كريمي دافئ #F5F2DF — قياس hue ‏36° بينما العلامة باردة كلها
+          · **اللوقو القديم بلا إطار التذكرة** (الملف من ١٤ يونيو، ولوقو
+            التذكرة اعتُمد ١٢ أغسطس) — أي بوستر منشور كان يحمل علامة قديمة
+          · أشكال زخرفية سيج/تركوازية خارج اللوحة المغلقة
+          · مقاسها 1024 بينما الكود يعلن 1080
+
+        البديل يتبع الدليل حرفياً: «المسافة الآمنة تُترك للتخطيط لا للملف»،
+        و«الاتساق يأتي من تكرار اللون والخط والمسافة لا من تكرار الشعار»،
+        و«في الهيدرات: أيقونة + اسم نصّي — لا علامة كاملة».
+        """
+        W = H = _CANVAS
+
+        img = _brand_backdrop(W, H)
 
         draw = ImageDraw.Draw(img)
 
         # ─── الكارت الأبيض الفاخر ────────────────────────────────────────
-        # يقع وسط البوستر، تحت header logo6 (DP + كتابة البراند).
+        # يقع وسط البوستر، تحت هيدر الخلفية (أيقونة DP + الاسم نصّاً).
         card_x = (W - card_w) // 2
         card_y = 360
         _drop_shadow(img, card_x, card_y, card_w, card_h, radius=50, blur=30, alpha=50)
@@ -12585,7 +13089,7 @@ elif page == "استوديو المحتوى":
             f_tag = _font(22, weight=700)
             _center_text(draw, _ar(_tag_clean), tag_y, f_tag, _STUDIO_EMERALD_DK)
 
-        # ملاحظة: الديكور ✦ موجود في خلفية logo6 — لا نرسمه يدوياً
+        # الديكور (نقش التقطيع) يرسمه `_brand_backdrop` من اللوحة — لا يدوياً هنا.
 
         out = io.BytesIO()
         img.convert("RGB").save(out, format="PNG", optimize=True)
@@ -12634,9 +13138,10 @@ elif page == "استوديو المحتوى":
 
             # ─── تنبيه عن الخلفية الرسمية ───────────────────────────────────
             st.info(
-                "🎨 **الخلفية الرسمية = logo6.png** (مربّع 1080×1080 جاهز للنشر). "
-                "تحتوي على DP + 'نبض الصفقات DEAL PULSE KSA' + لمسة ✦ في الزاوية. "
-                "لا تحتاج لأي تحكّم بالشفافية — المنتج النهائي جاهز للنشر مباشرة."
+                "🎨 **الخلفية تُبنى من اللوحة المغلقة** (1080×1080 جاهز للنشر): أرضية "
+                "الهوية + نقش تقطيع التذكرة + هيدر بأيقونة DP والاسم نصّاً. "
+                "كانت صورة مخبوزة `logo6.png` تُجمّد الهوية عند تاريخ تصديرها — "
+                "الآن تتبع اللوحة ومبدّل المظهر تلقائياً."
             )
 
             generate = st.button("✨ توليد البوسترين (نظيف + بالثيم)", type="primary", width='stretch')
@@ -12660,21 +13165,6 @@ elif page == "استوديو المحتوى":
                         st.caption(f"🪄 تمت إزالة الخلفية ({_method}).")
                     else:
                         st.warning(f"تعذّر إزالة الخلفية: {_rmbg_err} — سنستخدم الصورة كما هي.")
-                # ترتيب الأفضليّة لخلفية البوستر الرسمية:
-                #   1) logo6.png — الخلفية المربّعة 1024×1024 الجاهزة (الافتراضي).
-                #   2) logo5.png — الخلفية الطولية 768×1376 (احتياط).
-                #   3) logo_for_watermark.png — نسخة معالَجة بعتبة السطوع.
-                #   4) logo.png — اللوقو العادي بخلفيته الكريم.
-                dp_logo_bytes = None
-                _wm_path = None
-                for _cand in ("logo6.png", "logo5.png", "logo_for_watermark.png", "logo.png"):
-                    _p = os.path.join(_STUDIO_DIR, _cand)
-                    if os.path.exists(_p):
-                        _wm_path = _p
-                        break
-                if _wm_path:
-                    with open(_wm_path, "rb") as _f:
-                        dp_logo_bytes = _f.read()
                 with st.spinner("جاري رسم الصورتين…"):
                     # 1) الشعار النظيف (1080×1080 أبيض + لوقو موسَّط) → master.logo_url
                     clean_png = _render_clean_logo(store_logo_bytes, store_name_in)
@@ -12686,7 +13176,6 @@ elif page == "استوديو المحتوى":
                         discount_value=discount_value_in,
                         code=code_in,
                         tagline=tagline_in,
-                        deal_pulse_logo_bytes=dp_logo_bytes,
                         logo_scale=logo_scale,
                         discount_font_size=discount_font_size_in,
                     )
@@ -12867,8 +13356,8 @@ elif page == "محرّك SEO":
     st.header("🔍 محرّك صفحات SEO")
     st.caption("توليد ومراجعة وتعديل وحذف ونشر صفحات الـ landing من واجهة واحدة.")
 
-    # ═══ مدير المناسبات — يغذّي النشر التلقائي 3 صباحاً (ربط خلال أسبوعين) ═══
-    with st.expander("🗓️ مدير المناسبات (يستخدمها النشر التلقائي)", expanded=False):
+    # ═══ مدير المناسبات — تقويم مناسبات يُستخدم في توليد صفحات حول موضوع + تذكيرات المواسم ═══
+    with st.expander("🗓️ مدير المناسبات", expanded=False):
         _oc = get_conn(); _oc.rollback()
         try:
             _ocur = _oc.cursor()
@@ -12909,25 +13398,9 @@ elif page == "محرّك SEO":
         finally:
             _oc.close()
 
-    # ═══ تشغيل المحرّك الأوتوماتيكي يدوياً (نفس دورة 3 صباحاً — تجربة حقيقية) ═══
-    st.subheader("🚀 تشغيل دورة المحرّك الآن")
-    st.caption("نفس ما يحدث 3 صباحاً: أكثر المتاجر طلباً → ربط مناسبة → توليد → "
-               "**نشر تلقائي حقيقي** للموقع. استخدمه لاختبار دورة كاملة بأمان.")
-    if st.button("🚀 شغّل دورة SEO الآن", type="primary", key="seo_auto_run_btn"):
-        with st.spinner("جارٍ تشغيل الدورة الكاملة عبر الـ LLM... (قد تأخذ دقيقة)"):
-            _ar_data, _ar_err = _admin_post("/admin/seo-auto-run", timeout=280)
-        if _ar_err:
-            st.error(f"تعذّر التشغيل: {_ar_err}")
-        elif _ar_data and not _ar_data.get("enabled", True):
-            st.warning("المحرّك معطّل (SEO_AUTO_PUBLISH_ENABLED ليست true على خدمة الـ API).")
-        else:
-            d = _ar_data or {}
-            st.success(
-                f"✅ تمّت الدورة — متاجر: {d.get('top_stores', 0)} · "
-                f"مناسبة: {d.get('occasion') or '—'} · وظائف: {d.get('enqueued', 0)} · "
-                f"مُولَّد: {d.get('generated', 0)} · **منشور: {d.get('published', 0)}**"
-            )
-            st.balloons()
+    # التوليد التلقائي (دورة 3 صباحاً + زرّ التشغيل الفوري) أُزيل بطلب المالك
+    # ٢٠٢٦-٠٩-٠٩. صفحات /c/ تُصنع الآن يدوياً فقط: «توليد صفحات حول موضوع»
+    # أدناه ← مراجعة المسودّات ← نشر.
 
     # ═══ مسح كامل: كل صفحات SEO (مسودّات+منشورة+أرشيف) + الفهرسة + الوظائف ═══
     with st.expander("🧨 مسح كل صفحات SEO نهائياً (تصفير قبل الإطلاق)", expanded=False):
@@ -13290,16 +13763,30 @@ elif page == "📈 أداء SEO":
                     _ico = "🟢" if (_sc or 0) >= 90 else ("🟠" if (_sc or 0) >= 50 else "🔴")
                     _col.metric(_lbl, f"{_ico} {_sc}" if _sc is not None else "—")
                 _audits = _lr.get("audits", {})
-                _opps = [a for a in _audits.values()
-                         if a.get("details", {}).get("type") == "opportunity"
-                         and (a.get("score") if a.get("score") is not None else 1) < 0.9]
+                # Lighthouse 12+ (يشغّله PageSpeed الآن) نقل معظم «الفرص» إلى فحوص
+                # `*-insight` بنوع details مختلف — الفلتر القديم (type=="opportunity")
+                # كان يُسقطها فيظهر بند واحد بينما الحقيقة ٦+. نقبل الاثنين.
+                def _is_opp(_id, _a):
+                    if (_a.get("score") if _a.get("score") is not None else 1) >= 0.9:
+                        return False
+                    return (_a.get("details", {}).get("type") == "opportunity"
+                            or _id.endswith("-insight")
+                            or _a.get("displayValue", "").startswith("Est"))
+                _opps = [a for _id, a in _audits.items() if _is_opp(_id, a)]
                 _opps.sort(key=lambda a: a.get("score") if a.get("score") is not None else 1)
                 st.divider()
                 if _opps:
                     st.subheader("🛠️ أهم فرص التحسين")
-                    for _a in _opps[:8]:
+                    _seen = set()
+                    for _a in _opps:
+                        _ti = _a.get("title", "")
+                        if _ti in _seen:
+                            continue
+                        _seen.add(_ti)
                         _dv = _a.get("displayValue", "")
-                        st.markdown(f"- **{_a.get('title', '')}** {('— ' + _dv) if _dv else ''}")
+                        st.markdown(f"- **{_ti}** {('— ' + _dv) if _dv else ''}")
+                        if len(_seen) >= 10:
+                            break
                 else:
                     st.success("✅ لا فرص تحسين كبيرة — الأداء جيد.")
         if not os.getenv("PAGESPEED_API_KEY"):
@@ -13320,10 +13807,10 @@ elif page == "📈 أداء SEO":
             st.caption(f"الخاصية: {_gsc_site}")
             _gd1, _gd2 = st.columns(2)
             _g_from = _gd1.date_input(
-                "من", value=(datetime.datetime.utcnow() - timedelta(days=28)).date(),
+                "من", value=(datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) - timedelta(days=28)).date(),
                 key="gsc_from", format="YYYY-MM-DD")
             _g_to = _gd2.date_input(
-                "إلى", value=datetime.datetime.utcnow().date(), key="gsc_to", format="YYYY-MM-DD")
+                "إلى", value=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).date(), key="gsc_to", format="YYYY-MM-DD")
             if st.button("📊 اجلب بيانات Search Console", type="primary", key="gsc_run"):
                 with st.spinner("جارٍ الجلب من Google Search Console..."):
                     _gerr = None
@@ -13440,10 +13927,10 @@ elif page == "📊 تقرير البحث":
         }
         _rc1, _rc2, _rc3 = st.columns([2, 2, 1])
         _r_from = _rc1.date_input(
-            "من", value=(datetime.datetime.utcnow() - timedelta(days=90)).date(),
+            "من", value=(datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) - timedelta(days=90)).date(),
             key="rep_from", format="YYYY-MM-DD")
         _r_to = _rc2.date_input(
-            "إلى", value=datetime.datetime.utcnow().date(),
+            "إلى", value=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).date(),
             key="rep_to", format="YYYY-MM-DD")
 
         @st.cache_data(ttl=1800, show_spinner=False)
@@ -13577,13 +14064,17 @@ elif page == "📊 تقرير البحث":
 # ─────────────────────────────────────────────────────────────────────────────
 elif page == "🔎 الفهرسة":
     st.header("🔎 الفهرسة")
-    st.caption("كل روابط الموقع من sitemap الحيّ — انسخ، أرسِل للفهرسة في Search Console، "
-               "ثم علّمها «تمّت» لتختفي. أي رابط جديد يدخل الموقع يظهر هنا تلقائياً.")
+    st.caption("روابط sitemap الحيّ مقابل حالة Google الحقيقية. المفهرَس يُشطب تلقائياً، "
+               "والباقي worklist مصنّفة بالسبب. أي رابط جديد يدخل الموقع يظهر هنا تلقائياً.")
 
     import os as _os
     import re as _re
     from urllib.parse import unquote as _unquote
     idx_site = _os.getenv("SITE_URL", "https://www.dealpulseksa.com").rstrip("/")
+
+    def _idx_norm(u):
+        u = _unquote((u or "").strip()).split("?", 1)[0].split("#", 1)[0]
+        return u.rstrip("/")
 
     # ─── جلب كل روابط sitemap (مع متابعة sitemap index إن وُجد) — يُخزَّن للجلسة ──
     def _fetch_sitemap_urls(base):
@@ -13597,7 +14088,8 @@ elif page == "🔎 الفهرسة":
                 continue
             done.add(sm)
             try:
-                txt = _rq.get(sm, timeout=25).text
+                txt = _rq.get(sm, timeout=25,
+                              headers={"User-Agent": "Mozilla/5.0 (DealPulse indexer)"}).text
             except Exception:
                 continue
             locs = [m.strip() for m in
@@ -13606,10 +14098,43 @@ elif page == "🔎 الفهرسة":
                 queue.extend(locs)                       # ملف فهرس → اتبع الأبناء
                 continue
             for u in locs:
-                if u not in seen:
-                    seen.add(u)
-                    order.append(u)
+                n = _idx_norm(u)
+                if n not in seen:
+                    seen.add(n)
+                    order.append(n)
         return order
+
+    # ─── حارس migration 073 ──────────────────────────────────────────────────
+    _cov_ready = False
+    try:
+        _c = get_conn()
+        try:
+            _c.rollback()
+            with _c.cursor() as _cur:
+                _cur.execute("SELECT to_regclass('public.seo_index_coverage')")
+                _cov_ready = _cur.fetchone()[0] is not None
+        finally:
+            _c.close()
+    except Exception:
+        pass
+
+    if not _cov_ready:
+        st.warning("جدول تغطية الفهرسة `seo_index_coverage` غير منشأ (migration 073). "
+                   "الصفحة تعمل بلا مطابقة Google حتى تُنشئه.")
+        if st.button("🛠️ إنشاء جدول التغطية (073)", type="primary"):
+            try:
+                with open("migration_073_seo_index_coverage.sql", encoding="utf-8") as _f:
+                    _sql_txt = _f.read()
+                _c = get_conn()
+                try:
+                    with _c.cursor() as _cur:
+                        _cur.execute(_sql_txt)
+                    _c.commit()
+                finally:
+                    _c.close()
+                st.success("✅ طُبِّق migration 073"); st.rerun()
+            except Exception as _e:
+                st.error(f"تعذّر: {_e}")
 
     top1, top2 = st.columns([1, 3])
     with top1:
@@ -13625,44 +14150,138 @@ elif page == "🔎 الفهرسة":
         st.error("⚠️ تعذّر جلب أي رابط من sitemap. تأكد أن الموقع يعمل: "
                  f"`{idx_site}/sitemap.xml`")
     else:
-        # ─── حالة المعالَجة من القاعدة ────────────────────────────────────────
-        idx_acted = {}   # url -> status
+        # ─── حالة المعالَجة اليدوية + تغطية Google (مفاتيح مطبَّعة) ────────────
+        idx_acted = {}   # url مطبَّع -> (status, source)
         try:
             _c = get_conn()
             try:
                 _c.rollback()
                 with _c.cursor() as _cur:
-                    _cur.execute("SELECT url, status FROM seo_index_queue")
-                    idx_acted = {r[0]: r[1] for r in _cur.fetchall()}
+                    _cur.execute("SELECT url, status, "
+                                 "COALESCE(source, 'manual') FROM seo_index_queue")
+                    for _u, _s, _src in _cur.fetchall():
+                        idx_acted[_idx_norm(_u)] = (_s, _src)
             finally:
                 _c.close()
         except Exception as e:
             st.error(f"تعذّر قراءة جدول الفهرسة (هل طُبّق migration 063؟): {e}")
 
-        idx_pending = [u for u in idx_all_urls if u not in idx_acted]
-        idx_done    = [u for u, s in idx_acted.items() if s == "indexed"]
-        idx_ignored = [u for u, s in idx_acted.items() if s == "ignored"]
+        idx_cov = {}     # url مطبَّع -> {verdict, coverage_state, is_indexed, last_source}
+        if _cov_ready:
+            try:
+                from api.seo.index_coverage import coverage_map as _coverage_map
+                for _u, _meta in _coverage_map().items():
+                    idx_cov[_idx_norm(_u)] = _meta
+            except Exception as e:
+                st.warning(f"تعذّر قراءة تغطية Google: {e}")
+
+        _gsc_indexed = {u for u, c in idx_cov.items() if c.get("is_indexed")}
+        _hidden = set(idx_acted) | _gsc_indexed
+
+        idx_pending = [u for u in idx_all_urls if u not in _hidden]
+        idx_done    = [u for u, (s, _s) in idx_acted.items() if s == "indexed"]
+        idx_ignored = [u for u, (s, _s) in idx_acted.items() if s == "ignored"]
+
+        _VBADGE = {
+            "discovered":          "🔵 مكتشف — لم يُزحف",
+            "unknown":             "⚫ مجهول لجوجل",
+            "crawled_not_indexed": "🟠 زُحف ورُفض (جودة)",
+            "excluded_other":      "⚪ مستبعد (canonical/تحويل)",
+            "indexed":             "✅ مفهرَس",
+        }
+        _NOT_CHECKED = "◽ غير مفحوص"
+        # verdicts للدفع لا تفيدها (مشكلة جودة/canonical لا ميزانية زحف)
+        _PUSH_SKIP_VERDICTS = {"crawled_not_indexed", "excluded_other"}
 
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("📄 إجمالي الروابط", len(idx_all_urls))
         m2.metric("⏳ بانتظار الفهرسة", len(idx_pending))
-        m3.metric("✅ تمّت", len(idx_done))
+        m3.metric("✅ مفهرَس", len(idx_done) + len(_gsc_indexed - set(idx_acted)))
         m4.metric("🚫 متجاهَلة", len(idx_ignored))
 
-        if len(idx_all_urls):
-            _pct = round(len(idx_done) / len(idx_all_urls) * 100)
-            st.progress(min(_pct, 100) / 100,
-                        text=f"تقدّم الفهرسة اليدوية: {_pct}%")
+        # صف تصنيف verdict للمعلّقة
+        _pend_verdicts = {}
+        for u in idx_pending:
+            v = idx_cov.get(u, {}).get("verdict") or "_none"
+            _pend_verdicts[v] = _pend_verdicts.get(v, 0) + 1
+        if _pend_verdicts:
+            vc = st.columns(5)
+            vc[0].metric("🔵 مكتشف", _pend_verdicts.get("discovered", 0))
+            vc[1].metric("⚫ مجهول", _pend_verdicts.get("unknown", 0))
+            vc[2].metric("🟠 زُحف/رُفض", _pend_verdicts.get("crawled_not_indexed", 0))
+            vc[3].metric("⚪ مستبعد", _pend_verdicts.get("excluded_other", 0))
+            vc[4].metric("◽ غير مفحوص", _pend_verdicts.get("_none", 0))
 
-        with st.expander("ℹ️ طريقة العمل (مهم)"):
+        if len(idx_all_urls):
+            _idx_done_total = len(_hidden)
+            _pct = round(_idx_done_total / len(idx_all_urls) * 100)
+            st.progress(min(_pct, 100) / 100,
+                        text=f"مفهرَس / معالَج: {_idx_done_total} من {len(idx_all_urls)} ({_pct}%)")
+
+        # ─── قائمة «ما تفهرست» للتنزيل ───────────────────────────────────────
+        _not_indexed = [
+            (u, idx_cov.get(u, {}).get("verdict") or "not_checked",
+             idx_cov.get(u, {}).get("coverage_state") or "")
+            for u in idx_pending
+            if idx_acted.get(u, ("", ""))[0] != "ignored"
+        ]
+        if _not_indexed:
+            _csv = "url,verdict,coverage_state\n" + "\n".join(
+                f'"{u}","{v}","{s}"' for u, v, s in _not_indexed)
+            st.download_button(
+                f"⬇️ نزّل قائمة «ما تفهرست» ({len(_not_indexed)} رابط) CSV",
+                _csv, file_name="not_indexed.csv", mime="text/csv",
+                width='stretch')
+
+        # ─── مطابقة مع Google ────────────────────────────────────────────────
+        if _cov_ready:
+            with st.container(border=True):
+                st.markdown("#### ⚡ طابِق مع Google")
+
+                _stat, _serr = _admin_get("/admin/index-coverage-status")
+                _audit = (_stat or {}).get("audit", {})
+                _running = bool(_audit.get("running"))
+
+                a1, a2 = st.columns([2, 1])
+                with a1:
+                    if st.button("🔍 افحص كل الروابط عبر URL Inspection",
+                                 width='stretch', type="primary", disabled=_running):
+                        _d, _e = _admin_post("/admin/audit-index-coverage", timeout=30)
+                        if _e:
+                            st.error(f"تعذّر: {_e}")
+                        else:
+                            st.success("بدأ الفحص في الخلفية. حدّث بعد دقائق.")
+                            st.rerun()
+                with a2:
+                    if st.button("🔄 حدّث الحالة", width='stretch'):
+                        st.rerun()
+
+                if _serr:
+                    st.caption(f"⚠️ تعذّر قراءة حالة الفحص: {_serr}")
+                elif _running:
+                    _dn, _tt = _audit.get("done", 0), _audit.get("total", 0) or 1
+                    st.progress(min(1.0, _dn / _tt),
+                                text=f"جارٍ الفحص في الخلفية: {_dn} من {_tt}")
+                elif _audit.get("last_result"):
+                    _lr = _audit["last_result"]
+                    st.success("آخر فحص: " + " · ".join(
+                        f"{_VBADGE.get(k, k)}={v}"
+                        for k, v in sorted(_lr.get("by_verdict", {}).items()))
+                        + (f" · أخطاء={_lr.get('errors', 0)}" if _lr.get("errors") else ""))
+
+                st.caption("الفحص الكامل 15-25 دقيقة (خيط خلفي، حصة Google 2000/يوم). "
+                           "يبدأ بمكسب سريع (انطباعات 16 شهر) ثم URL Inspection لكل رابط "
+                           "متبقٍّ. آمن للإعادة — يكمل من حيث وقف.")
+
+        with st.expander("ℹ️ طريقة العمل"):
             st.markdown(
-                "1. انسخ الرابط (زر النسخ في ركن الصندوق).\n"
-                "2. افتح [Google Search Console](https://search.google.com/search-console) "
-                "→ الصق الرابط في شريط **URL Inspection** أعلى الصفحة.\n"
-                "3. اضغط **Request Indexing** (طلب الفهرسة).\n"
-                "4. ارجع هنا واضغط **✓ فُهرست** فيختفي الرابط.\n\n"
-                "⚠️ Google يحدّ الطلبات اليدوية بنحو **10–15 رابط/يوم**. اشتغل على دفعات. "
-                "الصفحات اللي ما تبي تفهرسها (خصوصية/شروط) علّمها **🚫 تجاهل**."
+                "**الترتيب:** شغّل «طابِق مع Google» أولاً — يشيل المفهرَس ويصنّف الباقي.\n\n"
+                "- 🔵 **مكتشف** / ⚫ **مجهول** → الدفع يفيد (ميزانية زحف). استخدم زر «📤 أرسِل».\n"
+                "- 🟠 **زُحف ورُفض** → مشكلة جودة، الدفع **لا** يفيد ويهدر الحصة — يُستثنى من الدفع.\n"
+                "- ⚪ **مستبعد** → canonical/تحويل، عادةً مقصود.\n\n"
+                "للفهرسة اليدوية: انسخ الرابط → [Search Console](https://search.google.com/search-console) "
+                "→ **URL Inspection** → **Request Indexing**، ثم اضغط **✓ فُهرست** هنا. "
+                "الصفحات اللي ما تبيها (خصوصية/شروط) علّمها **🚫 تجاهل**."
             )
 
         idx_tab_pending, idx_tab_done = st.tabs(
@@ -13672,13 +14291,50 @@ elif page == "🔎 الفهرسة":
         # ─── تبويب المعلّقة ───────────────────────────────────────────────────
         with idx_tab_pending:
             if not idx_pending:
-                st.success("🎉 ما في روابط معلّقة — كل شي في sitemap تمّت معالجته.")
+                st.success("🎉 ما في روابط معلّقة — كل شي في sitemap مفهرَس أو معالَج.")
             else:
-                idx_q = st.text_input("🔍 فلترة بالرابط", key="idx_filter",
-                                      placeholder="مثال: /store/  أو  /c/  أو اسم متجر")
+                fq1, fq2 = st.columns([3, 2])
+                idx_q = fq1.text_input("🔍 فلترة بالرابط", key="idx_filter",
+                                       placeholder="مثال: /store/  أو  /c/  أو اسم متجر")
+                _vopts = ["الكل", "🔵 مكتشف", "⚫ مجهول", "🟠 زُحف/رُفض",
+                          "⚪ مستبعد", "◽ غير مفحوص"]
+                _vmap = {"🔵 مكتشف": "discovered", "⚫ مجهول": "unknown",
+                         "🟠 زُحف/رُفض": "crawled_not_indexed",
+                         "⚪ مستبعد": "excluded_other", "◽ غير مفحوص": "_none"}
+                _vsel = fq2.selectbox("السبب", _vopts, key="idx_vfilter")
+
+                def _vof(u):
+                    return idx_cov.get(u, {}).get("verdict") or "_none"
+
                 _view = [u for u in idx_pending
-                         if not idx_q or idx_q.lower() in _unquote(u).lower()]
+                         if (not idx_q or idx_q.lower() in _unquote(u).lower())
+                         and (_vsel == "الكل" or _vof(u) == _vmap.get(_vsel))]
                 st.caption(f"معروض: {len(_view)} من {len(idx_pending)} رابط معلّق")
+
+                # ── دفع بالدفعة ──
+                _pushable = [u for u in _view if _vof(u) not in _PUSH_SKIP_VERDICTS][:25]
+                if _pushable and st.button(
+                        f"📤 أرسِل هذه الدفعة ({len(_pushable)}) للفهرسة",
+                        type="primary", key="idx_bulk_push"):
+                    _ok, _fail = 0, 0
+                    _pp = st.progress(0.0, text="إرسال...")
+                    for _j in range(0, len(_pushable), 6):     # حدّ Cloudflare 100s
+                        _batch = _pushable[_j:_j + 6]
+                        _data, _err = _admin_post("/admin/reindex-urls",
+                                                  json_body={"urls": _batch}, timeout=110)
+                        if _err:
+                            _fail += len(_batch)
+                        else:
+                            for _rr in (_data or {}).get("results", []):
+                                _gc = (_rr.get("google") or {}).get("code")
+                                if _gc == 200:
+                                    _ok += 1
+                                else:
+                                    _fail += 1
+                        _pp.progress(min(1.0, (_j + 6) / len(_pushable)))
+                    _pp.empty()
+                    st.success(f"دُفع لجوجل: {_ok} · متعثّر: {_fail} "
+                               f"(IndexNow يُدفع لكل الروابط بلا حصة)")
 
                 _per = 25
                 _npages = max(1, (len(_view) + _per - 1) // _per)
@@ -13688,8 +14344,12 @@ elif page == "🔎 الفهرسة":
 
                 for u in _slice:
                     _label = _unquote(u).replace(idx_site, "") or "/"
+                    _v = idx_cov.get(u, {})
+                    _vbadge = _VBADGE.get(_v.get("verdict"), _NOT_CHECKED)
                     with st.container(border=True):
-                        st.caption(f"🔗 {_label}")
+                        st.caption(f"🔗 {_label}  ·  {_vbadge}"
+                                   + (f"  ·  _{_v.get('coverage_state')}_"
+                                      if _v.get("coverage_state") else ""))
                         st.code(u, language=None)        # زر نسخ أصلي من Streamlit
                         b1, b2, _ = st.columns([1, 1, 3])
                         with b1:
@@ -13700,10 +14360,11 @@ elif page == "🔎 الفهرسة":
                                     try:
                                         with _c.cursor() as _cur:
                                             _cur.execute(
-                                                "INSERT INTO seo_index_queue (url, status) "
-                                                "VALUES (%s, 'indexed') "
+                                                "INSERT INTO seo_index_queue (url, status, source) "
+                                                "VALUES (%s, 'indexed', 'manual') "
                                                 "ON CONFLICT (url) DO UPDATE SET "
-                                                "status='indexed', marked_at=NOW()", (u,))
+                                                "status='indexed', source='manual', "
+                                                "marked_at=NOW()", (u,))
                                         _c.commit()
                                     finally:
                                         _c.close()
@@ -13718,10 +14379,11 @@ elif page == "🔎 الفهرسة":
                                     try:
                                         with _c.cursor() as _cur:
                                             _cur.execute(
-                                                "INSERT INTO seo_index_queue (url, status) "
-                                                "VALUES (%s, 'ignored') "
+                                                "INSERT INTO seo_index_queue (url, status, source) "
+                                                "VALUES (%s, 'ignored', 'manual') "
                                                 "ON CONFLICT (url) DO UPDATE SET "
-                                                "status='ignored', marked_at=NOW()", (u,))
+                                                "status='ignored', source='manual', "
+                                                "marked_at=NOW()", (u,))
                                         _c.commit()
                                     finally:
                                         _c.close()
@@ -13734,15 +14396,19 @@ elif page == "🔎 الفهرسة":
             if not idx_acted:
                 st.info("لا توجد روابط معالَجة بعد.")
             else:
+                st.caption("صفوف Google (تلقائية) بلا زر تراجع — Google مصدر الحقيقة. "
+                           "شغّل «طابِق مع Google» ثانيةً لتحديثها.")
                 for u in sorted(idx_acted, key=lambda x: idx_acted[x]):
-                    _st = idx_acted[u]
+                    _st, _src = idx_acted[u]
                     _badge = "✅ فُهرست" if _st == "indexed" else "🚫 متجاهَل"
+                    _tag = " (Google)" if _src == "gsc" else ""
                     c1, c2 = st.columns([5, 1])
                     with c1:
-                        st.caption(f"{_badge} · {_unquote(u).replace(idx_site, '') or '/'}")
+                        st.caption(f"{_badge}{_tag} · "
+                                   f"{_unquote(u).replace(idx_site, '') or '/'}")
                     with c2:
-                        if st.button("↩️ تراجع", key=f"idx_undo_{u}",
-                                     width='stretch'):
+                        if _src != "gsc" and st.button("↩️ تراجع", key=f"idx_undo_{u}",
+                                                       width='stretch'):
                             try:
                                 _c = get_conn()
                                 try:
@@ -13788,7 +14454,7 @@ elif page == "📤 الصفحات المنشورة":
             _creds = service_account.Credentials.from_service_account_info(
                 json.loads(raw), scopes=["https://www.googleapis.com/auth/webmasters.readonly"])
             _svc = build("searchconsole", "v1", credentials=_creds, cache_discovery=False)
-            _end = datetime.datetime.utcnow().date()
+            _end = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).date()
             _start = _end - timedelta(days=28)
             _resp = _svc.searchanalytics().query(
                 siteUrl=gsite,
@@ -15338,3 +16004,1360 @@ if page == "🛰️ متابعة المنصة":
             "فوق الجدولة دون لمس البيئة."
         )
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 🗓️ مواسم المتاجر — تنسيق يدوي لصفحات المناسبات (migration_067)
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "🗓️ مواسم المتاجر":
+    st.header("🗓️ مواسم المتاجر")
+    st.caption(
+        "حدّد يدوياً أي متاجر تظهر في كل صفحة مناسبة. هذا **يُضاف فوق** الاستنتاج "
+        "التلقائي من الأقسام ولا يلغيه — فالمتجر الذي يدخل بقسمه يبقى ظاهراً حتى لو "
+        "لم تختره هنا. يفيد المتاجر التي تخصّ موسماً بلا قسم يعبّر عنه (مثل متجر "
+        "توزيعات مدرسية قسمه «هدايا»)."
+    )
+
+    # المعرّفات مطابقة لـ SALE_SEASONS[].id في dealpulseksa-web/app/calendar/data.ts.
+    # أي تعديل هنا يجب أن يقابله تعديل هناك وإلا صار الاختيار بلا أثر على الموقع.
+    _SEASONS = [
+        ("back-to-school",   "🎒 العودة إلى المدارس",         "منتصف أغسطس – منتصف سبتمبر"),
+        ("national-day",     "🇸🇦 اليوم الوطني السعودي",       "18 – 25 سبتمبر"),
+        ("white-friday",     "🖤 الجمعة البيضاء",              "23 – 30 نوفمبر"),
+        ("eleven-eleven",    "1️⃣1️⃣ 11.11",                    "9 – 12 نوفمبر"),
+        ("twelve-twelve",    "🎁 12.12 ونهاية العام",          "10 – 31 ديسمبر"),
+        ("winter-clearance", "❄️ تصفية الشتاء",                "يناير"),
+        ("founding-day",     "🏛️ يوم التأسيس",                 "15 – 24 فبراير"),
+        ("ramadan",          "🌙 رمضان",                       "تقديري (هجري)"),
+        ("eid-fitr",         "🌟 عيد الفطر",                   "تقديري (هجري)"),
+        ("eid-adha",         "🕋 عيد الأضحى",                  "تقديري (هجري)"),
+        ("summer-sale",      "☀️ تخفيضات الصيف",               "يونيو – منتصف يوليو"),
+        ("riyadh-season",    "🎡 موسم الرياض",                 "أكتوبر – مارس"),
+    ]
+    _season_label = {s: f"{lbl}  ({win})" for s, lbl, win in _SEASONS}
+
+    _osel = st.selectbox(
+        "🗓️ اختر الموسم", options=[s for s, _, _ in _SEASONS],
+        format_func=lambda s: _season_label[s], key="occ_season_select")
+
+    # صراحة عن الأثر الفعلي: موسمان فقط لهما صفحة على الموقع اليوم، وصفحة اليوم
+    # الوطني تعرض كل المتاجر عمداً (موسم عابر للفئات) فالتنسيق لا يغيّرها.
+    # بلا هذه الملاحظة يظنّ المستخدم أن اختياره أثّر بينما لا أثر له.
+    if _osel == "back-to-school":
+        st.success("✅ هذا الموسم له صفحة حيّة `/back-to-school` تقرأ اختيارك.")
+    elif _osel == "national-day":
+        st.info(
+            "ℹ️ صفحة `/national-day` تعرض **كل** المتاجر عمداً (اليوم الوطني موسم "
+            "عابر للفئات)، فاختيارك هنا محفوظ لكنه بلا أثر عليها حالياً."
+        )
+    else:
+        st.warning(
+            "⚠️ لا توجد صفحة مناسبة لهذا الموسم على الموقع بعد — اختيارك يُحفظ "
+            "ويصير جاهزاً لحظة إنشائها، لكنه لا يظهر لأحد الآن."
+        )
+
+    _oc = get_conn(); _oc.rollback()
+    try:
+        _ostores = pd.read_sql(
+            "SELECT id, store_id, COALESCE(NULLIF(name_en,''), store_id) AS name_en, "
+            "COALESCE(store_tags,'') AS store_tags, COALESCE(occasions,'') AS occasions "
+            "FROM master ORDER BY store_id", _oc)
+    except Exception as _e:
+        st.error(f"تعذّر جلب المتاجر: {_e}"); _ostores = pd.DataFrame()
+    finally:
+        _oc.close()
+
+    if _ostores.empty:
+        st.info("لا توجد متاجر بعد.")
+    else:
+        _ostores["occ_list"] = _ostores["occasions"].apply(parse_tags)
+        _current = [int(r["id"]) for _, r in _ostores.iterrows()
+                    if _osel in r["occ_list"]]
+
+        _olabels = {
+            int(r["id"]): f'{r["store_id"]}  ·  {" / ".join(parse_tags(r["store_tags"])[:3]) or "بلا أقسام"}'
+            for _, r in _ostores.iterrows()
+        }
+
+        st.markdown(f"### المتاجر المُختارة لـ {_season_label[_osel]}")
+        _picked = st.multiselect(
+            "اختر المتاجر", options=list(_olabels.keys()),
+            default=_current, format_func=lambda i: _olabels[i],
+            key=f"occ_pick_{_osel}",
+            help="ابحث بالاسم. الأقسام معروضة بجانب كل متجر لتساعدك على القرار.")
+
+        _added   = sorted(set(_picked) - set(_current))
+        _removed = sorted(set(_current) - set(_picked))
+
+        if _added or _removed:
+            _msg = []
+            if _added:   _msg.append(f"➕ إضافة {len(_added)}")
+            if _removed: _msg.append(f"➖ إزالة {len(_removed)}")
+            st.warning(" · ".join(_msg) + " — اضغط حفظ للتطبيق.")
+        else:
+            st.caption(f"لا تغييرات. عدد المتاجر المُنسَّقة لهذا الموسم حالياً: {len(_current)}")
+
+        if st.button("💾 حفظ مواسم هذا الموسم", type="primary",
+                     disabled=not (_added or _removed), key=f"occ_save_{_osel}"):
+            try:
+                _wc = get_conn(); _wc.rollback(); _wcur = _wc.cursor()
+                _n = 0
+                for _sid in _added + _removed:
+                    _row = _ostores[_ostores["id"] == _sid].iloc[0]
+                    _lst = list(_row["occ_list"])
+                    if _sid in _added and _osel not in _lst:
+                        _lst.append(_osel)
+                    elif _sid in _removed and _osel in _lst:
+                        _lst.remove(_osel)
+                    # نفس اصطلاح store_tags: عمود نصّي بصيغة '{a,b}'، وفارغ = NULL.
+                    _lit = ("{" + ",".join(_lst) + "}") if _lst else None
+                    _wcur.execute("UPDATE master SET occasions=%s WHERE id=%s", (_lit, int(_sid)))
+                    _n += 1
+                _wc.commit(); _wc.close()
+                st.success(f"✅ حُدِّث {_n} متجراً. الموقع يلتقط التغيير خلال ساعة (ISR).")
+                st.rerun()
+            except Exception as _e:
+                st.error(f"فشل الحفظ: {_e}")
+
+        st.divider()
+        st.subheader("📋 كل المتاجر المُنسَّقة (كل المواسم)")
+        _tagged = _ostores[_ostores["occ_list"].apply(len) > 0]
+        if _tagged.empty:
+            st.info("لا متجر مُنسَّق يدوياً بعد — الصفحات تعتمد الاستنتاج من الأقسام وحده.")
+        else:
+            _view = pd.DataFrame({
+                "المتجر": _tagged["store_id"],
+                "المواسم": _tagged["occ_list"].apply(
+                    lambda ls: " · ".join(_season_label.get(x, x).split("  (")[0] for x in ls)),
+            })
+            st.dataframe(_view, width="stretch", hide_index=True)
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  🔔 تذكيرات المواسم — مشتركو /calendar
+# ═══════════════════════════════════════════════════════════════════════════
+#  زائر التقويم يأتي ليعرف تاريخاً ثم يخرج: نيّته تخطيط لا شراء، والموسم بعد
+#  أسابيع فلا شيء يفعله اليوم. هذه الصفحة تُظهر من التقطناه ليوم يصير جاهزاً.
+elif page == "🔔 تذكيرات المواسم":
+    page_title("🔔", "تذكيرات المواسم", "من اشترك ليُذكَّر قبل موسمه — مصنّفين حسب الموسم")
+
+    _rc = get_conn()
+    try:
+        _rc.rollback()  # تنظيف أي معاملة معلّقة من صفحة سابقة
+
+        _tot = pd.read_sql("""
+            SELECT COUNT(*) FILTER (WHERE status='active')                      AS active,
+                   COUNT(*) FILTER (WHERE status='unsubscribed')                AS unsub,
+                   COUNT(DISTINCT lower(email))                                 AS people,
+                   COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE)           AS today
+            FROM season_reminders
+        """, _rc).iloc[0]
+
+        c1, c2, c3, c4 = st.columns(4)
+        with c1: kpi_card("🔔", "اشتراكات نشطة", int(_tot["active"] or 0), "success")
+        with c2: kpi_card("👤", "أشخاص مختلفون", int(_tot["people"] or 0), "info")
+        with c3: kpi_card("🆕", "اشتراكات اليوم", int(_tot["today"] or 0), "info")
+        with c4: kpi_card("🚫", "ألغوا الاشتراك", int(_tot["unsub"] or 0), "warning")
+
+        st.markdown("---")
+
+        # ── التصنيف حسب الموسم ────────────────────────────────────────────
+        st.subheader("📊 المشتركون حسب الموسم")
+        _by = pd.read_sql("""
+            SELECT COALESCE(season_name, season_id)                       AS "الموسم",
+                   season_year                                            AS "السنة",
+                   COUNT(*) FILTER (WHERE status='active')                AS "نشط",
+                   COUNT(*) FILTER (WHERE status='unsubscribed')          AS "ملغى",
+                   COUNT(*) FILTER (WHERE sent_pre_at IS NOT NULL)        AS "أُرسل تنبيه مبكر",
+                   COUNT(*) FILTER (WHERE sent_start_at IS NOT NULL)      AS "أُرسل يوم البدء",
+                   MAX(created_at)                                        AS "آخر اشتراك"
+            FROM season_reminders
+            GROUP BY 1, 2
+            ORDER BY 3 DESC, 2
+        """, _rc)
+        if _by.empty:
+            st.info("ما فيه اشتراكات بعد. الزر يظهر على كل كرت موسم في /calendar.")
+        else:
+            st.dataframe(_by, use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+
+        # ── آخر المشتركين ─────────────────────────────────────────────────
+        st.subheader("🧾 آخر المشتركين")
+        _lim = st.slider("عدد الصفوف", 20, 500, 100, step=20, key="rem_limit")
+        _rows = pd.read_sql(f"""
+            SELECT created_at                                  AS "التاريخ",
+                   email                                       AS "البريد",
+                   COALESCE(season_name, season_id)            AS "الموسم",
+                   season_year                                 AS "السنة",
+                   source                                      AS "المصدر",
+                   status                                      AS "الحالة"
+            FROM season_reminders
+            ORDER BY created_at DESC
+            LIMIT {int(_lim)}
+        """, _rc)
+        if _rows.empty:
+            st.caption("لا صفوف.")
+        else:
+            st.dataframe(_rows, use_container_width=True, hide_index=True)
+            st.download_button(
+                "⬇️ تصدير CSV",
+                _rows.to_csv(index=False).encode("utf-8-sig"),
+                file_name="season_reminders.csv",
+                mime="text/csv",
+            )
+    except Exception as _e:
+        st.error(f"تعذّر تحميل التذكيرات: {_e}")
+    finally:
+        _rc.close()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 💰 إسناد الإيراد — الجسر بين الظهور العضوي والفلوس الفعلية
+# ═══════════════════════════════════════════════════════════════════════════
+# السؤال الذي لم يكن للمنصّة جواب عليه: «هل السيو يجيب فلوس؟». تعذّر الجواب
+# ليس نقص أدوات — بل نموذج الإسناد: سلة وكودماب ينسبان **بالكود** لا بالنقرة،
+# فطلبٌ يقع بلا أن يمرّ الشاري بالموقع أصلاً (ثبت: هدف ولحظات القهوة وخيارات
+# أعطوا طلبات حقيقية و action_logs يسجّل لهم صفر نقر وصفر نسخ). ⇒ لا يمكن ربط
+# طلبٍ بجلسة، ومحاولة ذلك تُنتج صفراً كاذباً.
+#
+# ما يصحّ هو الربط **على مستوى المتجر**: كم ريالاً أعاد كل متجر مقابل ظهوره
+# العضوي. تجمع الصفحة المصادر الثلاثة على master_id وتشتقّ المؤشّر:
+#   • الظهور/النقر العضوي  ← GSC لكل صفحة /store/{name}
+#   • التفاعل داخل الموقع  ← action_logs
+#   • الإيراد               ← affiliate_conversions
+elif page == "💰 إسناد الإيراد":
+    page_title("💰", "إسناد الإيراد",
+               "ريال حقيقي مقابل ظهور عضوي — لكل متجر. الإسناد بالكود لا بالنقرة، "
+               "فالربط على مستوى المتجر لا الطلب.")
+
+    _rc = get_conn()
+    _rc.rollback()
+    try:
+        # ── ١) حالة خطوط التغذية ─────────────────────────────────────────
+        st.subheader("① حالة مصادر الإيراد")
+        _pb_armed = bool(os.getenv("POSTBACK_ADMITAD_TOKEN"))
+        _conv = pd.read_sql(
+            "SELECT network, COUNT(*) AS rows, COALESCE(SUM(order_sum),0) AS sales, "
+            "COALESCE(SUM(reward_ready),0) AS commission "
+            "FROM affiliate_conversions GROUP BY network ORDER BY 2 DESC", _rc)
+
+        _c1, _c2, _c3 = st.columns(3)
+        _c1.metric("تحويلات مسجّلة", int(_conv["rows"].sum()) if not _conv.empty else 0)
+        _c2.metric("مبيعات (ر.س)",
+                   f"{float(_conv['sales'].sum()):,.2f}" if not _conv.empty else "0.00")
+        _c3.metric("عمولة (ر.س)",
+                   f"{float(_conv['commission'].sum()):,.2f}" if not _conv.empty else "0.00")
+
+        if _pb_armed:
+            st.success("✅ Admitad postback مُفعّل — التحويلات تدخل تلقائياً.")
+        else:
+            st.warning(
+                "⚠️ **Admitad postback مبنيّ لكنه معطّل.** الإنتاج يرد "
+                "503 POSTBACK_ADMITAD_TOKEN not configured. خطوتان يدويتان "
+                "(~٥ دقائق) موثّقتان في seo/admitad_postback_setup.md: ضع "
+                "POSTBACK_ADMITAD_TOKEN في متغيّرات Railway، ثم الصق رابط "
+                "الـPostback في لوحة Admitad. بعدها يدخل كل بيع تلقائياً."
+            )
+        if not _conv.empty:
+            st.dataframe(_conv.rename(columns={
+                "network": "الشبكة", "rows": "تحويلات",
+                "sales": "مبيعات", "commission": "عمولة"}),
+                width="stretch", hide_index=True)
+
+        # ── ٢) استيراد يدوي (سلة/كودماب: لا API للمسوّق) ──────────────────
+        st.divider()
+        st.subheader("② استيراد تحويلات يدوياً")
+        st.caption(
+            "سلة وكودماب لا يوفّران API للمسوّق (محسوم بالتحقّق) — لكن لوحة سلة "
+            "تدعم تصدير الطلبات. صدّر CSV وارفعه هنا، وطابِق الأعمدة."
+        )
+        _up = st.file_uploader("ملف CSV من لوحة الشريك", type=["csv"], key="conv_csv")
+        if _up is not None:
+            try:
+                _raw = pd.read_csv(_up)
+                st.dataframe(_raw.head(5), width="stretch")
+                _cols = list(_raw.columns)
+                _m1, _m2, _m3 = st.columns(3)
+                _f_store = _m1.selectbox("عمود المتجر", _cols, key="cv_store")
+                _f_order = _m2.selectbox("عمود رقم الطلب", _cols, key="cv_order")
+                _f_sales = _m3.selectbox("عمود المبيعات", _cols, key="cv_sales")
+                _m4, _m5, _m6 = st.columns(3)
+                _f_comm = _m4.selectbox("عمود العمولة", _cols, key="cv_comm")
+                _f_date = _m5.selectbox("عمود التاريخ", _cols, key="cv_date")
+                _f_net = _m6.text_input("اسم الشبكة", value="salla", key="cv_net")
+
+                if st.button("📥 استورد إلى affiliate_conversions", type="primary"):
+                    _stores = pd.read_sql("SELECT id, store_id FROM master", _rc)
+                    _byname = {str(r.store_id).strip(): int(r.id)
+                               for r in _stores.itertuples()}
+
+                    def _num(_row, _col):
+                        _v = _row.get(_col)
+                        if _v is None or pd.isna(_v):
+                            return None
+                        try:
+                            return float(str(_v).replace(",", "").strip())
+                        except ValueError:
+                            return None
+
+                    _ok = _skip = 0
+                    with _rc.cursor() as _cu:
+                        for _rec in _raw.to_dict("records"):
+                            _oid = str(_rec.get(_f_order) or "").strip()
+                            if not _oid or _oid.lower() == "nan":
+                                _skip += 1
+                                continue
+                            _mid = _byname.get(str(_rec.get(_f_store) or "").strip())
+                            _when = pd.to_datetime(_rec.get(_f_date), errors="coerce")
+                            _cu.execute(
+                                """
+                                INSERT INTO affiliate_conversions
+                                    (network, action_id, master_id, order_id,
+                                     order_sum, reward_ready, conversion_time,
+                                     status, currency, received_at)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s,
+                                        'imported', 'SAR', NOW())
+                                ON CONFLICT (network, action_id) DO UPDATE SET
+                                    order_sum    = EXCLUDED.order_sum,
+                                    reward_ready = EXCLUDED.reward_ready,
+                                    master_id    = COALESCE(EXCLUDED.master_id,
+                                                        affiliate_conversions.master_id)
+                                """,
+                                (_f_net.strip() or "manual", _oid, _mid, _oid,
+                                 _num(_rec, _f_sales), _num(_rec, _f_comm),
+                                 None if pd.isna(_when) else _when.to_pydatetime()),
+                            )
+                            _ok += 1
+                    _rc.commit()
+                    st.success(f"✅ استُورد {_ok} صفاً · تُخطّي {_skip} (بلا رقم طلب).")
+                    st.cache_data.clear()
+            except Exception as _e:
+                _rc.rollback()
+                st.error(f"تعذّرت قراءة/استيراد الملف: {_e}")
+
+        # ── ٣) الجسر: إيراد مقابل ظهور عضوي لكل متجر ──────────────────────
+        st.divider()
+        st.subheader("③ الجسر — ريال مقابل ظهور عضوي")
+
+        _days = st.slider("نافذة التحليل (أيام)", 7, 90, 28, key="attr_days")
+        _eng = pd.read_sql(f"""
+            SELECT m.id AS master_id, m.store_id AS store,
+                   COUNT(*) FILTER (WHERE a.action_type='view_store')  AS views,
+                   COUNT(*) FILTER (WHERE a.action_type='click_link')  AS clicks,
+                   COUNT(*) FILTER (WHERE a.action_type='copy_coupon') AS copies
+            FROM master m
+            LEFT JOIN action_logs a
+                   ON a.store_id = m.store_id
+                  AND a.action_time > NOW() - INTERVAL '{int(_days)} days'
+            GROUP BY m.id, m.store_id
+        """, _rc)
+        _rev = pd.read_sql(f"""
+            SELECT master_id,
+                   COUNT(*)                      AS orders,
+                   COALESCE(SUM(order_sum), 0)   AS sales,
+                   COALESCE(SUM(reward_ready),0) AS commission
+            FROM affiliate_conversions
+            WHERE master_id IS NOT NULL
+              AND COALESCE(conversion_time, received_at)
+                  > NOW() - INTERVAL '{int(_days)} days'
+            GROUP BY master_id
+        """, _rc)
+
+        _bridge = _eng.merge(_rev, on="master_id", how="left").fillna(
+            {"orders": 0, "sales": 0.0, "commission": 0.0})
+
+        # الظهور العضوي من GSC لكل صفحة /store/{name} — اختياري: الصفحة تعمل بدونه.
+        _gj = os.getenv("GSC_SA_JSON")
+        _gsite = os.getenv("GSC_SITE", "https://www.dealpulseksa.com/")
+        if _gj:
+            try:
+                from urllib.parse import unquote
+
+                from google.oauth2.service_account import Credentials as _Cr
+                from googleapiclient.discovery import build as _build
+
+                @st.cache_data(ttl=1800, show_spinner=False)
+                def _gsc_store_pages(site, days):
+                    _cr = _Cr.from_service_account_info(
+                        json.loads(os.getenv("GSC_SA_JSON")),
+                        scopes=["https://www.googleapis.com/auth/webmasters.readonly"])
+                    _sv = _build("searchconsole", "v1", credentials=_cr,
+                                 cache_discovery=False)
+                    # آخر يومين في GSC ناقصان دائماً — نُنهي النافذة قبلهما.
+                    _end = date.today() - timedelta(days=2)
+                    _res = _sv.searchanalytics().query(
+                        siteUrl=site,
+                        body={"startDate": str(_end - timedelta(days=days)),
+                              "endDate": str(_end),
+                              "dimensions": ["page"], "rowLimit": 1000}).execute()
+                    _out = []
+                    for _row in _res.get("rows", []):
+                        _u = _row["keys"][0]
+                        if "/store/" not in _u:
+                            continue
+                        _out.append({"store": unquote(_u.split("/store/")[1]).strip(),
+                                     "impressions": _row.get("impressions", 0),
+                                     "gsc_clicks": _row.get("clicks", 0)})
+                    return pd.DataFrame(_out)
+
+                _g = _gsc_store_pages(_gsite, int(_days))
+                if not _g.empty:
+                    _bridge = _bridge.merge(_g, on="store", how="left")
+            except Exception as _e:
+                st.caption(f"⚠️ تعذّر سحب GSC: {_e}")
+        else:
+            st.caption("ℹ️ GSC_SA_JSON غير مضبوط — الظهور العضوي غير معروض.")
+
+        if "impressions" not in _bridge.columns:
+            _bridge["impressions"] = 0
+            _bridge["gsc_clicks"] = 0
+        _bridge = _bridge.fillna({"impressions": 0, "gsc_clicks": 0})
+
+        # المؤشّر المشتقّ: ريال لكل ألف ظهور عضوي — يقارن متاجر مختلفة الحجم بعدل.
+        _bridge["ريال/ألف ظهور"] = _bridge.apply(
+            lambda r: round(float(r["commission"]) * 1000 / r["impressions"], 2)
+            if r["impressions"] else 0.0, axis=1)
+
+        _bridge = _bridge.sort_values(["commission", "impressions"], ascending=False)
+        st.dataframe(
+            _bridge.rename(columns={
+                "store": "المتجر", "views": "مشاهدات", "clicks": "نقرات",
+                "copies": "نسخ الكود", "orders": "طلبات", "sales": "مبيعات",
+                "commission": "عمولة", "impressions": "ظهور عضوي",
+                "gsc_clicks": "نقرات عضوية"}).drop(columns=["master_id"]),
+            width="stretch", hide_index=True)
+
+        _earning = int((_bridge["commission"] > 0).sum())
+        _exposed = int((_bridge["impressions"] > 0).sum())
+        st.caption(
+            f"**{_earning}** متجراً أعاد عمولة · **{_exposed}** متجراً له ظهور عضوي. "
+            "⚠️ العمود المشتقّ **ارتباط لا إسناد**: الشبكات تنسب بالكود، فالطلب قد "
+            "يقع بلا مرور الشاري بالموقع. اقرأه كترتيب أولويات لا كدليل سببية."
+        )
+        st.download_button(
+            "⬇️ تصدير الجسر CSV",
+            _bridge.to_csv(index=False).encode("utf-8-sig"),
+            file_name="revenue_attribution.csv", mime="text/csv")
+    except Exception as _e:
+        _rc.rollback()
+        st.error(f"تعذّر بناء الجسر: {_e}")
+    finally:
+        _rc.close()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 🎯 إدارة الحملات — عقد القياس قبل الإطلاق
+#
+# مبنية حرفياً على ما استُخلص من شهادات القياس والإسناد
+# (المرجع الكامل: seo/ads_measurement_doctrine.md):
+#   §10 أسماء المتاجر الشريكة كلمات سلبية إلزامية — التزام تعاقدي لا ضبط أداء.
+#   §16 هدف واحد لكل مرحلة، والوكيل يُعلَن وكيلاً لا يُخفى.
+#   §17 لا تقرير يُغلق بلا «فعل»؛ ومرجعيتنا أداؤنا الماضي المعدود لا مرجعية عامّة.
+#   §20 لا يُحكَم على آخر ٧–١٤ يوماً (تأخّر التحويل)، ولا يُشخَّص هبوط قبل سجلّ التغييرات.
+#   §23 القنوات غير-جوجل لا يُنسب إليها تحويل بلا UTM.
+# ═══════════════════════════════════════════════════════════════════════════
+elif page == "🎯 إدارة الحملات":
+    page_title("🎯", "إدارة الحملات",
+               "عقد قياس قبل الإطلاق — لا حملة تُطلق بلا حَكَم، ولا قراءة تُغلق بلا فعل")
+
+    _GA4_ID   = "G-VRBHD0VK66"
+    _MIN_DAYS = 21          # الاختبار يحتاج ٣–٤ أسابيع لبلوغ دلالة
+    _LAG_DAYS = 7           # آخر ٧ أيام لا يُحكم عليها — التحويل لم يصل بعد
+
+    _CHANNELS = {
+        "google_search": "🔍 بحث جوجل (مدفوع)",
+        "snapchat":      "👻 سناب شات",
+        "tiktok":        "🎵 تيك توك",
+        "instagram":     "📸 إنستقرام",
+        "telegram":      "✈️ تيليجرام (مملوك)",
+        "email":         "✉️ بريد (مملوك)",
+        "organic":       "🌱 عضوي/محتوى",
+    }
+    _PAID_NON_GOOGLE = {"snapchat", "tiktok", "instagram"}
+    _STAGES = {
+        "awareness":     "① وعي",
+        "consideration": "② اعتبار",
+        "purchase":      "③ شراء",
+        "loyalty":       "④ ولاء",
+    }
+    _KPI_EVENTS = {
+        "copy_coupon":     "نسخ كود (وكيل)",
+        "click_link":      "نقر رابط المتجر",
+        "view_store":      "مشاهدة متجر",
+        "order_confirmed": "طلب مؤكَّد (سلة/أدميتاد)",
+    }
+    _PROXY_KPIS = {"copy_coupon", "click_link", "view_store"}
+
+    _cc = get_conn()
+    try:
+        _cc.rollback()   # تنظيف أي معاملة معلّقة من صفحة سابقة
+
+        _tbl_n = int(pd.read_sql("""
+            SELECT COUNT(*) AS n FROM information_schema.tables
+            WHERE table_schema='public' AND table_name IN ('campaigns','campaign_readings')
+        """, _cc).iloc[0]["n"])
+
+        if _tbl_n < 2:
+            st.warning(
+                "**جداول الحملات غير منشأة بعد.** الملف `migration_070_campaigns.sql` في جذر "
+                "المشروع — ينشئ `campaigns` و`campaign_readings` وعمودَي الإسناد "
+                "`gclid`/`client_id` في `action_logs`."
+            )
+            if st.button("🛠️ إنشاء الجداول الآن (070 + 071)", type="primary"):
+                _done, _failed = [], []
+                for _mig in ("migration_070_campaigns.sql", "migration_071_gsc_detail.sql"):
+                    try:
+                        with open(_mig, encoding="utf-8") as _f:
+                            _sql_txt = _f.read()
+                        with _cc.cursor() as _cur:
+                            _cur.execute(_sql_txt)
+                        _cc.commit()
+                        _done.append(_mig)
+                    except Exception as _e:
+                        _cc.rollback()
+                        _failed.append("{} → {}".format(_mig, _e))
+                if _done:
+                    st.success("✅ طُبِّق: " + " · ".join(_done))
+                if _failed:
+                    st.error("❌ تعذّر: " + " · ".join(_failed))
+                if _done and not _failed:
+                    st.rerun()
+            st.stop()
+
+        _t_new, _t_run, _t_dem, _t_ord = st.tabs(
+            ["🧾 حملة جديدة (عقد القياس)", "📊 الحملات والقراءات",
+             "🔍 الطلب المرصود + UTM", "💰 الطلبات وقيمة الكود"])
+
+        # ── التبويب ١: سبعة فحوص تمنع إطلاق حملة لا تُقاس ────────────────
+        with _t_new:
+            st.caption(
+                "لا تُحفظ الحملة «جاهزة» إلا باجتياز الفحوص. كل فحص يقابل خسارة وقعت "
+                "فعلاً في سوقنا أو بنداً تعاقدياً."
+            )
+
+            _f1, _f2 = st.columns(2)
+            _name    = _f1.text_input("اسم الحملة", key="cmp_name",
+                                      placeholder="عودة المدارس — عنقود الأدوات")
+            _channel = _f2.selectbox("القناة", list(_CHANNELS),
+                                     format_func=lambda k: _CHANNELS[k], key="cmp_ch")
+
+            _f3, _f4, _f5 = st.columns(3)
+            _stage  = _f3.selectbox("مرحلة الرحلة", list(_STAGES),
+                                    format_func=lambda k: _STAGES[k], key="cmp_stage")
+            _kpi    = _f4.selectbox("المؤشّر الوحيد", list(_KPI_EVENTS),
+                                    format_func=lambda k: _KPI_EVENTS[k], key="cmp_kpi")
+            _target = _f5.number_input("الهدف الرقمي", min_value=1, value=20, step=1, key="cmp_target")
+
+            _f6, _f7, _f8 = st.columns(3)
+            _start  = _f6.date_input("يبدأ", value=date.today(), key="cmp_start")
+            _end    = _f7.date_input("ينتهي", value=date.today() + timedelta(days=28), key="cmp_end")
+            _budget = _f8.number_input("الميزانية (ر.س)", min_value=0.0, value=0.0, step=50.0, key="cmp_budget")
+
+            _url  = st.text_input("الصفحة المقصودة", key="cmp_url",
+                                  placeholder="https://www.dealpulseksa.com/calendar")
+            _stop = st.text_area("حدّ الإيقاف — متى نوقف الحملة؟", key="cmp_stop", height=70,
+                                 placeholder="نوقف إذا تجاوزت كلفة النسخة ٨ ر.س بعد ٣ أسابيع، أو صفر طلب مؤكَّد بعد ١٠٠ نسخة.")
+            _kws  = st.text_area("الكلمات المستهدَفة (كلمة بكل سطر)", key="cmp_kws", height=110,
+                                 placeholder="[كوبون ادوات مدرسية]")
+
+            st.markdown("**وسوم UTM** — إلزامية لكل قناة غير-جوجل: بلا UTM لا يُنسب تحويل.")
+            _u1, _u2, _u3 = st.columns(3)
+            _utm_s = _u1.text_input("utm_source", key="cmp_us",
+                                    value=("" if _channel == "google_search" else _channel))
+            _utm_m = _u2.text_input("utm_medium", key="cmp_um",
+                                    value=("" if _channel == "google_search" else
+                                           ("paid_social" if _channel in _PAID_NON_GOOGLE else "owned")))
+            _utm_c = _u3.text_input("utm_campaign", key="cmp_uc")
+
+            _proxy_ack = False
+            if _kpi in _PROXY_KPIS:
+                _proxy_ack = st.checkbox(
+                    "أُقرّ أن هذا **مؤشّر وكيل** لا طلباً مؤكَّداً، وأن بناء OCI مستمرّ.",
+                    key="cmp_proxy")
+
+            if st.button("🧪 افحص واحفظ", type="primary", key="cmp_save"):
+                _checks = []
+
+                # ① الصفحة المقصودة تعمل وتحمل وسم GA4
+                try:
+                    _r = requests.get(_url, timeout=20,
+                                      headers={"User-Agent": "DealPulse-Preflight/1.0"})
+                    _has_tag = _GA4_ID in _r.text
+                    _checks.append({
+                        "الفحص": "الصفحة المقصودة تعمل وتحمل وسم GA4",
+                        "النتيجة": bool(_r.status_code == 200 and _has_tag),
+                        "التفصيل": "HTTP {} · الوسم {}".format(
+                            _r.status_code, "موجود" if _has_tag else "مفقود"),
+                    })
+                except Exception as _e:
+                    _checks.append({"الفحص": "الصفحة المقصودة تعمل وتحمل وسم GA4",
+                                    "النتيجة": False, "التفصيل": "تعذّر الوصول: {}".format(_e)})
+
+                # ② UTM للقنوات غير-جوجل
+                if _channel == "google_search":
+                    _checks.append({"الفحص": "وسوم UTM",
+                                    "النتيجة": True,
+                                    "التفصيل": "قناة جوجل — الوسم التلقائي (gclid) يكفي ولا يُوسم يدوياً"})
+                else:
+                    _utm_vals = (_utm_s or "", _utm_m or "", _utm_c or "")
+                    _utm_ok = all(v.strip() for v in _utm_vals) and all(" " not in v.strip() for v in _utm_vals)
+                    _checks.append({"الفحص": "وسوم UTM (source/medium/campaign)",
+                                    "النتيجة": bool(_utm_ok),
+                                    "التفصيل": "الثلاثة مطلوبة بلا مسافات — وإلا لا يُنسب تحويل"})
+
+                # ③ صفر اسم متجر شريك في الكلمات — التزام تعاقدي
+                _kw_list = [k.strip(" []\"'") for k in (_kws or "").splitlines() if k.strip()]
+                _stores = pd.read_sql(
+                    "SELECT DISTINCT store_id, COALESCE(name_en,'') AS en FROM master "
+                    "WHERE store_id IS NOT NULL", _cc)
+                _hits = []
+                for _kw in _kw_list:
+                    _kl = _kw.lower()
+                    for _, _row in _stores.iterrows():
+                        _ar = str(_row["store_id"]).strip()
+                        _en = str(_row["en"]).strip().lower()
+                        if _ar and _ar in _kw:
+                            _hits.append("{} ⊃ {}".format(_kw, _ar))
+                        elif _en and len(_en) > 2 and _en in _kl:
+                            _hits.append("{} ⊃ {}".format(_kw, _en))
+                _checks.append({
+                    "الفحص": "صفر اسم متجر شريك في الكلمات (عقد الأفلييت)",
+                    "النتيجة": len(_hits) == 0,
+                    "التفصيل": ("لا تقاطع" if not _hits
+                                else "تقاطع يُبطل العمولة: " + " · ".join(_hits[:4])),
+                })
+
+                # ④ خطّ الأساس معدود من بياناتنا
+                _win_days = max(int((_end - _start).days), 1)
+                _base = None
+                if _kpi == "order_confirmed":
+                    _checks.append({"الفحص": "خطّ الأساس معدود",
+                                    "النتيجة": False,
+                                    "التفصيل": "الطلب المؤكَّد لا يُعَدّ عندنا بعد — يحتاج OCI. اختر وكيلاً مؤقّتاً."})
+                else:
+                    _base = int(pd.read_sql(
+                        "SELECT COUNT(*) AS n FROM action_logs WHERE action_type = %(k)s "
+                        "AND action_time >= %(s)s::date - make_interval(days => %(d)s) "
+                        "AND action_time < %(s)s::date",
+                        _cc, params={"k": _kpi, "s": _start, "d": _win_days}).iloc[0]["n"])
+                    _checks.append({"الفحص": "خطّ الأساس معدود من action_logs",
+                                    "النتيجة": True,
+                                    "التفصيل": "{} حدثاً في الـ{} يوماً السابقة — الهدف {}".format(
+                                        _base, _win_days, int(_target))})
+
+                # ⑤ حدّ الإيقاف + ميزانية للقنوات المدفوعة
+                _paid = (_channel in _PAID_NON_GOOGLE) or (_channel == "google_search")
+                _checks.append({"الفحص": "حدّ الإيقاف مكتوب قبل الإنفاق",
+                                "النتيجة": len((_stop or "").strip()) >= 15,
+                                "التفصيل": "بلا حدٍّ مكتوب لا يوجد قرار إيقاف بل مزاج"})
+                if _paid:
+                    _checks.append({"الفحص": "ميزانية محدَّدة",
+                                    "النتيجة": float(_budget) > 0,
+                                    "التفصيل": "{:,.0f} ر.س · اليومي ≈ {:,.1f} ر.س".format(
+                                        float(_budget), float(_budget) / max(_win_days, 1))})
+
+                # ⑥ إقرار الوكيل
+                if _kpi in _PROXY_KPIS:
+                    _checks.append({"الفحص": "إقرار أن المؤشّر وكيل مؤقّت",
+                                    "النتيجة": bool(_proxy_ack),
+                                    "التفصيل": "الوكيل رخصة مؤقّتة شرطها بناء القياس الحقيقي"})
+
+                # ⑦ نافذة كافية للحكم
+                _checks.append({"الفحص": "نافذة ≥ {} يوماً".format(_MIN_DAYS),
+                                "النتيجة": _win_days >= _MIN_DAYS,
+                                "التفصيل": "{} يوماً — أول ~٧ إقلاع وآخر ٧ لا يُحكم عليها".format(_win_days)})
+
+                _df_checks = pd.DataFrame(_checks)
+                _passed = bool(_df_checks["النتيجة"].all()) and bool((_name or "").strip()) and bool((_url or "").strip())
+
+                st.markdown("#### نتيجة الفحص")
+                _show = _df_checks.copy()
+                _show["النتيجة"] = _show["النتيجة"].map(lambda b: "✅" if b else "❌")
+                st.dataframe(_show, width="stretch", hide_index=True)
+
+                try:
+                    with _cc.cursor() as _cur:
+                        _cur.execute("""
+                            INSERT INTO campaigns
+                                (name, channel, stage, kpi_event, kpi_target, is_proxy_kpi,
+                                 baseline_value, baseline_window_days, starts_on, ends_on,
+                                 budget_sar, stop_rule, landing_url,
+                                 utm_source, utm_medium, utm_campaign, keywords,
+                                 preflight, preflight_passed, status)
+                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s)
+                            RETURNING id
+                        """, (
+                            (_name or "").strip(), _channel, _stage, _kpi, float(_target),
+                            _kpi in _PROXY_KPIS, _base, _win_days, _start, _end,
+                            float(_budget) or None, (_stop or "").strip(), (_url or "").strip(),
+                            (_utm_s or "").strip() or None, (_utm_m or "").strip() or None,
+                            (_utm_c or "").strip() or None, (_kws or "").strip() or None,
+                            json.dumps(_checks, ensure_ascii=False), _passed,
+                            "ready" if _passed else "draft",
+                        ))
+                        _new_id = _cur.fetchone()[0]
+                    _cc.commit()
+                    if _passed:
+                        st.success("✅ اجتازت الفحوص — حُفظت **جاهزة للإطلاق** (#{}).".format(_new_id))
+                    else:
+                        st.error("❌ لم تجتز — حُفظت **مسوّدة** (#{}). أصلح الأحمر ثم أعد الفحص.".format(_new_id))
+                except Exception as _e:
+                    _cc.rollback()
+                    st.error("تعذّر الحفظ: {}".format(_e))
+
+        # ── التبويب ٢: القراءة والفعل ────────────────────────────────────
+        with _t_run:
+            _camps = pd.read_sql("""
+                SELECT id, name, channel, stage, kpi_event, kpi_target, is_proxy_kpi,
+                       baseline_value, starts_on, ends_on, budget_sar, status,
+                       preflight_passed, landing_url
+                FROM campaigns ORDER BY created_at DESC
+            """, _cc)
+
+            if _camps.empty:
+                st.info("لا حملات بعد — ابدأ من تبويب «حملة جديدة».")
+            else:
+                _c1, _c2, _c3, _c4 = st.columns(4)
+                with _c1: kpi_card("🎯", "الحملات", len(_camps))
+                with _c2: kpi_card("✅", "جاهزة/شغّالة",
+                                   int(_camps["status"].isin(["ready", "running"]).sum()))
+                with _c3: kpi_card("📝", "مسوّدات لم تجتز",
+                                   int((~_camps["preflight_passed"].astype(bool)).sum()), "warning")
+                with _c4: kpi_card("💰", "ميزانية مرصودة",
+                                   "{:,.0f}".format(float(_camps["budget_sar"].fillna(0).sum())))
+
+                _sel = st.selectbox(
+                    "اختر حملة", _camps["id"].tolist(),
+                    format_func=lambda i: "#{} — {}".format(
+                        i, _camps.loc[_camps["id"] == i, "name"].iloc[0]),
+                    key="cmp_sel")
+                _c = _camps[_camps["id"] == _sel].iloc[0]
+
+                _today     = date.today()
+                _win_end   = min(_today, _c["ends_on"])
+                _judge_end = _win_end - timedelta(days=_LAG_DAYS)
+
+                _actual_full = 0
+                _actual_judge = 0
+                if _c["kpi_event"] != "order_confirmed":
+                    _q = ("SELECT COUNT(*) AS n FROM action_logs WHERE action_type = %(k)s "
+                          "AND action_time >= %(s)s AND action_time < %(e)s")
+                    _actual_full = int(pd.read_sql(_q, _cc, params={
+                        "k": _c["kpi_event"], "s": _c["starts_on"],
+                        "e": _win_end + timedelta(days=1)}).iloc[0]["n"])
+                    if _judge_end > _c["starts_on"]:
+                        _actual_judge = int(pd.read_sql(_q, _cc, params={
+                            "k": _c["kpi_event"], "s": _c["starts_on"],
+                            "e": _judge_end + timedelta(days=1)}).iloc[0]["n"])
+
+                _m1, _m2, _m3, _m4 = st.columns(4)
+                with _m1: kpi_card("📈", "المعدود (كل النافذة)", _actual_full)
+                with _m2: kpi_card("⚖️", "القابل للحكم (−{}ي)".format(_LAG_DAYS), _actual_judge)
+                with _m3: kpi_card("🎯", "الهدف", int(_c["kpi_target"] or 0))
+                with _m4: kpi_card("📉", "خطّ الأساس", int(_c["baseline_value"] or 0), "warning")
+
+                if bool(_c["is_proxy_kpi"]):
+                    st.warning(
+                        "**المؤشّر وكيل** ({}) لا طلباً مؤكَّداً: يُقرأ ولا يقود المزايدة، "
+                        "ورخصته مشروطة ببناء OCI.".format(
+                            _KPI_EVENTS.get(_c["kpi_event"], _c["kpi_event"])))
+
+                st.markdown("**قبل أن تحكم — خمسة أسباب معروفة لانخفاضٍ وهميّ تُستبعَد أولاً:**")
+                st.markdown(
+                    "1. **تأخّر التحويل** — الإنفاق يُبلَّغ كاملاً والتحويل حتى ٩٠ يوماً بعد النقرة.\n"
+                    "2. **تغيير نموذج الإسناد** — يعيد توزيع الفضل للماضي ولا يغيّر العدد.\n"
+                    "3. **ربط GA4 بـAds** — يخفض التحويلات المنسوبة في Ads، وليس أداءً أقلّ.\n"
+                    "4. **مسارات لم تُغلق** — من نقر ولم يحوّل **بعدُ** قد يحوّل لاحقاً.\n"
+                    "5. **وقبل أي تشخيص:** اقرأ `Change History` في Google Ads."
+                )
+
+                st.markdown("#### 🔍 Search Console — نفس نافذة الحملة")
+                _gsc = pd.read_sql("""
+                    SELECT snapshot_date AS "اليوم", gsc_clicks AS "نقرات",
+                           gsc_impressions AS "ظهور", gsc_ctr AS "CTR", gsc_position AS "المركز"
+                    FROM seo_perf_snapshots
+                    WHERE snapshot_date BETWEEN %(s)s AND %(e)s
+                    ORDER BY snapshot_date
+                """, _cc, params={"s": _c["starts_on"], "e": _win_end})
+                if _gsc.empty:
+                    st.caption("لا لقطات GSC في هذه النافذة (الكرون اليومي يملؤها على Railway).")
+                else:
+                    # ⚠️ كل صفّ في seo_perf_snapshots إجمالي **آخر ٢٨ يوماً** لا يومٌ واحد
+                    # (perf_snapshot.py يسحب نافذة ٢٨ يوماً كل يوم). فجمع الصفوف يضخّم
+                    # الرقم بعدد اللقطات — تُقرأ **آخر لقطة** ويُعرض الباقي اتجاهاً.
+                    _last = _gsc.iloc[-1]
+                    _g1, _g2, _g3 = st.columns(3)
+                    with _g1: kpi_card("🖱️", "نقرات (آخر ٢٨ يوماً)", int(_last["نقرات"] or 0))
+                    with _g2: kpi_card("👁️", "ظهور (آخر ٢٨ يوماً)", int(_last["ظهور"] or 0))
+                    with _g3: kpi_card("📍", "المركز", "{:.1f}".format(float(_last["المركز"] or 0)))
+                    st.caption(
+                        "📌 كل صفّ **إجمالي نافذة ٢٨ يوماً منتهية بذلك التاريخ** — لا يُجمَع. "
+                        "الأرقام أعلاه من لقطة {}.".format(_last["اليوم"]))
+                    st.dataframe(_gsc, width="stretch", hide_index=True)
+                    st.caption("⚠️ آخر يومين في GSC ناقصان دائماً — سقوط كل الخطوط معاً تأخّرُ إبلاغ لا هبوط.")
+                if not os.getenv("GSC_SA_JSON"):
+                    st.info(
+                        "لتفصيل **الاستعلامات والصفحات**: أضف `GSC_SA_JSON` على خدمة الداشبورد. "
+                        "صفحة «📊 تقرير البحث» تفكّكها جاهزةً — لا نكرّرها هنا."
+                    )
+
+                # ── أداء الصفحة المقصودة نفسها في البحث (migration 071) ──
+                _has_pg = int(pd.read_sql("""
+                    SELECT COUNT(*) AS n FROM information_schema.tables
+                    WHERE table_schema='public' AND table_name='seo_gsc_pages'
+                """, _cc).iloc[0]["n"]) == 1
+                if _has_pg:
+                    _lp = (_c["landing_url"] or "").split("?")[0].split("#")[0]
+                    _pg = pd.read_sql("""
+                        SELECT snapshot_date AS "اللقطة", clicks AS "نقرات",
+                               impressions AS "ظهور", ctr AS "CTR", position AS "المركز"
+                        FROM seo_gsc_pages
+                        WHERE page LIKE %(u)s
+                        ORDER BY snapshot_date DESC LIMIT 1
+                    """, _cc, params={"u": _lp.rstrip("/") + "%"})
+                    st.markdown("**أداء الصفحة المقصودة نفسها** (لا إجمالي الموقع)")
+                    if _pg.empty:
+                        st.caption(
+                            "لا صفّ لهذه الصفحة بعد — الكرون اليومي يملأ `seo_gsc_pages` على Railway، "
+                            "وGSC يتأخّر يومين. أو الصفحة لم تنل ظهوراً في النافذة."
+                        )
+                    else:
+                        _p0 = _pg.iloc[0]
+                        _p1c, _p2c, _p3c = st.columns(3)
+                        with _p1c: kpi_card("🖱️", "نقرات الصفحة", int(_p0["نقرات"] or 0))
+                        with _p2c: kpi_card("👁️", "ظهور الصفحة", int(_p0["ظهور"] or 0))
+                        with _p3c: kpi_card("📍", "مركز الصفحة",
+                                            "{:.1f}".format(float(_p0["المركز"] or 0)))
+                        st.caption("نافذة ٢٨ يوماً منتهية بـ {} — لا تُجمع مع لقطات أخرى.".format(_p0["اللقطة"]))
+
+                    if _pg.empty and st.button("🔄 املأ جداول GSC التفصيلية الآن", key="cmp_gsc_fill"):
+                        # الخدمة التي تحمل GSC_SA_JSON هي الـAPI لا الداشبورد،
+                        # فيُستدعى السحب عبر نقطة إدارية بدل تنفيذه هنا.
+                        _sec = os.getenv("ADMIN_SHARED_SECRET")
+                        _api = os.getenv("INTERNAL_API_URL", "https://api.dealpulseksa.com").rstrip("/")
+                        if not _sec:
+                            st.warning("أضف `ADMIN_SHARED_SECRET` على خدمة الداشبورد (بنفس قيمة الـAPI).")
+                        else:
+                            try:
+                                _rr = requests.post(
+                                    f"{_api}/api/v1/admin/seo-gsc-detail",
+                                    headers={"X-Admin-Secret": _sec}, timeout=90)
+                                if _rr.status_code < 300:
+                                    st.success("✅ {}".format(_rr.json()))
+                                    st.rerun()
+                                else:
+                                    st.error("HTTP {} — {}".format(_rr.status_code, _rr.text[:160]))
+                            except Exception as _e:
+                                st.error("تعذّر الاستدعاء: {}".format(_e))
+
+                    if st.button("🔍 اسحب استعلامات هذه الصفحة من GSC", key="cmp_gsc_q"):
+                        try:
+                            from api.seo.gsc_detail import queries_for_page
+                            _rows = queries_for_page(_lp)
+                            if not _rows:
+                                st.info(
+                                    "لا نتائج — إمّا `GSC_SA_JSON` غير مضبوط حيث يعمل الداشبورد، "
+                                    "أو الصفحة بلا ظهور في آخر ٢٨ يوماً."
+                                )
+                            else:
+                                _qdf = pd.DataFrame(_rows).rename(columns={
+                                    "query": "الاستعلام", "clicks": "نقرات",
+                                    "impressions": "ظهور", "ctr": "CTR", "position": "المركز"})
+                                st.dataframe(_qdf, width="stretch", hide_index=True)
+                                st.caption(
+                                    "هذه **الاستعلامات التي جلبت الصفحة فعلاً** — مصدر كلمات "
+                                    "أصدق من أي تقدير، ويُقرأ مع الكلمات السلبية التعاقدية."
+                                )
+                        except Exception as _e:
+                            st.warning("تعذّر السحب: {}".format(_e))
+
+                st.markdown("#### 📝 قراءة جديدة — لا تُحفظ بلا فعل")
+                _r1, _r2 = st.columns(2)
+                _r_actual = _r1.number_input("المؤشّر المعدود", min_value=0,
+                                             value=int(_actual_judge), key="cmp_r_actual")
+                _r_spend  = _r2.number_input("المصروف حتى الآن (ر.س)", min_value=0.0,
+                                             value=0.0, step=25.0, key="cmp_r_spend")
+                _r_notes  = st.text_area("ملاحظات", key="cmp_r_notes", height=70)
+                _r_action = st.text_area(
+                    "الفعل المتّخذ (إلزامي)", key="cmp_r_action", height=70,
+                    placeholder="مثال: أضفتُ ٣ كلمات سلبية من تقرير مصطلحات البحث، وخفضتُ سقف CPC.")
+                if st.button("💾 احفظ القراءة", key="cmp_r_save"):
+                    if len((_r_action or "").strip()) < 10:
+                        st.error("القراءة لا تُغلق بلا فعل — قياسٌ لا يُلهم فعلاً يعني أن الهدف أو المقياس خطأ.")
+                    else:
+                        try:
+                            with _cc.cursor() as _cur:
+                                _cur.execute("""
+                                    INSERT INTO campaign_readings
+                                        (campaign_id, kpi_actual, spend_sar, gsc_clicks,
+                                         gsc_impressions, gsc_position, notes, action_taken)
+                                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                                """, (
+                                    int(_sel), float(_r_actual), float(_r_spend) or None,
+                                    int(_gsc.iloc[-1]["نقرات"] or 0) if not _gsc.empty else None,
+                                    int(_gsc.iloc[-1]["ظهور"] or 0) if not _gsc.empty else None,
+                                    float(_gsc.iloc[-1]["المركز"] or 0) if not _gsc.empty else None,
+                                    (_r_notes or "").strip() or None, (_r_action or "").strip(),
+                                ))
+                            _cc.commit()
+                            st.success("✅ حُفظت القراءة بفعلها.")
+                            st.rerun()
+                        except Exception as _e:
+                            _cc.rollback()
+                            st.error("تعذّر الحفظ: {}".format(_e))
+
+                _reads = pd.read_sql("""
+                    SELECT read_on AS "اليوم", kpi_actual AS "المؤشّر", spend_sar AS "المصروف",
+                           gsc_clicks AS "نقرات GSC", action_taken AS "الفعل", notes AS "ملاحظات"
+                    FROM campaign_readings WHERE campaign_id = %(c)s
+                    ORDER BY read_on DESC, id DESC
+                """, _cc, params={"c": int(_sel)})
+                if not _reads.empty:
+                    st.markdown("#### 📚 سجلّ القراءات")
+                    st.dataframe(_reads, width="stretch", hide_index=True)
+
+                with st.expander("🧪 فحوص ما قبل الإطلاق لهذه الحملة"):
+                    _pf = pd.read_sql("SELECT preflight FROM campaigns WHERE id = %(c)s",
+                                      _cc, params={"c": int(_sel)}).iloc[0]["preflight"]
+                    if _pf:
+                        _pf_rows = _pf if isinstance(_pf, list) else json.loads(_pf)
+                        _pf_df = pd.DataFrame(_pf_rows)
+                        _pf_df["النتيجة"] = _pf_df["النتيجة"].map(lambda b: "✅" if b else "❌")
+                        st.dataframe(_pf_df, width="stretch", hide_index=True)
+
+        # ── التبويب ٣: الكلمات من طلبٍ مرصود لا من تخمين ─────────────────
+        with _t_dem:
+            st.caption(
+                "مصدر كلماتنا **بياناتنا**: ما كتبه الزائر عندنا فعلاً. وما لم نجد له نتيجة "
+                "= **قائمة محتوى قبل أن تكون قائمة كلمات**."
+            )
+            _d1, _d2 = st.columns(2)
+
+            _found = pd.read_sql("""
+                SELECT search_keyword AS "الكلمة", COUNT(*) AS "مرات",
+                       BOOL_OR(user_found) AS "وجدنا لها"
+                FROM direct_search
+                GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 40
+            """, _cc)
+            with _d1:
+                st.markdown("**أكثر ما بُحث عنه عندنا**")
+                _found_show = _found.copy()
+                _found_show["وجدنا لها"] = _found_show["وجدنا لها"].map(lambda b: "✅" if b else "❌")
+                st.dataframe(_found_show, width="stretch", hide_index=True, height=330)
+
+            _gap = pd.read_sql("""
+                SELECT search_keyword AS "طلب بلا عرض", COUNT(*) AS "مرات",
+                       MAX(search_date)::date AS "آخر مرة"
+                FROM direct_search WHERE user_found = FALSE
+                GROUP BY 1 ORDER BY 2 DESC, 3 DESC LIMIT 40
+            """, _cc)
+            with _d2:
+                st.markdown("**طلب رصدناه ولم نخدمه** — يُخدَم أولاً ثم يُشترى")
+                st.dataframe(_gap, width="stretch", hide_index=True, height=330)
+                if not _gap.empty:
+                    st.download_button(
+                        "⬇️ تصدير الفجوات CSV",
+                        _gap.to_csv(index=False).encode("utf-8-sig"),
+                        file_name="demand_gaps.csv", mime="text/csv", key="cmp_gap_dl")
+
+            st.markdown("---")
+            st.markdown("#### 🔗 مولّد روابط UTM")
+            st.caption("القنوات غير-جوجل لا يُنسب إليها تحويل بلا UTM. وجوجل تُوسَم تلقائياً — لا تُوسم يدوياً.")
+            _b1, _b2 = st.columns([2, 1])
+            _b_url = _b1.text_input("الرابط", key="utm_url", value="https://www.dealpulseksa.com/")
+            _b_ch  = _b2.selectbox("القناة", [c for c in _CHANNELS if c != "google_search"],
+                                   format_func=lambda k: _CHANNELS[k], key="utm_ch")
+            _b3, _b4 = st.columns(2)
+            _b_camp = _b3.text_input("اسم الحملة (utm_campaign)", key="utm_camp",
+                                     placeholder="back_to_school_2026")
+            _b_med  = _b4.text_input("utm_medium", key="utm_med",
+                                     value=("paid_social" if _b_ch in _PAID_NON_GOOGLE else "owned"))
+            if _b_url and _b_camp:
+                _clean = lambda s: (s or "").strip().lower().replace(" ", "_")
+                _sep = "&" if "?" in _b_url else "?"
+                _built = "{}{}utm_source={}&utm_medium={}&utm_campaign={}".format(
+                    _b_url, _sep, _clean(_b_ch), _clean(_b_med), _clean(_b_camp))
+                st.code(_built, language="text")
+                if " " in (_b_camp or ""):
+                    st.caption("المسافات حُوّلت إلى `_` — المسافة في UTM تكسر التجميع.")
+
+        # ══════════════════════════════════════════════════════════════════
+        # التبويب ٤ — الطلبات المؤكَّدة: من وكيل إلى إيراد، ومنه قيمة الكود
+        # ══════════════════════════════════════════════════════════════════
+        with _t_ord:
+            _ord_ready = int(pd.read_sql("""
+                SELECT COUNT(*) AS n FROM information_schema.tables
+                WHERE table_schema='public' AND table_name='affiliate_orders'
+            """, _cc).iloc[0]["n"]) == 1
+
+            if not _ord_ready:
+                st.warning(
+                    "**جدول الطلبات غير منشأ.** `migration_072_affiliate_orders.sql` في جذر "
+                    "المشروع — ينشئ `affiliate_orders` مع حارس **`UNIQUE (network, order_ref)`** "
+                    "الذي يمنع مضاعفة الإيراد عند إعادة رفع ملف."
+                )
+                if st.button("🛠️ إنشاء جدول الطلبات (072)", type="primary", key="ord_mig"):
+                    try:
+                        with open("migration_072_affiliate_orders.sql", encoding="utf-8") as _f:
+                            _sqlo = _f.read()
+                        with _cc.cursor() as _cur:
+                            _cur.execute(_sqlo)
+                        _cc.commit()
+                        st.success("✅ أُنشئ الجدول.")
+                        st.rerun()
+                    except Exception as _e:
+                        _cc.rollback()
+                        st.error("تعذّر الإنشاء: {}".format(_e))
+            else:
+                _o_tot = pd.read_sql("""
+                    SELECT COUNT(*) FILTER (WHERE status='confirmed')            AS confirmed,
+                           COALESCE(SUM(commission_sar) FILTER (WHERE status='confirmed'), 0) AS commission,
+                           COUNT(*) FILTER (WHERE status IN ('cancelled','refunded')) AS lost,
+                           COUNT(*) FILTER (WHERE gclid IS NOT NULL AND status='confirmed'
+                                              AND uploaded_to_ads = FALSE)       AS oci_ready
+                    FROM affiliate_orders
+                """, _cc).iloc[0]
+
+                _o1, _o2, _o3, _o4 = st.columns(4)
+                with _o1: kpi_card("📦", "طلبات مؤكَّدة", int(_o_tot["confirmed"] or 0))
+                with _o2: kpi_card("💰", "إجمالي العمولة (ر.س)",
+                                   "{:,.0f}".format(float(_o_tot["commission"] or 0)))
+                with _o3: kpi_card("↩️", "ملغى/مسترجع", int(_o_tot["lost"] or 0), "warning")
+                with _o4: kpi_card("📤", "جاهزة لرفع OCI", int(_o_tot["oci_ready"] or 0))
+
+                st.markdown("---")
+
+                # ── مُدخَلات الطلبات: ملف أو نصّ ملصوق ─────────────────────
+                # ⚠️ سلة **لا تُصدِّر** طلبات المسوّق (فُحص ٢٠٢٦-٠٨-٢٤ — المالك)،
+                # فاللصق من شاشة الطلبات هو المسار الحيّ لا البديل. والمُستورِد
+                # واحد للاثنين: نفس الربط، نفس التنظيف، ونفس حارس
+                # (الشبكة + رقم الطلب) الذي يمنع مضاعفة الإيراد عند إعادة الإدخال.
+                import re as _re
+
+                _AR_DIG = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
+                _AR_MON = {"يناير": "01", "فبراير": "02", "مارس": "03", "ابريل": "04",
+                           "أبريل": "04", "مايو": "05", "يونيو": "06", "يوليو": "07",
+                           "اغسطس": "08", "أغسطس": "08", "سبتمبر": "09", "اكتوبر": "10",
+                           "أكتوبر": "10", "نوفمبر": "11", "ديسمبر": "12"}
+
+                def _o_num(_v):
+                    """رقم من «2,475.00 ر.س» أو «٤٤٥٫٥٠» — العملة والفواصل تُرمى."""
+                    # ⚠️ لا تُنظَّف بحذف غير-الأرقام: «ر.س» تترك نقطتها فيصير «2475.00.»
+                    # ويرجع nan. الصحيح: التقاط أول عدد صريح.
+                    _s = str(_v).translate(_AR_DIG).replace("٫", ".").replace("،", "").replace(",", "")
+                    _m = _re.search(r"-?\d+(?:\.\d+)?", _s)
+                    return pd.to_numeric(_m.group(0)) if _m else float("nan")
+
+                def _o_date(_v):
+                    """تاريخ من «2026-08-14» أو «14/08/2026» أو «١٤ أغسطس ٢٠٢٦»."""
+                    _s = str(_v).translate(_AR_DIG).strip()
+                    for _ar, _mm in _AR_MON.items():
+                        if _ar in _s:
+                            _dd = _re.search(r"(?<!\d)(\d{1,2})(?!\d)", _s)
+                            _yy = _re.search(r"(20\d{2})", _s)
+                            if _dd and _yy:
+                                return pd.to_datetime("{}-{}-{:02d}".format(
+                                    _yy.group(1), _mm, int(_dd.group(1))), errors="coerce")
+                    return pd.to_datetime(_s, errors="coerce", dayfirst=True)
+
+                def _o_parse_paste(_text, _per_rec=0):
+                    """نصّ الجدول الملصوق → DataFrame. يفهم: تبويب · | · مسافتين+ ·
+                    فاصلة · وكذلك «حقل في كل سطر» (شكل النسخ من صفحة سلة) وعندها
+                    يُجمَّع كل `_per_rec` سطراً في سجل واحد."""
+                    _lines = [_l.strip() for _l in _text.splitlines() if _l.strip()]
+                    if not _lines:
+                        return None
+                    _joined = "\n".join(_lines)
+                    if "\t" in _joined:
+                        _split = lambda _l: [_c.strip() for _c in _l.split("\t")]
+                    elif "|" in _joined:
+                        _split = lambda _l: [_c.strip() for _c in _l.strip("|").split("|")]
+                    elif _re.search(r"\S {2,}\S", _joined):
+                        _split = lambda _l: [_c.strip() for _c in _re.split(r" {2,}", _l)]
+                    elif "," in _joined:
+                        _split = lambda _l: [_c.strip() for _c in _l.split(",")]
+                    else:
+                        _split = lambda _l: [_l]
+                    _rows = [list(_split(_l)) for _l in _lines]
+                    _w = max(len(_r) for _r in _rows)
+                    if _w == 1 and int(_per_rec) >= 2:
+                        _flat = [_r[0] for _r in _rows]
+                        _n = int(_per_rec)
+                        _rows = [_flat[_i:_i + _n] for _i in range(0, len(_flat), _n)]
+                        _rows = [_r for _r in _rows if len(_r) == _n]
+                        _w = _n
+                    if not _rows:
+                        return None
+                    _rows = [_r + [""] * (_w - len(_r)) for _r in _rows]
+                    # سطر أول بلا أي رقم = رؤوس أعمدة، وإلا أعمدة مرقّمة
+                    _head_nums = sum(1 for _c in _rows[0] if not pd.isna(_o_num(_c)))
+                    if len(_rows) > 1 and _head_nums == 0:
+                        _cols = [_c or "عمود {}".format(_i + 1)
+                                 for _i, _c in enumerate(_rows[0])]
+                        _body = _rows[1:]
+                    else:
+                        _cols = ["عمود {}".format(_i + 1) for _i in range(_w)]
+                        _body = _rows
+                    if not _body:
+                        return None
+                    return pd.DataFrame(_body, columns=_cols)
+
+                def _o_import_ui(_raw, _kp):
+                    """ربط الأعمدة ثم الإدخال — مشترك بين الملف والنصّ الملصوق."""
+                    _cols_o = ["—"] + list(map(str, _raw.columns))
+                    _mc1, _mc2, _mc3 = st.columns(3)
+                    _m_ref  = _mc1.selectbox("عمود رقم الطلب *", _cols_o, key=_kp + "m_ref")
+                    _m_date = _mc2.selectbox("عمود التاريخ *", _cols_o, key=_kp + "m_date")
+                    _m_comm = _mc3.selectbox("عمود العمولة *", _cols_o, key=_kp + "m_comm")
+                    _mc4, _mc5, _mc6 = st.columns(3)
+                    _m_store = _mc4.selectbox("عمود المتجر", _cols_o, key=_kp + "m_store")
+                    _m_val   = _mc5.selectbox("عمود قيمة الطلب", _cols_o, key=_kp + "m_val")
+                    _m_code  = _mc6.selectbox("عمود الكود", _cols_o, key=_kp + "m_code")
+                    _mc7, _mc8 = st.columns(2)
+                    _m_net    = _mc7.selectbox("الشبكة", ["salla", "admitad", "boostiny",
+                                                          "codemap", "manual"], key=_kp + "m_net")
+                    _m_status = _mc8.selectbox("حالة هذه الطلبات",
+                                               ["confirmed", "pending", "cancelled", "refunded"],
+                                               key=_kp + "m_status")
+
+                    if st.button("💾 استورد الصفوف", type="primary", key=_kp + "import"):
+                        if "—" in (_m_ref, _m_date, _m_comm):
+                            st.error("رقم الطلب والتاريخ والعمولة إلزامية.")
+                            return
+                        _ins = _skip = _bad = 0
+                        for _, _r in _raw.iterrows():
+                            try:
+                                _ref = str(_r[_m_ref]).translate(_AR_DIG).strip()
+                                if not _ref or _ref.lower() == "nan":
+                                    _bad += 1
+                                    continue
+                                _dt = _o_date(_r[_m_date])
+                                _cm = _o_num(_r[_m_comm])
+                                if pd.isna(_dt) or pd.isna(_cm):
+                                    _bad += 1
+                                    continue
+                                _vl = _o_num(_r[_m_val]) if _m_val != "—" else float("nan")
+                                with _cc.cursor() as _cur:
+                                    _cur.execute("""
+                                        INSERT INTO affiliate_orders
+                                            (network, order_ref, store_id, order_date,
+                                             order_value_sar, commission_sar, status, coupon_code)
+                                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                                        ON CONFLICT (network, order_ref) DO NOTHING
+                                    """, (
+                                        _m_net, _ref,
+                                        (str(_r[_m_store]).strip() if _m_store != "—" else None),
+                                        _dt.date(),
+                                        (None if pd.isna(_vl) else float(_vl)),
+                                        float(_cm), _m_status,
+                                        (str(_r[_m_code]).strip() if _m_code != "—" else None),
+                                    ))
+                                    if _cur.rowcount == 1:
+                                        _ins += 1
+                                    else:
+                                        _skip += 1
+                            except Exception:
+                                _cc.rollback()
+                                _bad += 1
+                                continue
+                        _cc.commit()
+                        st.success(
+                            "✅ أُدخل **{}** · تُجوهل مكرّراً **{}** · صفوف غير صالحة **{}**".format(
+                                _ins, _skip, _bad))
+                        st.caption("«تُجوهل مكرّراً» هو الحارس يعمل — لا خطأ.")
+                        st.rerun()
+
+                # ── ١) لصق جدول الطلبات (لا يحتاج تصديراً) ─────────────────
+                st.markdown("#### 📋 الصق جدول الطلبات من لوحة الشبكة")
+                st.caption(
+                    "سلة لا تُصدِّر طلبات المسوّق — فحدّد صفوف الجدول في الشاشة وانسخها "
+                    "(Ctrl+C) والصقها هنا. **رقم الطلب إلزامي** لأنه المفتاح الذي يمنع "
+                    "احتساب الطلب مرتين؛ ملخّص «المتاجر» بلا أرقام طلبات لا يصلح."
+                )
+                _pt1, _pt2 = st.columns([3, 1])
+                _paste = _pt1.text_area("الصق هنا", height=140, key="ord_paste",
+                                        placeholder="رقم الطلب / التاريخ / المتجر / قيمة الطلب / العمولة")
+                _per_rec = _pt2.number_input(
+                    "حقول لكل سجل", min_value=0, max_value=12, value=0, step=1, key="ord_percol",
+                    help="اتركه صفراً عادةً. عيّنه فقط إذا نزل كل حقل في سطر مستقل عند اللصق "
+                         "(مثلاً ٥ إذا كان كل طلب: رقم · تاريخ · متجر · قيمة · عمولة).")
+                if _paste and _paste.strip():
+                    try:
+                        _pdf = _o_parse_paste(_paste, _per_rec)
+                        if _pdf is None or _pdf.empty:
+                            st.warning("ما قدرت أفكّك النصّ إلى صفوف. جرّب «حقول لكل سجل».")
+                        else:
+                            st.caption(
+                                "فكّكته إلى **{}** صفاً × **{}** عموداً — راجعه قبل الاستيراد:".format(
+                                    len(_pdf), len(_pdf.columns)))
+                            st.dataframe(_pdf.head(10), width="stretch")
+                            _o_import_ui(_pdf, "pst_")
+                    except Exception as _e:
+                        st.error("تعذّر تفكيك النصّ: {}".format(_e))
+
+                st.markdown("---")
+
+                # ── ٢) رفع ملف الشبكة (لمن يدعم التصدير) ───────────────────
+                st.markdown("#### ⬆️ رفع تقرير الشبكة (CSV)")
+                st.caption(
+                    "للشبكات التي تدعم التصدير. الصفوف المكرّرة **تُتجاهَل تلقائياً** "
+                    "بحارس (الشبكة + رقم الطلب) — فإعادة رفع نفس الملف لا تضاعف الإيراد."
+                )
+                _up = st.file_uploader("ملف CSV", type=["csv"], key="ord_csv")
+                if _up is not None:
+                    try:
+                        _raw = pd.read_csv(_up)
+                        st.caption("قرأتُ **{}** صفاً · الأعمدة: {}".format(
+                            len(_raw), " · ".join(map(str, _raw.columns[:12]))))
+                        _o_import_ui(_raw, "csv_")
+                    except Exception as _e:
+                        st.error("تعذّرت قراءة الملف: {}".format(_e))
+
+                # ── إضافة طلب يدوياً ──────────────────────────────────────
+                with st.expander("➕ إضافة طلب واحد يدوياً"):
+                    _a1, _a2, _a3 = st.columns(3)
+                    _a_net  = _a1.selectbox("الشبكة", ["salla", "admitad", "boostiny",
+                                                       "codemap", "manual"], key="a_net")
+                    _a_ref  = _a2.text_input("رقم الطلب *", key="a_ref")
+                    _a_date = _a3.date_input("التاريخ", value=date.today(), key="a_date")
+                    _a4, _a5, _a6 = st.columns(3)
+                    _a_store = _a4.text_input("المتجر", key="a_store")
+                    _a_comm  = _a5.number_input("العمولة (ر.س) *", min_value=0.0, step=5.0, key="a_comm")
+                    _a_val   = _a6.number_input("قيمة الطلب (ر.س)", min_value=0.0, step=25.0, key="a_val")
+                    _a7, _a8 = st.columns(2)
+                    _a_code  = _a7.text_input("الكود", key="a_code")
+                    _a_gclid = _a8.text_input("gclid (إن عُرف)", key="a_gclid")
+                    if st.button("💾 احفظ الطلب", key="a_save"):
+                        if not _a_ref.strip() or float(_a_comm) <= 0:
+                            st.error("رقم الطلب والعمولة إلزاميان.")
+                        else:
+                            try:
+                                with _cc.cursor() as _cur:
+                                    _cur.execute("""
+                                        INSERT INTO affiliate_orders
+                                            (network, order_ref, store_id, order_date,
+                                             order_value_sar, commission_sar, coupon_code, gclid)
+                                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                                        ON CONFLICT (network, order_ref) DO NOTHING
+                                    """, (_a_net, _a_ref.strip(), _a_store.strip() or None, _a_date,
+                                          float(_a_val) or None, float(_a_comm),
+                                          _a_code.strip() or None, _a_gclid.strip() or None))
+                                    _added = _cur.rowcount
+                                _cc.commit()
+                                st.success("✅ أُضيف." if _added else "⚠️ موجود سلفاً — لم يُضَف (الحارس).")
+                                st.rerun()
+                            except Exception as _e:
+                                _cc.rollback()
+                                st.error("تعذّر الحفظ: {}".format(_e))
+
+                st.markdown("---")
+
+                # ── 🔑 قيمة الكود لكل متجر — الرقم الذي تقوم عليه tROAS ───
+                st.markdown("#### 🔑 قيمة نسخة الكود لكل متجر")
+                st.caption(
+                    "العمولة المؤكَّدة ÷ عدد النسخ المعدودة = **ما تساويه النسخة الواحدة فعلاً**. "
+                    "هذا الرقم — لا رقم مخترع — هو ما يُدخَل قيمةً للتحويل قبل أي مزايدة بالقيمة."
+                )
+                _val = pd.read_sql("""
+                    WITH comm AS (
+                        SELECT store_id, SUM(commission_sar) AS commission, COUNT(*) AS orders
+                        FROM affiliate_orders WHERE status='confirmed' AND store_id IS NOT NULL
+                        GROUP BY 1
+                    ), cps AS (
+                        SELECT store_id, COUNT(*) AS copies
+                        FROM action_logs WHERE action_type='copy_coupon' AND store_id IS NOT NULL
+                        GROUP BY 1
+                    )
+                    SELECT COALESCE(c.store_id, p.store_id)                       AS "المتجر",
+                           COALESCE(c.orders, 0)                                  AS "طلبات",
+                           ROUND(COALESCE(c.commission, 0)::numeric, 2)           AS "عمولة (ر.س)",
+                           COALESCE(p.copies, 0)                                  AS "نسخ",
+                           CASE WHEN COALESCE(p.copies,0) > 0
+                                THEN ROUND((COALESCE(c.commission,0) / p.copies)::numeric, 2)
+                                ELSE NULL END                                     AS "قيمة النسخة"
+                    FROM comm c FULL OUTER JOIN cps p ON c.store_id = p.store_id
+                    ORDER BY 3 DESC NULLS LAST, 4 DESC
+                    LIMIT 60
+                """, _cc)
+                if _val.empty:
+                    st.info("لا بيانات بعد — ارفع أول تقرير طلبات.")
+                else:
+                    st.dataframe(_val, width="stretch", hide_index=True)
+                    _priced = int((_val["قيمة النسخة"].notna() & (_val["قيمة النسخة"] > 0)).sum())
+                    st.caption(
+                        "**{}** متجراً له قيمة نسخة محسوبة. ⚠️ المتاجر بنسخٍ وبلا عمولة "
+                        "**ليست بلا قيمة بالضرورة** — قد يكون الطلب لم يُبلَّغ بعد (تأخّر التحويل)، "
+                        "أو الإسناد بالكود لم يصلنا. لا تُوقف متجراً بسببها وحدها.".format(_priced))
+                    st.download_button(
+                        "⬇️ تصدير جدول القيمة CSV",
+                        _val.to_csv(index=False).encode("utf-8-sig"),
+                        file_name="coupon_value_by_store.csv", mime="text/csv", key="val_dl")
+
+                st.markdown("---")
+
+                # ── 📤 ملف رفع OCI إلى Google Ads ─────────────────────────
+                st.markdown("#### 📤 ملف الرفع إلى Google Ads (OCI)")
+                _oci = pd.read_sql("""
+                    SELECT id, gclid, order_date, commission_sar, currency
+                    FROM affiliate_orders
+                    WHERE gclid IS NOT NULL AND status='confirmed' AND uploaded_to_ads = FALSE
+                    ORDER BY order_date
+                """, _cc)
+                if _oci.empty:
+                    st.info(
+                        "لا طلبات جاهزة للرفع. الطلب يصير جاهزاً حين يحمل **`gclid`** — "
+                        "أي حين يأتي الزائر من إعلان جوجل ويُربط طلبه بنقرته."
+                    )
+                else:
+                    _lines = ["Parameters:TimeZone=+0300",
+                              "Google Click ID,Conversion Name,Conversion Time,"
+                              "Conversion Value,Conversion Currency"]
+                    for _, _r in _oci.iterrows():
+                        _lines.append("{},{},{} 12:00:00+03:00,{},{}".format(
+                            _r["gclid"], "order_confirmed", _r["order_date"],
+                            float(_r["commission_sar"] or 0), _r["currency"] or "SAR"))
+                    _csv_txt = "\n".join(_lines)
+                    st.dataframe(_oci.rename(columns={
+                        "gclid": "مفتاح النقرة", "order_date": "التاريخ",
+                        "commission_sar": "العمولة", "currency": "العملة"}).drop(columns=["id"]),
+                        width="stretch", hide_index=True)
+                    st.download_button(
+                        "⬇️ نزّل ملف OCI",
+                        _csv_txt.encode("utf-8-sig"),
+                        file_name="google_ads_oci_upload.csv", mime="text/csv", key="oci_dl")
+                    st.caption(
+                        "ارفعه في `Google Ads ← Tools ← Conversions ← Uploads`. "
+                        "⚠️ **اسم التحويل في الملف (`order_confirmed`) يجب أن يطابق حرفياً** اسم "
+                        "إجراء التحويل عندك، و**انتظر ٤–٦ ساعات بعد إنشاء الإجراء قبل أول رفع**."
+                    )
+                    if st.button("✅ علّمها كمرفوعة", key="oci_mark"):
+                        try:
+                            with _cc.cursor() as _cur:
+                                _cur.execute("""
+                                    UPDATE affiliate_orders
+                                    SET uploaded_to_ads = TRUE, uploaded_at = NOW()
+                                    WHERE id = ANY(%s)
+                                """, (list(map(int, _oci["id"].tolist())),))
+                            _cc.commit()
+                            st.success("✅ عُلّمت {} طلباً كمرفوعة.".format(len(_oci)))
+                            st.rerun()
+                        except Exception as _e:
+                            _cc.rollback()
+                            st.error("تعذّر: {}".format(_e))
+
+                # ── آخر الطلبات ───────────────────────────────────────────
+                _recent = pd.read_sql("""
+                    SELECT order_date AS "التاريخ", network AS "الشبكة", order_ref AS "رقم الطلب",
+                           store_id AS "المتجر", commission_sar AS "العمولة", status AS "الحالة",
+                           coupon_code AS "الكود", (gclid IS NOT NULL) AS "له مفتاح نقرة"
+                    FROM affiliate_orders ORDER BY order_date DESC, id DESC LIMIT 50
+                """, _cc)
+                if not _recent.empty:
+                    st.markdown("#### 📚 آخر الطلبات")
+                    _recent["له مفتاح نقرة"] = _recent["له مفتاح نقرة"].map(lambda b: "✅" if b else "—")
+                    st.dataframe(_recent, width="stretch", hide_index=True)
+
+    except Exception as _e:
+        _cc.rollback()
+        st.error("تعذّر تحميل إدارة الحملات: {}".format(_e))
+    finally:
+        _cc.close()

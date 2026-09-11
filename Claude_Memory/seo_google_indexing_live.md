@@ -44,3 +44,28 @@ originSessionId: bf501e24-1a22-42b8-8227-c51a7b2dd362
 - ميزانية أدوات (Ahrefs/SEMrush/Apollo) — قرار مالي
 
 يخدم: [[seo-ai-visibility-optin]] · [[seo-owned-channels-pivot]] · [[seo-indexation-status]] · [[seo-pr-blitz-kit]].
+
+---
+
+## ✅ ٢٠٢٦-٠٨-٢٦ — «قوقل ساقط» كان تشخيصاً خاطئاً: الهوست لا الملكية
+
+دفعت ٢٧ رابطاً بـ`POST /api/v1/admin/reindex-urls` فرجع **`google: 403`** لكلٍّ منها،
+فكتبتُ هنا أن ملكية الـservice account سقطت. **هذا كان خطأ** — وهذه القصة الكاملة:
+
+- `GET /api/v1/admin/seo-google-check` رجع في اللحظة نفسها **`ok: true` و`dry_run_code: 200`**،
+  فالملكية سليمة ولا شيء انكسر.
+- الفرق الوحيد: **الهوست.** الروابط التي أرسلتها كانت `https://dealpulseksa.com/...`
+  (نطاق عارٍ)، بينما `seo_index_submissions` يُظهر أن محرّك السيو التلقائي يرسل دائماً
+  `https://www.dealpulseksa.com/...` **ويرجع 200**. والـdry-run يبني رابطه من `SITE_URL`
+  (وهو بـwww) فنجح.
+- **القاعدة:** عند Google، `www` والنطاق العاري **propertyان مختلفان**. رابط خارج الـproperty
+  الموثّقة يرجع 403 برسالة «Permission denied» التي تبدو كأنها مشكلة ملكية.
+- بعد إعادة الإرسال بـ`www`: **٢٧ من ٢٧ → `google: 200`**.
+
+**درسان:**
+1. **أرسل دائماً بالهوست الذي في `SITE_URL` (بـwww).**
+2. تشخيص الـ403 في `api/seo/indexer.py` كان يجزم بالملكية فأضلّني — عُدِّل ليضع
+   اختلاف الهوست أول المشتبهين ويطبع ردّ Google الخام.
+
+**IndexNow في نفس الدفعات:** Bing يقبل كل شيء بـ200 (بالهوستين)، وYandex/Naver/Seznam
+رجعت **422** للنطاق العاري و**200** لـwww — نفس السبب.

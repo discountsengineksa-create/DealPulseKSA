@@ -26,17 +26,21 @@ from typing import Optional
 # لو البيئة منقوصة (مثلاً اختبارات بدون pillow).
 
 
-# جذر المستودع — حيث NotoSansArabic-Bold.ttf
 _ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_FONT_AR = os.path.join(_ROOT_DIR, "NotoSansArabic-Bold.ttf")
 
-# ─── لوحة ألوان مطابقة لستوديو الداشبورد (هوية موحّدة) ───────────────────
-_BG_TOP     = (250, 250, 248)   # cream
-_BG_BOTTOM  = (232, 240, 234)   # mint-cream
-_EMERALD    = (16, 185, 129)
-_INK        = (31, 41, 55)
-_INK_SOFT   = (107, 114, 128)
-_WHITE      = (255, 255, 255)
+# ─── لوحة الهوية — مصدر واحد: brand.py (دليل الهوية §اللون) ───────────────
+# كانت لوحة خاصّة: كريمي (250,250,248) → نعناعي (232,240,234) بحبر (31,41,55).
+# الكريمي دافئ (hue 36°) بينما العلامة باردة، والحبر ليس حبر العلامة #141C31.
+import brand as _brand
+
+_FONT_AR    = _brand.font_path(700) or os.path.join(_ROOT_DIR, "NotoSansArabic-Bold.ttf")
+_BG_TOP     = _brand.PAPER        # #FFFFFF
+_BG_BOTTOM  = _brand.SURFACE      # #F7F9FB
+_EMERALD    = _brand.G_700        # الأخضر الحامل: كان g-500 (2.54:1 مع أبيض)
+_EMERALD_DEC = _brand.G_500       # زخرفي فقط — لا يحمل نصّاً
+_INK        = _brand.INK_900
+_INK_SOFT   = _brand.INK_500
+_WHITE      = _brand.PAPER
 _CANVAS     = 1080
 
 

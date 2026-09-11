@@ -17,24 +17,30 @@ from api.social.ig_slides import _shape_ar  # تشكيل عربي موحّد (re
 
 # ─── أصول ─────────────────────────────────────────────────────────────────
 _ROOT      = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# Cairo-Bold بالمستودع لاتيني فقط (لا يدعم العربي) → نستخدم Noto للعربي.
-_FONT_PATH = os.path.join(_ROOT, "NotoSansArabic-Bold.ttf")
 _LOGO_NIGHT = os.path.join(_ROOT, "logo_for_watermark.png")  # شفّاف، لوقو فاتح
 _LOGO_DAY   = os.path.join(_ROOT, "logo2.png")
 
-# ─── أبعاد ولوحة ألوان فاخرة ───────────────────────────────────────────────
+# ─── أبعاد ولوحة الهوية ────────────────────────────────────────────────────
+# ⚠️ كانت الأرضية **خضراء** (9,33,27)→(4,16,12) — وهو أوضح خرق للدليل:
+# «الأخضر لهجة لا خلفية، نسبته تحت ١٠–١٥٪» و«الأرضية حبر العلامة نفسه
+# #141C31 لا لون مخترع». الآن الأرضية حبر، والأخضر لهجة على النصّ والشارات.
+import brand as _brand
+
+# خطّ الهوية IBM Plex Sans Arabic (وداخل brand شبكةُ بدائل لو غاب الملف).
+_FONT_PATH = _brand.font_path(700) or os.path.join(_ROOT, "NotoSansArabic-Bold.ttf")
+
 W, H   = 1080, 1350
 MARGIN = 96
 
-BG_TOP    = (9, 33, 27)      # أخضر-فحمي عميق
-BG_BOTTOM = (4, 16, 12)      # شبه أسود
-EMERALD       = (16, 185, 129)
-EMERALD_BRIGHT = (52, 211, 153)
-EMERALD_DEEP   = (6, 78, 59)
-WHITE   = (255, 255, 255)
-MUTED   = (148, 173, 162)
-CARD    = (17, 45, 37)
-INK_ON_EMERALD = (5, 26, 20)
+BG_TOP    = _brand.DARK_RAISED     # #1B2440 — السطح المرتفع
+BG_BOTTOM = _brand.DARK_GROUND     # #141C31 — حبر العلامة
+EMERALD        = _brand.G_500      # على الداكن ينقلب الحامل إلى g-500 (6.68:1)
+EMERALD_BRIGHT = _brand.G_500
+EMERALD_DEEP   = _brand.G_700
+WHITE   = _brand.PAPER
+MUTED   = _brand.DARK_CAPTION      # #9AA6BC — 6.90:1 على الأرضية
+CARD    = _brand.DARK_RAISED
+INK_ON_EMERALD = _brand.INK_900    # نصّ على سطح أخضر فاتح
 
 _AR_NUMS = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")
 

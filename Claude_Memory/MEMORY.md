@@ -1,111 +1,162 @@
 # Project Memory Index
 
-- [Project Overview](project_overview.md) — DealPulse KSA: 3-component architecture, DB schema, Railway deployment
-- [Setup Guide](setup_guide.md) — How to run locally on a new machine (dependencies, env vars, migrations)
-- [Bug Fixes Log](bug_fixes.md) — All bugs fixed and why, so we don't reintroduce them
-- [User Preferences](user_preferences.md) — How the user likes to work
-- [🤝 Partnership Protocol](protocol_partnership.md) — ٨ أنماط أُمسك بها بالاسم + دورة انضباط رباعية + طقوس جلسة + الاتفاق الصامت + سياسة المصادر المفتوحة (2026-07-07)
-- [🔓 Full Authority Granted](feedback_full_authority.md) — 2026-07-07 تفويض دائم بالتنفيذ الذاتي على الأفعال المحلية القابلة للعكس؛ لا يبطل حوائط DB/البوت/الحذف الكتلي
-- [Bot-vs-Promo 3-Signal Check](bot_vs_promo_heuristic.md) — قبل اتّهام قفزة بالبوت: افحص visitor_id + timing gaps + ASN diversity؛ VPN إيطالي شرعي في KSA لا يُحظر
-- [Skills Install Manifest](skills_install_manifest.md) — 2026-07-07 ٢٣٨ skill مثبَّت على «user» في ~/.claude/skills عبر ٦ ريبوهات (تفكير ٣٩/رسمي ١٨/UX ١٧/تصميم ٩٦/تسويق ٦٧/فيروس ١)
-- [AI Mastery Goal](user_ai_mastery_goal.md) — wants a universal reusable prompt across all AI platforms/domains; into prompt engineering; give honest expert feedback
-- [Regression Audit First](feedback_regression_audit.md) — when user says "it worked before you changed it", check my own recent diffs first; no speculative code changes
-- [Contact Emails](contact_emails.md) — Personal vs brand ops mailbox (spelled `dealpulesksa@gmail.com`)
-- [Weeks Roadmap](weeks_roadmap.md) — `weeks plan.txt` is the canonical week-by-week schema plan; per-week progress (W1-4 done)
-- [Store Analytics BI Suite](store_analytics_bi.md) — rebuilt «تحليل المتاجر» (4 sub-tabs) + why AI tab uses Groq via REST (no local openai SDK)
-- [Analysis Rebuild Strategy](analysis_rebuild_strategy.md) — tearing down + rebuilding the 6 analysis pages; 3 monetization trajectories + zero-fakery / enterprise due-diligence mandate
-- [Git Sync Workflow](git_sync_workflow.md) — two machines: pull before work, push after every change; ask which branch (main = Railway prod deploy)
-- [Railway Production Deployment](railway_deployment.md) — DealPulseKSA unified service URL, stable rollback tag, BotFather setup — plus legacy 2-service Dockerfile/CORS/secret/logging gotchas
-- [Railway Scheduler Worker](railway_scheduler_worker.md) — separate config file pattern, 5-min cron minimum, healthcheck override
-- [Single Source of Truth](single_source_of_truth.md) — ONE DB (Railway Postgres) + ONE dashboard (Railway-hosted); local test DB deleted, .env points only to Railway
-- [Unified Favorites](unified_favorites.md) — user_favorites SSOT table (dual-write w/ manual_favorites) across bot+miniapp+web; notifications phase deferred (last_notified_at ready)
-- [Zero Friction Onboarding](feedback_zero_friction.md) — في B2C المبكر، اجمع البيانات عند نقطة قيمة (action-gated) لا عند الدخول؛ منافسو السوق بلا احتكاك = الميزة التنافسية
-- [Always Publish When Done](feedback_always_publish.md) — user wants auto commit+push on task finish; main = prod deploy, don't ask
-- [Always Push, Never Leave Work Local](feedback_always_push.md) — user works on multiple devices; commit+push everything, never stash, pull at session start
-- [Reconcile Web Repo Separately](reconcile_web_repo_separately.md) — dealpulseksa-web is its own repo; can be behind remote even when main repo is synced; fetch it first
-- [Platform Monitoring](platform_monitoring.md) — منظومة «متابعة المنصة»: صفحة داشبورد + ضوابط + تقرير صحة بالإيميل + مراقبة أداء API (latency/5xx)
-- [Mastermind Prompt](mastermind_prompt.md) — «العقل المدبر» برومنت التشغيل المرن: موقع الملف + كيف أتصرّف عند «فعّل العقل المدبر»
-- [العقل المدبر — البروتوكول التشغيلي](protocol_mastermind.md) — نواة + بروتوكول انخراط (٠–٥ أسئلة) + ٤ أوضاع + ٤ نداءات بالاسم (محامي الشيطان/٣ مسارات/مراجعة ذاتية/الأفضلية العالمية)
-- [Data Trust: Geo/Device](data_trust_geo_device.md) — bot_users.city/country/device_type مفبركة بالكود؛ المدينة الحقيقية من web_users.city أو action_logs.city فقط
-- [Users Analytics Rules](users_analytics_rules.md) — قواعد العدّ/الهوية/الجغرافيا المعتمدة لقسم تحليل المستخدمين (تبويبان: عام/فردي)
-- [Support System](support_system.md) — نظام الدعم: وسيط Telegram Bot API (بلا قروبات/أرقام/webhook)؛ بوت+ميني+API يكتبون support_tickets والداشبورد يرد بالتوكن؛ migration 039؛ الويب باقٍ
-- [SEO White-Hat Only](seo_white_hat_only.md) — قيد إلزامي: كل شغل SEO White-Hat فقط (لا Black-Hat)؛ محرّك أوتوماتيكي ببوابات (كوبون فعّال/تفرّد/سقف يومي/blocklist)؛ SEO_AUTO_PUBLISH_ENABLED على DEALPULSEKSA
-- [Google Keyword Planner](google_ads_keyword_planner.md) — تكامل Ads API في محرك الفرص؛ MCC 857-047-5609 مباشرة؛ v21؛ Basic Access قيد المراجعة (≈2026-06-12)؛ المتغيّرات على DEALPULSEKSA
-- [Social Listening Deferred](social_listening_deferred.md) — قسما الرصد الاجتماعي/رادار الصفقات مؤجَّلان (حذف أو اشتراك)؛ مصدراهما ميتان (RSS محذوف، Reddit محظور)؛ رصد IG/FB/Threads بكلمة مفتاحية مستحيل رسمياً
-- [Story System Design](story_system_design.md) — نظام ستوري المتاجر: جدول story_slides، نموذج متداخل (حلقة/متجر، شرائح متتابعة)، فيديو يكمّل مدّته + صوت، Cloudinary f_auto+poster، web createPortal z-[60]
-- [No Dead Code or Premature Optimization](feedback_no_dead_code.md) — المستخدم يرفض الكود الميّت/الوهمي/الاستباقي؛ كل سطر حقيقي وموصول ومبرّر ببوتلنك فعلي
-- [Bot Capacity & Scaling Roadmap](bot_capacity_scaling.md) — سقف تيليجرام ~30/ث للبوت الواحد؛ ضبط 16 عامل/طابور 12k؛ الطموح: الأول بالسعودية+الإمارات؛ مسار Redis/sharding
-- [🔓 Bot Freeze LIFTED](bot_frozen_lock.md) — البوت مفكوك (2026-07-07)؛ التعديل مسموح ضمن بروتوكول الشراكة؛ DB writes وحوائط الإنتاج باقية
-- [DB Foundation Audit](db_foundation_audit.md) — مخطط القاعدة (~76 جدول/42% فارغة)؛ العدّادات الحيّة total_*؛ ميت مؤكّد (users_master + أعمدة راكدة) جاهز للحذف بإذن+نسخة؛ دَيْن النوع (is_trending/priority_score) محجوب بتجميد البوت
-- [Admitad Affiliate Setup](admitad_affiliate_setup.md) — منصة الأفلييت Admitad؛ مساحتان (تيليجرام + ويب موثّقة DealPulseKSA)؛ كل برنامج له بوّابتان: نوع الترافيك (Messengers محظور غالباً→الموقع لا البوت) + حجم الجمهور (SHEIN=10k)؛ ابدأ بالسهل (AliExpress/سفر/Airalo)
-- [Publish Channels Feature](publish_channels_feature.md) — master.publish_channels لاستهداف القنوات لكل متجر (website/bot/social)؛ يحترم شروط الأفلييت؛ API بارامتر channel (افتراضي website)؛ بوت+ميني+SEO يفلترون؛ fallback «حصري بالموقع»
-- [Health Content Cluster](health_content_cluster.md) — 10 مقالات مكمّلات بمدوّنة الويب (lib/blog.ts) لفتح تصنيف iHerb «محتوى» 5%؛ كود مكافآت QQC1568 على الروابط؛ معايير الكتابة + العنقود التالي
-- [Salla Affiliate Channel](salla_affiliate_channel.md) — سلة قناة أفلييت محلية (خصم عميل حقيقي + عمولة، بلا بوّابة ترافيك)؛ تحلّ رفض عمالقة Admitad؛ منتقياً لا جامعاً + عنقود محتوى محلي (عود/تمور/عبايات)؛ ✅ قُبلت 2026-06-18
-- [Store Selection Criterion](feedback_store_selection.md) — معرفة السعودي + ملاءمة السياق تغلب العمولة/الخصم؛ أبقِ المعروف (Alibaba/Sedar/H&M) واحذف الغريب (Oman Air/RaynaTours)
-- [Domain Authority Plan](domain_authority_plan.md) — خطة سلطة الدومين (White-Hat): الربط الداخلي منجز (متجر↔/c/ + شبك /c/)؛ المتبقّي عناقيد محتوى/Schema/روابط خلفية
-- [CodeMap Affiliate Channel](codemap_affiliate_channel.md) — قناة أفلييت ثانية (كوبونات فقط بلا روابط تتبّع)؛ براندات كبيرة معروفة نون/نمشي/ستايلي؛ تكمّل سلة وتحلّ بوّابة Admitad
-- [Marketing Skills Toolkit](marketing_skills_toolkit.md) — ركّبنا 17 skill منتقاة من coreyhaines31/marketingskills عام في ~/.claude/skills لدفعة سلطة الدومين؛ المخرجات تُعاد عربي/سعودي + White-Hat
-- [SEO Indexation Status](seo_indexation_status.md) — الفهرسة انحلّت (4→150)؛ انفجار ظهور يوليو 2026 (20→336/يوم) نيّته تجارية غير-براند من غرباء لكن مركز 7-70 وCTR~0؛ العنق الآن = المركز+CTR؛ per-query يُسحب عبر Windsor MCP searchconsole؛ عناوين المتاجر صارت «كود خصم {store}» (web 59be4b6)
-- [Affiliate PPC Brand Restrictions](affiliate_ppc_brand_restrictions.md) — نمشي وغيره يمنع المزايدة المدفوعة على اسمه؛ SEO عضوي مسموح؛ seo_enabled=ON بلا أي إعلان مدفوع على اسم براند
-- [Keyword Demand (KSA)](keyword_demand_ksa.md) — الطلب مركّز على البراندات الكبيرة (نون/نمشي/اي هيرب/امازون/شي إن 10K-100K)؛ متاجرك الصغيرة ~10-100؛ اي هيرب أسرع مكسب (أفلييت جاهز)
-- [Instagram Content Engine](instagram_content_engine.md) — محرّك ريلز محتوى فاخر Dark Luxe (content_reels.py + تبويب الاستوديو 3 أوضاع) + تنويع كابشن؛ @dealpulseksa 5 متابعين؛ الستوريات التلقائية وقفت (غير مُشخَّصة)
-- [Instagram Growth Engine](ig_growth_engine.md) — caption SEO + carousel/story/reel auto-publish + /ig bio page + keyword bank لكل فئة سعودية
-- [IG Publishing Policy (Stories Manual, Reels Auto-6)](ig_publish_policy.md) — قرار 2026-06-19: الستوري التلقائية ملغاة، الريل يُنتَج كل 6 بثّات تراكمياً
-- [Brand Face for Flow Reels](brand_face_reels.md) — 2026-07-10 وجه علامة نبض الصفقات مقفول: بنت خضراء سعودية (BRAND_FACE/brand_face_crop.png) كـIngredient + character bible؛ الاسم نطقاً «نبض الصفقات» لا «ديل بلس»؛ التوليد في Flow (Google AI Pro) لا Veo API (أغلى 35×)
-- [Competitor Landscape](competitor_landscape.md) — منافسو الكوبونات السعوديون (الموفّر القائد)؛ لا منافسة على الكلمات الكبيرة قريباً؛ الفجوات: التحقّق/تيليجرام/النيش المحلي/AEO
-- [Web Visits Tracking](web_visits_tracking.md) — نبض الزوّار: تتبّع زيارات الموقع على مستوى الجلسة (web_visits/Migration 060) منفصل عن action_logs؛ بوتات مفلترة q≥50؛ النشر يستلزم تطبيق المايقريشن قبل الـ API
-- [Web Login Gate Model](web_login_gate_model.md) — الموقع مفتوح حالياً (web_login_gate_enabled=0)؛ الأكواد/الزيارة للجميع، والستوري (محجوبة بالكامل) والمفضلة للمسجّلين فقط؛ auth-gate يفصل codeUnlocked عن isAuthed؛ حركات المجهول تُحتسب بـ visitor_id
-- [Content/Programmatic Strategy](content_programmatic_strategy.md) — قرار «عربي فقط لا /en» (الإنجليزي noindex بقرارهم)؛ محرّك category-content + هَب روابط الأقسام + 19 مقال عربي بربط داخلي لمتاجر حقيقية؛ لا 1000 صفحة رقيقة
-- [Website Design Preferences](website_design_preferences.md) — Apple-style aesthetic, logo watermark background, Firebase OTP for dealpulseksa.com
-- [Website Project](website_project.md) — Next.js repo location, Firebase project ID, deployment status checklist
-- [Website SEO Engine](website_seo_engine.md) — lib/seo modules, BILINGUAL_ENABLED toggle, revalidate/indexnow API, env vars
-- [Check .env Before Infra Suggestions](feedback_check_env_first.md) — config issues: read .env + diagnostic endpoints FIRST, then suggest Railway changes
-- [master.store_id Not Unique](db_master_duplicate_store_id.md) — duplicate "نون" (ids 8, 21) blocks UNIQUE/FK on master(store_id); dedupe pending
-- [Local DB Is Detached From Railway Prod](db_local_vs_railway.md) — localhost = dummy/test only؛ الإنتاج عبر DATABASE_URL في .env (٤٢ متجر)
-- [No Philosophy — Just Execute](feedback_no_philosophy.md) — no multi-option questions, no planning preambles; start executing on the clearest piece, ask one short text question only when truly blocked
-- [Never Write to DB Without Explicit Permission](feedback_no_db_writes_without_permission.md) — INSERT/UPDATE/DELETE على discounts_engine يحتاج إذن صريح للعملية؛ "يلا نبدا" ليس إذن كتابة
-- [Store Analytics Final Structure](analytics_store_structure.md) — 6 sections + columns + subset semantics + إجمالي formula; «أبرز» = top favorites across bot+miniapp+web
-- [Trend System Architecture (Final)](trend_architecture_final.md) — ١٤ قرار معماري نهائي للترند: نوافذ، حشو، تداخل، تثبيتات، فلاتر الستوري، تسجيل النقر، debounce بحث
-- [Trend Uses source='all' Everywhere](trend_source_all.md) — DB واحد، الترند موحّد. لا تجزئة per-platform. البوت بلا ستوري
-- [Treat User as Senior Engineer](feedback_senior_engineer.md) — خبير ٢٠+ سنة. لا فلسفة، لا خيارات، لا أساسيات. اقرأ، حدّد، نفّذ مباشرة
-- [No Triple Backticks in blog.ts Template Literals](feedback_no_backticks_in_template_literals.md) — ``` داخل body يكسر SWC parser ويعطّل كل المقالات بعده — استخدم `inline` أو `-` لـ list
-- [Memory Sync via Junction](memory_sync_junction.md) — ذاكرة واحدة داخل الريبو (Claude_Memory/) + junction على كل جهاز؛ تتزامن مع git pull/push؛ لا تفرّع بعد اليوم
-- [Blog AliExpress Cluster](blog_aliexpress_cluster.md) — 150 مقال قطع سيارات كانت مكسورة (‏\n حرفية) وأُصلح العرض؛ الأسعار وصفية؛ توصية بالتنقية+noindex؛ أصل /calendar وفكّ يُتمه
-- [🛡️ Content Guardrails Playbook](content_guardrails_playbook.md) — قواعد إلزامية لأي Claude يكتب محتوى: استثناءات سلامة العلامة/YMYL/سلامة حرجة + صفر فبركة + جودة + تنسيق الجهازين + الربط الداخلي للمتاجر + الصراحة الاستراتيجية (باكلينك لا صفحات أكثر)
-- [Blog Home Furniture Cluster](blog_home_furniture_cluster.md) — عنقود أثاث ١٩ مقال (هَب + ٣ لكل ٦ أقسام: كنب/سرير/سفرة/دولاب/خارجي/مكتب) بصوت خبير ٢٠ سنة؛ web 97a1c5a
-- [Blog Toys Cluster Progress](blog_toys_cluster_progress.md) — عنقود ألعاب مستهدَف ٧٢ مقال (٢٤ قسم × ٣)؛ منجَز ١٠/٧٢ (Pillar+STEM+قطيفة+رضّع)؛ باقي ٦٢ مرتّبة بأولويات
-- [Blog The Deal Cluster](blog_thedeal_cluster.md) — عنقود ذا ديل أوتلت 15 مقال (5 أقسام × 3) + ربط من الهَب الرئيسي + best-saudi-stores؛ web 90935f8 (2026-07-08)
-- [Blog VogaCloset Cluster](blog_vogacloset_cluster.md) — عنقود فوغا كلوسيت 15 مقال (5 أقسام × 3: نسائي/رجالي/أطفال/جمال/منزل) + ربط شبكي متبادل مع عنقود ذا ديل؛ web 4b6de74 (2026-07-09)
-- [Blog Mamas & Papas Cluster](blog_mamaspapas_cluster.md) — عنقود ماماز آند باباز 15 مقال (عربات/غرفة/ملابس/تغذية/استحمام) بمعايير سلامة صارمة (لا مقعد سيارة/لا مصدّات) + ربط ثلاثي مع ذا ديل وفوغا؛ web 3bdb844 (2026-07-09)
-- [Blog H&M Cluster](blog_hm_cluster.md) — عنقود اتش اند ام 15 مقال (نسائي/رجالي/أطفال/H&M Home/H&M Move) بصراحة استراتيجية "يستحقّ/لا يستحقّ" + ربط رباعي مع 3 عناقيد سابقة؛ web 46e9e15 (2026-07-09)
-- [Domain Canonical Trap](domain_canonical_trap.md) — الصح dealpulseksa.com (حيّ)، التوأم dealpulesksa.com ميّت؛ لا تحكم على هجاء من لقطة مضغوطة — احسمه بـcurl/DNS؛ Trustpilot أول باكلينك مكتمل (2026-07-04)
-- [Local TTS Engine — XTTS v2 (REMOVED)](tts_engine_xtts_v2.md) — بُني ثم حُذف بالكامل 2026-07-06؛ جودة العربي المحلي ضعيفة؛ لا تُعِد بناء محلي-مجاني — الطريق الصحيح API عصبي مدفوع (ElevenLabs/Azure)
-- [Judge by Output, Not Engineering Effort](feedback_output_over_engineering.md) — المستخدم يقيّم بالمخرَج النهائي لا بصعوبة السباكة؛ اكشف سقف جودة الأداة بصراحة قبل البناء عليها
-- [Voice Bible](voice_bible.md) — نموذج الصوت التحريري للمقالات: عيّنة حقيقية مشرَّحة (فيتامين د) + الـ DNA؛ قلّد العيّنة لا القواعد النظرية وحدها
-- [Mirror Audit — Trace Not Claim](feedback_mirror_audit.md) — دقّق الـ agents (ونفسك) بالـ trace الخام بشكل متماثل؛ الأفضلية للأرقام لا المنصب
-- [Blog Internal-Link De-orphan](blog_internal_link_deorphan.md) — 65 مقال يتيم صُفِّرت (web 98b4329) بإكمال فهارس 4 pillars + hubs؛ السبب top-6 في getRelatedPosts يجوّع ذيل العنقود؛ طريقة تدقيق Node قابلة للتكرار + esbuild للتحقّق
-- [SEO Deep Audit Fixes](seo_deep_audit_fixes.md) — 2026-07-07: بق light-AR 500 (هجرة is_trending BOOLEAN نسيت جملة SELECT رابعة) أفرغ الخريطة/المتاجر/llms صامتاً؛ + حذف ادعاءات متاجر مفبركة (أمازون/Carrefour غير موجودة)؛ درس: اسحب الباك-إند قبل التشخيص
-- [SEO PR Blitz Kit](seo_pr_blitz_kit.md) — 2026-07-08 seo/pr_blitz_kit.md شُحن (Reddit×4 + Quora AR×3 + X ثريد + إيميلات ×5) لترويج /calendar وفكّ الطبقة D المعطّلة
-- [SEO AI Visibility Opt-In](seo_ai_visibility_optin.md) — 2026-07-08 robots.ts opt-in صريح لـ15 كراولر AI + llms.txt أُثري بأرقام+براندات+FAQ لاستخراج AI
-- [SEO Owned-Channels Pivot](seo_owned_channels_pivot.md) — 2026-07-08 المالك رفض Reddit/Quora/مدوّنين؛ التركيز على X+Telegram+IG المملوكة + دليل Google Indexing API
-- [SEO Google Indexing Live](seo_google_indexing_live.md) — 2026-07-08 Google Indexing API فُعِّل بنجاح؛ ٢٠٠ صفحة كلها Google:200 (استنزاف حصة يوم واحد كاملة)
-- [Blog Coffee Moments Cluster](blog_lahazat_cluster.md) — عنقود لحظات القهوة 15 مقال (قهوة/شاي/شراب/باردة/معدّات) + ربط من الهَبين (2026-07-10)
-- [Blog Jana Al-Asal Cluster](blog_jana_honey_cluster.md) — عنقود جنى العسل 15 مقال (أنواع/جودة/YMYL صحّة/مطبخ وجمال/هدايا) + إصلاح مرجع مكسور (2026-07-10)
-- [Blog 7 Clusters July 11](blog_7clusters_july11.md) — 105 مقال (عود رويال + قطرة عسل + 5 عبايات: ديزاج/ماي سكاريف/بنت الشيخ/المخملية/عذية) بتموضع متمايز (2026-07-11)
-- [Blog 14 Clusters July 11](blog_14clusters_july11.md) — 280 مقال (14 متجر: توب بيوتي/بنارا/الصقعبي/بيلاس/إليجنت هاب/ريمان/تويو/كاركستريم/وولفكس/هواوي/إيرالو/نمشي/نون/ستايلي) ربط شبكي متبادل (2026-07-11)
-- [Web Blog Monolith OOM + Client-Prop Serialization](web_blog_monolith_oom_and_client_prop_serialization.md) — 2026-07-11 إصلاح Ahrefs (web 6a70e1f): Discord discord.gg→discord.com/invite يمسح 1,450 redirect؛ قصّ related لحقول البطاقة يحلّ صفحة >2MB (props الـclient تُسلسَل في HTML)؛ سقف: next dev يـOOM على blog.ts 5.8MB حتى بـ8GB — تحقّق عبر Vercel+Ahrefs لا dev
-- [Health Citation Sourcing](health_citation_sourcing.md) — 2026-07-11 مصادر الاستشهاد الصحي (YMYL): Mayo Clinic + NIH ODS يحجبان الـcrawlers (403) فيظهران «مكسور» بـAhrefs؛ استخدم Harvard Nutrition Source المباشر (nutritionsource.hsph.harvard.edu = 200 للبوت)؛ JISSN 406 للبوت لكنه إيجابي كاذب (يعمل)؛ تحقّق أي «broken link» بـUA متصفح قبل الحكم
-- [SEO High-Demand Front Opened](seo_high_demand_front_opened.md) — 2026-07-12 فخّ منظومي: محرك /c/ يُنشئ AR=draft + EN=published لكن EN noindex → براند صفحته AR draft = صفر صفحة عربية قابلة للفهرسة؛ فُتحت 4 طلب-عالي (علي اكسبرس/علي بابا/ستايلي/إيرالو): عناوين عربية + نشر + Google Indexing 200؛ نون/نمشي محجوبان بالسلطة لا النشر
-- [🆕 Project Maqalat](project_maqalat.md) — 2026-08-29 مشروع مستقل جديد؛ maqalat.org على Cloudflare؛ مدوّنة مرجعية عربي/إنجليزي؛ هدف AdSense؛ بدء بعنقودَي تقويم+جامعات؛ Next.js+MDX+Vercel
-- [🚧 Maqalat — Zero Reference to DealPulse](feedback_maqalat_isolation.md) — قاعدة صارمة (2026-08-29): مشروع Maqalat لا يذكر dealpulse/discountsengineksa/نبض الصفقات في أي كود أو ملف؛ GitHub org: maqalatorg فقط
-- [🔐 Maqalat Git Auth Trap](project_maqalat_git_auth.md) — Windows Credential Manager كاش حساب discountsengineksa-create؛ push لأي ريبو maqalatorg يفشل 403؛ الحل: PAT fine-grained inline في URL (لا تحفظه في origin)
-- [🖼️ Maqalat OG Image Pitfalls](project_maqalat_og_pitfalls.md) — satori يرفض variable fonts (Cairo VF)؛ outputFileTracingIncludes يكسر Next.js 16؛ edge fetch يرجع 0 bytes صامتاً؛ الحل النهائي: Tajawal static + nodejs runtime + fetch من public/fonts
-- [🌐 Maqalat i18n Architecture](project_maqalat_i18n.md) — next-intl v4، AR افتراضي على /، EN على /en، middleware بلا auto-detect، URLs مفهرَسة محفوظة، مقالات EN تُرجِع 404 حتى تُضاف (لمنع duplicate content)
-- [📧 Maqalat Newsletter (Resend)](project_maqalat_newsletter.md) — Resend مربوط live؛ default audience "General" auto-created؛ فخّ الصلاحيات (Sending vs Full access)؛ API endpoint idempotent؛ Audience ID عبر API فقط
-- [📜 Maqalat Editorial Charter](project_maqalat_editorial_charter.md) — الميثاق التحريري 2026-09-01: صفر فبركة/حشو/لَفَت AI، YMYL صارم، مصادر رسمية، AdSense بلا حظر
-- [🧰 Maqalat SEO+Writing Toolkit](project_maqalat_toolkit.md) — سكلز المنصة + خريطة منافسين عربي (سطور/موضوع/الطبي/سبق) + نقاط ضعفهم = فرصنا
-- [📖 Maqalat Writing Playbook v1](project_maqalat_writing_playbook.md) — 2026-09-02 دليل الكتابة الكامل: E-E-A-T 2026 (Trust foundation + Authors section)، تجنّب AI-detection (المبني للمجهول ≤12%، إشارات بشرية)، AdSense-safe، YMYL-صارم، بنية إلزامية، قواعد المصادر، قائمة تدقيق ١٧ بنداً
-- [🔍 Maqalat Content Audit 2026-09-02](project_maqalat_audit_2026_09_02.md) — تدقيق أوّل: ٣ فجوات P0 (كاتب مجهول/Mayo المحجوبة/Person schema)، ٣ فجوات P1 (رقم متقاعدين قد يكون خطأ/افتتاحيات AI-typical/لا inline citations)، ٤ فجوات P2
-- [🎓 Maqalat Universities Cluster](project_maqalat_universities_cluster.md) — 2026-09-02: ١٠ جامعات × لغتين = ٢٠ مقال على قالب موحّد؛ لا رسوم/تواريخ؛ ترتيب موثّق + سوق عمل؛ AdSense threshold تجاوَزنا (٤٠+ مقال إجمالاً)
-- [📊 Maqalat Admin Dashboard](project_maqalat_admin_dashboard.md) — /admin بـ 3 تبويبات (روابط+زيارات/زوّار ومدن/محرّر MDX)؛ Firestore+GitHub API+Vercel Blob؛ env: ADMIN_PASSWORD+JWT_SECRET+GITHUB_TOKEN+BLOB_TOKEN (2026-09-01)
-- [🗺️ Maqalat Competitor Landscape](project_maqalat_competitor_landscape.md) — 2026-09-02 مسح ١٣٠ منافس (KSA/Gulf/EG/Levant/World/Asia)؛ أخطر ٥: موضوع+سطور/المرسال/سيدتي/الطبي/الجزيرة؛ ٥ فجوات: E-E-A-T/no-AI-slop/خدمات GCC/جامعات/تقاويم؛ نموذج دخل: AdSense+أفلييت+Deep Report مدفوع
+> ١٧٥ ملفاً (عُدّت ٢٠٢٦-٠٩-١١ بعد عنقود يمّك — `ls *.md | grep -v MEMORY.md | wc -l` = ١٧٥). **العدّ للمتون، بلا `MEMORY.md` نفسه**. **الفهرس وحده يُحمَّل — المتون لا.** السطر هنا **عنوان لا حقيقة**؛ الحقيقة في المتن.
+> **الطبقة ٠ تُقرأ متونها قبل أي مهمة.** من الباقي: افتح ما يخصّ مهمتك وأعلن ما فتحته.
+> الحوائط الصلبة منسوخة نصّاً في `CLAUDE.md`. سطرٌ بعدّة روابط = ملفات مستقلة جُمعت للاختصار.
+
+## 🔴 الطبقة ٠ — اقرأ متونها قبل أي مهمة (١٣)
+
+- [🧱 تحقّق من كتالوج المتجر الحيّ قبل أي ادّعاء](feedback_verify_catalog_before_claim.md) — لا تشتقّ منتجاً من التاق؛ درس سيدار: ٨٩ ادّعاءً مفبركاً عبر ٥٥ مقالاً
+- [🤝 Partnership Protocol](protocol_partnership.md) — ٨ أنماط بالاسم + دورة انضباط + طقوس جلسة + سياسة المصادر
+- [No Philosophy — Just Execute](feedback_no_philosophy.md) — لا خيارات/تمهيد؛ ابدأ بالأوضح؛ سؤال نصّي واحد عند العجز
+- [Treat User as Senior Engineer](feedback_senior_engineer.md) — خبير ٢٠+؛ لا فلسفة/خيارات/أساسيات؛ اقرأ حدّد نفّذ
+- [🧱 No DB Writes Without Permission](feedback_no_db_writes_without_permission.md) — INSERT/UPDATE/DELETE يحتاج إذناً صريحاً؛ «يلا نبدا» ليس إذناً
+- [🚧 الهارنس يحجب الوكيل عن كتابة DB وتعديل صلاحياته بنفسه](feedback_harness_blocks_self_permission.md) — حتى بإذن المالك؛ الحلّ: المالك يلصق قاعدة الصلاحية بنفسه
+- [🧱 لا حذف من الكتالوج ولا من المدوّنة](feedback_never_delete_catalog_or_content.md) — متجر/مقال لا يُحذف إلا بطلب شخصي؛ التوصية مسموحة والتنفيذ ممنوع
+- [🧱 Always Push, Never Leave Work Local](feedback_always_push.md) — أجهزة متعددة؛ push كل شيء، لا stash، pull بالبداية
+- [🧱 SEO White-Hat Only](seo_white_hat_only.md) — White-Hat فقط؛ محرّك ببوابات؛ SEO_AUTO_PUBLISH على DEALPULSEKSA
+- [🛡️ Content Guardrails Playbook](content_guardrails_playbook.md) — سلامة/YMYL + صفر فبركة + تنسيق + ربط داخلي + صراحة استراتيجية
+- [🔓 Full Authority Granted](feedback_full_authority.md) — تفويض ذاتي على الأفعال المحلية القابلة للعكس (لا يبطل حوائط DB/الحذف)
+- [🔓 Bot Freeze LIFTED](bot_frozen_lock.md) — البوت مفكوك ٢٠٢٦-٠٧-٠٧ ضمن البروتوكول؛ حوائط DB/الإنتاج باقية
+- [Mirror Audit — Trace Not Claim](feedback_mirror_audit.md) — دقّق الـagents ونفسك بالـtrace الخام؛ الأفضلية للأرقام
+- [Git Sync Workflow](git_sync_workflow.md) — جهازان: pull قبل، push بعد كل تغيير؛ main = Railway prod
+
+## ١) أسلوب العمل والتفضيلات (٢١)
+
+- [🔥 ضبط حرق التوكنز](feedback_token_burn_control.md) — تكلفة الدور = المحادثة كلها؛ الصور تسكن السياق للأبد؛ العدّاد في statusline
+- [User Preferences](user_preferences.md) — how the user likes to work
+- [Analysis Style](feedback_analysis_style.md) — جداول مقارِنة تقود قراراً؛ أفعال وأكواد لا كلام ملمّع؛ أقفل الصفحة قبل التالية
+- [Judge by Output](feedback_output_over_engineering.md) — يقيّم بالمخرَج لا صعوبة السباكة؛ اكشف سقف الأداة بصراحة
+- [Regression Audit First](feedback_regression_audit.md) — «كان يشتغل قبل تغييرك» → افحص diffs الأخيرة أولاً
+- [Check .env First](feedback_check_env_first.md) — مشاكل config: اقرأ .env + endpoints أولاً ثم Railway
+- [No Dead Code / No Premature Opt](feedback_no_dead_code.md) — كل سطر حقيقي موصول مبرّر ببوتلنك فعلي
+- [Zero Friction Onboarding](feedback_zero_friction.md) — اجمع البيانات عند نقطة القيمة (action-gated) لا الدخول
+- [Store Selection Criterion](feedback_store_selection.md) — معرفة السعودي+السياق تغلب العمولة؛ أبقِ المعروف احذف الغريب
+- [Prefer Codes over Tracking Links](feedback_prefer_codes_over_tracking_links.md) — الأكواد لا روابط التتبّع
+- [Never Publish Competing Codes](feedback_never_publish_competing_codes.md) — لا تذكر كود المتجر الترحيبي ولو كان أعلى
+- [Always Publish When Done](feedback_always_publish.md) — auto commit+push عند الإنجاز؛ main=prod؛ لا تسأل
+- [No Backticks in blog.ts Literals](feedback_no_backticks_in_template_literals.md) — ``` داخل body يكسر SWC
+- [AI Mastery Goal](user_ai_mastery_goal.md) — يريد برومبت عالمي معاد الاستخدام؛ رأي خبير صريح
+- العقل المدبر: [البروتوكول](protocol_mastermind.md) · [البرومبت](mastermind_prompt.md)
+- [Memory Sync via Junction](memory_sync_junction.md) — ذاكرة واحدة بالريبو + junction؛ تتزامن مع git؛ لا تفرّع
+- [☁️ Claude Code Cloud Sessions](claude_code_cloud_sessions.md) — claude.ai/code + الجوال مربوطان بالريبو؛ يرثان الذاكرة لكن بلا `.env`
+- المهارات: [المثبَّتة](skills_install_manifest.md) (٢٩٦ skill + ٢٥ أمراً؛ لا مهارة RTL/عربية) · [عدّة التسويق](marketing_skills_toolkit.md) (١٧ skill؛ عربي سعودي)
+- [Reconcile Web Repo Separately](reconcile_web_repo_separately.md) — dealpulseksa-web ريبو مستقل؛ افحصه أولاً
+
+## ٢) البنية والتشغيل والنشر والموقع (١٩)
+
+- أساسيات: [نظرة عامة](project_overview.md) · [الإعداد المحلي](setup_guide.md) · [سجلّ الإصلاحات](bug_fixes.md)
+- Railway: [النشر](railway_deployment.md) (الخدمة الموحّدة، tag الرجوع) · [عامل الجدولة](railway_scheduler_worker.md) (config منفصل، cron ≥5د)
+- [Single Source of Truth](single_source_of_truth.md) — DB واحد + داشبورد واحد؛ .env على Railway فقط
+- [Platform Monitoring](platform_monitoring.md) — «متابعة المنصة»: نشرة يومية ٧ص + أسبوعية اثنين + تقرير صحة (فيه GSC) + أداء API؛ لقطة الـLLM ٧ أيام
+- [🔒 Security Hardening](security_hardening.md) — فحص أمني (صفر ثغرة حرجة)؛ CSP بـnext.config؛ /docs مقفول بالإنتاج
+- متفرقات تشغيلية: [سعة البوت](bot_capacity_scaling.md) (سقف ~30/ث) · [ميزات مُنجَزة](project_completed_features.md) · [البريد](project_email_infrastructure.md) (Resend) · [خطة الأسابيع](weeks_roadmap.md) · [معسكر ريادة](entrepreneur_bootcamp.md)
+- الموقع: [المشروع](website_project.md) (Next.js+Firebase) · [التصميم](website_design_preferences.md) · [محرّك السيو](website_seo_engine.md)
+- [Web Repo Verification Recipes](web_repo_verification_recipes.md) + [Blog OOM/Client-Prop](web_blog_monolith_oom_and_client_prop_serialization.md) — tsconfig ضيّق يتجاوز OOM؛ قصّ related لصفحة >2MB
+- [⚡ جولة أداء الرئيسية](web_home_perf_pass.md) — TBT ٢٩٠٠→٢٠ms بـgtag lazyOnload + تقليم النبذة + `.cv-section`؛ السقف LCP وهو ليس رافعة ترتيب (لا CrUX)
+- [🎟️ Coupon Visual Identity](web_coupon_visual_identity.md) — نُشرت ٢٠٢٦-٠٨-١١؛ **`view=light` يرجّع الكود/الرابط `null`**؛ الترند وُصل بالكتالوج
+- [🎫 Logo: Ticket + DP](brand_logo_ticket_2026_08.md) — اعتُمد ٢٠٢٦-٠٨-١٢؛ **الفافيكون الحالي ١٦×٨ بكسل**
+- [🎨 الهوية طُبِّقت على الأسطح الأربعة](brand_identity_applied.md) — `brand.py`+`style.css` مصدر الحقيقة؛ **ملفّات الخط `-ar` مجزّأة فطبعت مربّعات**
+
+## ٣) قاعدة البيانات وموثوقية الأرقام (٩)
+
+- [DB Foundation Audit](db_foundation_audit.md) — **حيّ ٢٠٢٦-٠٨-٠٥: ٧١ جدول / ٣٨ فارغ (٥٤٪) / master ٥٢**؛ دَيْن النوع بلا contract
+- [master.store_id غير فريد](db_master_duplicate_store_id.md) · [المحلي منفصل عن الإنتاج](db_local_vs_railway.md)
+- تتبّع/جغرافيا: [ثقة البيانات](data_trust_geo_device.md) (city/device مفبركة) · [قواعد تحليل المستخدمين](users_analytics_rules.md) · [Web Visits](web_visits_tracking.md) (Migration 060)
+- [Unified Favorites](unified_favorites.md) — user_favorites SSOT + كتابة مزدوجة **حيّة**؛ **الإزالة لا تُسجَّل**
+- [Bot-vs-Promo 3-Signal Check](bot_vs_promo_heuristic.md) — قبل اتّهام قفزة بالبوت: visitor_id + timing + ASN
+- [Owned Audience Reality](owned_audience_reality.md) — ٥ مستخدمي بوت + ١٠ حسابات ويب + صفر بثّ؛ **لا تقرير أداء لشريك أبداً**
+
+## ٤) ميزات المنتج (١١)
+
+- [🔎 طبقة البحث الذكي](search_intelligence_layer.md) — تطبيع عربي + `search_concepts` (مرادف→قسم) + `blog_bridge` (كلمة→مقال→متاجره)؛ **حيّ ٢٠٢٦-٠٨-٣٠**؛ أعِد `build_blog_bridge --write` بعد أي تعديل مدوّنة
+- ترند: [البنية النهائية](trend_architecture_final.md) (١٤ قرار) · [source='all'](trend_source_all.md) (DB واحد، البوت بلا ستوري)
+- [Story System Design](story_system_design.md) — story_slides؛ نموذج متداخل؛ فيديو+صوت؛ Cloudinary
+- [Support System](support_system.md) · [Publish Channels](publish_channels_feature.md) · [Season Reminders](season_reminders_feature.md)
+- [Calendar Conversion Hub](calendar_conversion_hub.md) — كل موسم بوابة؛ **«لا /en» يحكم الـURLs لا لغة الواجهة**؛ مرحلة ٥/٦: جملة مؤرَّخة مطلقة بدل العدّاد النسبي
+- [Occasion Page Relevance Filter](occasion_page_relevance_filter.md) — store_tags تصنيف لا موسم؛ + master.occasions
+- [💳 التقسيط: هَب /installments](web_installments_bnpl.md) — تابي/تمارا/مدفوع مزحوفة لا مُدخلة؛ **الرئيسية وحدها كذبت**
+- [🔐 جلسة الويب في كوكي HttpOnly](web_session_httponly_cookie.md) — انتقلت ٢٠٢٦-٠٨-٢٧؛ **الميني-آب بأصل `null` فالترويسة تبقى للأبد**
+- [🎯 صفّ «صفقات تهمّك»](web_home_interests_rail.md) — `?interest=`/`?cat=` + `IntentPicker`؛ **hook في `lib/` يصله `api.ts` يكسر البناء**
+- [Web Login Gate Model](web_login_gate_model.md) — الموقع مفتوح؛ الستوري/المفضلة للمسجّلين
+- [Store Page Evergreen (404 Root Cause)](store_page_evergreen.md) — `last_time>=CURRENT_DATE` أخفى المتجر → 404
+
+## ٥) التحليلات والسيو (٣٣)
+
+- [🎯 منظومة إدارة الحملات](campaign_system.md) — ٧ فحوص تمنع إطلاق حملة لا تُقاس؛ **صفوف `seo_perf_snapshots` نوافذ ٢٨ يوماً لا أياماً**
+- [📈 GA4 رُكِّب — ومربوط بمفاتيح اللوحة](web_ga4_install.md) — `G-VRBHD0VK66`؛ **لا `page_view` يدويّ**؛ مرجع الحملات/الدورة/الدليل داخل الملف
+- سيو خارجي: [فلتر النصائح](seo_external_advice_filter.md) (٧ من ١٠٠ ضارّة) · [مصادر التعلّم](seo_learning_sources.md) (١٤ مصدراً مفحوصاً)
+- [🔤 تحقّق من تعريب اسم البراند قبل SEO](seo_verify_brand_transliteration.md) — Autocomplete السعودي يحكم؛ درس ناتشورال تاتش (أُدخل «ناشيونال تاتش» خطأً) + بيانات قناته
+- تحليل المتاجر: [الجناح](store_analytics_bi.md) · [استراتيجية إعادة البناء](analysis_rebuild_strategy.md) · [البنية النهائية](analytics_store_structure.md)
+- الكلمات المفتاحية: [⛔ Keyword Planner](google_ads_keyword_planner.md) (مرفوض نهائياً) · [طلب السوق](keyword_demand_ksa.md) · [⚠️ Windsor GSC](windsor_gsc_connector.md) (يرجع أصفاراً وهمية)
+- [SEO Indexation Status](seo_indexation_status.md) + [Deep Audit Fixes](seo_deep_audit_fixes.md) — فهرسة 4→150؛ بق light-AR 500 أفرغ الخريطة صامتاً
+- [SEO Authority Building](seo_authority_building.md) — crawled-not-indexed سقف سلطة؛ **صفر رابط خارج لأي تاجر ⇒ مسار الشركاء ليس تبادلاً**
+- [SEO High-Demand Front](seo_high_demand_front_opened.md) — فخّ AR=draft+EN=noindex؛ نون/نمشي محجوبان بالسلطة
+- [🤖 AI Citation Channel](ai_citation_channel.md) — **٤١٣ استشهاد Copilot/٣٠يوم مقابل ١٣٢ نقرة جوجل**؛ **+ ٠٨-٢٧: GA4 أكّدها بنقرة حقيقية — قناة AI Assistant ٤٥ جلسة/٧أيام**
+- [🏫 عنقود الإدارة المدرسية = المحرّك الأول](school_admin_cluster_engine.md) — ٣٤ مقالاً، ~١١٠+ نقرة/٢٨ي بـCTR ١٠–٢٠٪؛ بُني له هَب `/school-templates` ٢٠٢٦-٠٩-٠٢؛ منافسو الكوبونات صفر محتوى هنا
+- [SEO Page Portfolio Verdict](seo_page_portfolio_verdict.md) — ٧١٠/٧٦٤ صفحة صفر نقرة؛ **٢٠٢٦-٠٩-٠٩: أنبوب توليد `/c/` التلقائي أُزيل بالكامل (قرار المالك) — يدوي فقط عبر `seo-seed-custom`**؛ صفر نقرة ≠ صفر قيمة ([[ai_citation_channel]])
+- [SEO Category Query Alignment](seo_category_query_alignment.md) — وزن المفردات: «كوبون» م49 و«متاجر» م19؛ ٨٧٪ من الظهور غارق
+- تكاذُب/تسريب: [/c/ ↔ /store](seo_c_store_cannibalization.md) (canonical مشتقّ لـ١٩) · [Meta Code Leak](seo_meta_code_leak.md) (الكود يُكشف بـllms.txt أيضاً)
+- [⚖️ ثقة أدوات الفحص](seo_audit_tools_trust.md) — آخر يومين GSC ناقصان (تأخّر لا هبوط)؛ «هبوط الترافيك» في Ahrefs تقدير لا قياس
+- الفهرسة: [حيّ](seo_google_indexing_live.md) (٢٠٠/يوم) · [الدفع بالجملة](seo_bulk_reindex_ops.md) · [الظهور لمحرّكات AI](seo_ai_visibility_optin.md) (١٥ كراولر)
+- الترويج: [القنوات المملوكة](seo_owned_channels_pivot.md) (رفض Reddit/Quora) · [PR Blitz Kit](seo_pr_blitz_kit.md)
+- [🔗 SaaSHub Directory Listing](saashub_directory_listing.md) — رابط nofollow حتى تُوثَّق الملكية
+- الدومين: [خطة السلطة](domain_authority_plan.md) (الهَب السِتوايد أُعيد توجيهه للمناسبات) · [⚠️ فخّ الـcanonical](domain_canonical_trap.md) (dealpulesksa ميّت)
+- [Content/Programmatic Strategy](content_programmatic_strategy.md) — «عربي فقط لا /en»؛ لا صفحات رقيقة
+- [Seasonal School Traffic Bridge](seasonal_school_traffic_bridge.md) + [Competitor Landscape](competitor_landscape.md) — لا كارتل يملك هَب تقويم مؤرَّخاً
+- [🔌 Claude SEO Plugin](claude_seo_plugin.md) — ١٨ agent+٢٥ skill بمستوى الريبو؛ **السحابة محجوبة عن dealpulseksa.com**
+- [🏺 قصر الاواني](qasr_alawani_source_of_truth.md) + [🚕 لائحة نقل الركاب](ride_hailing_regulation_sources.md) — مصادر أوّلية مفحوصة للاستشهاد
+
+## ٦) المحتوى والمدوّنة (٢٧)
+
+- [Voice Bible](voice_bible.md) — نموذج الصوت التحريري؛ قلّد العيّنة
+- [Blog Total = Count It Live](blog_massive_content_session.md) — **١٨٩٣ (عُدَّ ٢٠٢٦-٠٩-١٠ بعد عنقود ذي بيوتي سيكرتس)**؛ عُدّ بـ`grep -cE "^\s*slug:" lib/blog.ts` لا تجمع تقديرياً
+- [🧴 عنقود ذي بيوتي سيكرتس (علامة عناية وجمال سعودية عريضة)](blog_beautysecrets_cluster.md) — **٢٢ مقالاً** `beautysecrets-` (web `863c82b`)؛ `master.id=89` كود **T2** خصم **٥٪**؛ 312 منتجاً (تحقّق sitemap)؛ عطور + بشرة (YMYL: إخلاء طبي + اختبار بقعة + «تفتيح» تجميلي لا علاجي) + جسم + شعر + تعطير منزل + شموع (سلامة كاملة)؛ **جمهور نسائي، معلومات حقيقية فقط، جدول+FAQ في كل مقال** (طلب المالك)؛ de-orphan في 8 هَبّات عطور + tajjmel + nice
+- [💎 عنقود بلوار (بيت عطور سعودي + أجهزة تعطير)](blog_beluar_cluster.md) — **١٦ مقالاً** `beluar-` (web `e8200c3`)؛ `master.id=88` كود **ADDD** خصم ٧٪؛ سلة؛ توقيعه عطور نيش بأسماء الأحجار الكريمة (ياقوت/توباز/لازورد/كريستال/روبي/عنبر/كهرمان/تورمالين) + **٤ أجهزة تعطير حسب المساحة** (رافعة تمييزه)؛ **مسابقة سيارات = جملة محايدة واحدة فقط** (حائط القمار، سجل 13623، لا يُشترط الشراء)؛ صفر رقم ريال؛ de-orphan في 8 هَبّات `perfume-brands-*'
+- [🧹 عنقود يمّك (منصّة خدمات منزلية — أوّل عنقود "خدمات" لا منتجات)](blog_yammak_cluster.md) — **٢٠ مقالاً** `yammak-` (web `1297937`)؛ `master.id=96` كود **A100** خصم ٢٠٪ **للعملاء الجدد تحديداً**؛ تنظيف+صيانة (نجار/سباك/كهربائي/تكييف)+جمال نسائي+جليسة أطفال+تحضير وجبات، صيغة «دليل حجز» لا شراء؛ انضباط سلامة حقيقي (كهرباء/سباكة طوارئ، مساج حمل يحتاج موافقة طبيبة، **أول عنقود رعاية أطفال بالموقع** بتحقّق هوية وحجز تجريبي)
+- [🍫 عنقود بتيل (تمور وشوكولاتة فاخرة)](blog_bateel_cluster.md) — **١٨ مقالاً** `bateel-` (web `6584838`)؛ `master.id=95` كود **A43** خصم ١٥٪ (يطابق بانر الموقع فعلياً)؛ نبرة خبير بطلب المالك: جدول مقارنة أنواع تمور حقيقي + فرق تقني ترافل/برالين/جانش + شوكولاتة دبي بالتمر + إخلاء تغذوي للداكنة؛ صفر ادّعاء تاريخي غير محقَّق (فشل WebFetch لصفحة «من نحن»، لم يُعوَّض بتخمين)
+- [👗 عنقود فاشون.سا (أزياء نسائية وأطفال + زي مدرسي بالاسم)](blog_fashion_cluster.md) — **٢٠ مقالاً** `fashion-` (web `8e98b0b`)؛ `master.id=94` كود **AAF68** خصم ١٠٪؛ الميزة: زي مدرسي لـ٤ مدارس محدّدة بالاسم (نور الإسلام/الفيصلية/GHIS/المنارات) + الحكومي + دليل مقاسات، كل مقال مدرسة يحمل «راجعي تعميم مدرستك الرسمي»؛ كود بانر `SA96` رُصد ولم يُنشَر (نفس منطق DISCOK95)
+- [🧴 عنقود ناتشورال تاتش (عطور وعناية بخطوط خاصة)](blog_naturaltouch_cluster.md) — **١٦ مقالاً** `naturaltouch-` (web `2d3059f`)؛ `master.id=74` كود **M13** خصم ١٠٪؛ كان له ٤٢ صفحة `/c/` ميتة الأداء (شبه صفر نقرة/ظهور بعد أسبوعين) — تشخيص حيّ: سقف سلطة الدومين لا بق صفحة (200/canonical سليم/٣٩ رابط وارد)؛ ⚠️ `store_bio` صُحِّح («ناشيونال»→«ناتشورال»، غلطة لم تُلتقط بتصحيح `store_id` السابق)؛ **بلومينغديلز (81) يبقى الوحيد صفر سيو — المالك رفضه صراحةً**
+- [👠 عنقود ليفل شوز (أحذية وحقائب فاخرة)](blog_levelshoes_cluster.md) — **٢٠ مقالاً** `levelshoes-` (web `7247465`)؛ `master.id=92` كود **AAC147** خصم ١٠٪؛ جزء من مجموعة شلهوب؛ دليل مصمّمين (غوتشي/برادا/سان لوران...) + مستخدمة بعناية + أصالة + جلود/أقمشة + مقاسات دولية؛ نبرة فاخرة محرّرة بطلب المالك بلا مبالغة؛ de-orphan في هَبّ واحد فقط (تجنّب `thedeal-*`/`namshi-*` الشريكة)
+- [🍼 عنقود ممزورلد (حمل وأمومة ومواليد وأطفال)](blog_mumzworld_cluster.md) — **٢٠ مقالاً** `mumzworld-` (web `2b36d8d`)؛ `master.id=93` كود **M43** خصم ١٠٪؛ طلب المالك صريح: أمهات جدد + Q&A + وسائد الحمل + جداول؛ نفس انضباط YMYL/السلامة كالنهدي (لا فورمولا، لا مقاعد سيارة، لا مصدّات سرير) + تمييز وسائد الحمل الآمنة عن مصدّات الرضيع؛ de-orphan في ٤ هَبّات محايدة، **لم تُمسّ عناقيد ماماز آند باباز الشريكة**؛ + كود ثانٍ `DISCOK95` (إحالة ٢٥٪) نُشر بطلب صريح لاحقاً، المالك يضيفه بـ`master` بنفسه
+- [💊 عنقود صيدلية النهدي أونلاين](blog_nahdi_cluster.md) — **٢٠ مقالاً** `nahdi-` (web `c3934c7`)؛ `master.id=91` كود **9LDF** خصم ٥٪ (حد ٢٥ ريال، عملاء جدد، **يستثني الأدوية وحليب الأطفال**)؛ منضبط YMYL (لا فورمولا رضّع، لا مكمّلات حمل/أمراض مزمنة، لا مقاعد سيارة، لا «الصحة الجنسية»)؛ de-orphan في ٥ هَبّات جمال/فيتامينات؛ `my_coupon='6%'` عمولة صحيحة (عُرف بوستيني)؛ **`blog_bridge --write` حجبه مصنّف الهارنس — يشغّله المالك**
+- [🐚 عنقود ريف (بيت عطور سعودي + ريف بيوتي للشفاه)](blog_reef_cluster.md) — **١٨ مقالاً** `reef-` (web `af7db8c`)؛ `master.id=90` كود **B71** خصم ٥٪؛ عطور مرقّمة/مسمّاة + فوّاحات + مكياج شفاه؛ **استُرجع من جلسة سابقة غير مدفوعة**؛ تحقّق esbuild فقط (الجهاز يـOOM على البناء)؛ `blog_bridge` معلّق
+- [🌿 عنقود رسيس (بيت عطور سعودي)](blog_rasees_cluster.md) — **١٦ مقالاً** `rasees-` (web `8276493`)؛ `master.id=87` كود **RA50** خصم ٧٪؛ توقيعه مجموعة نيش بأسماء معالم السعودية (نيوم/العلا/الدرعية/الطريف/ذا لاين/القدية/طويق/الرياض)؛ **المالك: يسوّي إعلانات كثيرة — لا تتحمّس ولا تفبرك**؛ صفر ادّعاء منشأ/نقاء/جوائز؛ فضح أكواد 50-70٪ الوهمية؛ de-orphan في 8 هَبّات `perfume-brands-*`
+- [✈️ عنقود المطار للسفر](blog_almatar_travel_cluster.md) — **٤٤ مقالاً** (طيران ١٠ + تأجير سيارات ٧ + وجهات السعودية ٩ + وجهات العالم بالفصل ٨ + عمرة/تأشيرات/دبي/تركيا/جورجيا ١٠)؛ `master.id=86` كود **M31** خصم ٧٪ (طيران+فنادق+سيارة)؛ web `5e7aa30`/`21adfb1`/`a151695`/`fbc956f`؛ فئة جديدة `سفر وسياحة` + alias أصلح يُتم ١٤ بيد إن روم؛ **صفر رقم ريال مفبرك**؛ **بيد إن روم للسعودية فقط**؛ ⚠️ أُصلح ٤ روابط `/store/ايرالو` (بلا همزة) 404؛ غلطة «توسيع نطاق» (de-orphan أصاب ٢٦٤ لا ٥ — رُوجع)
+- [🛍️ عناقيد المتاجر الجديدة سبتمبر ٢٠٢٦: ماكس فاشن (١٦) · بوما (٢٠) · مودانيسا (١٨) · روملس/eSIM (١٤)](blog_maxfashion_puma_clusters.md) — id 76-79؛ مواقعها محجوبة للبوتات؛ blog_bridge (١٤٨٤/٦٥)؛ روملس تعريبه يصطدم بمصعد إيراني
+- [🪔 عنقود الماجد للعود: المبسوس والمعمول](blog_almajed_cluster.md) — ١٥ مقالاً `almajed-*` + محايد؛ web `c58c55d`؛ كود AR196؛ عود رويال/القرشي شريكان فلم تُلمس عناقيدهما؛ `blog_bridge --write` معلّق على إذن المالك
+- [🌹 عنقود فيرنز اند بيتل (FNP)](blog_fnp_cluster.md) — ١٦ مقالاً `fnp-` (زاوية ورد+توصيل فوري)؛ `store_id` صُحّح `بيتلز`→`بيتل` (`migration_074`)؛ كود FN68 خصم ١٢٪؛ blog_bridge ١٥١٥/٦٧؛ **صفحات `/c/` + `migration_075/076` أُلغيت ٢٠٢٦-٠٩-٠٩** (المالك رفض النمط)
+- [🪵 عنقود الدخيل للعود](blog_aldakheel_cluster.md) — ١٦ مقالاً `aldakheel-` (web `15a3d29`)؛ `master.id=83` كود HH14 خصم ٥٪ إضافي بوستيني؛ زاوية بيت عطور تجاري+معطّرات منزل+توزيعات؛ طلب كوبون سعودي حقيقي
+- [🍽️ عنقود نايس (NICE هوم-وير)](blog_nice_cluster.md) — **٢٣ مقالاً** `nice-` (web `8003e79`+`6f21842`)؛ `master.id=84` كود E13 خصم ١٠٪ يشمل المخفّض بوستيني؛ **⚠️ «نايس» ≠ «نايس ون»** (تلوّث SERP، أُفصح في كل مقال)؛ زاوية خاصّة بالمتجر؛ الدفعة ٢ كل قسم محقَّق ضد `nice_cat.xml`
+- [🧸 عنقود دبدوب (Dabdoob متجر ألعاب)](blog_dabdoob_cluster.md) — ١٧ مقالاً `dabdoob-` (web `6bbadb4`)؛ `master.id=85` كود EF2 خصم ١٠٪ على غير المخفّض بوستيني؛ **⚠️ «دبدوب» = الحيوان المحشو** (تلوّث SERP، أُفصح كل مقال)؛ زاوية خاصّة بالمتجر (ماركات + توصيل نفس اليوم + تغليف مجاني) لا تعليم ألعاب؛ السلامة: البيبي ألعاب فقط + نيرف قواعد عين
+- `blog_bridge` أُعيد بناؤه ٢٠٢٦-٠٩-٠٩: **١٥٦٩ صفّاً / ٧٠ متجراً** (الدخيل + نايس + دبدوب مضافة)
+- الصحّة: [عنقود المكمّلات](health_content_cluster.md) · [مصادر الاستشهاد](health_citation_sourcing.md) (Mayo/NIH يحجبان الـcrawlers)
+- [Blog Internal-Link De-orphan](blog_internal_link_deorphan.md) — 65 مقال يتيم صُفِّرت؛ top-6 getRelatedPosts يجوّع الذيل
+- [Blog Inline Code Chips](blog_inline_code_chips.md) + [Jolina Pre-Purchase Angle](jolina_prepurchase_angle.md) — الزاوية «الاسترجاع» لا الكود
+- عناقيد كبرى: [١٤ متجر/٢٨٠ مقال](blog_14clusters_july11.md) · [٧ عناقيد/١٠٥](blog_7clusters_july11.md) · [AliExpress ١٥٠](blog_aliexpress_cluster.md) · [ألعاب ١٠/٧٢](blog_toys_cluster_progress.md)
+- [💇 عنقود نزيه — ست ممرّات فارغة](blog_nazih_cluster.md) — لا تغزُ عنقود شريك؛ عُدَّ الروابط **لكل مقال** لا للعنقود
+- عناقيد متاجر (١٢–١٩ مقالاً لكلٍّ): [ذا ديل](blog_thedeal_cluster.md) · [فوغا كلوسيت](blog_vogacloset_cluster.md) · [ماماز](blog_mamaspapas_cluster.md) · [H&M](blog_hm_cluster.md) · [بيد إن روم](blog_bedinroom_cluster.md) · [لحظات القهوة](blog_lahazat_cluster.md) · [جنى العسل](blog_jana_honey_cluster.md) · [عبدالصمد القرشي](blog_asq_cluster.md) · [⚠️ أثاث المنزل — سيدار لا يبيع أثاثاً](blog_home_furniture_cluster.md)
+
+## ٧) قنوات الأفلييت والشراكات (١٢)
+
+- سلة: [القناة](salla_affiliate_channel.md) · [الإسناد بالكود](salla_orders_attribution_reality.md) · [٦ متاجر محوِّلة · ٨٠٧٫٥٤ ر.س](salla_proven_converters.md)
+- Admitad: [الإعداد](admitad_affiliate_setup.md) · [حجب ISP للنطاق](admitad_dns_block.md)
+- شبكات أخرى: [CodeMap](codemap_affiliate_channel.md) (كوبونات بلا تتبّع) · [Boostiny](boostiny_publisher_channel.md) (قُبل ٠٨-٠٦) · [DCM](dcm_network_channel.md) (ليس رافعة نمو) · [Zid](zid_affiliate_channel.md) (سفير زد)
+- [Jahez Direct BD](jahez_direct_bd.md) — تواصل مباشر بلا شبكة؛ مسوّدة في outreach/
+- [📄 الملف التعريفي بنسختين](company_profile_bilingual.md) — AR+EN؛ **لا حالات بأرقام/أسماء، لا صفحة مؤسس**
+- [Affiliate PPC Brand Restrictions](affiliate_ppc_brand_restrictions.md) · [Contact Emails](contact_emails.md) (`dealpulseksa@gmail.com`)
+
+## ٨) التسويق والسوشيال (٧)
+
+- [Marketing Baseline & Strategy](marketing_baseline_and_strategy.md) — **حُدّث 2026-09-01: 546 سعودي بشري/30ي (×4.5)، GSC 336 نقرة/28ي، محرّك واحد كاسب = المواسم**؛ ثغرات: opportunity_keywords فارغ، landing_pages perf NULL، GA4 غير موصول بـWindsor
+- انستقرام: [محرّك المحتوى](instagram_content_engine.md) (ريلز Dark Luxe) · [محرّك النمو](ig_growth_engine.md) (caption SEO) · [سياسة النشر](ig_publish_policy.md) (لا ستوري تلقائية)
+- [Brand Face for Flow Reels](brand_face_reels.md) — بنت خضراء سعودية؛ نطق «نبض الصفقات»
+- [Social Listening Deferred](social_listening_deferred.md) — الرصد الاجتماعي مؤجَّل (مصادر ميتة)
+- [Local TTS — XTTS v2 (REMOVED)](tts_engine_xtts_v2.md) — بُني وحُذف؛ عربي محلي ضعيف
+
+### صيانة الفهرس — **كل ملف على القرص يجب أن يظهر هنا**
+
+```powershell
+$idx=(Get-Content Claude_Memory\MEMORY.md -Encoding UTF8|%{[regex]::Matches($_,'\(([^)]+\.md)\)')|%{$_.Groups[1].Value}})
+(Get-ChildItem Claude_Memory -Filter *.md|?{$_.Name -ne 'MEMORY.md'}).Name|?{$idx -notcontains $_}
+```

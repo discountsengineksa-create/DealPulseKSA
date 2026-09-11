@@ -33,6 +33,64 @@ def _verify_admin(x_admin_secret: str) -> None:
         raise HTTPException(status_code=403, detail="forbidden")
 
 
+# ─── Reindex arbitrary URLs ───────────────────────────────────────────────
+# يعيد إرسال روابط عشوائية (صفحات متاجر/رئيسية/أقسام) لمحركات البحث فوراً عبر
+# IndexNow (Bing/Yandex/Naver/Seznam) + Google Indexing API. مفيد لتسريع إعادة
+# زحف صفحة تغيّرت حالتها — مثلاً متجر رجع 200 بعد أن كان 404 (تجديد الكوبون).
+# best-effort: فشل محرك لا يكسر الباقي، وكل محاولة تُسجَّل في seo_index_submissions.
+class ReindexUrlsRequest(BaseModel):
+    urls: list[str]
+
+
+@router.post("/reindex-urls")
+def reindex_urls(
+    body: ReindexUrlsRequest,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """إعادة إرسال روابط لمحركات البحث (IndexNow + Google Indexing API)."""
+    _verify_admin(x_admin_secret)
+    from api.seo.indexer import resubmit_url
+    # سقف 50 لحماية حصة Google (~200/يوم/مفتاح)
+    results = [resubmit_url(u) for u in body.urls[:50]]
+    return {"count": len(results), "results": results}
+
+
+# ─── Index-coverage audit (URL Inspection over the whole sitemap) ─────────
+# يقارن كل رابط في sitemap بحالته الحقيقية في Google (مفهرَس / مكتشف / زُحف-ورُفض /
+# مجهول) عبر URL Inspection API، فتُشطب المفهرَسة من قائمة «🔎 الفهرسة» ويظهر
+# الباقي مصنّفاً بالسبب. خيط خلفي — الفحص الكامل 15-25 دقيقة (حصة Google 2000/يوم).
+@router.post("/audit-index-coverage")
+def audit_index_coverage(x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
+    """يطلق تدقيق فهرسة كامل في الخلفية. تابع التقدّم عبر GET /admin/index-coverage-status."""
+    _verify_admin(x_admin_secret)
+    from api.seo.index_coverage import audit_state, run_full_audit
+    if audit_state().get("running"):
+        return {"status": "already_running", **audit_state()}
+    threading.Thread(target=run_full_audit, daemon=True).start()
+    return {"status": "started"}
+
+
+@router.get("/index-coverage-status")
+def index_coverage_status(x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
+    """حالة تدقيق الفهرسة + إحصاء verdicts الحالي من seo_index_coverage."""
+    _verify_admin(x_admin_secret)
+    from api.db import get_db_context
+    from api.seo.index_coverage import audit_state
+    counts: dict[str, int] = {}
+    try:
+        with get_db_context() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT verdict, count(*), "
+                            "count(*) FILTER (WHERE is_indexed) "
+                            "FROM seo_index_coverage GROUP BY verdict")
+                rows = cur.fetchall()
+        counts = {r[0]: r[1] for r in rows}
+        counts["_indexed_total"] = sum(r[2] for r in rows)
+    except Exception as exc:
+        counts = {"error": str(exc)[:200]}
+    return {"audit": audit_state(), "coverage_counts": counts}
+
+
 # ─── Email Diagnostics ────────────────────────────────────────────────────
 # يكشف لماذا "نسيت كلمة المرور" لا يصل: غالباً RESEND_API_KEY مفقود في Railway،
 # أو الدومين غير موثّق على Resend. كلا المسارين الفرعيين يطبع رسائل واضحة.
@@ -274,6 +332,27 @@ def broadcast(
     return {"status": "queued", "master_id": master_id}
 
 
+@router.post("/social/ig-feed/{master_id}")
+@limiter.limit(LIMIT_ADMIN)
+def ig_feed_only(
+    master_id: int,
+    request: Request,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """ينشر بوستر الفيد على إنستقرام لمتجر واحد فقط — بلا بقية المنصات.
+
+    يسدّ فجوة المتاجر التي بُثّت أثناء تعطيل الفيد (2026-07-15 ← 2026-08-02):
+    إعادة البث الكامل كانت ستكرّر المنشور على تيليجرام/ديسكورد/فيسبوك بلا داعٍ.
+    تنفيذ متزامن ليرجع النتيجة مباشرة، ولا يمسّ قائمة انتظار الريل.
+    """
+    _verify_admin(x_admin_secret)
+    from api.social.dispatcher import post_instagram_feed_only
+    result = post_instagram_feed_only(master_id)
+    from api.utils.ops import audit_log
+    audit_log(action="ig_feed_only", target=str(master_id))
+    return result
+
+
 @router.post("/social/test-story/{master_id}")
 @limiter.limit(LIMIT_ADMIN)
 def test_story(
@@ -431,27 +510,22 @@ def trigger_directive(
     }
 
 
-# ─── Week 5-6: SEO generator triggers ──────────────────────────────────────
+# ─── SEO generator trigger — manual only ───────────────────────────────────
 @router.post("/seo-run")
 def seo_run(
-    batch: int = Query(default=3, ge=0, le=20),
+    batch: int = Query(default=3, ge=1, le=20),
     x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
 ):
     """
-    تشغيل يدوي لخط أنابيب الـ SEO:
-      1. تجميع الترند الداخلي (مجاني)
-      2. مطابقة الكلمات بالمتاجر وإنشاء وظائف (مجاني)
-      3. توليد batch صفحات عبر الـ LLM (يستهلك الميزانية — batch=0 يتخطّاه)
+    يولّد صفحات SEO للوظائف الموجودة **صراحةً** في قائمة الانتظار (التي صُفّت
+    عبر /admin/seo-seed-custom). لا يكتشف كلمات ولا يصفّ وظائف من نفسه —
+    التوليد التلقائي أُزيل بطلب المالك (٢٠٢٦-٠٩-٠٩).
     """
     _verify_admin(x_admin_secret)
-    from api.seo.trends import aggregate_internal_search
-    from api.seo.matcher import match_and_enqueue
     from api.seo.generator import process_pending_jobs
 
-    trends = aggregate_internal_search()
-    enqueued = match_and_enqueue()
-    gen = process_pending_jobs(batch=batch) if batch else {"processed": 0, "generated": 0, "failed": 0}
-    return {"trends_upserted": trends, "jobs_enqueued": enqueued, "generation": gen}
+    gen = process_pending_jobs(batch=batch)
+    return {"generation": gen}
 
 
 @router.post("/seo-snapshot")
@@ -462,14 +536,16 @@ def seo_snapshot(x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
     return capture_snapshot()
 
 
-@router.post("/seo-auto-run")
-def seo_auto_run(x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
-    """تشغيل يدوي لدورة محرّك SEO الأوتوماتيكية الكاملة (نفس دورة 3 صباحاً):
-    أكثر المتاجر طلباً → ربط مناسبة → توليد → نشر مُبوّب. force=True يتجاوز
-    مفتاح SEO_AUTO_PUBLISH_ENABLED (التشغيل هنا قرار صريح من المالك)."""
+@router.post("/seo-gsc-detail")
+def seo_gsc_detail(x_admin_secret: str = Header(..., alias="X-Admin-Secret")):
+    """يسحب تفصيل Search Console بالصفحة والاستعلام الآن (migration 071).
+
+    الكرون اليومي يفعلها تلقائياً؛ هذه للتشغيل الفوري بعد إنشاء الجداول بدل
+    انتظار دورة الغد. تعمل على الخدمة التي تحمل GSC_SA_JSON.
+    """
     _verify_admin(x_admin_secret)
-    from api.seo.auto_pipeline import run_daily_seo_cycle
-    return run_daily_seo_cycle(force=True)
+    from api.seo.gsc_detail import capture_gsc_detail
+    return capture_gsc_detail()
 
 
 @router.post("/seo-publish/{page_id}")
@@ -544,6 +620,110 @@ def seo_drafts(
             )
             rows = [dict(r) for r in cur.fetchall()]
     return {"total": len(rows), "drafts": rows}
+
+
+# ─── Import pre-written SEO landing pages (no LLM generation) ───────────────
+# مسار توليد الـ SEO يكتب المحتوى عبر LLM؛ هذا يستورد محتوى مكتوب مسبقاً
+# (مسودات مُحرّرة يدوياً) بنفس منطق الإدخال في api/seo/generator.py — slug فريد
+# + body_html_hash + status='draft'. المراجعة والنشر عبر /seo-publish/{id} كالعادة.
+class SeoImportPage(BaseModel):
+    title: str
+    body_markdown: str
+    target_keyword: str
+    master_id: int
+    lang: str = "ar"
+    description: str | None = None
+    slug: str | None = None
+
+
+@router.post("/seo-import")
+def seo_import(
+    payload: SeoImportPage,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """يستورد صفحة هبوط مكتوبة مسبقاً كـ draft. لا يستدعي الـ LLM."""
+    _verify_admin(x_admin_secret)
+    import hashlib
+    import psycopg2
+    from api.db import get_db_context
+    from api.seo.generator import _make_slug
+
+    if not payload.body_markdown.strip() or not payload.title.strip():
+        raise HTTPException(status_code=422, detail="title and body_markdown required")
+    lang = (payload.lang or "ar")[:2]
+    body = payload.body_markdown
+    body_hash = hashlib.sha256(body.encode("utf-8")).digest()
+
+    with get_db_context() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT COALESCE(seo_enabled, TRUE) FROM master WHERE id=%s",
+                (payload.master_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="master_id not found")
+            if row[0] is False:
+                raise HTTPException(
+                    status_code=403,
+                    detail="هذا المتجر ممنوع من نشر صفحات SEO (seo_enabled=FALSE)",
+                )
+            base = (payload.slug or _make_slug(
+                payload.target_keyword, payload.master_id, lang=lang))[:190]
+            slug, n = base, 2
+            while True:
+                cur.execute("SELECT 1 FROM seo_landing_pages WHERE slug=%s", (slug,))
+                if cur.fetchone() is None:
+                    break
+                slug = f"{base}-{n}"[:200]
+                n += 1
+            cur.execute(
+                """
+                INSERT INTO seo_landing_pages
+                    (slug, target_keyword, master_id, lang, title_meta,
+                     description_meta, body_markdown, body_html_hash, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'draft')
+                RETURNING id
+                """,
+                (slug, payload.target_keyword[:500], payload.master_id, lang,
+                 payload.title[:180], (payload.description or "")[:280],
+                 body, psycopg2.Binary(body_hash)),
+            )
+            page_id = cur.fetchone()[0]
+
+    from api.utils.ops import audit_log
+    audit_log(action="seo_import", target=slug,
+              meta={"page_id": page_id, "master_id": payload.master_id})
+    return {"imported": True, "id": page_id, "slug": slug}
+
+
+@router.put("/seo-import/{page_id}/body")
+def seo_import_body(
+    page_id: int,
+    payload: SeoImportPage,
+    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
+):
+    """يحدّث جسم مسودة مستوردة — لتمريرة الربط الداخلي بعد معرفة كل الـ slugs."""
+    _verify_admin(x_admin_secret)
+    import hashlib
+    import psycopg2
+    from api.db import get_db_context
+
+    body = payload.body_markdown
+    if not body.strip():
+        raise HTTPException(status_code=422, detail="body_markdown required")
+    body_hash = hashlib.sha256(body.encode("utf-8")).digest()
+    with get_db_context() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE seo_landing_pages SET body_markdown=%s, body_html_hash=%s "
+                "WHERE id=%s AND status='draft' RETURNING slug",
+                (body, psycopg2.Binary(body_hash), page_id),
+            )
+            row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="draft page not found")
+    return {"updated": True, "id": page_id, "slug": row[0]}
 
 
 # ─── Week 7-8: Social listener controls ────────────────────────────────────
@@ -1352,7 +1532,8 @@ def seo_seed_custom(
             cur.execute(
                 """
                 SELECT id, store_id,
-                       COALESCE(NULLIF(name_en, ''), store_id) AS display_name
+                       -- الأنماط أدناه عربية، فالاسم العربي هو الصحيح فيها.
+                       COALESCE(NULLIF(store_id, ''), name_en) AS display_name
                 FROM master
                 WHERE COALESCE(affiliate_link, '') <> ''
                   AND COALESCE(seo_enabled, TRUE) = TRUE
@@ -1475,27 +1656,6 @@ def seo_retry_failed(
             )
             requeued = len(cur.fetchall())
     return {"requeued": requeued}
-
-
-@router.post("/seo-seed-long-tail")
-def seo_seed_long_tail(
-    max_stores: int = Query(default=30, ge=1, le=100,
-                             description="عدد المتاجر التي ننتقي منها"),
-    sort_by: str = Query(default="trending",
-                          description="trending | engagement | recent"),
-    x_admin_secret: str = Header(..., alias="X-Admin-Secret"),
-):
-    """
-    يولّد وظائف SEO بكلمات long-tail (منخفضة المنافسة) لأهمّ المتاجر.
-
-    مثال: 30 متجر × 10-12 نمط = 300-360 صفحة محتملة. الـ dedup يمنع التكرار،
-    فلو شغّلته مرّتين ما يضاعف العدد.
-
-    بعد التشغيل، استخدم /admin/seo-run?batch=50 لتوليد الصفحات فعلياً عبر LLM.
-    """
-    _verify_admin(x_admin_secret)
-    from api.seo.seed_long_tail import seed_long_tail_jobs
-    return seed_long_tail_jobs(max_stores=max_stores, sort_by=sort_by)
 
 
 @router.post("/seo-resubmit-url")

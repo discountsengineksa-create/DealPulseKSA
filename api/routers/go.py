@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import uuid as _uuid
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
@@ -83,9 +84,24 @@ def _swap_amazon_tag(url: str, source: str) -> str:
 #
 # Recognized hosts default to Admitad's known tracking domains; override via
 # env `AFFILIATE_ADMITAD_HOSTS` (comma-list) if new domains appear.
+#
+# ⚠️ Admitad issues a *different* throwaway domain per program, so this list
+# goes stale silently: a missing host makes the injection a no-op and the
+# postback lands with master_id = NULL (conversion with no store). The audit on
+# 2026-08-03 found 6 of 7 Admitad links in `master` on hosts absent from the
+# original list. Hence the shape fallback below — keep both.
 _ADMITAD_HOSTS_DEFAULT = (
-    "admitad.com", "rzekl.com", "wbbsv.com", "gotolink.pro", "mitgo.com",
+    "admitad.com", "gotolink.pro", "mitgo.com",
+    # per-program tracking domains observed in `master`
+    "rzekl.com", "wbbsv.com", "gndrz.com", "ogsib.com",
+    "dhwnh.com", "grfpr.com", "rkdro.com", "vxrlm.com",
 )
+
+# Every Admitad tracking domain seen so far is a five-letter .com serving
+# deeplinks under /g/<hash>. Matching that shape catches new domains before
+# anyone notices they are missing. A false positive only adds an ignored
+# `subid` query param, so the trade is safe in this direction.
+_ADMITAD_SHAPE_HOST = re.compile(r"^[a-z]{5}\.com$")
 
 
 def _admitad_hosts() -> tuple[str, ...]:
@@ -93,6 +109,13 @@ def _admitad_hosts() -> tuple[str, ...]:
     if not env:
         return _ADMITAD_HOSTS_DEFAULT
     return tuple(h.strip().lower() for h in env.split(",") if h.strip())
+
+
+def _is_admitad(host: str, path: str) -> bool:
+    """Known host, or an unseen host with Admitad's deeplink shape."""
+    if any(h in host for h in _admitad_hosts()):
+        return True
+    return bool(_ADMITAD_SHAPE_HOST.match(host) and path.startswith("/g/"))
 
 
 def _inject_admitad_subid(url: str, master_id: int, visitor_id: str | None) -> str:
@@ -104,7 +127,7 @@ def _inject_admitad_subid(url: str, master_id: int, visitor_id: str | None) -> s
     except Exception:
         return url
     host = (parsed.netloc or "").lower()
-    if not any(h in host for h in _admitad_hosts()):
+    if not _is_admitad(host, parsed.path or ""):
         return url
     qs = dict(parse_qsl(parsed.query, keep_blank_values=True))
     # Respect a fixed subid the merchant may already require.

@@ -8,11 +8,23 @@
 """
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+import os
+
+from fastapi import (
+    APIRouter,
+    Cookie,
+    Depends,
+    Header,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
 from psycopg2.errors import UniqueViolation
 from psycopg2.extras import RealDictCursor
 
 from api.auth_utils import (
+    JWT_EXPIRY_DAYS,
     create_jwt_token,
     decode_jwt_token,
     generate_reset_code,
@@ -111,19 +123,76 @@ def _mask_email(email: str) -> str:
     return f"{masked}@{domain}"
 
 
+# ─── كوكي الجلسة ────────────────────────────────────────────────────────────
+# الـJWT كان يعيش في localStorage وحده، وأي ثغرة XSS تقرأه. الكوكي بـHttpOnly
+# لا تراه JavaScript إطلاقاً.
+#
+# **بلا سمة Domain عمداً (host-only على api.dealpulseksa.com).** الموقع
+# `dealpulseksa.com` والـAPI `api.dealpulseksa.com` يتشاركان النطاق المسجَّل
+# نفسه، فالطلب بينهما **same-site** وSameSite=Lax يمرّره — بلا حاجة لمشاركة
+# الكوكي مع مضيف الواجهة. لو لزم مضيف آخر يوماً: SESSION_COOKIE_DOMAIN.
+#
+# ⚠️ معاينات Vercel (`*.vercel.app`) **cross-site** فلا يصلها الكوكي بـLax.
+# مسار الترويسة يبقى عاملاً هناك، والإنتاج هو ما يُقاس.
+SESSION_COOKIE = "dpk_session"
+_COOKIE_DOMAIN = os.getenv("SESSION_COOKIE_DOMAIN") or None
+# Secure افتراضياً: الإنتاج https. يُطفأ محلياً فقط (المتصفح لا يخزّن Secure على http).
+_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "true").lower() != "false"
+_COOKIE_SAMESITE = os.getenv("SESSION_COOKIE_SAMESITE", "lax").lower()
+
+
+def _set_session_cookie(response: Response, token: str, days: int) -> None:
+    """يزرع كوكي الجلسة. عمره يطابق عمر الـJWT — كوكي يعيش أطول من توكنه
+    يعني زائراً يظنّ نفسه داخلاً ثم يُرفض عند أول طلب."""
+    response.set_cookie(
+        key=SESSION_COOKIE,
+        value=token,
+        max_age=days * 24 * 60 * 60,
+        httponly=True,
+        secure=_COOKIE_SECURE,
+        samesite=_COOKIE_SAMESITE,
+        domain=_COOKIE_DOMAIN,
+        path="/",
+    )
+
+
+def _clear_session_cookie(response: Response) -> None:
+    """يمسح كوكي الجلسة. السمات نفسها إلزامية — المتصفح لا يطابق الكوكي
+    للحذف إلا بتطابق path/domain."""
+    response.delete_cookie(
+        key=SESSION_COOKIE,
+        path="/",
+        domain=_COOKIE_DOMAIN,
+        httponly=True,
+        secure=_COOKIE_SECURE,
+        samesite=_COOKIE_SAMESITE,
+    )
+
+
 # ─── JWT Dependency ─────────────────────────────────────────────────────────
 def get_current_user(
-    authorization: str = Header(..., alias="Authorization"),
+    authorization: str | None = Header(None, alias="Authorization"),
+    session_cookie: str | None = Cookie(None, alias=SESSION_COOKIE),
     conn=Depends(get_db),
 ) -> dict:
     """
-    Dependency يستخرج المستخدم الحالي من Authorization header.
-    استخدامه في endpoints محمية: user = Depends(get_current_user)
-    """
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Authorization header malformed")
+    Dependency يستخرج المستخدم الحالي: **الكوكي أولاً ثم ترويسة Authorization**.
 
-    token = authorization[7:].strip()
+    الترتيب مقصود ولا يجوز عكسه: الويب ينتقل للكوكي بينما تبقى في localStorage
+    توكنات جلسات قديمة لم تنتهِ صلاحيتها بعد — تقديم الترويسة يجعل التوكن العتيق
+    يطغى على الكوكي الطازج، فيبقى المستخدم على المسار القديم إلى الأبد.
+
+    والترويسة **تبقى مدعومة ولا تُحذف**: الـTelegram Mini App يُخدَم بـ
+    `origin: null`، و`null` لا يرسل كوكيز إطلاقاً. حذفها = كسر الميني-آب.
+    """
+    token = (session_cookie or "").strip()
+    if not token:
+        if not authorization:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        if not authorization.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Authorization header malformed")
+        token = authorization[7:].strip()
+
     payload = decode_jwt_token(token)
     if not payload or "sub" not in payload:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
@@ -145,7 +214,7 @@ def get_current_user(
 # ─── Endpoints ──────────────────────────────────────────────────────────────
 @router.post("/register", response_model=TokenResponse, status_code=201)
 @limiter.limit(LIMIT_REGISTER)
-def register(payload: RegisterRequest, request: Request, conn=Depends(get_db)):
+def register(payload: RegisterRequest, request: Request, response: Response, conn=Depends(get_db)):
     """إنشاء حساب جديد. يرجع JWT token مباشرة (دخول تلقائي)."""
     pw_hash = hash_password(payload.password)
     client_ip = request.client.host if request.client else None
@@ -200,12 +269,14 @@ def register(payload: RegisterRequest, request: Request, conn=Depends(get_db)):
         )
 
     token = create_jwt_token(user["id"])
+    # الكوكي للويب، وحقل token في الـJSON يبقى كما هو للميني-آب وأي عميل قائم.
+    _set_session_cookie(response, token, JWT_EXPIRY_DAYS)
     return TokenResponse(token=token, user=_row_to_user(user))
 
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit(LIMIT_LOGIN)
-def login(payload: LoginRequest, request: Request, conn=Depends(get_db)):
+def login(payload: LoginRequest, request: Request, response: Response, conn=Depends(get_db)):
     """تسجيل دخول. username = جوال أو إيميل. remember_me=true → JWT 30 يوم."""
     user = _find_user_by_username(conn, payload.username)
     if not user or not user.get("password_hash"):
@@ -221,6 +292,8 @@ def login(payload: LoginRequest, request: Request, conn=Depends(get_db)):
     # remember_me يمدّد الجلسة لـ 30 يوم بدل 14 الافتراضية
     expiry_days = 30 if payload.remember_me else None
     token = create_jwt_token(user["id"], expiry_days=expiry_days)
+    # عمر الكوكي = عمر التوكن نفسه، وremember_me يمدّهما معاً.
+    _set_session_cookie(response, token, expiry_days or JWT_EXPIRY_DAYS)
     return TokenResponse(token=token, user=_row_to_user(user))
 
 
@@ -228,6 +301,21 @@ def login(payload: LoginRequest, request: Request, conn=Depends(get_db)):
 def me(user=Depends(get_current_user)):
     """بيانات المستخدم الحالي (يحتاج Authorization: Bearer <token>)."""
     return _row_to_user(user)
+
+
+@router.post("/logout", response_model=SimpleOkResponse)
+def logout(response: Response):
+    """يُنهي جلسة الويب بمسح كوكي HttpOnly.
+
+    نقطة نهاية **إلزامية** بعد الانتقال للكوكي: JavaScript لا تستطيع حذف كوكي
+    HttpOnly، فبلا هذا المسار يصير «خروج» الويب تنظيفاً لـlocalStorage بينما
+    الجلسة الحقيقية باقية في المتصفح.
+
+    بلا مصادقة عمداً — الخروج فعلٌ آمن دائماً، ورفض 401 لمن انتهت جلسته يمنعه
+    من التنظيف وهو أسوأ حالة يحتاجه فيها.
+    """
+    _clear_session_cookie(response)
+    return SimpleOkResponse(message="تم تسجيل الخروج")
 
 
 @router.post("/forgot-password", response_model=ForgotPasswordResponse)
@@ -315,7 +403,7 @@ def forgot_password(
 
 @router.post("/reset-password", response_model=TokenResponse)
 @limiter.limit(LIMIT_RESET_PASSWORD)
-def reset_password(payload: ResetPasswordRequest, request: Request, conn=Depends(get_db)):
+def reset_password(payload: ResetPasswordRequest, request: Request, response: Response, conn=Depends(get_db)):
     """
     يتحقق من الكود ويعيّن كلمة سر جديدة.
     عند النجاح: يحذف الكود + يرجع JWT جديد (دخول تلقائي).
@@ -363,6 +451,7 @@ def reset_password(payload: ResetPasswordRequest, request: Request, conn=Depends
         )
 
     jwt_token = create_jwt_token(updated_user["id"])
+    _set_session_cookie(response, jwt_token, JWT_EXPIRY_DAYS)
     return TokenResponse(token=jwt_token, user=_row_to_user(updated_user))
 
 
@@ -448,6 +537,7 @@ def update_profile(
 @limiter.limit(LIMIT_DELETE_ACCOUNT)
 def delete_account(
     request: Request,
+    response: Response,
     user=Depends(get_current_user),
     conn=Depends(get_db),
 ):
@@ -458,6 +548,9 @@ def delete_account(
     """
     with conn.cursor() as cur:
         cur.execute("DELETE FROM web_users WHERE id = %s", (user["id"],))
+    # بلا هذا يبقى كوكي HttpOnly في المتصفح بعد زوال صاحبه — لا يستطيع
+    # JavaScript حذفه، فيُرسَل مع كل طلب حتى انتهاء صلاحيته.
+    _clear_session_cookie(response)
     return SimpleOkResponse(message="تم حذف الحساب نهائياً")
 
 

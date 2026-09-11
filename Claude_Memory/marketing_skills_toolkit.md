@@ -16,6 +16,6 @@ metadata:
 **قيود إلزامية عند الاستخدام:**
 - الـskills **إنجليزية ومتحيّزة SaaS غربي** — المنهج ينتقل، المخرجات لا. كل ناتج يُعاد تأليفه **عربي للسوق السعودي بنموذج أفلييت**.
 - التزام [[seo_white_hat_only]] — لا أي تكتيك Black-Hat من أي skill.
-- البوت [[bot_frozen_lock]] مجمّد — لا skill يلمس كوده.
+- البوت [[bot_frozen_lock]] **مفكوك ٢٠٢٦-٠٧-٠٧** — لكن لا skill تسويقي يعدّل كوده تلقائياً؛ أي تعديل يمرّ بالبروتوكول (إعلان → تحقّق → إثبات).
 
 **الربط بالأهداف:** هذي الباقة هي عُدّة [[domain_authority_plan]] («سلطنة الدومين»): schema + site-architecture + programmatic-seo + content-strategy + ai-seo. مكمّلة لعناقيد [[health_content_cluster]] و[[salla_affiliate_channel]].

@@ -23,6 +23,9 @@ class StoreResult(BaseModel):
     discount_value: str | None = None
     store_tags: list[str] = Field(default_factory=list)
     store_tags_en: list[str] = Field(default_factory=list)
+    # مواسم يظهر فيها المتجر صراحةً (migration_067) — معرّفات SALE_SEASONS.
+    # مفردات مستقلة عن store_tags: التصنيف يقول «ماذا يبيع»، وهذا يقول «في أي موسم».
+    occasions: list[str] = Field(default_factory=list)
     is_trending: bool = False
     priority_score: int = 0
     is_promoted: bool = False
@@ -36,6 +39,15 @@ class StoreResult(BaseModel):
     # «الأكثر طلباً» = نقرات + نسخ + عدد البحث + عدد المفضّلين (يُحسب في SQL).
     popularity_score: int = 0
     score_pct: int = 0
+    # كيف طوبق هذا المتجر بالاستعلام — تستعمله الواجهة لتجميع النتائج بعناوين:
+    #   name    اسم المتجر (دقيق أو أقرب عند الخطأ الإملائي)
+    #   concept قسم/مرادف/كلمة-منتج → كل متاجر القسم
+    #   blog    كلمة وردت في متن مقال يذكر هذا المتجر
+    #   bio     نصّ في نبذة المتجر
+    #   fuzzy   تطابق ضبابي بعيد (آخر تدرّج)
+    match_type: str = "name"
+    # عنوان المقال الذي جسر الاستعلام لهذا المتجر (match_type='blog' فقط).
+    via_article: str | None = None
 
 
 class SearchResponse(BaseModel):

@@ -35,7 +35,8 @@ ORG_NAME_AR = "نبض الصفقات"
 ORG_NAME_EN = "DealPulse KSA"
 ORG_DESC_AR = "منصة سعودية لكوبونات وخصومات عشرات المتاجر — تشمل البراندات العالمية والمحلية والمتاجر السعودية، مع عروض المواسم الكبرى والصفقات اليومية."
 ORG_DESC_EN = "Saudi platform for discount codes from dozens of stores — spanning international and local brands and Saudi retailers, with major-season offers and daily deals."
-ORG_LOGO = f"{SITE_URL}/logo.png"
+# شعار Organization لجوجل يجب أن يكون مربّعاً بخلفية صلبة، لا القفل العرضي.
+ORG_LOGO = f"{SITE_URL}/icon-512.png"
 
 KSA_LANGS = ["ar", "en"]
 KSA_AREA = {"@type": "Country", "name": "Saudi Arabia"}

@@ -12,7 +12,7 @@ originSessionId: cea0f63e-ba76-4d17-afa2-ac0c9cecc7b9
 - **مسار المشروع المحلي**: `c:\Users\user\Desktop\dealpulseksa-web\` (مش داخل مستودع Discounts_Engine)
 - **GitHub repo**: `discountsengineksa-create/dealpulseksa-web` (private)
 - **Firebase project ID**: `dealpulseksa-aab18`
-- **Firebase auth method**: Phone OTP فقط (Spark plan, 10 SMS/day limit)
+- **طريقة التسجيل**: ⚠️ صُحِّح ٣ أغسطس ٢٠٢٦ — جوال + جنس + إيميل + كلمة مرور. لا OTP.
 - **API base URL**: `https://dealpulseksa-production.up.railway.app/api/v1`
 - **Stack**: Next.js 14.2.15 + TypeScript + Tailwind + Firebase 10 + framer-motion
 - **حالة النشر** (آخر تحديث 2026-05-09):

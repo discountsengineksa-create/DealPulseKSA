@@ -55,7 +55,7 @@ from deal_pulse_bot import (
 from telebot import ExceptionHandler
 
 from api.routers import (admin, auth, broadcast_tracking, contact, coupons, go,
-                          seo, social, track, trend, users)
+                          reminders, seo, social, track, trend, users)
 from api.utils.rate_limit import limiter
 from api.workers.scheduler import start_workers
 
@@ -136,12 +136,17 @@ _raw_origins = os.getenv("ALLOWED_ORIGINS", "null")
 ALLOWED_ORIGINS: list[str] = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 
 # ─── FastAPI app ──────────────────────────────────────────────────────────────
+# تحصين: توثيق الـAPI التفاعلي (Swagger /docs + /openapi.json) يكشف كامل مخطّط
+# الـendpoints والنماذج لأي زائر — استطلاع مجاني للمهاجم. نقفله افتراضياً بالإنتاج،
+# ويُفتح محلياً عند الحاجة بـ EXPOSE_DOCS=1.
+_EXPOSE_DOCS = os.getenv("EXPOSE_DOCS") == "1"
 app = FastAPI(
     title="Deal Pulse KSA — Unified Service",
     description="بوت + API + Mini App في خدمة واحدة",
     version="1.0.0",
-    docs_url="/docs",
+    docs_url="/docs" if _EXPOSE_DOCS else None,
     redoc_url=None,
+    openapi_url="/openapi.json" if _EXPOSE_DOCS else None,
 )
 
 # ─── Rate limiting (slowapi + Redis) ─────────────────────────────────────────
@@ -221,7 +226,8 @@ app.include_router(auth.router,    prefix="/api/v1")
 app.include_router(admin.router,   prefix="/api/v1")
 app.include_router(seo.router,     prefix="/api/v1")   # Week 5-6 — SEO landing pages (read)
 app.include_router(social.router,  prefix="/api/v1")   # Week 7-8 — social listener ingest
-app.include_router(trend.router,   prefix="/api/v1")   # ترند يومي/أسبوعي للموقع والميني-ويب
+app.include_router(trend.router,   prefix="/api/v1")
+app.include_router(reminders.router, prefix="/api/v1")   # تذكيرات مواسم التخفيضات
 # Week 4 — Affiliate cloaking: /go/{slug} (بدون /api/v1 — رابط عام قصير)
 app.include_router(go.router)
 # /r/whatsapp — تحويل قصير على دومين البراند إلى Short Link واتساب
@@ -379,6 +385,10 @@ def serve_miniapp():
 _STATIC_FILES = {
     "logo.png":  "image/png",
     "logo2.png": "image/png",
+    # مارك DP وحده (شفّاف، ضيّق) — الميني-ويب يستخدمه في الهيدر بنسختَي الثيم،
+    # لأن القفل الكامل بالاسم يذوب عند 45px والاسم مكتوب نصّاً بجانبه.
+    "mark.png":       "image/png",
+    "mark_white.png": "image/png",
     "Cairo-Bold.ttf": "font/ttf",
 }
 

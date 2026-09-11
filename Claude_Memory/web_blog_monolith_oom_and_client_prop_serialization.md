@@ -17,4 +17,13 @@ metadata:
 
 **RESOLVED 2026-07-11 (web `6211710`):** `/blog` was still 3.64MB (renders all ~1,340 cards) — the related-trim fix only touched article pages, not the index. Fixed by restructuring `/blog` into a **category hub → /blog/category/[slug] → article** network (no articles deleted, no pagination). `lib/blog.ts` now has: `CATEGORY_ALIASES` (folds ~60 messy Arabic `category` values → 20 canonical), `getBlogCategories()`, `getBlogCategory()`, `getPostsByCategory()`, and **`toCard()`** (strips a post to card fields — use it for ANY client list to stay under 2MB). `/blog` = hub component `BlogHub.tsx` (category cards + 12 latest). Largest category ≈ 178 cards ≈ ~400KB. `BlogList` gained optional `heading`/`lead` props (reused by category pages). Sitemap includes the category URLs. Mesh completed in `b1d661b`: each article's category chip is now a `<Link>` to `/blog/category/[slug]` (via new `getPostCategory(post)`) + the article breadcrumb JSON-LD gained the category level — so every category page gets a dofollow link from all its articles (no orphans, fixes Ahrefs "one dofollow incoming internal link"). Net result confirmed by re-crawl: both 🔴 errors (2MB page + links-to-broken-page) gone; audit is all-🔵-notices. Remaining notices are intentional/noise (iHerb affiliate `?rcode` 301s, title/SERP, slow page).
 
+**٢٠٢٦-٠٩-٠٧ — نفس الدرس على الرئيسية (web `1805c7a`):** `app/page.tsx` يمرّر الكتالوج
+كاملاً (`getStores(5000)` `view=full` ≈ ١٠٩KB) إلى `HomeContent` وهو `'use client'` ⇒ كل حقل
+يُسلسَل مرّتين (RSC flight + props) ويُرطَّب. `store_bio`+`store_bio_en` ≈ ٥٠KB منها **ولا
+مكوّن على الرئيسية يرسمها** (كل البطاقات `variant="compact"`؛ النبذة في `StoreCard` بند
+`detailed` فقط). `trimForHome()` يصفّرهما خادِمياً قبل عبور الـprop ⇒ `index.html` المُصيَّر
+**٤١٠KB → ٣٥٥KB**، صفر تغيير بصري، صفر تغيير باك-إند. `view=light` لم يكن خياراً: يصفّر
+`public_coupon`/`affiliate_link`/`cloaked_slug` والرئيسية تحتاجها لبطاقات الترند/المتجر.
+**القاعدة تتوسّع: أي كتالوج/قائمة تعبر إلى `'use client'` تُقصّ خادِمياً لحقول العرض فقط.**
+
 Ahrefs triage note: only 🔴 Errors matter — "Page size >2MB" and "links to broken page". The scary-looking counts ("1,450 redirect", "Pages to submit to IndexNow") are 🔵 Notices. See [[seo-deep-audit-fixes]] [[blog-internal-link-deorphan]] [[content-programmatic-strategy]].

@@ -72,7 +72,7 @@ def get_top_favorited_stores(
                        fc.fav_count
                 FROM master m
                 JOIN fav_counts fc ON fc.store_id = m.store_id
-                WHERE (m.last_time IS NULL OR m.last_time >= CURRENT_DATE)
+                WHERE (m.last_time IS NULL OR m.last_time > CURRENT_DATE)
                   AND NOT COALESCE(m.is_suspended, FALSE)
                   AND (m.publish_channels IS NULL OR m.publish_channels ILIKE %(chpat)s)
                 ORDER BY fc.fav_count DESC, m.store_id ASC
@@ -161,6 +161,34 @@ _POPULARITY_SQL = """
 """
 
 
+# ── صفحة المتجر = أصل SEO دائم (evergreen) ───────────────────────────────────
+# صفحة `/store/{id}` وبطاقتها في الدليل والـsitemap يجب أن تبقى 200 وموجودة حتى بعد
+# انتهاء الكوبون. الفلترة بالانتهاء كانت تُحوّلها 404 فتكسر مئات الروابط الداخلية
+# وbreadcrumbs وتوقف زحف Google (السبب الجذري، 2026-07). الحلّ: على قناة الموقع لا
+# نفلتر بالانتهاء (المتجر يبقى)، والكوبون/الخصم يُفرَّغ في المخرجات عبر CASE إذا
+# انتهى فلا يظهر كود ميّت كأنه فعّال (صدق البيانات). قنوات البوت/الميني تبقى على
+# الكوبونات الفعّالة فقط (سطح صفقات لا دليل SEO دائم).
+_OFFER_ACTIVE_SQL = "(last_time IS NULL OR last_time > CURRENT_DATE)"
+
+
+def _expiry_where(channel: str, *, detail: bool = False, evergreen: bool = False) -> str:
+    """شرط الانتهاء في WHERE.
+
+    • **الكتالوج والبحث والأبرز — كل القنوات:** المتجر المنتهي يختفي فوراً من
+      واجهات العرض (القائمة، البحث، عدّاد المتاجر) إلى حين تجديد التاريخ.
+    • **صفحة المتجر المفردة على الموقع فقط (`detail=True`):** تبقى 200 بلا كود.
+      المقالات تحمل ٧٥ رابطاً داخلياً إليها، وتحويلها 404 كسر شبكة الروابط وأوقف
+      زحف Google في 2026-07-21. البوت والميني يفلترانها كالمعتاد.
+    • **الخريطة على الموقع فقط (`evergreen=True`):** تُدرج المنتهي كذلك.
+      إخراج صفحة ترجّع 200 من الـsitemap يجعلها أصلاً حيّاً بلا إشارة اكتشاف —
+      وميزانية الزحف هنا شحيحة (٢٤٤ صفحة «مكتشفة لم تُفهرس»)، فالإخراج يذبلها
+      بصمت بينما نيّة الإصلاح كانت الحفاظ عليها. لا يمسّ الكتالوج ولا البحث.
+    """
+    if channel == "website" and (detail or evergreen):
+        return ""
+    return f"AND {_OFFER_ACTIVE_SQL}"
+
+
 def _select_lang_clause(lang: str) -> str:
     """
     يبني SELECT يحقن قيم اللغة المطلوبة في الحقول الأساسية،
@@ -175,15 +203,20 @@ def _select_lang_clause(lang: str) -> str:
             -- store_id هو المفتاح الأساسي (للمفضلة/التتبّع/الربط) ويجب أن يبقى
             -- ثابتاً عبر اللغتين. الواجهة تعرض name_en وتستخدم store_id للعمليات.
             COALESCE(NULLIF(name_en, ''), store_id) AS name_en,
-            affiliate_link, public_coupon,
-            COALESCE(NULLIF(extra_offer_en, ''), extra_offer)   AS extra_offer,
-            extra_offer_en,
+            affiliate_link,
+            -- الكوبون/الخصم/العرض محتوى مؤقّت: يُفرَّغ إذا انتهى فلا يظهر كود ميّت
+            -- كأنه فعّال، مع بقاء المتجر نفسه ظاهراً (evergreen على قناة الموقع).
+            CASE WHEN (last_time IS NULL OR last_time > CURRENT_DATE) THEN public_coupon ELSE NULL END AS public_coupon,
+            CASE WHEN (last_time IS NULL OR last_time > CURRENT_DATE)
+                 THEN COALESCE(NULLIF(extra_offer_en, ''), extra_offer) ELSE NULL END AS extra_offer,
+            CASE WHEN (last_time IS NULL OR last_time > CURRENT_DATE) THEN extra_offer_en ELSE NULL END AS extra_offer_en,
             COALESCE(NULLIF(store_bio_en, ''),   store_bio)     AS store_bio,
             store_bio_en,
             description,
             COALESCE(NULLIF(store_tags_en, ''),  store_tags)    AS store_tags,
             store_tags_en,
-            discount_value,
+            occasions,
+            CASE WHEN (last_time IS NULL OR last_time > CURRENT_DATE) THEN discount_value ELSE NULL END AS discount_value,
             total_coupon_copies, total_link_clicks, is_trending_bool AS is_trending, priority_score_int AS priority_score,
             COALESCE(is_promoted, FALSE) AS is_promoted,
             logo_url, cloaked_slug, story_ring_color,
@@ -205,12 +238,16 @@ def _select_lang_clause(lang: str) -> str:
                      '[]'::json) AS extra_coupons
         """
     return """
-        id, store_id, name_en, affiliate_link, public_coupon,
-        extra_offer, extra_offer_en,
+        id, store_id, name_en, affiliate_link,
+        -- الكوبون/الخصم/العرض يُفرَّغ إذا انتهى (المتجر يبقى evergreen على الموقع).
+        CASE WHEN (last_time IS NULL OR last_time > CURRENT_DATE) THEN public_coupon ELSE NULL END AS public_coupon,
+        CASE WHEN (last_time IS NULL OR last_time > CURRENT_DATE) THEN extra_offer    ELSE NULL END AS extra_offer,
+        CASE WHEN (last_time IS NULL OR last_time > CURRENT_DATE) THEN extra_offer_en ELSE NULL END AS extra_offer_en,
         store_bio,   store_bio_en,
         description,
         store_tags,  store_tags_en,
-        discount_value,
+        occasions,
+        CASE WHEN (last_time IS NULL OR last_time > CURRENT_DATE) THEN discount_value ELSE NULL END AS discount_value,
         total_coupon_copies, total_link_clicks, is_trending_bool AS is_trending, priority_score_int AS priority_score,
         COALESCE(is_promoted, FALSE) AS is_promoted,
         logo_url, cloaked_slug, story_ring_color,
@@ -241,15 +278,20 @@ def _select_light_clause(lang: str) -> str:
         return """
             id, store_id,
             COALESCE(NULLIF(name_en, ''), store_id)              AS name_en,
-            COALESCE(NULLIF(extra_offer_en, ''), extra_offer)    AS extra_offer,
+            CASE WHEN (last_time IS NULL OR last_time > CURRENT_DATE)
+                 THEN COALESCE(NULLIF(extra_offer_en, ''), extra_offer) ELSE NULL END AS extra_offer,
             COALESCE(NULLIF(store_tags_en, ''),  store_tags)     AS store_tags,
-            discount_value, is_trending_bool AS is_trending, priority_score_int AS priority_score,
+            CASE WHEN (last_time IS NULL OR last_time > CURRENT_DATE) THEN discount_value ELSE NULL END AS discount_value,
+            is_trending_bool AS is_trending, priority_score_int AS priority_score,
             COALESCE(is_promoted, FALSE) AS is_promoted,
             logo_url, story_ring_color, total_coupon_copies, total_link_clicks
         """
     return """
-        id, store_id, name_en, extra_offer, store_tags,
-        discount_value, is_trending_bool AS is_trending, priority_score_int AS priority_score,
+        id, store_id, name_en,
+        CASE WHEN (last_time IS NULL OR last_time > CURRENT_DATE) THEN extra_offer    ELSE NULL END AS extra_offer,
+        store_tags,
+        CASE WHEN (last_time IS NULL OR last_time > CURRENT_DATE) THEN discount_value ELSE NULL END AS discount_value,
+        is_trending_bool AS is_trending, priority_score_int AS priority_score,
         COALESCE(is_promoted, FALSE) AS is_promoted,
         logo_url, story_ring_color, total_coupon_copies, total_link_clicks
     """
@@ -269,7 +311,7 @@ def get_categories(conn=Depends(get_db)):
                      trim(both '{}' from COALESCE(store_tags, '')), ','
                  )) AS tg
             WHERE trim(tg) <> ''
-              AND (last_time IS NULL OR last_time >= CURRENT_DATE)
+              AND (last_time IS NULL OR last_time > CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
         )
         SELECT
@@ -291,16 +333,28 @@ def get_categories(conn=Depends(get_db)):
 
 @router.get("/", response_model=SearchResponse)
 def get_all_coupons(
-    limit: int = Query(default=50, ge=1, le=5000),     # light يسمح حتى 5000 (كتالوج كامل)
+    limit: int = Query(default=5000, ge=1, le=5000),   # الكتالوج كامل افتراضياً
+    # كان 50: أي متجر خارج الخمسين يسقط من الصفحة الرئيسية — ومعه صف الستوري
+    # الذي كان يُبنى بفلترة هذه القائمة. «منصة زد» تصدّرت الترند اليومي
+    # والأسبوعي وغابت عن الصف لأنها المتجر 52 من 52. الكتالوج صغير، فالسقف
+    # الافتراضي المنخفض كان يكلّف أكثر مما يوفّر.
     lang: Literal["ar", "en"] = Query(default="ar"),
     view: Literal["full", "light"] = Query(default="full"),
     channel: str = Query(default="website"),
+    include_expired: bool = Query(
+        default=False,
+        description="خريطة الموقع فقط: يضمّ المتاجر المنتهية (channel=website حصراً)",
+    ),
     conn=Depends(get_db),
 ):
     """إرجاع المتاجر مرتبةً: المروّجة ثم الترند ثم بالمعرّف. ?lang=en يبدّل الحقول.
     ?view=light → قائمة خفيفة سريعة (بلا ستوري/أكواد إضافية/وصف/popularity) للكتالوج
     الكامل (آلاف المتاجر)؛ التفاصيل تُجلب لكل متجر عبر /coupons/detail/{id}.
-    ?channel=bot → قائمة الميني-ويب/البوت (افتراضي website)."""
+    ?channel=bot → قائمة الميني-ويب/البوت (افتراضي website).
+
+    ⚠️ `include_expired=true` **للـsitemap وحده** — صفحة المتجر المنتهي ترجّع 200
+    فيجب أن تبقى في الخريطة، لكنها تظلّ خارج الكتالوج والبحث وعدّاد المتاجر.
+    لا تستعمله في واجهة عرض: سيُظهر متجراً بلا كود كأنه معروض."""
     if view == "light":
         select_clause = _select_light_clause(lang)
         pop_clause = "0 AS popularity_score"
@@ -313,8 +367,8 @@ def get_all_coupons(
             {pop_clause},
             0 AS score_pct
         FROM master
-        WHERE (last_time IS NULL OR last_time >= CURRENT_DATE)
-              AND NOT COALESCE(is_suspended, FALSE)
+        WHERE NOT COALESCE(is_suspended, FALSE)
+              {_expiry_where(channel, evergreen=include_expired)}
               AND (publish_channels IS NULL OR publish_channels ILIKE %(chpat)s)
         ORDER BY
             COALESCE(is_promoted, FALSE) DESC,
@@ -329,13 +383,24 @@ def get_all_coupons(
 
     results = [
         StoreResult(
-            **{k: v for k, v in row.items() if k not in ("store_tags", "store_tags_en")},
+            **{k: v for k, v in row.items() if k not in ("store_tags", "store_tags_en", "occasions")},
             store_tags=_parse_tags(row.get("store_tags")),
             store_tags_en=_parse_tags(row.get("store_tags_en")),
+            occasions=_parse_tags(row.get("occasions")),
         )
         for row in rows
     ]
     return SearchResponse(query="", total=len(results), capped=(len(results) == limit), results=results)
+
+
+# تطبيع عربي داخل SQL بلا الاعتماد على دالة DB — يبقى البحث سليماً حتى لو
+# نُشر الكود قبل تشغيل migration_070 (الذي يُنشئ normalize_ar و search_concepts).
+# نفس قواعد api/utils/arabic_search.normalize_ar: أإآٱ→ا، ى→ي، ة→ه، حذف التطويل/التشكيل.
+def _norm_sql(col: str) -> str:
+    return (
+        f"regexp_replace(translate(lower(coalesce({col}, '')), "
+        f"'أإآٱىة', 'اااايه'), '[ـً-ْ]', '', 'g')"
+    )
 
 
 @router.get("/search", response_model=SearchResponse)
@@ -347,65 +412,169 @@ def search_coupons(
     conn=Depends(get_db),
 ):
     """
-    البحث الذكي بالـ Trigram Similarity.
-    - يبحث في الحقول العربيّة والإنجليزيّة معاً (المستخدم قد يكتب بأيّ لغة).
+    البحث الذكي — ثلاث طبقات مرتّبة بالتدرّج:
+
+    1. **اسم المتجر** — تطابق دقيق، ثم الأقرب عند الخطأ الإملائي (trigram).
+       التطبيع يوحّد صور الحرف («نمشى»→«نمشي») والمسافات («ترنديول»→«ترند يول»).
+    2. **مفهوم/قسم** — الاستعلام (أو أقرب صورة له) موجود في `search_concepts`
+       كمرادف/إملاء/كلمة-منتج → وسم قسم. النتيجة: **كل** متاجر ذلك القسم
+       مرتّبةً بالشعبية. («أحذية»→كل متاجر `أحذيه` ، «خواتم»→كل متاجر `مجوهرات`).
+    3. **نبذة المتجر** ثم **تطابق ضبابي بعيد** — آخر تدرّج.
+
+    كل صفّ يحمل `match_type` لتجمّعه الواجهة بعناوين.
     - ?lang=en يبدّل قيم الاستجابة للإنجليزيّة (Fallback للعربية إذا فارغة).
     - ?channel=bot يقصر النتائج على متاجر قناة البوت/الميني (افتراضي website).
     """
-    _like = f"%{q}%"
-    # نُطبّع المسافات: المستخدم قد يكتب «ترنديول» والمتجر «ترند يول».
-    # ILIKE العادي يفشل في هذه الحالة — نطبّق REPLACE على الجانبين.
-    _q_no_ws = "".join(q.split())            # "ترنديول"
-    _like_no_ws = f"%{_q_no_ws}%"
+    from api.utils.arabic_search import normalize_ar, strip_ws
+
+    q = q.strip()
+    q_norm = normalize_ar(q)
+    q_no_ws = strip_ws(q_norm)
+
+    # ── الطبقة ٢: حلّ المفاهيم (مرادف/إملاء/كلمة-منتج → وسوم canonical) ──────
+    # يُتخطّى بأمان قبل migration_070 (الجدول غير موجود).
+    concept_tags: list[str] = []
+    concept_weights: list[float] = []
+    with conn.cursor() as cur:
+        cur.execute("SELECT to_regclass('search_concepts')")
+        if cur.fetchone()[0] is not None and len(q_norm) >= 2:
+            cur.execute(
+                """
+                SELECT canonical_tag, MAX(weight) AS w
+                FROM search_concepts
+                WHERE term = %(q)s
+                   OR (length(%(q)s) >= 3 AND similarity(term, %(q)s) >= 0.55)
+                GROUP BY canonical_tag
+                ORDER BY w DESC, canonical_tag
+                LIMIT 6
+                """,
+                {"q": q_norm},
+            )
+            for tag, w in cur.fetchall():
+                concept_tags.append(normalize_ar(tag))
+                concept_weights.append(float(w))
+
+    # ── الطبقة ٣ (احتياط أخير): جسر المدوّنة — كلمة الاستعلام في نصّ مقال ضيّق
+    # الموضوع → متاجر ذلك المقال، مع عنوانه. FTS بترتيب ts_rank، أعلى ٣ مقالات.
+    # يُتخطّى بأمان قبل migration_070 / قبل ملء blog_bridge.
+    blog_ids: list[str] = []
+    blog_titles: list[str] = []
+    with conn.cursor() as cur:
+        cur.execute("SELECT to_regclass('blog_bridge')")
+        if cur.fetchone()[0] is not None and len(q_norm) >= 3:
+            cur.execute(
+                """
+                SELECT slug, title, store_ids,
+                       ts_rank(to_tsvector('simple', body_norm),
+                               plainto_tsquery('simple', %(q)s)) AS rank
+                FROM blog_bridge
+                WHERE to_tsvector('simple', body_norm)
+                      @@ plainto_tsquery('simple', %(q)s)
+                ORDER BY rank DESC
+                LIMIT 3
+                """,
+                {"q": q_norm},
+            )
+            seen: set[str] = set()
+            for _slug, title, store_ids, _rank in cur.fetchall():
+                for sid in _parse_tags(store_ids):
+                    if sid and sid not in seen:
+                        seen.add(sid)
+                        blog_ids.append(sid)
+                        blog_titles.append(title or "")
+
+    n_id, n_name, n_bio, n_tags = (
+        _norm_sql("store_id"), _norm_sql("name_en"),
+        _norm_sql("store_bio"), _norm_sql("store_tags"),
+    )
 
     sql = f"""
-        WITH filtered AS (
+        WITH concept(tag, w) AS (
+            SELECT * FROM unnest(%(c_tags)s::text[], %(c_weights)s::real[])
+        ),
+        scored AS (
             SELECT
                 {_select_lang_clause(lang)},
                 {_POPULARITY_SQL},
                 GREATEST(
-                    similarity(lower(store_id),                    lower(%(term)s)),
-                    similarity(lower(COALESCE(name_en,        '')), lower(%(term)s)),
-                    similarity(lower(COALESCE(store_tags,     '')), lower(%(term)s)),
-                    similarity(lower(COALESCE(store_tags_en,  '')), lower(%(term)s)),
-                    similarity(lower(COALESCE(store_bio_en,   '')), lower(%(term)s))
-                ) AS relevance_score
+                    similarity({n_id},   %(qn)s),
+                    similarity({n_name}, %(qn)s),
+                    similarity({n_bio},  %(qn)s) * 0.35,
+                    similarity(lower(coalesce(store_bio_en, '')), lower(%(q)s)) * 0.35
+                ) AS name_score,
+                (
+                    SELECT max(c.w) FROM concept c
+                    WHERE length(c.tag) >= 2
+                      AND position(c.tag in {n_tags}) > 0
+                ) AS concept_w,
+                (
+                    length(%(qn)s) >= 2 AND (
+                        position(%(qn)s in {n_id})   > 0
+                        OR position(%(qn)s in {n_name}) > 0
+                        OR (length(%(qnw)s) >= 3
+                            AND position(%(qnw)s in replace({n_id}, ' ', '')) > 0)
+                    )
+                ) AS name_hit,
+                (
+                    length(%(qn)s) >= 3 AND (
+                        position(%(qn)s in {n_bio}) > 0
+                        OR position(lower(%(q)s) in lower(coalesce(store_bio_en, ''))) > 0
+                    )
+                ) AS bio_hit,
+                (
+                    SELECT bt.title
+                    FROM unnest(%(b_ids)s::text[], %(b_titles)s::text[]) bt(sid, title)
+                    WHERE bt.sid = master.store_id
+                    LIMIT 1
+                ) AS via_article
             FROM master
-            WHERE
-                (last_time IS NULL OR last_time >= CURRENT_DATE)
-              AND NOT COALESCE(is_suspended, FALSE)
+            WHERE NOT COALESCE(is_suspended, FALSE)
+              {_expiry_where(channel)}
               AND (publish_channels IS NULL OR publish_channels ILIKE %(chpat)s)
-                AND (
-                    store_id                       ILIKE %(like)s
-                    OR COALESCE(name_en,       '') ILIKE %(like)s
-                    OR COALESCE(store_tags,    '') ILIKE %(like)s
-                    OR COALESCE(store_tags_en, '') ILIKE %(like)s
-                    OR COALESCE(store_bio_en,  '') ILIKE %(like)s
-                    -- مطابقة بدون مسافات: «ترنديول» يطابق «ترند يول»
-                    OR REPLACE(store_id,                       ' ', '') ILIKE %(like_no_ws)s
-                    OR REPLACE(COALESCE(name_en,       ''),    ' ', '') ILIKE %(like_no_ws)s
-                    OR REPLACE(COALESCE(store_tags,    ''),    ' ', '') ILIKE %(like_no_ws)s
-                    OR REPLACE(COALESCE(store_tags_en, ''),    ' ', '') ILIKE %(like_no_ws)s
-                )
         )
-        SELECT *, (relevance_score * 100)::int AS score_pct
-        FROM filtered
-        WHERE relevance_score > 0.05
-        ORDER BY relevance_score DESC
+        SELECT s.*,
+            CASE
+                WHEN name_hit OR name_score >= 0.40 THEN 'name'
+                WHEN concept_w IS NOT NULL          THEN 'concept'
+                WHEN via_article IS NOT NULL        THEN 'blog'
+                WHEN bio_hit                        THEN 'bio'
+                ELSE 'fuzzy'
+            END AS match_type,
+            (LEAST(GREATEST(name_score, COALESCE(concept_w, 0)), 1.0) * 100)::int AS score_pct
+        FROM scored s
+        WHERE name_hit OR bio_hit OR concept_w IS NOT NULL
+           OR via_article IS NOT NULL OR name_score > 0.25
+        ORDER BY
+            CASE
+                WHEN name_hit              THEN 1
+                WHEN name_score >= 0.40    THEN 2
+                WHEN concept_w >= 1.0      THEN 3
+                WHEN concept_w > 0         THEN 4
+                WHEN via_article IS NOT NULL THEN 5
+                WHEN bio_hit               THEN 6
+                ELSE 7
+            END,
+            popularity_score DESC,
+            name_score DESC,
+            store_id ASC
         LIMIT %(limit)s
     """
 
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(sql, {"term": q, "like": _like,
-                          "like_no_ws": _like_no_ws, "limit": limit,
-                          "chpat": _channel_like(channel)})
+        cur.execute(sql, {
+            "q": q, "qn": q_norm, "qnw": q_no_ws,
+            "c_tags": concept_tags, "c_weights": concept_weights,
+            "b_ids": blog_ids, "b_titles": blog_titles,
+            "limit": limit, "chpat": _channel_like(channel),
+        })
         rows = cur.fetchall()
 
     results = [
         StoreResult(
-            **{k: v for k, v in row.items() if k not in ("store_tags", "store_tags_en")},
+            **{k: v for k, v in row.items() if k not in ("store_tags", "store_tags_en", "occasions")},
             store_tags=_parse_tags(row.get("store_tags")),
             store_tags_en=_parse_tags(row.get("store_tags_en")),
+            occasions=_parse_tags(row.get("occasions")),
         )
         for row in rows
     ]
@@ -437,8 +606,8 @@ def get_coupon_detail(
             0 AS score_pct
         FROM master
         WHERE id = %(id)s
-              AND (last_time IS NULL OR last_time >= CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
+              {_expiry_where(channel, detail=True)}
               AND (publish_channels IS NULL OR publish_channels ILIKE %(chpat)s)
         LIMIT 1
     """
@@ -448,9 +617,10 @@ def get_coupon_detail(
     if not row:
         raise HTTPException(status_code=404, detail="store not found")
     return StoreResult(
-        **{k: v for k, v in row.items() if k not in ("store_tags", "store_tags_en")},
+        **{k: v for k, v in row.items() if k not in ("store_tags", "store_tags_en", "occasions")},
         store_tags=_parse_tags(row.get("store_tags")),
         store_tags_en=_parse_tags(row.get("store_tags_en")),
+        occasions=_parse_tags(row.get("occasions")),
     )
 
 
@@ -473,8 +643,8 @@ def get_coupon_by_slug(
             0 AS score_pct
         FROM master
         WHERE store_id = %(slug)s
-              AND (last_time IS NULL OR last_time >= CURRENT_DATE)
               AND NOT COALESCE(is_suspended, FALSE)
+              {_expiry_where(channel, detail=True)}
               AND (publish_channels IS NULL OR publish_channels ILIKE %(chpat)s)
         LIMIT 1
     """
@@ -484,7 +654,8 @@ def get_coupon_by_slug(
     if not row:
         raise HTTPException(status_code=404, detail="store not found")
     return StoreResult(
-        **{k: v for k, v in row.items() if k not in ("store_tags", "store_tags_en")},
+        **{k: v for k, v in row.items() if k not in ("store_tags", "store_tags_en", "occasions")},
         store_tags=_parse_tags(row.get("store_tags")),
         store_tags_en=_parse_tags(row.get("store_tags_en")),
+        occasions=_parse_tags(row.get("occasions")),
     )

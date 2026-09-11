@@ -37,12 +37,11 @@ _started_lock = threading.Lock()
 MATVIEW_REFRESH_MINUTES = int(os.getenv("WORKER_MATVIEW_REFRESH_MIN", "1"))
 SPIKE_DETECT_MINUTES    = int(os.getenv("WORKER_SPIKE_DETECT_MIN", "5"))
 ALERT_DISPATCH_SECONDS  = int(os.getenv("WORKER_ALERT_DISPATCH_SEC", "30"))
-DIRECTIVE_HOURS         = int(os.getenv("WORKER_DIRECTIVE_HOURS", "3"))
-# Week 5-6 — SEO generator
-SEO_DISCOVERY_HOURS     = int(os.getenv("WORKER_SEO_DISCOVERY_HOURS", "12"))
-SEO_GENERATE_HOURS      = int(os.getenv("WORKER_SEO_GENERATE_HOURS", "6"))
-SEO_GENERATE_BATCH      = int(os.getenv("SEO_GENERATE_BATCH", "3"))
-SEO_AUTOGEN_ENABLED     = os.getenv("SEO_AUTOGEN_ENABLED") == "1"
+# ⛔ محرّك توليد صفحات /c/ التلقائي **أُزيل نهائياً**: الكرونات ٢٠٢٦-٠٩-٠٥، ثم
+# `run_daily_seo_cycle` / `auto_pipeline.py` / `seed_long_tail.py` / زرّ الداشبورد
+# / `match_and_enqueue` كلها ٢٠٢٦-٠٩-٠٩ (قرار المالك — ٢٠٠ صفحة LLM = نقرة واحدة/
+# ٣٠ يوماً). صفحات /c/ تُصنع يدوياً فقط عبر /admin/seo-seed-custom ثم مراجعة ونشر.
+# لقطة GSC اليومية (seo_snapshot_daily) تبقى — هي حلقة التغذية الراجعة لا التوليد.
 # Week 7-8 — social listener (scoring/matching/response prep — مجاني، بلا LLM)
 SOCIAL_PROCESS_MINUTES  = int(os.getenv("WORKER_SOCIAL_PROCESS_MIN", "10"))
 SOCIAL_PROCESS_BATCH    = int(os.getenv("SOCIAL_PROCESS_BATCH", "20"))
@@ -52,20 +51,6 @@ TRENDS_REFRESH_HOURS    = int(os.getenv("WORKER_TRENDS_REFRESH_HOURS", "24"))
 _scheduler: BackgroundScheduler | None = None
 _consumer_thread: threading.Thread | None = None
 _stop_event: threading.Event | None = None
-
-
-def _seo_discovery_cycle() -> None:
-    """Week 5-6 — مرحلة مجانية: تجميع الترند الداخلي + مطابقة وإنشاء وظائف."""
-    from api.seo.matcher import match_and_enqueue
-    from api.seo.trends import aggregate_internal_search
-    aggregate_internal_search()
-    match_and_enqueue()
-
-
-def _seo_generation_cycle() -> None:
-    """Week 5-6 — مرحلة LLM (تستهلك الميزانية): توليد صفحات من الوظائف المنتظرة."""
-    from api.seo.generator import process_pending_jobs
-    process_pending_jobs(batch=SEO_GENERATE_BATCH)
 
 
 def _social_listener_cycle() -> None:
@@ -98,14 +83,14 @@ def _trends_refresh_cycle() -> None:
         _log.warning("trends refresh cycle failed (non-fatal): %s", exc)
 
 
-def _seo_auto_cycle() -> None:
-    """محرّك SEO الأوتوماتيكي اليومي (3 صباحاً Riyadh): أكثر المتاجر طلباً +
-    ربط مناسبة + توليد + نشر مُبوّب. يتحكّم فيه SEO_AUTO_PUBLISH_ENABLED داخلياً."""
-    from api.seo.auto_pipeline import run_daily_seo_cycle
+def _season_reminder_cycle() -> None:
+    """تذكيرات مواسم التخفيضات (9 صباحاً Riyadh): رسالة قبل الموسم بأسبوع
+    وأخرى يوم البدء. آمنة للتكرار — الطوابع تمنع الإرسال المزدوج."""
+    from api.workers.season_reminder_sender import run_season_reminders
     try:
-        run_daily_seo_cycle()
+        run_season_reminders()
     except Exception as exc:
-        _log.warning("seo auto cycle failed (non-fatal): %s", exc)
+        _log.warning("season reminder cycle failed (non-fatal): %s", exc)
 
 
 def _seo_snapshot_cycle() -> None:
@@ -115,6 +100,22 @@ def _seo_snapshot_cycle() -> None:
         capture_snapshot()
     except Exception as exc:
         _log.warning("seo snapshot cycle failed (non-fatal): %s", exc)
+    # تفصيل GSC بالصفحة والاستعلام (migration 071) — تقرأه صفحة إدارة الحملات
+    # لترى أداء صفحتها المقصودة لا إجمالي الموقع. مستقلّ عن اللقطة أعلاه كي لا
+    # يُسقط فشلُ أحدهما الآخر.
+    try:
+        from api.seo.gsc_detail import capture_gsc_detail
+        capture_gsc_detail()
+    except Exception as exc:
+        _log.warning("gsc detail cycle failed (non-fatal): %s", exc)
+    # مطابقة الفهرسة (migration 073): أي صفحة لها انطباع في GSC ⇒ مفهرَسة، تُشطب
+    # من «المعلّقة» في صفحة «🔎 الفهرسة» تلقائياً. نداء API واحد رخيص. فحص
+    # URL Inspection الأثقل يبقى يدوياً من الداشبورد (محدود بحصة 2000/يوم).
+    try:
+        from api.seo.index_coverage import reconcile_from_impressions
+        reconcile_from_impressions()
+    except Exception as exc:
+        _log.warning("index-coverage cycle failed (non-fatal): %s", exc)
 
 
 def _llm_cache_cleanup_cycle() -> None:
@@ -209,53 +210,43 @@ def start_workers() -> None:
     # then return now + interval). This used to be the bug that kept
     # social_listener / directive_generator / seo_* jobs silent for days.
 
-    # Week 3 — LLM directive generator (every 3 hours by default)
+    # نشرة المنصّة — يومية 07:00 الرياض (بيانات فقط، بلا LLM، heartbeat دائم)
+    # + أسبوعية 07:30 الاثنين (بيانات + اتجاه ٤ أسابيع + توجيهات LLM).
+    # كانت interval كل ٣ ساعات → إيميلات شبه مكرّرة وجسم توجيهات فارغ غالباً.
     _scheduler.add_job(
         run_directive_cycle,
-        trigger="interval",
-        hours=DIRECTIVE_HOURS,
-        id="directive_generator",
-        name="Generate LLM operational directives",
+        trigger="cron", hour=7, minute=0, timezone="Asia/Riyadh",
+        args=["daily"],
+        id="directive_daily",
+        name="Daily platform digest (health + GSC, no LLM)",
         replace_existing=True,
     )
-
-    # Week 5-6 — SEO discovery (مجاني: trends + match) كل 12 ساعة
     _scheduler.add_job(
-        _seo_discovery_cycle,
-        trigger="interval",
-        hours=SEO_DISCOVERY_HOURS,
-        id="seo_discovery",
-        name="SEO trend discovery + store match",
+        run_directive_cycle,
+        trigger="cron", day_of_week="mon", hour=7, minute=30, timezone="Asia/Riyadh",
+        args=["weekly"],
+        id="directive_weekly",
+        name="Weekly deep digest (4-week trend + LLM directives)",
         replace_existing=True,
     )
 
-    # Week 5-6 — SEO generation (يستهلك ميزانية LLM) — محكوم بـ SEO_AUTOGEN_ENABLED
-    if SEO_AUTOGEN_ENABLED:
-        _scheduler.add_job(
-            _seo_generation_cycle,
-            trigger="interval",
-            hours=SEO_GENERATE_HOURS,
-            id="seo_generate",
-            name="SEO LLM page generation",
-            replace_existing=True,
-        )
+    # ⛔ لا توليد /c/ تلقائي — راجع التعليق أعلى الملف (أُزيل على مرحلتين، آخرها ٢٠٢٦-٠٩-٠٩).
 
-    # محرّك SEO الأوتوماتيكي — يومياً 3 صباحاً بتوقيت الرياض (نشر تلقائي مُبوّب).
-    # يُسجَّل دائماً؛ يتوقّف ذاتياً إذا SEO_AUTO_PUBLISH_ENABLED != true.
-    _scheduler.add_job(
-        _seo_auto_cycle,
-        trigger="cron", hour=3, minute=0, timezone="Asia/Riyadh",
-        id="seo_auto_daily",
-        name="Daily autonomous SEO generate+publish (3AM Riyadh)",
-        replace_existing=True,
-    )
-
-    # لقطة أداء SEO اليومية — 4 صباحاً Riyadh (بعد دورة التوليد)
+    # لقطة أداء SEO اليومية — 4 صباحاً Riyadh (حلقة التغذية الراجعة من GSC)
     _scheduler.add_job(
         _seo_snapshot_cycle,
         trigger="cron", hour=4, minute=0, timezone="Asia/Riyadh",
         id="seo_snapshot_daily",
         name="Daily SEO performance snapshot (PageSpeed + GSC)",
+        replace_existing=True,
+    )
+
+    # تذكيرات المواسم — 9 صباحاً Riyadh (وقت فتح البريد لا منتصف الليل)
+    _scheduler.add_job(
+        _season_reminder_cycle,
+        trigger="cron", hour=9, minute=0, timezone="Asia/Riyadh",
+        id="season_reminders_daily",
+        name="Season reminder emails (pre-week + start day)",
         replace_existing=True,
     )
 
@@ -298,11 +289,11 @@ def start_workers() -> None:
 
     _scheduler.start()
     _log.info(
-        "✅ APScheduler started — matview/%dm, spike/%dm, dispatch/%ds, directive/%dh, "
-        "seo_discovery/%dh, seo_generate=%s, social/%dm, trends/%dh",
+        "✅ APScheduler started — matview/%dm, spike/%dm, dispatch/%ds, "
+        "digest=daily-07:00+weekly-mon-07:30, social/%dm, trends/%dh, "
+        "seo_snapshot=daily (auto /c/ generation REMOVED)",
         MATVIEW_REFRESH_MINUTES, SPIKE_DETECT_MINUTES,
-        ALERT_DISPATCH_SECONDS, DIRECTIVE_HOURS,
-        SEO_DISCOVERY_HOURS, "on/%dh" % SEO_GENERATE_HOURS if SEO_AUTOGEN_ENABLED else "off",
+        ALERT_DISPATCH_SECONDS,
         SOCIAL_PROCESS_MINUTES, TRENDS_REFRESH_HOURS,
     )
 

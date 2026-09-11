@@ -61,7 +61,7 @@ def _page_path(slug: str) -> str:
     return SEO_PAGE_PATH.format(slug=slug)
 
 
-def _record(landing_page_id: int, provider: str, code: int | None,
+def _record(landing_page_id: int | None, provider: str, code: int | None,
             body: str | None) -> None:
     try:
         with get_db_context() as conn:
@@ -119,7 +119,7 @@ def _get_google_access_token() -> str | None:
         return None
 
 
-def _submit_to_google(landing_page_id: int, full_url: str, out: dict) -> None:
+def _submit_to_google(landing_page_id: int | None, full_url: str, out: dict) -> None:
     """
     يخطر Google. يفسّر أكواد الخطأ الشائعة بوضوح حتى يفهم الـ ops
     سبب الفشل (مفتاح خطأ vs ownership غير محقق vs quota مستنفد).
@@ -148,10 +148,17 @@ def _submit_to_google(landing_page_id: int, full_url: str, out: dict) -> None:
             diagnosis = "ok"
         elif code == 403:
             if "Permission denied" in body or "permission" in body.lower():
+                # ⚠️ 403 هنا يعني «هذا الرابط ليس داخل property موثّقة» — والسبب
+                # الأشيع **ليس** سقوط الملكية بل **اختلاف الهوست**: الـproperty
+                # موثّقة على www والرابط أُرسل بالنطاق العاري (أو العكس).
+                # حدث فعلياً 2026-08-26: seo-google-check أعطى 200 بينما ٢٧ رابطاً
+                # بلا www أعطت 403، ثم نجحت كلها فور إضافة www.
                 diagnosis = (
-                    "FORBIDDEN — service account ليس owner على الـ property في "
-                    "Search Console. الحل: ضِف رابط DNS TXT verification "
-                    "(راجع diagnose_google_setup) أو استخدم HTML file."
+                    f"FORBIDDEN — الرابط خارج الـproperty الموثّقة. تحقّق أولاً أن "
+                    f"الهوست يطابق SITE_URL ({SITE_URL}) — www مقابل النطاق العاري "
+                    "propertyان مختلفان عند Google. إن تطابق الهوست فالمشكلة "
+                    "ownership (راجع diagnose_google_setup). "
+                    f"ردّ Google: {body[:120]}"
                 )
             else:
                 diagnosis = f"forbidden: {body[:120]}"
@@ -257,7 +264,7 @@ def diagnose_google_setup() -> dict:
 # ═══════════════════════════════════════════════════════════════════════════
 #  IndexNow (Bing + Yandex + Naver + Seznam)
 # ═══════════════════════════════════════════════════════════════════════════
-def _submit_indexnow_direct(landing_page_id: int, full_url: str, out: dict) -> None:
+def _submit_indexnow_direct(landing_page_id: int | None, full_url: str, out: dict) -> None:
     """
     يُرسل لكل محرك IndexNow مباشرة (يتجاوز الـ Next.js hook).
     البروتوكول مفتوح: نفس payload لكل المحركات.
@@ -334,9 +341,16 @@ def submit_page(*, landing_page_id: int, slug: str) -> dict:
 def resubmit_url(url: str, landing_page_id: int | None = None) -> dict:
     """
     إعادة إرسال URL محدّد (مفيد عند تحديث محتوى صفحة منشورة).
-    يستخدم landing_page_id = -1 للأمور غير المرتبطة بصفحة (homepage مثلاً).
+    الرابط غير المرتبط بصفحة هبوط يُسجَّل بـ landing_page_id = NULL.
+
+    ⚠️ كان السنتينل هنا -1، و`seo_index_submissions.landing_page_id` عليه **مفتاح
+    أجنبي** — فكل إدراج لرابط حرّ كان ينتهك الـFK، ويبتلعه `except` في `_record`
+    فيُكتب تحذيراً في اللوق ولا يُسجَّل صفّ. النتيجة المقيسة ٢٠٢٦-٠٨-٢٦:
+    **صفر صفّ بـ landing_page_id IS NULL في تاريخ الجدول كلّه** رغم مئات الدفعات
+    من `/admin/reindex-urls` — أي أن الدفع يقع فعلاً (جوجل يرجّع 200) لكن بلا أثر
+    يُراجَع لاحقاً. العمود nullable أصلاً، فتمرير None يُسجّل الصفّ ويحترم الـFK.
     """
-    lpid = landing_page_id if landing_page_id is not None else -1
+    lpid = landing_page_id
     out: dict[str, Any] = {"url": url, "resubmit": True}
     _submit_indexnow_direct(lpid, url, out)
     _submit_to_google(lpid, url, out)

@@ -17,3 +17,27 @@ originSessionId: 0fe41f94-3ccf-43d5-8719-71266c3cf888
   ```
 - المرور بـ `host='localhost'` مع `password='123456'` (نمط CLAUDE.md) يعطي قاعدة dummy ولا يعكس الإنتاج. هذا النمط مفيد فقط للاختبار المعزول.
 - قبل أي ادعاء «المتجر X غير موجود» — نفّذ الاستعلام على الإنتاج عبر DATABASE_URL.
+
+---
+
+## 🔴 ٢٠٢٦-٠٨-٢٧ — `pytest tests/` كان يضرب الإنتاج، والحارس كان الحظّ
+
+`tests/conftest.py` كان فيه `os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL")`.
+و`TEST_DATABASE_URL` **غير مضبوط أصلاً** على هذا الجهاز. فمتى حُمّل `.env` — ويكفي أن
+يستورد ملفُ اختبارٍ واحدٌ `api.db` — انقلب `db_available` إلى `True` وصارت حزمة الاختبارات
+تشتغل على **Railway الإنتاج**: `clean_users` يحذف من `web_users`، و`sample_store` يكتب
+ويحذف في `master` و`action_logs`.
+
+**كيف يُكشف:** الحزمة كانت «١٩ متخطّى» ثم صارت «٣٣ نجحت / ٤ فشلت» بلا تغيير في الاختبارات
+نفسها. **قفزة عدد الاختبارات المنفَّذة = إشارة أن القاعدة صارت متاحة — افحص أيّ قاعدة.**
+
+**الأثر:** صفر. المرشّحات ضيّقة (`pytest\_%@example.com` · `store_id LIKE 'pytest%'`)
+وأُثبت بالعدّ: صفر صفّ `pytest_`، ١١ في `web_users` (الأحدث id=12 من ٠٨-١٥)، ٥٨ في `master`،
+صفر في `password_reset_tokens`.
+
+**العلاج:** `db_available` صار **`TEST_DATABASE_URL` وحده بلا سقوط**، ويرفع `RuntimeError`
+لو ساوى `DATABASE_URL`. → commit `95f985a`.
+
+**الدرس الأوسع:** «الاختبارات لا تلمس الإنتاج» كان **افتراضاً** لا حاجزاً. أي سقوط
+(`A or B`) على اعتماد إنتاج هو لغم — لا يعمل حتى تتغيّر بيئة التشغيل تحتك.
+راجع [[feedback_no_db_writes_without_permission]].
