@@ -156,7 +156,7 @@ def write_db(rows: list[dict]) -> None:
             {**r, "store_ids_sql": "{" + ",".join(r["store_ids"]) + "}"}
             for r in rows
         ])
-    print(f"✓ blog_bridge: {len(rows)} صفّ (صفّ/مقال).")
+    sys.stdout.buffer.write(f"✓ blog_bridge: {len(rows)} صفّ (صفّ/مقال).\n".encode("utf-8", errors="replace"))
 
 
 def main() -> None:
@@ -176,12 +176,12 @@ def main() -> None:
          for r in rows[:200]],
         ensure_ascii=False, indent=1,
     ), encoding="utf-8")
-    print(f"\nمعاينة أول 200 مقال → {out}")
+    sys.stdout.buffer.write(f"\nمعاينة أول 200 مقال → {out}\n".encode("utf-8", errors="replace"))
 
     if args.write:
         write_db(rows)
     else:
-        print("\n(dry-run) — أضِف --write بعد مراجعة المعاينة وإذن المالك.")
+        sys.stdout.buffer.write("\n(dry-run) — أضِف --write بعد مراجعة المعاينة وإذن المالك.\n".encode("utf-8", errors="replace"))
 
 
 if __name__ == "__main__":
