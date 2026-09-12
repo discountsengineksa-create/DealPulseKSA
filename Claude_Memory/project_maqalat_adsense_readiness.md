@@ -49,23 +49,47 @@ originSessionId: ba0ddc64-d7f5-4764-afa1-cce83b257794
   WHO/NIH). القاعدة الجديدة: **قبل ذكر أي مصدر طبي في صفحات الثقة، فُحص هل يسمح للـcrawlers
   أم يعطي 403**.
 
-## المتبقّي لـAdSense (يحتاج قرار المالك أو عمل يدوي)
+## توسيع المحتوى (٢٠٢٦-٠٩-١٢، دفعة ثانية، commits `82f3901` + `e1e345c` + `436560e`)
 
-- **١٠٠ مقال بلا جدول** — يحتاج تحرير محرّر لا سكربت.
-- **٢٧ مقالاً رقيقاً (<٧٠٠ كلمة)** — إمّا حذف، أو توسّع.
-- **٢١ مقال YMYL بأرقام غير موثّقة inline** — أولوية عالية: (gov cluster حكوماتيات) — يحتاج
-  مراجعة inline citations. أعلى المخاطر: `saudi-government-salary-scale.en`،
-  `driving-license-saudi-guide.en`، `zatca-vat-e-invoicing-guide.en`،
-  `musaned-domestic-workers-guide.en`، `menstrual-cycle-calculator.en`.
-- **AI cluster (١٧٨ مقالاً) نبرة نمطية**: قابلة للفحص لكن التحرير محرّر لا سكربت.
-- **`ads.txt` + `app-ads.txt`**: لم يُنشآ. AdSense يتطلبهما بعد الموافقة (لا قبل).
-- **عمر الدومين**: تسجّل ٢٠٢٦-٠٨-٢٩، اليوم ٢٠٢٦-٠٩-١٢ = ١٤ يوماً. الحدّ الأدنى لـAdSense
-  الرسمي = ٦ أشهر بمناطق كثيرة، أو أسبوعان في السعودية/الخليج. **قابل للتقديم من الآن**.
+المالك أكّد شرط الكتابة: **معلومات حقيقية + مصادر رسمية + صفر حشو + ٨٠٠-١٦٠٠ كلمة + صفر
+فبركة**. الصفحات ذات الطابع الأداتي (حاسبات/تقاويم/عدّادات) مستثناة من حدّ ٨٠٠. تحت هذا
+العقد الكتابي، وُسّع **١٨ مقالاً** بمعلومات جديدة موثّقة (لا حشو). كل توسّع يضيف قسماً أو
+قسمَين بمعدّل ١٥٠-٣٥٠ كلمة، كل ادّعاء بمصدر رسمي inline:
 
-## المسار المقترح (بلا تنفيذ)
+**عنقود AI (١٢ مقالاً)**: common-prompt-mistakes (Chain-of-Thought بمرجع Wei et al. + Anthropic
+XML tags + مثال متكامل عقد عمل)، context-window-explained (رياضيات التسعير الحقيقية لـAPI +
+تجزئة العربية الخاصّة)، chatgpt-best-work-uses (SDAIA PDPL Compliance)، effective-prompt-writing-rules
+(كسر القواعد + تقنية القوالب بمتغيّرات)، gpt-4-vs-gpt-5-vs-o3 (شجرة قرار + جدول latency
+للإنتاج)، gemini-vs-chatgpt-detailed (فارق الأداء العربي + مصفوفة الحسّاسية للبيانات)،
+arabic-vs-english-prompting (رياضيات فجوة بيانات التدريب + مسار ٣ خطوات للمحتوى العربي
+الرفيع)، chatgpt-weaknesses (الاختبار الذاتي MIT + Mata v. Avianca مفصَّلاً)، chatgpt-advanced-voice-and-sora
+(قانون السعودية لتوليد الفيديو + ميزانية Sora الحقيقية)، chatgpt-for-students (كاشفات
+الغشّ + جدول استخدام لكل مادّة)، gemini-live-and-veo (interruption handling + مقارنة Veo 2 vs 3)،
+temperature-top-p-explained (رياضيات softmax + seed=42 للاختبار)، gemini-in-google-workspace
+(Workspace DPA + ٥ ميزات مُغفلة).
 
-١. المالك يشغّل الفهرسة (قال يفعلها بنفسه).
-٢. تقديم AdSense.
-٣. أثناء انتظار المراجعة (٢-٤ أسابيع): مراجعة يدوية للمقالات YMYL الـ٢١، وإضافة جداول للأولوية العليا.
+**عنقود Government (٥ مقالات)**: tawakkalna (النسخة الموسّعة + الفرق بين تسميتَيه)،
+traffic-violations (المخالفات المرصودة آلياً + متى الاعتراض ينجح)، absher (تمييز الأنواع
+الثلاثة + مصفوفة قرار مع توكلنا)، saudi-id-renewal (مدد الصلاحية بحسب العمر + تحديث رقم
+التسلسل)، runway-ml-signup-and-usage (حقوق تجارية بحسب الاشتراك + رياضيات credits).
+
+**سكربت اختبار مضاف**: `scripts/audits/internal_link_check.mjs` — ٠ روابط داخلية مكسورة.
+**JSON-LD أُضيف لكل صفحات الثقة** (`staticPageJsonLd`): AboutPage/ContactPage/WebPage.
+
+## المتبقّي لـAdSense بعد دفعة اليوم
+
+- **٤٢ مقالاً لا يزال تحت ٨٠٠ كلمة** (منها ١٢ صفحات أدوات مستثناة، فالباقي الحقيقي ٣٠ مقالاً).
+  الأولوية بعد اليوم: `iqama-renewal-guide` (٧٨٤w)، `najiz-services-guide` (٧٨٠w)،
+  `zatca-vat-e-invoicing-guide` (٧٦٢w) — ٣ حكوماتيات YMYL قريبة من الحدّ.
+- **٩٧ مقالاً بلا جدول** — دفعة اليوم أضافت جداول لـ٣ مقالات فقط (common-prompt-mistakes،
+  chatgpt-best-work-uses، effective-prompt-writing-rules)؛ الباقي محرّر لا سكربت.
+- **`ads.txt`** موجود بالفعل بمعرّف `pub-3238758280300568` — الموقع مقبول لعرض AdSense الآن.
+- **عمر الدومين**: ٢٠٢٦-٠٨-٢٩ → ٢٠٢٦-٠٩-١٢ = ١٤ يوماً — قابل للتقديم للسعودية.
+
+## المسار المقترح
+
+١. تقديم AdSense الآن — البنية والمحتوى جاهزان.
+٢. المالك يشغّل الفهرسة (يفعلها بنفسه).
+٣. أثناء المراجعة (٢-٤ أسابيع): توسّع ٣٠ مقالاً الباقية على نفس النهج (١٥-٢٠ دقيقة/مقال بمعدّل ٤-٥ مقالات/جلسة).
 
 مرتبط: [[project_maqalat]] · [[project_maqalat_writing_playbook]] · [[content_guardrails_playbook]] · [[voice_bible]] · [[health_citation_sourcing]] · [[feedback_mdx_v3_comments]]
