@@ -171,6 +171,8 @@
 - [تدقيق ٠٩-٠٢](project_maqalat_audit_2026_09_02.md) — E-E-A-T + إصلاح P0 راتب + صفحة منهجية
 - [Google Indexing API فُعِّل](project_maqalat_indexing_api.md) — سكربت Node صفر تبعيات؛ آخر دفعة ٠٩-١١ ٢٠٠/٢٠٠
 - [⚠️ ٣ أنماط عربية تكسر MDX بـ٥٠٠](project_maqalat_mdx_pitfalls.md) — تُفحص قبل أي نشر
+- [⚠️ MDX v3 يرفض `<!-- -->` — استخدم `{/* */}`](feedback_mdx_v3_comments.md) — درس ٢٠٢٦-٠٩-١٢، ٣ محاولات بناء
+- [🎯 AdSense Readiness Sweep](project_maqalat_adsense_readiness.md) — ٢٠ مقالاً de-orphan + صفحات ثقة مقوّاة + سكربتات مسح قابلة لإعادة التشغيل (٢٠٢٦-٠٩-١٢)
 - [⚠️ ٣ مطبّات @vercel/og](project_maqalat_og_pitfalls.md) — خطوط متغيّرة + مفاتيح config وهمية + edge/node runtime
 - [ثنائية اللغة الكاملة](project_maqalat_i18n.md) — قرارات + بنية ملفات + مطبّات AR/EN
 - [لوحة /admin](project_maqalat_admin_dashboard.md) — Firestore + محرّر MDX عبر GitHub API + رفع Vercel Blob
