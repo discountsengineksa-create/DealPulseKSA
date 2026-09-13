@@ -55,3 +55,7 @@ dash_test.log
 
 # Local Claude Code settings — contains machine paths + a dead DB password; never track
 .claude/settings.local.json
+
+# ─── ملف البروفايل التعريفي (خاص بالمعلنين) — ريبو عام، لا يُنشر هنا ────────
+# مصدره + الـPDF يبقيان محليين فقط بعد 2026-09-13؛ لا يزيلان من تاريخ git القديم.
+outreach/company_profile/
