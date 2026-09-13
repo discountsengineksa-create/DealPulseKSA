@@ -4,7 +4,7 @@
 > الطبقة ٠ تُقرأ متونها قبل أي مهمة. من الباقي: افتح ما يخصّ مهمتك وأعلن ما فتحته.
 > الحوائط الصلبة منسوخة نصّاً في `CLAUDE.md`. سطرٌ بعدّة روابط = ملفات مستقلة جُمعت للاختصار.
 
-## 🔴 الطبقة ٠ — اقرأ متونها قبل أي مهمة (١٣)
+## 🔴 الطبقة ٠ — اقرأ متونها قبل أي مهمة (١٤)
 
 - [🧱 تحقّق من كتالوج المتجر الحيّ قبل أي ادّعاء](feedback_verify_catalog_before_claim.md) — لا تشتقّ منتجاً من التاق؛ درس سيدار: ٨٩ ادّعاءً مفبركاً عبر ٥٥ مقالاً
 - [🤝 Partnership Protocol](protocol_partnership.md) — ٨ أنماط بالاسم + دورة انضباط + طقوس جلسة + سياسة المصادر
@@ -20,6 +20,7 @@
 - [🔓 Bot Freeze LIFTED](bot_frozen_lock.md) — البوت مفكوك ٢٠٢٦-٠٧-٠٧ ضمن البروتوكول؛ حوائط DB/الإنتاج باقية
 - [Mirror Audit — Trace Not Claim](feedback_mirror_audit.md) — دقّق الـagents ونفسك بالـtrace الخام؛ الأفضلية للأرقام
 - [Git Sync Workflow](git_sync_workflow.md) — جهازان: pull قبل، push بعد كل تغيير؛ main = Railway prod
+- [🧱 maqalat: تحقّق من البناء قبل الدفع](feedback_maqalat_verify_before_push.md) — `npm run build` قبل أيّ push (لا `next build` وحده)؛ الـpre-push hook يفرضها؛ يمنع سلسلة ٥د-Vercel-Error التي كسرت ١٥ deploy متتالياً ٢٠٢٦-٠٩-١٣
 
 ## ١) أسلوب العمل والتفضيلات (٢١)
 
