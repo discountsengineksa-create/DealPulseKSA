@@ -1,0 +1,28 @@
+genuinely thin (fragment-style, needs rewrite): 0
+
+already reasonably substantive (skip/light-touch): 25
+kids-toys-playdough-clay-guide-saudi-arabia	avg_bullet_len=38.8	total_chars=7098
+kids-toys-tablet-screen-time-guide-saudi-arabia	avg_bullet_len=40.4	total_chars=6562
+kids-toys-arts-crafts-guide-saudi-arabia	avg_bullet_len=33.8	total_chars=8139
+kids-toys-smartwatch-guide-saudi-arabia	avg_bullet_len=38.0	total_chars=5687
+kids-toys-baby-teething-sensory-guide-saudi-arabia	avg_bullet_len=55.6	total_chars=7191
+kids-toys-gross-motor-outdoor-guide-saudi-arabia	avg_bullet_len=39.9	total_chars=7873
+kids-toys-electronics-guide-saudi-arabia	avg_bullet_len=45.0	total_chars=6853
+kids-toys-crayons-markers-guide-saudi-arabia	avg_bullet_len=46.4	total_chars=6863
+kids-toys-baby-newborn-guide-saudi-arabia	avg_bullet_len=55.0	total_chars=8920
+kids-toys-ride-on-guide-saudi-arabia	avg_bullet_len=42.6	total_chars=6138
+kids-toys-baby-dolls-guide-saudi-arabia	avg_bullet_len=37.9	total_chars=6969
+kids-toys-bikes-scooters-guide-saudi-arabia	avg_bullet_len=46.8	total_chars=6276
+kids-toys-plush-stuffed-guide-saudi-arabia	avg_bullet_len=57.4	total_chars=7737
+kids-toys-baby-doll-accessories-guide-saudi-arabia	avg_bullet_len=34.4	total_chars=5822
+tools-home-buying-guide-saudi-arabia	avg_bullet_len=38.6	total_chars=7992
+kids-toys-tea-set-baking-guide-saudi-arabia	avg_bullet_len=42.3	total_chars=6055
+kids-toys-role-play-guide-saudi-arabia	avg_bullet_len=37.5	total_chars=7650
+kids-toys-board-games-guide-saudi-arabia	avg_bullet_len=34.1	total_chars=7481
+kids-toys-card-games-guide-saudi-arabia	avg_bullet_len=28.4	total_chars=4760
+kids-toys-chess-strategy-guide-saudi-arabia	avg_bullet_len=33.9	total_chars=5646
+phone-accessories-buying-guide-saudi-arabia	avg_bullet_len=60.3	total_chars=9704
+kids-toys-buying-guide-saudi-arabia	avg_bullet_len=81.1	total_chars=17651
+kids-toys-plush-safety-cleaning-guide-saudi-arabia	avg_bullet_len=50.4	total_chars=6766
+kids-toys-baby-milestone-6-18m-guide-saudi-arabia	avg_bullet_len=56.7	total_chars=7897
+kids-toys-tools-workshop-guide-saudi-arabia	avg_bullet_len=38.7	total_chars=6365

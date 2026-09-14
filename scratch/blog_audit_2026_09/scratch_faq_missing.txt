@@ -1,0 +1,2 @@
+total articles: 2042
+missing FAQ section: 0
