@@ -1,6 +1,6 @@
 # Project Memory Index
 
-> ١٩٩ ملفاً (عُدّت ٢٠٢٦-٠٩-١٣ بعد إضافة FAQ completion). الفهرس وحده يُحمَّل — المتون لا. السطر هنا عنوان لا حقيقة؛ الحقيقة في المتن.
+> ٢٠٠ ملفاً (عُدّت ٢٠٢٦-٠٩-١٤ بعد إضافة preferred-sources). الفهرس وحده يُحمَّل — المتون لا. السطر هنا عنوان لا حقيقة؛ الحقيقة في المتن.
 > الطبقة ٠ تُقرأ متونها قبل أي مهمة. من الباقي: افتح ما يخصّ مهمتك وأعلن ما فتحته.
 > الحوائط الصلبة منسوخة نصّاً في `CLAUDE.md`. سطرٌ بعدّة روابط = ملفات مستقلة جُمعت للاختصار.
 
@@ -81,6 +81,7 @@
 - الدومين: [خطة السلطة](domain_authority_plan.md) · [⚠️ فخّ الـcanonical](domain_canonical_trap.md) (dealpulesksa ميّت)
 - [Content/Programmatic Strategy](content_programmatic_strategy.md) · [Seasonal School Bridge](seasonal_school_traffic_bridge.md) + [Competitor Landscape](competitor_landscape.md)
 - [🔌 Claude SEO Plugin](claude_seo_plugin.md) — ١٨ agent+٢٥ skill؛ السحابة محجوبة عن الموقع
+- [🆕 زر Preferred Sources](seo_preferred_sources_button.md) — شُحن ٢٠٢٦-٠٩-١٤؛ + إعداد GSC AI controls منفصل يحتاج فعل المالك
 - مصادر أوّلية: [🏺 قصر الاواني](qasr_alawani_source_of_truth.md) + [🚕 لائحة نقل الركاب](ride_hailing_regulation_sources.md)
 
 ## ٦) المحتوى والمدوّنة (٢٩)
