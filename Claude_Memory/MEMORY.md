@@ -124,7 +124,10 @@
 - [تدقيق ٠٩-٠٢](project_maqalat_audit_2026_09_02.md) · [Indexing API](project_maqalat_indexing_api.md) (٢٠٠/٢٠٠) · [🎯 AdSense Readiness](project_maqalat_adsense_readiness.md)
 - مطبّات تقنية: [٣ أنماط عربية تكسر MDX](project_maqalat_mdx_pitfalls.md) · [MDX v3 `{/* */}`](feedback_mdx_v3_comments.md) · [٣ مطبّات @vercel/og](project_maqalat_og_pitfalls.md)
 - [ثنائية اللغة](project_maqalat_i18n.md) · [لوحة /admin](project_maqalat_admin_dashboard.md) · [النشرة البريدية](project_maqalat_newsletter.md)
-- [⚠️ Git auth محجوز](project_maqalat_git_auth.md) — الحلّ PAT inline بالرابط
+- [✅ Git auth — حُلّ دائماً بـSSH](project_maqalat_git_auth.md) — مفتاح SSH مخصّص + host alias، لا توكن بعد اليوم (٢٠٢٦-٠٩-١٥)
+- [🔴 فبركة بعنقود الخدمات الحكومية](feedback_maqalat_government_cluster_fabrication_2026_09_15.md) — ٨/١٩ مقالاً جديداً فيها أخطاء مؤكَّدة (أخطرها تاريخ دمج PPA/GOSI)، صُلِّحت ٢٠٢٦-٠٩-١٥
+- [🔴 تدقيق الموقع كامل + فبركة أسماء نماذج AI](project_maqalat_site_wide_audit_2026_09_15.md) — صحة/جامعات نظيفة، ٧٥ يتيمة أُصلِحت، ~٨٠ ملف AI بأسماء نماذج مختلَقة (Sonnet 4.7 غير موجود) صُحِّحت
+- [🔴 العنقود الحكومي الحقيقي ٥٠ ملفاً لا ٣٤ — منصّة "موثّق" كاملة مفبركة + هيئة التأمين حلّت محل ساما](project_maqalat_government_cluster_full_sweep_2026_09_15.md) — رابط `mowaad.moe.gov.sa` ميت تماماً (ENOTFOUND)؛ ٨ ملفات تربط بـ`cchi.gov.sa` الميت
 
 ### صيانة الفهرس — كل ملف على القرص يجب أن يظهر هنا
 
