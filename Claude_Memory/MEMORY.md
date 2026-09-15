@@ -20,7 +20,6 @@
 - [🔓 Bot Freeze LIFTED](bot_frozen_lock.md) — البوت مفكوك ٢٠٢٦-٠٧-٠٧ ضمن البروتوكول؛ حوائط DB/الإنتاج باقية
 - [Mirror Audit — Trace Not Claim](feedback_mirror_audit.md) — دقّق الـagents ونفسك بالـtrace الخام؛ الأفضلية للأرقام
 - [Git Sync Workflow](git_sync_workflow.md) — جهازان: pull قبل، push بعد كل تغيير؛ main = Railway prod
-- [🧱 maqalat: تحقّق من البناء قبل الدفع](feedback_maqalat_verify_before_push.md) — `npm run build` قبل أيّ push (لا `next build` وحده)؛ الـpre-push hook يفرضها؛ يمنع سلسلة ٥د-Vercel-Error التي كسرت ١٥ deploy متتالياً ٢٠٢٦-٠٩-١٣
 - [🧱 الفهرسة مسؤولية المالك — لا مسؤوليّتي](feedback_indexing_is_owner_responsibility.md) — لا `index:ping` تلقائياً بعد أي تعديل؛ لا اقتراح الفهرسة كخطوة تالية؛ الاستثناء: طلب صريح
 
 ## ١) أسلوب العمل والتفضيلات (٢١)
@@ -114,20 +113,9 @@
 - انستقرام: [محرّك المحتوى](instagram_content_engine.md) · [محرّك النمو](ig_growth_engine.md) · [سياسة النشر](ig_publish_policy.md)
 - [Brand Face for Flow Reels](brand_face_reels.md) · [Social Listening Deferred](social_listening_deferred.md) · [Local TTS (REMOVED)](tts_engine_xtts_v2.md)
 
-## ٩) مشروع مقالات (Maqalat.org) — مستقل تماماً عن نبض الصفقات
+## ٩) مشروع مقالات (Maqalat.org) — نُقلت ذاكرته لمجلد مستقل ٢٠٢٦-٠٩-١٥
 
-> [عزل تام إلزامي](feedback_maqalat_isolation.md): ريبو وحساب Cloudflare منفصلان.
-
-- [🆕 نظرة عامة](project_maqalat.md) · [الميثاق التحريري](project_maqalat_editorial_charter.md) + [دليل الكتابة](project_maqalat_writing_playbook.md)
-- [سياسات AdSense ٢٠٢٦](project_maqalat_adsense_policies.md) · [عدّة السكلز](project_maqalat_toolkit.md) · [مسح ١٣٠ منافساً](project_maqalat_competitor_landscape.md)
-- عناقيد: [AI](project_maqalat_ai_cluster.md)(~١٥٠) · [الجامعات](project_maqalat_universities_cluster.md)(٢٠) · [الخدمات الحكومية](project_maqalat_government_cluster.md)(٣٠+حاسبة)
-- [تدقيق ٠٩-٠٢](project_maqalat_audit_2026_09_02.md) · [Indexing API](project_maqalat_indexing_api.md) (٢٠٠/٢٠٠) · [🎯 AdSense Readiness](project_maqalat_adsense_readiness.md)
-- مطبّات تقنية: [٣ أنماط عربية تكسر MDX](project_maqalat_mdx_pitfalls.md) · [MDX v3 `{/* */}`](feedback_mdx_v3_comments.md) · [٣ مطبّات @vercel/og](project_maqalat_og_pitfalls.md)
-- [ثنائية اللغة](project_maqalat_i18n.md) · [لوحة /admin](project_maqalat_admin_dashboard.md) · [النشرة البريدية](project_maqalat_newsletter.md)
-- [✅ Git auth — حُلّ دائماً بـSSH](project_maqalat_git_auth.md) — مفتاح SSH مخصّص + host alias، لا توكن بعد اليوم (٢٠٢٦-٠٩-١٥)
-- [🔴 فبركة بعنقود الخدمات الحكومية](feedback_maqalat_government_cluster_fabrication_2026_09_15.md) — ٨/١٩ مقالاً جديداً فيها أخطاء مؤكَّدة (أخطرها تاريخ دمج PPA/GOSI)، صُلِّحت ٢٠٢٦-٠٩-١٥
-- [🔴 تدقيق الموقع كامل + فبركة أسماء نماذج AI](project_maqalat_site_wide_audit_2026_09_15.md) — صحة/جامعات نظيفة، ٧٥ يتيمة أُصلِحت، ~٨٠ ملف AI بأسماء نماذج مختلَقة (Sonnet 4.7 غير موجود) صُحِّحت
-- [🔴 العنقود الحكومي الحقيقي ٥٠ ملفاً لا ٣٤ — منصّة "موثّق" كاملة مفبركة + هيئة التأمين حلّت محل ساما](project_maqalat_government_cluster_full_sweep_2026_09_15.md) — رابط `mowaad.moe.gov.sa` ميت تماماً (ENOTFOUND)؛ ٨ ملفات تربط بـ`cchi.gov.sa` الميت
+> عزل تام بطلب صريح من المالك: "جلسة مقالات لمقالات، وجلسة نبض لنبض — لا تحفظهم مع بعض". ذاكرة مقالات كاملة (٢٤ ملفاً) انتقلت من هنا لـ`C:\Users\PC\.claude\projects\c--Users-PC-Desktop-maqalat\memory\` ولها فهرسها الخاص هناك. **لا تُنشئ ملفات مقالات هنا بعد اليوم** — أي شغل مقالات يبدأ بجلسة Claude Code منفصلة بمجلد عمل `C:\Users\PC\Desktop\maqalat`.
 
 ### صيانة الفهرس — كل ملف على القرص يجب أن يظهر هنا
 
